@@ -1,0 +1,9 @@
+neg_one = -1
+neg_zero = -0
+neg_zero_f = -0.0
+neg_two = -2
+pos_one = +1
+double_neg = --1
+neg_pos = -+1
+minus_expr = 1 - 1
+sub_two = 5 - 2

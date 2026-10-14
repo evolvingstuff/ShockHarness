@@ -1,0 +1,10 @@
+const negOne = -1;
+const negZero = -0;
+const negZeroF = -0.0;
+const negTwo = -2;
+const posOne = +1;
+const doubleNeg = - -1;
+const negPos = -+1;
+const minus = 1 - 1;
+const subTwo = 5 - 2;
+const bigNeg = -1n;

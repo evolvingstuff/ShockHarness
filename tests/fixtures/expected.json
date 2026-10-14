@@ -1,0 +1,813 @@
+{
+  "javascript/clean.js": {
+    "status": "analyzed",
+    "findings": []
+  },
+  "javascript/common.cjs": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        29,
+        "3",
+        false
+      ]
+    ]
+  },
+  "javascript/jsx.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        25,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        34,
+        "10",
+        false
+      ]
+    ]
+  },
+  "javascript/magic_basic.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        17,
+        "30",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        21,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        14,
+        "1.5",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        25,
+        "1e3",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        36,
+        "1_000",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        17,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        20,
+        "3",
+        false
+      ],
+      [
+        "MAGIC001",
+        7,
+        14,
+        "5",
+        false
+      ]
+    ]
+  },
+  "javascript/magic_encodings.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        3,
+        16,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        19,
+        "0x2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        24,
+        "0o2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        29,
+        "0b10",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        35,
+        "2n",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        39,
+        "10n",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        44,
+        "1e1",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        49,
+        ".5",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        53,
+        "1_0",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        58,
+        "017",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        63,
+        "09",
+        false
+      ]
+    ]
+  },
+  "javascript/magic_negatives.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        16,
+        "-1",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        17,
+        "-0",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        18,
+        "-0.0",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        16,
+        "-2",
+        false
+      ],
+      [
+        "MAGIC001",
+        7,
+        16,
+        "-+1",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        16,
+        "5",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        20,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        10,
+        16,
+        "-1n",
+        false
+      ]
+    ]
+  },
+  "javascript/module.mjs": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        22,
+        "50",
+        false
+      ]
+    ]
+  },
+  "javascript/scopes.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        13,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        27,
+        "3",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        21,
+        "4",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        18,
+        "5",
+        false
+      ],
+      [
+        "MAGIC001",
+        6,
+        19,
+        "6",
+        false
+      ],
+      [
+        "MAGIC001",
+        8,
+        44,
+        "7",
+        false
+      ],
+      [
+        "MAGIC001",
+        8,
+        61,
+        "8",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        31,
+        "9",
+        false
+      ]
+    ]
+  },
+  "javascript/strings_regex.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        6,
+        31,
+        "10",
+        false
+      ]
+    ]
+  },
+  "javascript/suppressions.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        11,
+        "30",
+        true
+      ],
+      [
+        "MAGIC001",
+        2,
+        11,
+        "30",
+        true
+      ],
+      [
+        "MAGIC001",
+        3,
+        11,
+        "30",
+        false
+      ],
+      [
+        "SUPP001",
+        3,
+        15,
+        "malformed suppression",
+        false
+      ],
+      [
+        "SUPP002",
+        4,
+        14,
+        "suppression of MAGIC001 on this line sil",
+        false
+      ]
+    ]
+  },
+  "javascript/syntax_error.js": {
+    "status": "parse_error",
+    "findings": [],
+    "parse_failure_line": 1
+  },
+  "javascript/unicode.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        37,
+        "30",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        34,
+        "2",
+        false
+      ]
+    ]
+  },
+  "python/clean.py": {
+    "status": "analyzed",
+    "findings": []
+  },
+  "python/magic_annotations.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        4,
+        18,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        40,
+        "3",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        55,
+        "4",
+        false
+      ],
+      [
+        "MAGIC001",
+        8,
+        12,
+        "5",
+        false
+      ]
+    ]
+  },
+  "python/magic_basic.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        2,
+        11,
+        "30",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        16,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        8,
+        8,
+        "1.5",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        10,
+        "3.14",
+        false
+      ],
+      [
+        "MAGIC001",
+        10,
+        7,
+        "1e3",
+        false
+      ],
+      [
+        "MAGIC001",
+        11,
+        7,
+        "1_000_000",
+        false
+      ]
+    ]
+  },
+  "python/magic_booleans.py": {
+    "status": "analyzed",
+    "findings": []
+  },
+  "python/magic_encodings.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        3,
+        10,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        13,
+        "0x2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        18,
+        "0o2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        23,
+        "0b10",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        29,
+        "2j",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        33,
+        "1j",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        37,
+        "1e1",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        42,
+        "0.5",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        47,
+        "1_0",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        52,
+        "10",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        56,
+        "1.0000001",
+        false
+      ]
+    ]
+  },
+  "python/magic_negatives.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        11,
+        "-1",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        12,
+        "-0",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        14,
+        "-0.0",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        11,
+        "-2",
+        false
+      ],
+      [
+        "MAGIC001",
+        7,
+        11,
+        "-+1",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        11,
+        "5",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        15,
+        "2",
+        false
+      ]
+    ]
+  },
+  "python/magic_scopes.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        7,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        19,
+        "3",
+        false
+      ],
+      [
+        "MAGIC001",
+        8,
+        16,
+        "4",
+        false
+      ],
+      [
+        "MAGIC001",
+        14,
+        13,
+        "5",
+        false
+      ],
+      [
+        "MAGIC001",
+        17,
+        16,
+        "6",
+        false
+      ],
+      [
+        "MAGIC001",
+        20,
+        16,
+        "7",
+        false
+      ],
+      [
+        "MAGIC001",
+        23,
+        24,
+        "8",
+        false
+      ],
+      [
+        "MAGIC001",
+        28,
+        14,
+        "9",
+        false
+      ],
+      [
+        "MAGIC001",
+        30,
+        14,
+        "-10",
+        false
+      ]
+    ]
+  },
+  "python/magic_strings_not_numbers.py": {
+    "status": "analyzed",
+    "findings": []
+  },
+  "python/suppressions.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        5,
+        "30",
+        true
+      ],
+      [
+        "MAGIC001",
+        2,
+        5,
+        "30",
+        false
+      ],
+      [
+        "SUPP001",
+        2,
+        9,
+        "malformed suppression",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        5,
+        "30",
+        false
+      ],
+      [
+        "SUPP001",
+        3,
+        9,
+        "suppression has an empty reason",
+        false
+      ],
+      [
+        "MAGIC001",
+        4,
+        5,
+        "30",
+        false
+      ],
+      [
+        "SUPP001",
+        4,
+        9,
+        "suppression names unknown rule 'NOPE001'",
+        false
+      ],
+      [
+        "SUPP002",
+        5,
+        8,
+        "suppression of MAGIC001 on this line sil",
+        false
+      ],
+      [
+        "MAGIC001",
+        6,
+        5,
+        "30",
+        true
+      ],
+      [
+        "SUPP002",
+        6,
+        9,
+        "suppression of SUPP002 on this line sile",
+        false
+      ],
+      [
+        "MAGIC001",
+        7,
+        5,
+        "30",
+        false
+      ],
+      [
+        "SUPP001",
+        7,
+        9,
+        "malformed suppression",
+        false
+      ],
+      [
+        "MAGIC001",
+        9,
+        5,
+        "30",
+        false
+      ]
+    ]
+  },
+  "python/syntax_error.py": {
+    "status": "parse_error",
+    "findings": [],
+    "parse_failure_line": 1
+  },
+  "python/unicode.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        1,
+        25,
+        "30",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        22,
+        "2",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        6,
+        "3",
+        false
+      ]
+    ]
+  }
+}

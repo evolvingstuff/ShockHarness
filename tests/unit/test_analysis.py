@@ -1,0 +1,114 @@
+from collections.abc import Callable
+from pathlib import Path
+
+from shockharness.analysis import AnalysisOptions, analyze_file, analyze_text
+from shockharness.config import EffectiveConfig
+from shockharness.discovery import DiscoveredFile
+
+
+def test_override_disables_rule_with_origin(make_config: Callable[[str], EffectiveConfig]) -> None:
+    config = make_config(
+        "[[tool.shockharness.overrides]]\n"
+        'paths = ["tests/**"]\ndisable = ["MAGIC001"]\nreason = "fixtures encode literals"\n'
+    )
+    inside = analyze_text("tests/t.py", "python", "x = 42\n", config, AnalysisOptions(True))
+    outside = analyze_text("src/t.py", "python", "x = 42\n", config, AnalysisOptions(True))
+    assert inside.findings == ()
+    assert [(d.rule_id, d.reason, d.origin) for d in inside.rules_disabled] == [
+        ("MAGIC001", "fixtures encode literals", "overrides[0]")
+    ]
+    assert len(outside.findings) == 1
+    assert outside.rules_disabled == ()
+
+
+def test_configuration_files_are_exempt_and_recorded(strict_config: EffectiveConfig) -> None:
+    result = analyze_text(
+        "web/vite.config.js",
+        "javascript",
+        "export default { port: 3000 };\n",
+        strict_config,
+        AnalysisOptions(True),
+    )
+    assert result.findings == ()
+    (disable,) = result.rules_disabled
+    assert disable.rule_id == "MAGIC001"
+    assert disable.origin == "configuration_file"
+    assert "*.config.js" in disable.reason
+    plain = analyze_text(
+        "web/server.js", "javascript", "const port = 3000;\n", strict_config, AnalysisOptions(True)
+    )
+    assert len(plain.findings) == 1
+
+
+def test_configuration_file_exemption_can_be_turned_off(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(
+        "[tool.shockharness.rules.magic_numbers]\nexclude_configuration_files = false\n"
+    )
+    result = analyze_text(
+        "vite.config.js",
+        "javascript",
+        "export default { port: 3000 };\n",
+        config,
+        AnalysisOptions(True),
+    )
+    assert len(result.findings) == 1
+
+
+def test_parse_error_file_has_no_findings_and_explicit_status(
+    strict_config: EffectiveConfig,
+) -> None:
+    result = analyze_text(
+        "bad.py", "python", "def broken(:\n", strict_config, AnalysisOptions(True)
+    )
+    assert result.status == "parse_error"
+    assert result.failed
+    assert result.findings == ()
+    assert result.rules_applied == ()
+    assert result.error is not None and result.error.startswith("SyntaxError")
+
+
+def test_undecodable_file(tmp_path: Path, strict_config: EffectiveConfig) -> None:
+    bad = tmp_path / "latin1.py"
+    bad.write_bytes(b"x = 'caf\xe9'\n")
+    result = analyze_file(
+        DiscoveredFile(bad, "latin1.py", "python"), strict_config, AnalysisOptions(True)
+    )
+    assert result.status == "decode_error"
+    assert result.failed
+    assert result.error is not None and "UTF-8" in result.error
+
+
+def test_unreadable_file(tmp_path: Path, strict_config: EffectiveConfig) -> None:
+    missing = tmp_path / "gone.py"
+    result = analyze_file(
+        DiscoveredFile(missing, "gone.py", "python"), strict_config, AnalysisOptions(True)
+    )
+    assert result.status == "read_error"
+    assert result.failed
+
+
+def test_bom_is_tolerated(tmp_path: Path, strict_config: EffectiveConfig) -> None:
+    path = tmp_path / "bom.py"
+    path.write_bytes(b"\xef\xbb\xbfx = 7\n")
+    result = analyze_file(
+        DiscoveredFile(path, "bom.py", "python"), strict_config, AnalysisOptions(True)
+    )
+    assert result.status == "analyzed"
+    assert [(f.span.line, f.span.column) for f in result.findings] == [(1, 5)]
+
+
+def test_line_count_is_recorded(strict_config: EffectiveConfig) -> None:
+    result = analyze_text("t.py", "python", "a = 1\nb = 1\n", strict_config, AnalysisOptions(True))
+    assert result.line_count == 2
+
+
+def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
+    data = analyze_text(
+        "t.py", "python", "x = 2\n", strict_config, AnalysisOptions(True)
+    ).to_json_dict()
+    assert data["path"] == "t.py"
+    assert data["status"] == "analyzed"
+    assert data["finding_count"] == 1
+    assert data["rules_applied"] == ["MAGIC001", "SUPP001", "SUPP002"]

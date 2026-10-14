@@ -1,0 +1,60 @@
+# Bundled defaults for the "strict" profile. Loaded from the package, lowest
+# precedence tier. User configuration is validated against the same schema and
+# merged over these values; lists replace, tables merge key by key.
+
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
+exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
+parse_errors = "fail"
+follow_symlinks = false
+overrides = []
+
+[tool.shockharness.rules.magic_numbers]
+enabled = true
+allowed_values = [0, 1]
+allow_unary_negative_one = false
+exclude_configuration_files = true
+# Basenames (or path globs) that are tooling configuration rather than application
+# source. Matching files are exempt from MAGIC001 and listed in the report.
+configuration_files = [
+  "conftest.py",
+  "setup.py",
+  "*.config.js",
+  "*.config.mjs",
+  "*.config.cjs",
+  "*.conf.js",
+  "*.conf.cjs",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  "gulpfile.js",
+  "Gruntfile.js",
+]
+
+[tool.shockharness.rules.magic_strings]
+enabled = true
+mode = "review"
+
+[tool.shockharness.rules.exceptions]
+enabled = true
+mode = "boundary_whitelist"
+boundaries = []
+
+[tool.shockharness.rules.defaults]
+enabled = true
+function_parameters = "forbid"
+missing_value_fallbacks = "forbid"
+truthiness_fallbacks = "review"
+
+[tool.shockharness.complexity]
+enabled = true
+cognitive_warn = 15
+cyclomatic_warn = 15
+max_nesting_warn = 4
+
+[tool.shockharness.gates]
+new_hard_violations = "fail"
+legacy = "baseline"
+complexity_regressions = "warn"

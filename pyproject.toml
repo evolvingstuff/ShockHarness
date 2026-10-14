@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shockharness"
+dynamic = ["version"]
+description = "Strict static-analysis quality gate for Python and JavaScript: no silent failures, no implicit defaults, no magic numbers."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Thomas Lahore" }]
+keywords = ["static-analysis", "linter", "quality-gate", "magic-numbers", "exceptions", "ci"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: JavaScript",
+  "Topic :: Software Development :: Quality Assurance",
+  "Typing :: Typed",
+]
+# Runtime dependencies are the tree-sitter core and the JavaScript grammar only.
+# Tested pair: tree-sitter 0.25.2 with tree-sitter-javascript 0.25.0 (language ABI 15).
+# tree-sitter 0.26.0 is excluded on purpose: on CPython 3.14 it segfaults while walking
+# trees nested deeper than about 200 levels (reproduced 2026-10-14; 3.13 is unaffected).
+dependencies = [
+  "tree-sitter>=0.25.1,<0.26",
+  "tree-sitter-javascript>=0.25,<0.26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "hypothesis>=6",
+  "ruff>=0.6",
+  "build>=1.2",
+]
+
+[project.scripts]
+shockharness = "shockharness.cli:entry"
+
+[project.urls]
+Homepage = "https://github.com/thomaslahore/ShockHarness"
+
+[tool.hatch.version]
+path = "src/shockharness/version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shockharness"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/shockharness", "tests", "docs", "schemas", "README.md", "LICENSE", "CHANGELOG.md", "STATUS.md", ".shockharness.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["slow: tests that run subprocesses or large inputs"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["tests/fixtures"]  # intentionally invalid and non-compliant inputs
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+  "SIM102",  # nested ifs are often clearer than compound conditions in rule code
+  "SIM108",  # ternaries read worse than explicit branches here
+  "RUF012",  # mutable class attributes are not used; keep rule quiet on registries
+  "SIM401",  # suggests dict.get(key, default), which is exactly the DEF002 fallback this project forbids
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]

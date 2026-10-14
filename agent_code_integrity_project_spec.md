@@ -1,6 +1,6 @@
 # Agent-Ready Specification: Explicit-Code Integrity and Complexity Analyzer
 
-**Status:** Implementation blueprint, v1.1 (v1.0 reviewed and decisions resolved; see §19)  
+**Status:** Implementation blueprint, v1.2 (v1.0 reviewed and decisions resolved; see §19)  
 **Date:** 2026-10-14  
 **Name:** **ShockHarness**. Python distribution and import package `shockharness`, CLI command `shockharness`, config table `[tool.shockharness]`, dedicated config file `.shockharness.toml`, inline suppression prefix `# shockharness:` / `// shockharness:`. Registry and trademark clearance is still the maintainer's responsibility before publishing (see §17).  
 **Initial languages:** Python and JavaScript (including ESM/CommonJS); TypeScript is a future target.  
@@ -188,6 +188,8 @@ Scan numeric literal nodes in executable Python and JS. For a first, testable sp
 
 **Directive to remediation agent:** For a numeric violation, determine the business/mathematical/protocol reason for the value. Prefer a required, validated configuration parameter for variable policy; a named authoritative constant for invariant math/specification; never silently move it into a meaningless constant or add an implicit fallback.
 
+**`0` and `1` are permitted, not recommended.** When a `0` or `1` carries meaning beyond arithmetic identity (an exit or return code, a sentinel, a boolean-as-integer flag, a protocol value, a first/last index with domain meaning), the skills direct the agent to give it a named constant (`EXIT_OK`, `FIRST_PAGE`, `SUCCESS`). Plain arithmetic uses (`i + 1`, `len(x) - 1`, `range(0, n)`, `x ** 0`) stay literal. The analyzer does not flag `0`/`1`; this is a skill-level convention, not a rule.
+
 ### MAGIC002 suspicious string literals (advisory initially)
 
 Flag duplicate decision strings, magic status strings and condition operands, hardcoded endpoints, and repeated protocols where names/enums would improve discoverability. Exempt ordinary error text, docstrings, import paths, schema keys, and UI copy initially via explicit, documented heuristic categories. High false-positive risk: never hard-fail by default until empirical calibration.
@@ -301,7 +303,7 @@ Commands are **requested implementation**, not extant tools. `init` writes a con
 
 Bundle four vendor-neutral skills with YAML frontmatter (name, description) and a `SKILL.md` in each subdirectory:
 
-1. `write-compliant-code`: require clear contracts, no arbitrary catches/defaults/non-0/1 numeric literals; distinguish data/config/spec and source.
+1. `write-compliant-code`: require clear contracts, no arbitrary catches/defaults/non-0/1 numeric literals; distinguish data/config/spec and source. Prefer named constants for `0`/`1` that carry meaning (return codes, sentinels, flags) per §5; leave arithmetic identity literals alone.
 2. `fix-violations`: run analyzer; for each finding determine intended contract, add characterization tests, modify code, rerun suite and analyzer; never blindly delete `try/except` or replace `get` with indexing without contract review.
 3. `refactor-complexity`: address repeated cognitive work and coupling rather than metric gaming; require before/after call graph and behavior tests.
 4. `pre-commit-review`: run diff gate, show unsupported analysis and suppressions, tests, and remaining warnings; never claim passes without running.
@@ -454,9 +456,10 @@ Recorded so that the implementation agent does not re-ask them. Each is binding 
 | 6 | `MAGIC001` negative zero | `-0` and `-0.0` flagged by default, same as `-1` | §5 |
 | 7 | `MAGIC001` annotations | Numeric literals inside Python type annotations are flagged | §5 |
 | 8 | Commit cadence | One commit per milestone after tests pass; never push from the agent | §15.9 |
-| 9 | Dependencies | `tree-sitter` + `tree-sitter-javascript` only at runtime; stdlib `argparse`/`tomllib`; `uv` for environments | §3 |
+| 9 | Dependencies | `tree-sitter` 0.25.x + `tree-sitter-javascript` 0.25.x only at runtime (0.26.0 excluded: segfaults on CPython 3.14 with deep nesting); stdlib `argparse`/`tomllib`; `uv` for environments; Ruff, pytest, Hypothesis as dev-only tools | §3 |
 | 10 | JS parse errors | Any tree-sitter `ERROR`/`MISSING` node is a parse failure | §3 |
 | 11 | CI matrix | GitHub Actions on ubuntu, macos, windows × Python 3.11–3.14 | §14 Milestone A |
+| 12 | Meaningful `0`/`1` | Skills prefer a named constant when a `0` or `1` carries meaning (exit codes, sentinels); the rule itself never flags them | §5, §12 |
 
 ---
 

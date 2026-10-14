@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thomaslahore/ShockHarness/schemas/report-v1.schema.json",
+  "title": "ShockHarness report, schema_version 1",
+  "type": "object",
+  "required": [
+    "schema_version", "tool_version", "analysis_status", "config_digest", "policy_profile",
+    "config", "coverage", "files", "findings", "metrics", "gate", "execution_summary"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["1"]},
+    "tool_version": {"type": "string"},
+    "analysis_status": {"type": "string", "enum": ["complete", "incomplete", "failed"]},
+    "config_digest": {"type": "string"},
+    "policy_profile": {"type": "string"},
+    "config": {
+      "type": "object",
+      "required": ["source", "notes", "deviations"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": ["tier", "path"],
+          "properties": {
+            "tier": {"type": "string", "enum": ["cli", "dedicated", "pyproject", "bundled"]},
+            "path": {"type": "string"}
+          }
+        },
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "deviations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "host_python", "languages", "rules_implemented", "rules_not_implemented",
+        "rules_disabled_globally", "files_analyzed", "files_failed", "limitations"
+      ],
+      "properties": {
+        "host_python": {"type": "string"},
+        "languages": {"type": "object"},
+        "rules_implemented": {"type": "array", "items": {"type": "string"}},
+        "rules_not_implemented": {"type": "array", "items": {"type": "string"}},
+        "rules_disabled_globally": {"type": "array", "items": {"type": "string"}},
+        "files_analyzed": {"type": "integer"},
+        "files_failed": {"type": "integer"},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "language", "status", "line_count", "rules_applied", "rules_disabled", "finding_count"],
+        "properties": {
+          "path": {"type": "string"},
+          "language": {"type": "string", "enum": ["python", "javascript"]},
+          "status": {"type": "string", "enum": ["analyzed", "parse_error", "decode_error", "read_error"]},
+          "line_count": {"type": "integer"},
+          "rules_applied": {"type": "array", "items": {"type": "string"}},
+          "rules_disabled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["rule_id", "reason", "origin"],
+              "properties": {
+                "rule_id": {"type": "string"},
+                "reason": {"type": "string"},
+                "origin": {"type": "string"}
+              }
+            }
+          },
+          "finding_count": {"type": "integer"}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id", "rule_version", "severity", "path", "span", "message", "evidence",
+          "confidence", "remediation", "safe_autofix", "scope", "suppression"
+        ],
+        "properties": {
+          "rule_id": {"type": "string"},
+          "rule_version": {"type": "string"},
+          "severity": {"type": "string", "enum": ["error", "warning", "review", "note"]},
+          "path": {"type": "string"},
+          "span": {
+            "type": "object",
+            "required": ["line", "column", "end_line", "end_column"],
+            "properties": {
+              "line": {"type": "integer"},
+              "column": {"type": "integer"},
+              "end_line": {"type": "integer"},
+              "end_column": {"type": "integer"}
+            }
+          },
+          "message": {"type": "string"},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "string", "enum": ["exact", "approximate", "unresolved"]},
+          "remediation": {"type": "string"},
+          "safe_autofix": {"type": "boolean"}
+        }
+      }
+    },
+    "metrics": {"type": "object"},
+    "gate": {
+      "type": "object",
+      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "reasons"],
+      "properties": {
+        "status": {"type": "string", "enum": ["pass", "fail", "error"]},
+        "exit_code": {"type": "integer", "enum": [0, 1, 3]},
+        "hard_violations": {"type": "integer"},
+        "suppressed": {"type": "integer"},
+        "warnings": {"type": "integer"},
+        "review": {"type": "integer"},
+        "analysis_failures": {"type": "integer"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "execution_summary": {
+      "type": "object",
+      "required": ["files", "findings", "findings_by_severity", "suppressed"]
+    }
+  }
+}
