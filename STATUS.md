@@ -491,4 +491,4 @@ built.
   (a `.get(k)` whose result is checked against `None` on the next statement),
   and scope-aware mapping knowledge, if the review noise proves costly.
 - Decide `.gitignore` handling (spec: only if configured) and `-0` policy wording in docs if challenged.
-- CI has not run yet (nothing pushed). The matrix is defined; first push will show Linux/Windows results.
+- CI verified 2026-10-14 on the first push (run 1 at https://github.com/evolvingstuff/ShockHarness/actions/runs/38646310534): all 13 jobs green, ubuntu/macos/windows x Python 3.11-3.14 plus the wheel build job.
