@@ -482,7 +482,7 @@ The distribution brief in `docs/shockharness_distribution_integration.md` is a d
 | 5 | Skills | Names stay as in §12 (`refactor-complexity`, not `complexity-refactoring`). `skills update` with a manifest (names, package version, per-file hashes) joins Milestone G | §12, Milestone G |
 | 6 | Milestone order | F before E | §14 |
 | 7 | Repository | `https://github.com/evolvingstuff/ShockHarness`; reusable workflow references and package URLs point there | pyproject, Milestone F |
-| 8 | Package name | `shockharness` was unregistered on PyPI (JSON API and simple index both 404) and on npm on 2026-10-14; `shock-harness` was also free. This is a snapshot, not a reservation; the first tagged release claims it | §17 |
+| 8 | Package name | `shockharness` **registered on PyPI on 2026-10-14** by publishing 0.1.0a1 (owner: Thomas Lahore); the similarity check passed. npm `shockharness` was free on the same date and is not claimed | §17 |
 | 9 | Publishing | Tag-triggered: pushing `v*` runs the test matrix, builds wheel and sdist, and publishes to PyPI through trusted publishing (no stored token). One-time PyPI setup by the maintainer; exact steps documented in Milestone F | Milestone F |
 | 10 | Consumer updates | Dependabot. Consumer docs show a `.github/dependabot.yml` and require the version pin to live in `pyproject.toml`, a requirements file, or a workflow `uses:` line, never inside a shell command such as `uvx --from shockharness==x` | Milestone F docs |
 | 11 | Consumer examples | `examples/python` and `examples/js` inside this repository, exercised by a script that creates throwaway git repositories and performs a pinned install plus an upgrade. Real external consumer repositories only if this proves insufficient | Milestone F |

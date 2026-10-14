@@ -5,6 +5,17 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.1.0a1] - 2026-10-14
+
+First public alpha, published to PyPI to claim the `shockharness` name.
+Contains Milestones A through D: MAGIC001, EXC001-EXC003, DEF001-DEF006,
+SUPP001/SUPP002, configuration validation, text and JSON reports, and the
+`scan`, `config`, `rules`, and `init` commands. No baselines, diff, SARIF,
+complexity metrics, or skills yet; see `coverage.rules_not_implemented` in
+every report.
+
+Everything listed under "Added" below shipped in this version.
+
 ### Added
 - Milestone A: package skeleton, MIT license, configuration schema with full
   shape and semantic validation, precedence (`--config` > `.shockharness.toml` >
