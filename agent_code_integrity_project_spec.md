@@ -1,6 +1,6 @@
 # Agent-Ready Specification: Explicit-Code Integrity and Complexity Analyzer
 
-**Status:** Implementation blueprint, v1.2 (v1.0 reviewed and decisions resolved; see §19)  
+**Status:** Implementation blueprint, v1.3 (kickoff decisions in §19; distribution decisions in §20)  
 **Date:** 2026-10-14  
 **Name:** **ShockHarness**. Python distribution and import package `shockharness`, CLI command `shockharness`, config table `[tool.shockharness]`, dedicated config file `.shockharness.toml`, inline suppression prefix `# shockharness:` / `// shockharness:`. Registry and trademark clearance is still the maintainer's responsibility before publishing (see §17).  
 **Initial languages:** Python and JavaScript (including ESM/CommonJS); TypeScript is a future target.  
@@ -109,7 +109,7 @@ pyproject.toml README.md LICENSE CHANGELOG.md STATUS.md
 
 ## 4. Configuration contract
 
-Use `pyproject.toml` under `[tool.shockharness]` OR a `.shockharness.toml` dedicated file, with a documented priority order: CLI explicit config > dedicated file > pyproject > bundled defaults. Multiple config sources at a single tier are errors rather than silently combined. No implicit environment fallback. Support `--print-effective-config` with origins and `config validate`.
+Use `pyproject.toml` under `[tool.shockharness]` OR a dedicated file named `.shockharness.toml` or `shockharness.toml` (both spellings are accepted; having both in one root is an error), with a documented priority order: CLI explicit config > dedicated file > pyproject > bundled defaults. A `profile` key selects one of the built-in profiles in §20 decision 4; the profile layer sits between bundled defaults and the repository's own keys. Multiple config sources at a single tier are errors rather than silently combined. No implicit environment fallback. Support `--print-effective-config` with origins and `config validate`.
 
 **Normative example (schema to implement; naming provisional):**
 
@@ -284,20 +284,22 @@ Python library exposes typed `analyze_source(source, language, config)`, `analyz
 
 ```shell
 shockharness init --profile strict
+shockharness version
 shockharness config validate
 shockharness config effective
-shockharness scan src/ --format text
-shockharness scan src/ --format json --output report.json
-shockharness scan src/ --format sarif --output report.sarif
+shockharness check src/ --format text            # canonical name; `scan` remains a hidden alias
+shockharness check src/ --format json --output report.json
+shockharness check src/ --format sarif --output report.sarif
 shockharness baseline create src/ --output .shockharness-baseline.json
 shockharness diff --base main --head HEAD
 shockharness gate --base main --head HEAD --format text
 shockharness rules list
 shockharness rules explain MAGIC001
-shockharness skills install --agent codex
+shockharness skills install --agent codex|claude [--project PATH]
+shockharness skills update --agent codex|claude [--project PATH]
 ```
 
-Commands are **requested implementation**, not extant tools. `init` writes a config but never overwrites an existing config without explicit confirmation; CI must be noninteractive. `baseline create` requires explicit user invocation. Diff works with changed files and stable baseline comparison; perform whole graph analysis as needed to avoid missing cross-file effects. Respect `.gitignore` only if configured; explicit includes/excludes take precedence.
+`check` is the canonical analysis command from Milestone F onward (§20 decision 1); `scan`, which Milestones A-D shipped, stays as an undocumented alias so existing CI lines keep working. Commands are **requested implementation**, not extant tools. `init` writes a config but never overwrites an existing config without explicit confirmation; CI must be noninteractive. `baseline create` requires explicit user invocation. Diff works with changed files and stable baseline comparison; perform whole graph analysis as needed to avoid missing cross-file effects. Respect `.gitignore` only if configured; explicit includes/excludes take precedence.
 
 ## 12. Agent skills and integration
 
@@ -308,7 +310,7 @@ Bundle four vendor-neutral skills with YAML frontmatter (name, description) and 
 3. `refactor-complexity`: address repeated cognitive work and coupling rather than metric gaming; require before/after call graph and behavior tests.
 4. `pre-commit-review`: run diff gate, show unsupported analysis and suppressions, tests, and remaining warnings; never claim passes without running.
 
-Skills contain concrete examples of compliant and noncompliant Python/JS, exact CLI invocations, corrective workflow, and a checklist. `skills install` should support user-specified target directory and documented Codex/Claude adapters; never modify agent config without explicit invocation, and never overwrite user-customized skill files silently. No mandatory MCP server in v1.
+Skills contain concrete examples of compliant and noncompliant Python/JS, exact CLI invocations, corrective workflow, and a checklist. `skills install` should support user-specified target directory and documented Codex/Claude adapters; never modify agent config without explicit invocation, and never overwrite user-customized skill files silently. `skills install` writes a manifest recording installed skill names, the source package version, and a content hash per file; `skills update` refreshes files whose hash still matches the manifest, preserves files the user edited, and reports each conflict with remediation instructions (§20 decision 5). No mandatory MCP server in v1.
 
 Eval suite: paired coding tasks with/without skills across Python/JS, count rule violations, behavioral regressions, unnecessary suppressions, and review accuracy. Agents are not correctness oracles; automated tests and human review remain necessary.
 
@@ -356,14 +358,19 @@ Use `pytest`, property-based tests (Hypothesis), subprocess CLI integration test
 - Maintain evidence and conservative no-autofix policy.
 - **Done when:** representative Python and JS examples produce exact diagnostics and fixes remain suggestions.
 
+> **Order change (§20 decision 6):** Milestone F runs before Milestone E. Distribution needs baselines, diff, SARIF and release automation sooner than it needs complexity metrics.
+
 ### Milestone E — Complexity + graph
 
 - Per-function cyclomatic/cognitive/nesting, approximate NPath; call graph with unresolved-edge reports; coupling and cycles.
 - **Done when:** validated fixtures agree with documented counting conventions; don't state unsupported resolutions as exact.
 
-### Milestone F — Git + gates + reports
+### Milestone F — Git + gates + reports + distribution
 
 - Baseline, diff, policy evaluation; file churn, hotspots and co-change; JSON + SARIF; deterministic ordering and stable fingerprints.
+- `check` as canonical command with `scan` alias, `version` subcommand, `shockharness.toml` filename, `effective_profile` in output, built-in profiles `strict`/`recommended`/`minimal` with deviation reporting (§20).
+- Release automation: tag-triggered GitHub Actions workflow (`v*` tag → test matrix → build → publish to PyPI via trusted publishing), reusable `workflow_call` workflow for consumers with inputs for analyzer version, config path and diff base, `.github/dependabot.yml` for this repo, and consumer integration docs built around Dependabot.
+- `examples/python` and `examples/js` consumer projects plus a script that copies each into a throwaway git repository, installs a pinned version, runs the gate, bumps the pin, and runs it again.
 - **Done when:** reproducible PR gate on two commits and a complete output provenance trail.
 
 ### Milestone G — Agent skills + docs + beta
@@ -460,6 +467,27 @@ Recorded so that the implementation agent does not re-ask them. Each is binding 
 | 10 | JS parse errors | Any tree-sitter `ERROR`/`MISSING` node is a parse failure | §3 |
 | 11 | CI matrix | GitHub Actions on ubuntu, macos, windows × Python 3.11–3.14 | §14 Milestone A |
 | 12 | Meaningful `0`/`1` | Skills prefer a named constant when a `0` or `1` carries meaning (exit codes, sentinels); the rule itself never flags them | §5, §12 |
+| 13 | Distribution | See §20 for the decisions taken on reviewing `docs/shockharness_distribution_integration.md` | §20 |
+
+## 20. Distribution decisions (2026-10-14 review of `docs/shockharness_distribution_integration.md`)
+
+The distribution brief in `docs/shockharness_distribution_integration.md` is a design input. Where it and this specification differ, this section is binding and the brief is annotated to say so.
+
+| # | Topic | Decision | Where applied |
+|---|---|---|---|
+| 1 | Command names | `check` is the canonical analysis command; `scan` stays as a hidden alias; `version` is added as a subcommand alongside `--version`; `rules explain` and `diff --base/--head` keep the spec's forms | §11, Milestone F |
+| 2 | Exit codes | Stay `0` pass, `1` violations, `2` invalid configuration or invocation, `3` internal error or strict parse failure. The brief's three-code scheme is not adopted; CI consumers need to tell a broken config from an unreadable file | §10 |
+| 3 | Config schema and filename | The schema in §4 stays (`[tool.shockharness]`, `rules.exceptions`, `rules.defaults`, `complexity.cognitive_warn`). The brief's `[shockharness]`/`exception_handling`/`implicit_defaults`/`max_cognitive` names are illustrative only. Both `.shockharness.toml` and `shockharness.toml` are accepted; both present is an error | §4, Milestone F |
+| 4 | Profiles | Three built-in profiles ship, selected with `profile = "..."`; `strict` is the default and keeps its name. `strict`: every rule at its documented severity, `parse_errors = "fail"`. `recommended`: as strict, except DEF003 and DEF004 are `review`. `minimal`: MAGIC001, EXC*, DEF* all `review`, `parse_errors = "warn"`, complexity off. Any profile below `strict` emits a policy-deviation line in every report. Precedence: bundled defaults < profile < repository config < explicit CLI overrides (the overridable CLI keys are decided in Milestone F and listed in docs) | §4, Milestone F |
+| 5 | Skills | Names stay as in §12 (`refactor-complexity`, not `complexity-refactoring`). `skills update` with a manifest (names, package version, per-file hashes) joins Milestone G | §12, Milestone G |
+| 6 | Milestone order | F before E | §14 |
+| 7 | Repository | `https://github.com/evolvingstuff/ShockHarness`; reusable workflow references and package URLs point there | pyproject, Milestone F |
+| 8 | Package name | `shockharness` was unregistered on PyPI (JSON API and simple index both 404) and on npm on 2026-10-14; `shock-harness` was also free. This is a snapshot, not a reservation; the first tagged release claims it | §17 |
+| 9 | Publishing | Tag-triggered: pushing `v*` runs the test matrix, builds wheel and sdist, and publishes to PyPI through trusted publishing (no stored token). One-time PyPI setup by the maintainer; exact steps documented in Milestone F | Milestone F |
+| 10 | Consumer updates | Dependabot. Consumer docs show a `.github/dependabot.yml` and require the version pin to live in `pyproject.toml`, a requirements file, or a workflow `uses:` line, never inside a shell command such as `uvx --from shockharness==x` | Milestone F docs |
+| 11 | Consumer examples | `examples/python` and `examples/js` inside this repository, exercised by a script that creates throwaway git repositories and performs a pinned install plus an upgrade. Real external consumer repositories only if this proves insufficient | Milestone F |
+| 12 | Submodules | Not supported as an integration mechanism, per the brief | — |
+| 13 | Output fields | `effective_profile` is added to the JSON report next to `tool_version` and `schema_version`; `policy_profile` is renamed to it before schema v1 is published | §10, Milestone F |
 
 ---
 

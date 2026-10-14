@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/thomaslahore/ShockHarness/schemas/report-v1.schema.json",
+  "$id": "https://github.com/evolvingstuff/ShockHarness/schemas/report-v1.schema.json",
   "title": "ShockHarness report, schema_version 1",
   "type": "object",
   "required": [

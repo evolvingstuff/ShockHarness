@@ -47,7 +47,10 @@ dev = [
 shockharness = "shockharness.cli:entry"
 
 [project.urls]
-Homepage = "https://github.com/thomaslahore/ShockHarness"
+Homepage = "https://github.com/evolvingstuff/ShockHarness"
+Repository = "https://github.com/evolvingstuff/ShockHarness"
+Issues = "https://github.com/evolvingstuff/ShockHarness/issues"
+Changelog = "https://github.com/evolvingstuff/ShockHarness/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/shockharness/version.py"
