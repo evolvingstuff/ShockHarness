@@ -1,0 +1,20 @@
+# Environments
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+
+# macOS
+.DS_Store
