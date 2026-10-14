@@ -109,8 +109,14 @@
         "exit_code",
         "new_hard_violations",
         "baseline",
-        "reasons"
-      ]
+        "reasons",
+        "advisory"
+      ],
+      "properties": {
+        "advisory": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "$defs": {

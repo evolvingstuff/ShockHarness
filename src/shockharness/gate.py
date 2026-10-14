@@ -9,10 +9,16 @@ Legacy findings (fingerprint in a baseline file, or present at the base revision
 of a diff) carry a ``baseline`` marker set before the gate runs. ``matched`` ones
 are counted in the totals but never fail the gate; ``ignored`` ones are not
 counted at all. Both stay in the report.
+
+An *advisory* run (``--exit-zero``) leaves the verdict, its exit code and every
+count untouched and only changes what the process returns: a ``fail`` verdict
+exits 0. ``error`` (exit 3) is never masked, and configuration or usage errors
+never reach the gate at all. The report says ``advisory = true`` so nobody can
+mistake the 0 for a pass.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from shockharness.analysis import FileResult
@@ -45,6 +51,7 @@ class GateResult:
     new_hard_violations: int
     baseline: BaselineApplication | None
     reasons: tuple[str, ...]
+    advisory: bool
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -59,6 +66,7 @@ class GateResult:
             "new_hard_violations": self.new_hard_violations,
             "baseline": None if self.baseline is None else self.baseline.to_json_dict(),
             "reasons": list(self.reasons),
+            "advisory": self.advisory,
         }
 
 
@@ -132,6 +140,27 @@ def evaluate(
         new_hard_violations=new_hard,
         baseline=baseline,
         reasons=tuple(reasons),
+        advisory=False,
+    )
+
+
+def as_advisory(gate: GateResult) -> GateResult:
+    """The same verdict, marked as an advisory run (``--exit-zero``)."""
+    return replace(gate, advisory=True)
+
+
+def process_exit_code(gate: GateResult) -> int:
+    """What the process returns: the gate's exit code, except that an advisory run
+    turns ``EXIT_VIOLATIONS`` into ``EXIT_OK``. ``EXIT_INTERNAL_ERROR`` is never masked."""
+    if gate.advisory and gate.exit_code == EXIT_VIOLATIONS:
+        return EXIT_OK
+    return gate.exit_code
+
+
+def advisory_line(gate: GateResult) -> str:
+    return (
+        f"shockharness: advisory run (--exit-zero): gate verdict {gate.status.upper()} "
+        f"reported as exit {process_exit_code(gate)}"
     )
 
 

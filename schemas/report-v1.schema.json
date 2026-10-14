@@ -137,9 +137,10 @@
     },
     "gate": {
       "type": "object",
-      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "baselined", "new_hard_violations", "baseline", "reasons"],
+      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "baselined", "new_hard_violations", "baseline", "reasons", "advisory"],
       "properties": {
         "status": {"type": "string", "enum": ["pass", "fail", "error"]},
+        "advisory": {"type": "boolean"},
         "exit_code": {"type": "integer", "enum": [0, 1, 3]},
         "hard_violations": {"type": "integer"},
         "suppressed": {"type": "integer"},

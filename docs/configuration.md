@@ -206,6 +206,31 @@ validated and stored so that a configuration written today keeps working when
 the rules land. They have no effect on findings yet; the report's
 `coverage.rules_not_implemented` says so.
 
+## Adopting ShockHarness on an existing codebase
+
+Four ways to turn the gate on without a red build on day one. They answer
+different questions and combine freely; every one is visible in the report.
+
+| Path | Where it lives | What it does | Use it when |
+|---|---|---|---|
+| **Baseline** (`baseline create`, then `--baseline FILE`) | A reviewed, committed file | Existing findings are legacy and do not gate; anything new fails. Counts and listings are unchanged. | You want the gate to be *real* from the first PR while the backlog is paid down. The usual choice. |
+| **`gates.new_hard_violations = "warn"`** | Configuration (`[tool.shockharness.gates]`) | Every run reports hard violations and exits 0; the gate reason says they were downgraded. A policy deviation. | The whole repository has agreed, for now, that the policy is advisory, and that decision should be reviewed and diffed like any other config change. |
+| **`profile = "minimal"`** (or `recommended`) | Configuration (`profile`) or `--profile` | Rules still run and report, but their findings are `review` (and syntax failures only warn). A policy deviation with one line per changed key. | First contact: you want to read what the rules would say before deciding anything, or an interim policy where only malformed suppressions fail. |
+| **`--exit-zero`** | Command line only, on `check` (and `scan`) and `gate` | The report, severities, verdict text and counts are unchanged; only the process exit code becomes 0 when the verdict is `fail`. Exit 2 (configuration, usage) and exit 3 (tool failure, strict parse failure) are never masked. The report carries `gate.advisory = true`, a `shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0` line in text, and `advisory` in SARIF run properties. | One invocation should not block (a scheduled strict run on a repository that gates on `recommended`, a first SARIF upload, a local dry run) and nobody should have to edit the repository's policy to get that. |
+
+`--exit-zero` is deliberately **not** a configuration key: a checked-in
+"never fail" switch already exists as `gates.new_hard_violations = "warn"`,
+and it belongs in the repository where it is reviewed, digested and reported
+as a deviation. The flag is the per-invocation form of the same decision, and
+because it lives in the command line it can never silently become the
+repository's policy. It is not a deviation (the policy did not change) but it
+is never silent either: a report that exited 0 under the flag says so in every
+format.
+
+Typical sequence: start with `--profile minimal` or `--exit-zero` to read the
+report; create a baseline and switch to `strict`; use `gate --base <default
+branch> --head HEAD` on pull requests; delete the baseline when it is empty.
+
 ## Baselines
 
 A baseline is a reviewed JSON file of finding fingerprints. It lets a project

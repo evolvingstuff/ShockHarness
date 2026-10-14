@@ -11,6 +11,7 @@ import json
 import sys
 import traceback
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from shockharness.analysis import AnalysisOptions
@@ -29,7 +30,7 @@ from shockharness.constants import (
     JSON_INDENT,
 )
 from shockharness.errors import ShockHarnessError, UsageError
-from shockharness.gate import GATE_ERROR
+from shockharness.gate import GATE_ERROR, as_advisory, process_exit_code
 from shockharness.gating.baseline import build_baseline, load_baseline, render_baseline
 from shockharness.gating.diff import DiffReport, diff_revisions, head_paths, with_metrics
 from shockharness.history.hotspots import collect_history
@@ -110,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_analysis_arguments(gate)
     _add_output_arguments(gate)
     _add_baseline_argument(gate)
+    _add_exit_zero_argument(gate)
 
     config = commands.add_parser("config", help="validate or print the effective configuration")
     config_commands = config.add_subparsers(
@@ -155,6 +157,17 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     _add_analysis_arguments(parser)
     _add_output_arguments(parser)
     _add_baseline_argument(parser)
+    _add_exit_zero_argument(parser)
+
+
+def _add_exit_zero_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--exit-zero",
+        action="store_true",
+        help="advisory run: report everything as usual but exit 0 instead of 1 on policy "
+        "violations; exit 2 (configuration) and exit 3 (tool failure, strict parse "
+        "failure) are never masked",
+    )
 
 
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
@@ -239,7 +252,10 @@ def _analyze_working_tree(args: argparse.Namespace) -> Report:
     report = analyze_paths(list(args.paths), args.root, config, _options(args))
     if args.baseline is not None:
         report = apply_baseline(report, load_baseline(args.baseline), config)
-    return with_history(report, args.root, WORKING_TREE_REVISION, config)
+    report = with_history(report, args.root, WORKING_TREE_REVISION, config)
+    if args.exit_zero:
+        report = replace(report, gate=as_advisory(report.gate))
+    return report
 
 
 def _render_report(report: Report, fmt: str) -> str:
@@ -268,8 +284,8 @@ def _report_written(args: argparse.Namespace, status: str, exit_code: int) -> No
 def _run_scan(args: argparse.Namespace) -> int:
     report = _analyze_working_tree(args)
     _write_output(_render_report(report, args.format), args.output)
-    _report_written(args, report.gate.status, report.gate.exit_code)
-    return report.gate.exit_code
+    _report_written(args, report.gate.status, process_exit_code(report.gate))
+    return process_exit_code(report.gate)
 
 
 def _run_baseline(args: argparse.Namespace) -> int:
@@ -330,9 +346,11 @@ def _run_gate(args: argparse.Namespace) -> int:
                 None,
             )
         diff = _run_diff_like(args)
+        if args.exit_zero:
+            diff = replace(diff, gate=as_advisory(diff.gate))
         _write_output(_render_diff(diff, args.format), args.output)
-        _report_written(args, diff.gate.status, diff.gate.exit_code)
-        return diff.gate.exit_code
+        _report_written(args, diff.gate.status, process_exit_code(diff.gate))
+        return process_exit_code(diff.gate)
     if len(args.paths) == 0:
         raise UsageError("gate needs PATH... or --base and --head", None)
     return _run_scan(args)

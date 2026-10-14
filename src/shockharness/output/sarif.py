@@ -13,7 +13,7 @@ from typing import Any
 
 from shockharness.constants import JSON_INDENT, SARIF_SCHEMA_URI, SARIF_VERSION
 from shockharness.findings import Finding
-from shockharness.gate import GateResult
+from shockharness.gate import GateResult, process_exit_code
 from shockharness.gating.baseline import FINGERPRINT_KEY
 from shockharness.gating.diff import STATUS_FIXED, STATUS_NEW, DiffReport
 from shockharness.report import STATUS_FAILED, Report
@@ -119,7 +119,9 @@ def _result(
 def _invocation(analysis_status: str, gate: GateResult) -> dict[str, Any]:
     return {
         "executionSuccessful": analysis_status != STATUS_FAILED,
-        "exitCode": gate.exit_code,
+        # The process exit code: under --exit-zero a failing verdict still exits 0, and
+        # properties.gate.exit_code keeps the verdict's own code next to advisory = true.
+        "exitCode": process_exit_code(gate),
         "properties": {"analysis_status": analysis_status, "gate": gate.to_json_dict()},
     }
 
@@ -159,6 +161,7 @@ def render(report: Report) -> str:
             "config_digest": report.config.digest,
             "effective_profile": report.config.values["profile"],
             "config_deviations": list(report.config.deviations),
+            "advisory": report.gate.advisory,
             "analysis_status": report.analysis_status,
             "coverage": dict(report.coverage),
             "files_failed": [f.to_json_dict() for f in report.files if f.failed],
@@ -190,6 +193,7 @@ def render_diff(diff: DiffReport) -> str:
             "config_digest": diff.config.digest,
             "effective_profile": diff.config.values["profile"],
             "config_deviations": list(diff.config.deviations),
+            "advisory": diff.gate.advisory,
             "base": {"ref": diff.base.ref, "commit": diff.base.commit},
             "head": {"ref": diff.head.ref, "commit": diff.head.commit},
             "summary": diff.summary(),

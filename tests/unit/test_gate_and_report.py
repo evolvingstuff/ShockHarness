@@ -220,3 +220,23 @@ def test_report_matches_published_schema(empty_root: Path, strict_config: Effect
     )
     assert _check(schema, data, "$") == []
     assert data["schema_version"] == "1"
+
+
+def test_advisory_gate_changes_only_the_process_exit_code(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    from shockharness.gate import advisory_line, as_advisory, process_exit_code
+
+    write(empty_root, "src/a.py", "x = 2\n")
+    report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
+    gate = report.gate
+    assert gate.advisory is False and process_exit_code(gate) == 1
+    advisory = as_advisory(gate)
+    assert advisory.to_json_dict() == {**gate.to_json_dict(), "advisory": True}
+    assert process_exit_code(advisory) == 0
+    assert advisory_line(advisory) == (
+        "shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0"
+    )
+    write(empty_root, "src/bad.js", "function (\n")
+    report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
+    assert process_exit_code(as_advisory(report.gate)) == 3

@@ -162,8 +162,12 @@ Rules that make this work:
 
 ## 6. Adopting on a legacy codebase
 
+The four onboarding paths (baseline, `gates.new_hard_violations = "warn"`,
+`profile = "minimal"`, `--exit-zero`) and when to use each are compared in
+`configuration.md`, "Adopting ShockHarness on an existing codebase". In short:
+
 1. Start with `profile = "minimal"` (everything reported, nothing gating) or
-   `recommended`, and read the report.
+   `recommended`, or run once with `--exit-zero`, and read the report.
 2. Create a reviewed baseline: `shockharness baseline create src --output
    .shockharness-baseline.json`, commit it, and pass `--baseline` to `check`.
    Legacy findings stay listed but do not gate; new ones do.

@@ -996,3 +996,84 @@ shockharness: error: .../.shockharness.toml and .../shockharness.toml: two dedic
 * Specification section 10 still names `policy_profile`; one word to align
   with section 20 decision 13.
 * Milestone E (complexity + graph) and Milestone G (skills) are unchanged.
+
+## Follow-up: `--exit-zero` for advisory runs — DONE (2026-10-14)
+
+Approved by the maintainer after the Milestone F part 2 commit; its own commit
+"Add --exit-zero for advisory runs". Not pushed, not tagged, version unchanged.
+
+Delivered: `--exit-zero` on `check` (and the hidden `scan` alias, which shares
+the parser helper) and on `gate` (both the `PATH...` and the `--base/--head`
+forms). `GateResult` gained an `advisory` flag (`gate.as_advisory`,
+`gate.process_exit_code`, `gate.advisory_line`); `evaluate` always sets it
+false and the CLI flips it after analysis, so the library API and every count,
+severity and verdict are untouched. The process returns
+`process_exit_code(gate)`: `EXIT_VIOLATIONS` becomes `EXIT_OK` under the flag,
+`EXIT_INTERNAL_ERROR` never does, and configuration or usage errors are raised
+before any gate exists, so they stay exit 2. Visible in every format:
+`gate.advisory` in the JSON and diff reports (both schemas, additive,
+`schema_version` still 1), the line `shockharness: advisory run
+(--exit-zero): gate verdict FAIL reported as exit 0` after the gate lines in
+text (the `gate: FAIL (exit 1)` line itself is unchanged), and `advisory` in
+SARIF run properties; the SARIF invocation `exitCode` is the process exit code
+while `properties.gate.exit_code` keeps the verdict's. The `report written to`
+summary names the process exit. `diff` does not take the flag: it already
+exits 0.
+
+Not a configuration key, on purpose: the checked-in form is
+`gates.new_hard_violations = "warn"`, which is reviewed, digested and reported
+as a deviation. `docs/configuration.md` gained "Adopting ShockHarness on an
+existing codebase" comparing baseline, `gates.new_hard_violations = "warn"`,
+`profile = "minimal"` and `--exit-zero` with when to use each; the README has
+the short form; `docs/integration.md` points to it.
+
+Tests (4 new, 447 total): exit 0 with violations under the flag with the
+verdict text and counts byte-identical to the strict run plus the one advisory
+line; `gate.advisory` true in JSON, `advisory` true and invocation `exitCode`
+0 in SARIF; the alias and both `gate` forms; `--output` summary; exit 2 for an
+invalid configuration and for a missing target under the flag; exit 3 for a
+strict parse failure under the flag (with the advisory line saying `ERROR
+reported as exit 3`); `diff --exit-zero` is an argparse error; a unit test
+that `as_advisory` changes only the `advisory` key of the gate's JSON.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts && ruff format --check src tests scripts
+All checks passed!
+73 files already formatted
+
+$ pytest -q        # CPython 3.14.7 / 3.13.1 / 3.12.8 / 3.11.11
+447 passed in 4.77s / 4.71s / 4.69s / 5.55s
+
+$ shockharness check src tests scripts    # self-compliance, all four interpreters
+gate: PASS (exit 0)
+
+$ shockharness check src --exit-zero      # smoke corpus: 7 hard violations
+  ...
+gate: FAIL (exit 1)
+  7 new hard violation(s) and gates.new_hard_violations = "fail"
+shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0
+$ echo $?
+0
+$ shockharness check src --exit-zero --format json | jq .gate
+{"status": "fail", "exit_code": 1, "hard_violations": 7, ..., "advisory": true}
+
+$ shockharness check src --exit-zero      # with an unparseable src/bad.js added
+gate: ERROR (exit 3)
+  1 file(s) could not be analyzed and parse_errors = "fail"
+shockharness: advisory run (--exit-zero): gate verdict ERROR reported as exit 3
+(exit 3)
+
+$ shockharness check src --exit-zero      # with include = 5 in .shockharness.toml
+shockharness: error: .../.shockharness.toml: configuration is invalid:
+  include: expected a list, got integer
+(exit 2)
+```
+
+### Failures observed during development (and what was done)
+
+1. The first patch of `cli.py` did not apply (a multi-line match missed the
+   one-line `config` parser call) and the three new CLI tests failed with
+   "unrecognized arguments: --exit-zero"; the patch was re-applied with the
+   correct anchor. Nothing else changed.

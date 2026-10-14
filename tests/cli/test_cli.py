@@ -784,3 +784,127 @@ def test_init_writes_a_short_file_for_profiles_below_strict(
     code, _, _ = run(["init", "--profile", "strict", "--path", str(target), "--force"], capsys)
     assert code == 0
     assert 'parse_errors = "fail"' in target.read_text(encoding="utf-8")
+
+
+# --- --exit-zero: advisory runs ----------------------------------------------------------
+
+
+def test_exit_zero_reports_violations_but_exits_zero(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(empty_root, "src/a.py", "x = 2\n")
+    root = ["--root", str(empty_root)]
+    code, strict_out, _ = run(["check", str(empty_root / "src"), *root], capsys)
+    assert code == 1
+    code, out, _ = run(["check", str(empty_root / "src"), "--exit-zero", *root], capsys)
+    assert code == 0
+    assert "src/a.py:1:5: MAGIC001 error" in out
+    assert "gate: FAIL (exit 1)" in out  # the verdict text is unchanged
+    assert '1 new hard violation(s) and gates.new_hard_violations = "fail"' in out
+    assert "shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0" in out
+    assert "advisory run" not in strict_out
+    assert (
+        out.replace(
+            "shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0\n", ""
+        )
+        == strict_out
+    )
+
+    code, out, _ = run(
+        ["check", str(empty_root / "src"), "--exit-zero", "--format", "json", *root], capsys
+    )
+    assert code == 0
+    data = json.loads(out)
+    assert data["gate"]["advisory"] is True
+    assert data["gate"]["status"] == "fail"
+    assert data["gate"]["exit_code"] == 1
+    assert data["gate"]["hard_violations"] == 1
+    assert data["execution_summary"]["findings"] == 1
+    code, out, _ = run(["check", str(empty_root / "src"), "--format", "json", *root], capsys)
+    assert code == 1
+    assert json.loads(out)["gate"]["advisory"] is False
+
+    code, out, _ = run(
+        ["check", str(empty_root / "src"), "--exit-zero", "--format", "sarif", *root], capsys
+    )
+    assert code == 0
+    sarif_run = json.loads(out)["runs"][0]
+    assert sarif_run["properties"]["advisory"] is True
+    assert sarif_run["invocations"][0]["exitCode"] == 0
+    assert sarif_run["invocations"][0]["properties"]["gate"]["exit_code"] == 1
+
+    # the alias and the working-tree gate honour it the same way
+    code, _, _ = run(["scan", str(empty_root / "src"), "--exit-zero", *root], capsys)
+    assert code == 0
+    code, out, _ = run(["gate", str(empty_root / "src"), "--exit-zero", *root], capsys)
+    assert code == 0
+    assert "advisory run (--exit-zero)" in out
+    # --output: the summary line names the process exit, the verdict stays in the file
+    report = empty_root / "r.json"
+    code, out, _ = run(
+        [
+            "check",
+            str(empty_root / "src"),
+            "--exit-zero",
+            "--format",
+            "json",
+            "--output",
+            str(report),
+            *root,
+        ],
+        capsys,
+    )
+    assert code == 0
+    assert "gate fail (exit 0)" in out
+    assert json.loads(report.read_text(encoding="utf-8"))["gate"]["advisory"] is True
+
+
+def test_exit_zero_never_masks_config_or_tool_failures(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(empty_root, "src/a.py", "x = 2\n")
+    root = ["--root", str(empty_root)]
+    write(empty_root, ".shockharness.toml", "[tool.shockharness]\ninclude = 5\n")
+    code, _, err = run(["check", str(empty_root / "src"), "--exit-zero", *root], capsys)
+    assert code == 2
+    assert "include: expected a list" in err
+    (empty_root / ".shockharness.toml").unlink()
+
+    write(empty_root, "src/bad.js", "function (\n")
+    code, out, _ = run(["check", str(empty_root / "src"), "--exit-zero", *root], capsys)
+    assert code == 3
+    assert "gate: ERROR (exit 3)" in out
+    assert "advisory run (--exit-zero): gate verdict ERROR reported as exit 3" in out
+    code, out, _ = run(
+        ["check", str(empty_root / "src"), "--exit-zero", "--format", "json", *root], capsys
+    )
+    assert code == 3
+    assert json.loads(out)["gate"]["advisory"] is True
+
+    code, _, err = run(["check", str(empty_root / "missing"), "--exit-zero", *root], capsys)
+    assert code == 2
+    assert "does not exist" in err
+    code, _, err = run(["gate", "--exit-zero", "--base", "HEAD", *root], capsys)
+    assert code == 2
+    assert "must be given together" in err
+
+
+def test_exit_zero_on_a_revision_gate(empty_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    c1, _c2 = _two_commit_repo(empty_root)
+    root = ["--root", str(empty_root)]
+    code, _, _ = run(["gate", "--base", c1, "--head", "HEAD", *root], capsys)
+    assert code == 1
+    code, out, _ = run(["gate", "--base", c1, "--head", "HEAD", "--exit-zero", *root], capsys)
+    assert code == 0
+    assert "gate: FAIL (exit 1)" in out
+    assert "advisory run (--exit-zero): gate verdict FAIL reported as exit 0" in out
+    code, out, _ = run(
+        ["gate", "--base", c1, "--head", "HEAD", "--exit-zero", "--format", "json", *root], capsys
+    )
+    assert code == 0
+    data = json.loads(out)
+    assert data["gate"]["advisory"] is True
+    assert data["summary"]["new_hard_violations"] == 1
+    with pytest.raises(SystemExit) as info:
+        main(["diff", "--base", c1, "--head", "HEAD", "--exit-zero", *root])
+    assert info.value.code == 2  # diff already exits 0; the flag does not exist there

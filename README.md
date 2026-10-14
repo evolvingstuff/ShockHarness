@@ -78,6 +78,7 @@ shockharness check src/ --format json --output report.json
 shockharness check src/ --format sarif --output report.sarif  # GitHub code scanning
 shockharness check src/ --profile minimal                      # try a profile without editing config
 shockharness check src/ --parse-errors warn                    # the only other CLI override
+shockharness check src/ --exit-zero                            # advisory: full report, exit 0 on violations
 shockharness baseline create src/ --output .shockharness-baseline.json
 shockharness check src/ --baseline .shockharness-baseline.json # legacy findings do not gate
 shockharness diff --base main --head HEAD                      # new / fixed / unchanged, exit 0
@@ -130,6 +131,18 @@ everything is reported, nothing but malformed suppressions fails). Precedence
 is bundled defaults < profile < repository configuration < `--profile` /
 `--parse-errors`. Any profile below `strict` is printed as a policy deviation
 in every report, and the report's `effective_profile` names it.
+
+## Adopting ShockHarness on an existing codebase
+
+Four onboarding paths, all visible in the report (details in
+`docs/configuration.md`):
+
+| Path | Use it when |
+|---|---|
+| **Baseline**: `baseline create`, then `--baseline FILE` | You want a real gate from the first PR: legacy findings are listed but do not gate, new ones fail. The usual choice. |
+| **`gates.new_hard_violations = "warn"`** in the config | The repository has agreed the policy is advisory for now; the decision is reviewed and diffed like any config change and reported as a deviation. |
+| **`profile = "minimal"`** (or `--profile minimal`) | First contact: every rule runs and reports at `review`; only malformed suppressions fail. |
+| **`--exit-zero`** on `check`/`gate` | One invocation must not block (a dry run, a first SARIF upload, a scheduled strict run) and the repository's policy should not change for it. Only the process exit code changes (1 becomes 0); exit 2 and 3 are never masked; the report says `advisory`. Deliberately not a config key: the config form is `gates.new_hard_violations = "warn"`. |
 
 ## Configuration
 

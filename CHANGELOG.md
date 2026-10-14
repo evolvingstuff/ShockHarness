@@ -6,6 +6,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- `--exit-zero` on `check` (and the `scan` alias) and `gate`: an advisory
+  run. The report, severities, gate verdict text and every count are
+  unchanged; only the process exit code is 0 where the verdict would have
+  returned 1. Exit 2 (configuration, usage) and exit 3 (tool failure, strict
+  parse failure) are never masked. The run is visible as `gate.advisory`
+  (JSON and diff reports, both schemas, additive), a `shockharness: advisory
+  run (--exit-zero): gate verdict FAIL reported as exit 0` line in text, and
+  the `advisory` SARIF run property; the SARIF invocation `exitCode` is the
+  process exit code while `properties.gate.exit_code` keeps the verdict's.
+  Deliberately a CLI-only flag, not a configuration key: the configuration
+  form is `gates.new_hard_violations = "warn"`. `docs/configuration.md` gains
+  "Adopting ShockHarness on an existing codebase" comparing the four onboarding
+  paths (baseline, `gates.new_hard_violations = "warn"`, `profile =
+  "minimal"`, `--exit-zero`).
 - Milestone F (distribution half). `shockharness check` is the canonical
   analysis command (identical arguments and behaviour to `scan`, which stays as
   a hidden alias); `shockharness version` prints the same string as

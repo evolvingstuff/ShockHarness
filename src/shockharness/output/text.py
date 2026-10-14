@@ -5,7 +5,7 @@ from typing import Any
 
 from shockharness.constants import COMMIT_SHORT_HEX, CONFIG_DIGEST_SHORT_HEX, TEXT_WRAP_WIDTH
 from shockharness.findings import Finding
-from shockharness.gate import GateResult
+from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
 from shockharness.report import Report
 from shockharness.rules.registry import RuleSpec
@@ -27,6 +27,8 @@ def _gate_lines(gate: GateResult) -> list[str]:
     lines = [f"gate: {gate.status.upper()} (exit {gate.exit_code})"]
     for reason in gate.reasons:
         lines.append(f"  {reason}")
+    if gate.advisory:
+        lines.append(advisory_line(gate))
     return lines
 
 
