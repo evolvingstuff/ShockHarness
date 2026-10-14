@@ -1,0 +1,20 @@
+# Profile "minimal": every rule still runs and reports, nothing fails the gate
+# except malformed suppressions (SUPP001). MAGIC001, EXC001-EXC003 and
+# DEF001-DEF006 are capped at review, syntax failures are warnings, and the
+# complexity family is off. Meant for first contact with a legacy codebase;
+# every line below is reported as a policy deviation in every report.
+
+[tool.shockharness]
+parse_errors = "warn"
+
+[tool.shockharness.rules.magic_numbers]
+severity = "review"
+
+[tool.shockharness.rules.exceptions]
+severity = "review"
+
+[tool.shockharness.rules.defaults]
+severity = "review"
+
+[tool.shockharness.complexity]
+enabled = false

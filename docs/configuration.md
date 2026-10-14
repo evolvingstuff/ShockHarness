@@ -1,27 +1,93 @@
 # Configuration
 
 ShockHarness reads exactly one user configuration source, validated against a
-closed schema, and merges it over the bundled strict defaults. Nothing is read
-from environment variables. Configuration files are data and are never executed.
+closed schema, and layers it over a built-in profile and the bundled strict
+defaults. Nothing is read from environment variables. Configuration files are
+data and are never executed.
 
 ## Where configuration comes from
 
-Precedence, highest first:
+One **source** applies, chosen in this order (highest first):
 
 | Tier | Source | Notes |
 |---|---|---|
 | `cli` | `--config PATH` | Must exist and contain `[tool.shockharness]`. |
-| `dedicated` | `<root>/.shockharness.toml` | Wins over `pyproject.toml`; a shadowed `pyproject` table is reported as a config note. |
+| `dedicated` | `<root>/.shockharness.toml` **or** `<root>/shockharness.toml` | Either spelling; **both present is an error** naming both files. Wins over `pyproject.toml`; a shadowed `pyproject` table is reported as a config note. |
 | `pyproject` | `[tool.shockharness]` in `<root>/pyproject.toml` | Used only when no dedicated file exists. |
 | `bundled` | `defaults.toml` inside the package | Always present; the strict profile. |
+
+The effective configuration is then built from four **layers**, lowest first:
+
+```text
+bundled defaults  <  built-in profile  <  the source above  <  command-line overrides
+```
+
+* The profile layer is the overlay for `profile = "strict" | "recommended" |
+  "minimal"` (see Profiles below); `strict` changes nothing.
+* The source's own keys override the profile's. Lists replace, tables merge key by key.
+* The command-line overrides are exactly `--profile NAME` and
+  `--parse-errors fail|warn` (see below); nothing else can be changed from the
+  command line.
 
 `<root>` is `--root` (default: the current directory). Targets outside the root
 are a usage error, so relative paths in reports are always root-relative.
 
-`shockharness config effective` prints the merged values with a per-key origin
-tier, the digest, notes, and policy deviations. `shockharness config validate`
-exits 0 only when the configuration is valid; every problem is listed with its
-key path.
+`shockharness config effective` prints the merged values with a per-key
+origin (`bundled`, `profile:<name>`, `cli`/`dedicated`/`pyproject`, or
+`cli_override`), the digest, notes, and policy deviations. `shockharness
+config validate` exits 0 only when the configuration is valid, prints the
+effective profile, and lists every policy deviation; every problem is listed
+with its key path.
+
+## Profiles
+
+Three profiles ship inside the package (`shockharness/profiles/*.toml`,
+versioned with the tool; no profile is ever fetched remotely). Select one with
+`profile = "..."` in the configuration or `--profile` on the command line.
+
+| Profile | What it is | Gate behaviour |
+|---|---|---|
+| `strict` (default) | The bundled defaults: every rule at its documented severity, `parse_errors = "fail"`, complexity enabled | Hard violations and unparseable files fail |
+| `recommended` | `strict`, except `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review` | As strict minus `DEF004` |
+| `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
+
+Any profile below `strict` prints a `policy deviation` line in every report
+(text, JSON `config.deviations`, SARIF run `properties.config_deviations`)
+and in `config validate`, followed by one line per key the profile changes.
+The report's top-level `effective_profile` names the profile in force.
+`shockharness init --profile recommended|minimal` writes a short file that
+selects the profile and nothing else: spelling out the strict values would
+override the profile layer and undo it.
+
+The per-section severity cap is also available directly:
+`rules.magic_numbers.severity`, `rules.exceptions.severity` and
+`rules.defaults.severity` accept `"error"` (default) or `"review"`. `"review"`
+turns the section's error findings into review findings (reported, never
+gating; `DEF005` included for `rules.defaults`); warnings and review findings
+are unchanged. Each cap below `"error"` is a reported deviation.
+
+## Command-line overrides
+
+Exactly two configuration keys can be overridden on the command line, on every
+command that loads configuration (`check`, `gate`, `diff`, `baseline create`,
+`config validate`, `config effective`):
+
+| Flag | Effect |
+|---|---|
+| `--profile strict\|recommended\|minimal` | Replaces the profile layer. The configuration file's *other* keys still apply on top of it, so `--profile strict` on a repository configured for `minimal` applies the repository's includes, boundaries and overrides under strict severities. |
+| `--parse-errors fail\|warn` | Replaces `parse_errors` only. |
+
+Both are recorded with origin `cli_override`, each adds a config note naming
+the flag and the value it replaced, both enter the configuration digest, and
+any resulting looseness is a policy deviation like any other.
+
+Why only these two: a CI job sometimes needs to ask a stricter or looser
+question without editing the repository (a scheduled strict run on a codebase
+that gates on `recommended`, or a quick look at what `minimal` would report),
+and sometimes needs to decide whether syntax the host interpreter cannot parse
+should fail the step. Everything else is policy and belongs in the checked-in
+file, where it is reviewed, diffed and digested. A flag per key would let a
+pipeline weaken the gate invisibly to anyone reading the repository.
 
 ## Schema
 
@@ -31,7 +97,7 @@ rule IDs, and unsupported include extensions are **errors**, never warnings.
 
 ```toml
 [tool.shockharness]
-profile = "strict"                      # only "strict" exists today
+profile = "strict"                      # "strict" | "recommended" | "minimal"; see Profiles
 include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**",
            "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
@@ -40,6 +106,7 @@ follow_symlinks = false                 # never leave the root through a link un
 
 [tool.shockharness.rules.magic_numbers]
 enabled = true
+severity = "error"                      # "review" caps MAGIC001 at review (reported, never gating; a deviation)
 allowed_values = [0, 1]                 # value-based; extra values are reported as deviations
 allow_unary_negative_one = false        # -1 fails unless true; -0 always fails
 exclude_configuration_files = true      # files matching configuration_files skip MAGIC001 (reported per file)
@@ -53,12 +120,14 @@ mode = "review"
 
 [tool.shockharness.rules.exceptions]      # EXC001-EXC003
 enabled = true
+severity = "error"                        # "review" caps EXC001-EXC003 at review
 mode = "boundary_whitelist"               # the only mode
 transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
 boundaries = []                           # see below
 
 [tool.shockharness.rules.defaults]        # DEF001-DEF006; each mode: "forbid" -> error, "review" -> review, "allow" -> off
 enabled = true
+severity = "error"                        # "review" caps every DEF finding (DEF005 included) at review
 function_parameters = "forbid"            # DEF001: parameter defaults, destructured parameter defaults
 dataclass_fields = "forbid"               # DEF001: dataclass field defaults and default_factory
 missing_value_fallbacks = "forbid"        # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
@@ -146,7 +215,7 @@ adopt the strict profile with existing debt: findings in the baseline are
 ```bash
 shockharness baseline create src/ --output .shockharness-baseline.json
 # review the file, then commit it
-shockharness scan src/ --baseline .shockharness-baseline.json
+shockharness check src/ --baseline .shockharness-baseline.json
 shockharness gate src/ --baseline .shockharness-baseline.json
 ```
 
@@ -213,8 +282,8 @@ commit hashes, the configuration digest, and the tool version; see
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report
-(`scan`, `diff`, `gate`). It reads `git log` locally for the analyzed files at
-the analyzed revision (`HEAD` for `scan`, the head commit for `diff`/`gate`)
+(`check`, `diff`, `gate`). It reads `git log` locally for the analyzed files at
+the analyzed revision (`HEAD` for `check`, the head commit for `diff`/`gate`)
 and reports, at **file granularity**: per file the number of commits, distinct
 authors, first and last change (author dates); `cochange` pairs of analyzed
 files that appear in the same commits with `support` (shared commits) and a
@@ -241,7 +310,7 @@ library's `analyze_paths` alone is `"not_collected"` (use
 
 ## Targets
 
-`shockharness scan PATH...` accepts files and directories. Directories are
+`shockharness check PATH...` accepts files and directories (`scan` is a hidden alias with identical arguments). Directories are
 walked (sorted, deterministic) and filtered by `include` then `exclude`. A file
 named explicitly is analyzed even if `include` does not match it; if `exclude`
 matches it, it is listed under `coverage.explicit_targets_excluded` rather than
@@ -270,10 +339,15 @@ const other = 500;  /* shockharness: ignore[MAGIC001] reason="RFC 9110 section 1
 
 Everything that loosens the strict profile is surfaced, never silent:
 
-* `config.deviations` lists disabled rules, extra `allowed_values`,
-  `allow_unary_negative_one`, `parse_errors = "warn"`, `transparent_rethrow`,
-  every exception boundary, every `rules.defaults` mode looser than the strict
-  profile, and every override, each with its reason.
+* `config.deviations` lists the profile when it is below `strict`, disabled
+  rules (complexity included), every `rules.<section>.severity = "review"`
+  cap, extra `allowed_values`, `allow_unary_negative_one`,
+  `parse_errors = "warn"`, `transparent_rethrow`, every exception boundary,
+  every `rules.defaults` mode looser than the strict profile, and every
+  override, each with its reason. The same list is in the text report, SARIF
+  run properties, and `config validate`.
+* `effective_profile` (top level, next to `tool_version` and `schema_version`)
+  names the profile in force, including one selected with `--profile`.
 * `files[].rules_disabled` lists, per file, which rules did not run and why
   (`config`, `overrides[i]`, or `configuration_file`).
 * `coverage.rules_not_implemented` lists rules that exist in the registry but produce nothing yet.

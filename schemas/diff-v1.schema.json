@@ -9,7 +9,7 @@
     "report_kind",
     "analysis_status",
     "config_digest",
-    "policy_profile",
+    "effective_profile",
     "config",
     "coverage",
     "base",
@@ -46,7 +46,7 @@
     "config_digest": {
       "type": "string"
     },
-    "policy_profile": {
+    "effective_profile": {
       "type": "string"
     },
     "base": {

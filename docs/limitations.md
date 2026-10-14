@@ -164,10 +164,14 @@ Stated so that a clean report is never read as more than it is.
 
 ## Not yet built (see the specification)
 
-Complexity metrics and the hotspot score, call graphs, profiles below
-`strict`, `check` as the canonical command name, `version` subcommand,
-`.gitignore` awareness, release automation, agent skills and `skills install`.
-Unknown CLI commands are argparse errors (exit 2).
+Complexity metrics and the hotspot score, call graphs, `.gitignore`
+awareness, agent skills and `skills install`. Unknown CLI commands are
+argparse errors (exit 2). Profiles exist but are limited to the three built-in
+ones (no user-defined or remote profiles), and the only command-line overrides
+are `--profile` and `--parse-errors`. The publish workflow and the reusable
+consumer workflow have not yet run on GitHub: the first `v*` tag exercises
+them (see `docs/releasing.md`), and the example workflows reference the tag
+`v0.1.0`, which exists only after that release.
 
 ## Platform
 

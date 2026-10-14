@@ -4,7 +4,7 @@
   "title": "ShockHarness report, schema_version 1",
   "type": "object",
   "required": [
-    "schema_version", "tool_version", "analysis_status", "config_digest", "policy_profile",
+    "schema_version", "tool_version", "analysis_status", "config_digest", "effective_profile",
     "config", "coverage", "files", "findings", "metrics", "gate", "execution_summary"
   ],
   "properties": {
@@ -12,7 +12,7 @@
     "tool_version": {"type": "string"},
     "analysis_status": {"type": "string", "enum": ["complete", "incomplete", "failed"]},
     "config_digest": {"type": "string"},
-    "policy_profile": {"type": "string"},
+    "effective_profile": {"type": "string"},
     "config": {
       "type": "object",
       "required": ["source", "notes", "deviations"],

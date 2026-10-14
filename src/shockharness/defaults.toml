@@ -1,4 +1,4 @@
-# Bundled defaults for the "strict" profile. Loaded from the package, lowest
+# Bundled defaults: the "strict" profile. Loaded from the package, lowest
 # precedence tier. User configuration is validated against the same schema and
 # merged over these values; lists replace, tables merge key by key.
 
@@ -12,6 +12,8 @@ overrides = []
 
 [tool.shockharness.rules.magic_numbers]
 enabled = true
+# "error": MAGIC001 findings fail the gate. "review": reported, never gating (a deviation).
+severity = "error"
 allowed_values = [0, 1]
 allow_unary_negative_one = false
 exclude_configuration_files = true
@@ -39,6 +41,8 @@ mode = "review"
 
 [tool.shockharness.rules.exceptions]
 enabled = true
+# "error": EXC001-EXC003 findings fail the gate. "review": reported, never gating.
+severity = "error"
 mode = "boundary_whitelist"
 # When true, a handler that only re-raises the caught exception (bare `raise`,
 # `raise err`, `throw err`) passes EXC001 outside any boundary. Off in strict:
@@ -50,6 +54,9 @@ boundaries = []
 
 [tool.shockharness.rules.defaults]
 enabled = true
+# "error": each mode below decides the severity. "review": every DEF finding, DEF005
+# included, is capped at review (reported, never gating).
+severity = "error"
 # Each mode: "forbid" -> error (fails the gate), "review" -> reported, never fails,
 # "allow" -> no finding. Anything looser than the strict value below is reported
 # as a policy deviation.

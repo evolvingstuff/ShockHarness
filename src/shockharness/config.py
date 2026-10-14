@@ -1,9 +1,15 @@
 """Configuration loading: discovery, precedence, validation, merge, digest.
 
-Precedence (highest first): explicit ``--config`` path, ``.shockharness.toml`` in
-the root, ``[tool.shockharness]`` in ``pyproject.toml``, bundled defaults. Exactly
-one user source applies; it is merged over the bundled defaults. A shadowed
-``pyproject.toml`` table is reported in ``notes`` rather than silently ignored.
+Sources (highest first): explicit ``--config`` path, ``.shockharness.toml`` or
+``shockharness.toml`` in the root (both present is an error), ``[tool.shockharness]``
+in ``pyproject.toml``, bundled defaults. Exactly one user source applies. A
+shadowed ``pyproject.toml`` table is reported in ``notes`` rather than silently
+ignored.
+
+Layers (lowest first): bundled defaults < the selected built-in profile
+(``profile = "..."``; an overlay shipped as package data) < the user source <
+the two command-line overrides (``--profile``, ``--parse-errors``). Every key
+records the layer it came from in ``origins``.
 
 Nothing here reads environment variables or executes configuration content.
 """
@@ -23,11 +29,27 @@ from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
-from shockharness.schema import ConfigIssue, validate_shape
+from shockharness.schema import (
+    PROFILE_STRICT,
+    PROFILES,
+    SECTION_SEVERITIES,
+    ConfigIssue,
+    validate_shape,
+)
 
 TOOL_TABLE = ("tool", "shockharness")
 DEDICATED_FILENAME = ".shockharness.toml"
+DEDICATED_FILENAMES = (DEDICATED_FILENAME, "shockharness.toml")
 PYPROJECT_FILENAME = "pyproject.toml"
+PROFILE_KEY = "profile"
+PARSE_ERRORS_KEY = "parse_errors"
+PROFILES_PACKAGE = "shockharness.profiles"
+# Sections that carry a `severity` cap (see rules/severity.py), with the rules they cover.
+SEVERITY_SECTIONS: Mapping[str, str] = {
+    "magic_numbers": "MAGIC001",
+    "exceptions": "EXC001-EXC003",
+    "defaults": "DEF001-DEF006",
+}
 
 # A boundary names one exception class: a dotted identifier path, never a wildcard.
 EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
@@ -36,6 +58,10 @@ TIER_CLI = "cli"
 TIER_DEDICATED = "dedicated"
 TIER_PYPROJECT = "pyproject"
 TIER_BUNDLED = "bundled"
+# Origin labels for the two layers that are not sources: the profile overlay
+# (``profile:<name>``) and the command-line overrides.
+ORIGIN_PROFILE_PREFIX = "profile:"
+ORIGIN_CLI_OVERRIDE = "cli_override"
 
 SUPPORTED_EXTENSIONS: Mapping[str, str] = {
     ".py": registry.PYTHON,
@@ -49,6 +75,22 @@ SUPPORTED_EXTENSIONS: Mapping[str, str] = {
 class ConfigSource:
     tier: str
     path: str
+
+
+@dataclass(frozen=True)
+class CliOverrides:
+    """The only configuration keys the command line may override.
+
+    ``--profile`` replaces the profile layer (the repository's own keys still apply on
+    top of it); ``--parse-errors`` decides whether syntax failures fail the run. Both
+    are recorded in ``origins`` as ``cli_override`` and in ``notes``.
+    """
+
+    profile: str | None
+    parse_errors: str | None
+
+
+NO_OVERRIDES = CliOverrides(profile=None, parse_errors=None)
 
 
 @dataclass(frozen=True)
@@ -113,6 +155,33 @@ def load_bundled_defaults() -> dict[str, Any]:
     return table
 
 
+def profile_overlay_text(name: str) -> str:
+    """The TOML text of built-in profile ``name`` (package data)."""
+    if name not in PROFILES:
+        raise ConfigError(f"unknown profile; known profiles: {', '.join(PROFILES)}", name)
+    return resources.files(PROFILES_PACKAGE).joinpath(f"{name}.toml").read_text(encoding="utf-8")
+
+
+def load_profile_overlay(name: str) -> dict[str, Any]:
+    """The keys built-in profile ``name`` changes relative to the bundled defaults.
+
+    An overlay is validated like user configuration and may not set ``profile`` itself.
+    """
+    origin = f"bundled profiles/{name}.toml"
+    table = _extract_tool_table(tomllib.loads(profile_overlay_text(name)), origin)
+    if table is None:
+        raise ConfigError("bundled profile is missing [tool.shockharness]", origin)
+    issues = validate_shape(table)
+    if PROFILE_KEY in table:
+        issues.append(ConfigIssue(PROFILE_KEY, "a profile overlay cannot select a profile"))
+    if len(issues) > 0:
+        raise ConfigError(
+            "bundled profile is invalid:\n  " + "\n  ".join(issue.render() for issue in issues),
+            origin,
+        )
+    return table
+
+
 def _deep_merge(
     base: dict[str, Any],
     override: Mapping[str, Any],
@@ -157,13 +226,21 @@ def _discover_source(
             raise ConfigError("configuration file has no [tool.shockharness] table", str(explicit))
         return ConfigSource(TIER_CLI, str(explicit)), table, notes
 
-    dedicated = root / DEDICATED_FILENAME
+    present = [root / name for name in DEDICATED_FILENAMES if (root / name).is_file()]
+    if len(present) > 1:
+        listed = " and ".join(str(path) for path in present)
+        raise ConfigError(
+            "two dedicated configuration files exist; keep exactly one of "
+            + ", ".join(DEDICATED_FILENAMES),
+            listed,
+        )
     pyproject = root / PYPROJECT_FILENAME
     pyproject_table: dict[str, Any] | None = None
     if pyproject.is_file():
         pyproject_table = _extract_tool_table(_read_toml(pyproject), str(pyproject))
 
-    if dedicated.is_file():
+    if len(present) == 1:
+        dedicated = present[0]
         table = _extract_tool_table(_read_toml(dedicated), str(dedicated))
         if table is None:
             raise ConfigError("configuration file has no [tool.shockharness] table", str(dedicated))
@@ -252,10 +329,25 @@ def _literal_extension(pattern: str) -> str | None:
 def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
     """Explicit departures from the strict profile, always surfaced in reports."""
     found: list[str] = []
+    profile = values[PROFILE_KEY]
+    if profile != PROFILE_STRICT:
+        found.append(
+            f"profile is {profile!r}, below {PROFILE_STRICT!r}; the lines that follow are what "
+            "it changes (see docs/configuration.md, Profiles)"
+        )
     rules = values["rules"]
     for section_name in sorted(rules):
         if rules[section_name]["enabled"] is False:
             found.append(f"rules.{section_name} is disabled")
+    for section_name in SEVERITY_SECTIONS:
+        if rules[section_name]["severity"] != SECTION_SEVERITIES[0]:
+            found.append(
+                f"rules.{section_name}.severity is {rules[section_name]['severity']!r}; "
+                f"{SEVERITY_SECTIONS[section_name]} findings are reported as review and never "
+                "fail the gate"
+            )
+    if values["complexity"]["enabled"] is False:
+        found.append("complexity is disabled")
     allowed = rules["magic_numbers"]["allowed_values"]
     extra = sorted({str(v) for v in allowed if v != 0 and v != 1})
     if len(extra) > 0:
@@ -291,10 +383,37 @@ def config_digest(values: Mapping[str, Any]) -> str:
 
 
 def load_config(root: Path, explicit: Path | None) -> EffectiveConfig:
-    """Discover, validate, and merge configuration for ``root``.
+    """Discover, validate, and merge configuration for ``root`` with no CLI overrides.
 
     Raises :class:`ConfigError` listing every shape and semantic problem found.
     """
+    return load_config_with_overrides(root, explicit, NO_OVERRIDES)
+
+
+def _validate_overrides(overrides: CliOverrides) -> None:
+    if overrides.profile is not None and overrides.profile not in PROFILES:
+        raise ConfigError(
+            f"--profile must be one of {', '.join(PROFILES)}", repr(overrides.profile)
+        )
+    parse_choices = ("fail", "warn")
+    if overrides.parse_errors is not None and overrides.parse_errors not in parse_choices:
+        raise ConfigError(
+            f"--parse-errors must be one of {', '.join(parse_choices)}",
+            repr(overrides.parse_errors),
+        )
+
+
+def load_config_with_overrides(
+    root: Path, explicit: Path | None, overrides: CliOverrides
+) -> EffectiveConfig:
+    """Discover, validate, and merge configuration for ``root``.
+
+    Layers, lowest first: bundled defaults, the profile overlay (selected by
+    ``--profile``, else the user source's ``profile`` key, else ``strict``), the user
+    source, the CLI overrides. Raises :class:`ConfigError` listing every shape and
+    semantic problem found.
+    """
+    _validate_overrides(overrides)
     defaults = load_bundled_defaults()
     source, user_table, notes = _discover_source(root, explicit)
 
@@ -305,9 +424,35 @@ def load_config(root: Path, explicit: Path | None) -> EffectiveConfig:
             source.path,
         )
 
+    profile_name = str(defaults[PROFILE_KEY])
+    if PROFILE_KEY in user_table:
+        profile_name = str(user_table[PROFILE_KEY])
+    if overrides.profile is not None:
+        if overrides.profile != profile_name:
+            notes.append(
+                f"profile {overrides.profile!r} selected by --profile on the command line "
+                f"replaces profile {profile_name!r}; the configuration file's other keys "
+                "still apply on top of it"
+            )
+        profile_name = overrides.profile
+
     origins: dict[str, str] = {}
     _record_origins(origins, defaults, TIER_BUNDLED)
-    merged = _deep_merge(defaults, user_table, origins, source.tier, "")
+    overlay = load_profile_overlay(profile_name)
+    merged = _deep_merge(defaults, overlay, origins, ORIGIN_PROFILE_PREFIX + profile_name, "")
+    merged = _deep_merge(merged, user_table, origins, source.tier, "")
+
+    cli_layer: dict[str, Any] = {}
+    if overrides.profile is not None:
+        cli_layer[PROFILE_KEY] = overrides.profile
+    if overrides.parse_errors is not None:
+        cli_layer[PARSE_ERRORS_KEY] = overrides.parse_errors
+        notes.append(
+            f"parse_errors = {overrides.parse_errors!r} set by --parse-errors on the command "
+            f"line (configured value: {merged[PARSE_ERRORS_KEY]!r})"
+        )
+    if len(cli_layer) > 0:
+        merged = _deep_merge(merged, cli_layer, origins, ORIGIN_CLI_OVERRIDE, "")
 
     semantic = _semantic_issues(merged)
     if len(semantic) > 0:
@@ -327,5 +472,26 @@ def load_config(root: Path, explicit: Path | None) -> EffectiveConfig:
 
 
 def render_default_config_toml() -> str:
-    """The text ``shockharness init`` writes: the bundled defaults, verbatim."""
+    """The text ``shockharness init --profile strict`` writes: the bundled defaults, verbatim."""
     return resources.files("shockharness").joinpath("defaults.toml").read_text(encoding="utf-8")
+
+
+def render_profile_config_toml(name: str) -> str:
+    """The text ``shockharness init --profile NAME`` writes.
+
+    ``strict`` is the bundled defaults verbatim. Any other profile gets a short file
+    that selects the profile and nothing else: spelling out the strict values would
+    override the profile layer and silently undo it.
+    """
+    if name == PROFILE_STRICT:
+        return render_default_config_toml()
+    if name not in PROFILES:
+        raise ConfigError(f"unknown profile; known profiles: {', '.join(PROFILES)}", name)
+    return (
+        f"# ShockHarness configuration selecting the built-in {name!r} profile.\n"
+        "# Keys set here override the profile; keys left out keep the profile's values.\n"
+        "# `shockharness config effective` prints the result with a per-key origin.\n"
+        "\n"
+        "[tool.shockharness]\n"
+        f'profile = "{name}"\n'
+    )

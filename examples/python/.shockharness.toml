@@ -1,0 +1,12 @@
+# ShockHarness policy for example-service. Strict profile; every exemption is explicit.
+
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py", "tests/**/*.py"]
+exclude = ["**/.venv/**", "**/dist/**", "**/build/**"]
+parse_errors = "fail"
+
+[[tool.shockharness.overrides]]
+paths = ["tests/**"]
+disable = ["MAGIC001", "DEF001"]
+reason = "Tests encode literal expected outputs and pytest fixture signatures"

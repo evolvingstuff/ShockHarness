@@ -20,7 +20,7 @@ def test_nested_unknown_key_has_full_path() -> None:
     messages = issues_for({"rules": {"magic_numbers": {"allow_values": [0]}}})
     assert messages == [
         "rules.magic_numbers.allow_values: unknown key (known keys: allow_unary_negative_one, "
-        "allowed_values, configuration_files, enabled, exclude_configuration_files)"
+        "allowed_values, configuration_files, enabled, exclude_configuration_files, severity)"
     ]
 
 
@@ -71,4 +71,12 @@ def test_integer_minimums() -> None:
 
 
 def test_unknown_profile() -> None:
-    assert issues_for({"profile": "lenient"}) == ["profile: must be one of 'strict', got 'lenient'"]
+    assert issues_for({"profile": "lenient"}) == [
+        "profile: must be one of 'strict', 'recommended', 'minimal', got 'lenient'"
+    ]
+
+
+def test_section_severity_enum() -> None:
+    assert issues_for({"rules": {"defaults": {"severity": "warn"}}}) == [
+        "rules.defaults.severity: must be one of 'error', 'review', got 'warn'"
+    ]

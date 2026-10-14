@@ -1,0 +1,5 @@
+# Profile "strict": the bundled defaults, unchanged. Every rule at its documented
+# severity, parse_errors = "fail", complexity enabled. This overlay sets nothing;
+# it exists so that every profile name resolves to a file.
+
+[tool.shockharness]

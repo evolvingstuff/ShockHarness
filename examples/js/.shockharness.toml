@@ -1,0 +1,12 @@
+# ShockHarness policy for example-web. Strict profile; every exemption is explicit.
+
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.js", "test/**/*.js"]
+exclude = ["**/node_modules/**", "**/dist/**"]
+parse_errors = "fail"
+
+[[tool.shockharness.overrides]]
+paths = ["test/**"]
+disable = ["MAGIC001"]
+reason = "Tests encode literal expected outputs"

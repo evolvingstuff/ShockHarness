@@ -12,6 +12,7 @@ from shockharness.constants import NEGATIVE_ONE
 from shockharness.findings import CONFIDENCE_EXACT, Finding
 from shockharness.ir.model import ModuleFacts, NumericLiteral
 from shockharness.rules.registry import MAGIC001
+from shockharness.rules.severity import section_severity
 from shockharness.source import SourceText
 
 
@@ -31,6 +32,7 @@ def run_magic001(
 ) -> list[Finding]:
     allowed_values = list(settings["allowed_values"])
     allow_negative_one = bool(settings["allow_unary_negative_one"])
+    severity = section_severity(settings, MAGIC001.default_severity)
     findings: list[Finding] = []
     for literal in facts.numeric_literals:
         if _is_allowed(literal, allowed_values, allow_negative_one):
@@ -40,7 +42,7 @@ def run_magic001(
             Finding(
                 rule_id=MAGIC001.rule_id,
                 rule_version=MAGIC001.version,
-                severity=MAGIC001.default_severity,
+                severity=severity,
                 path=path,
                 span=literal.span,
                 message=f"Numeric literal {literal.raw} has no permitted justification{where}",

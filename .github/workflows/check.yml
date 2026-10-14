@@ -1,0 +1,71 @@
+name: ShockHarness check (reusable)
+
+# Reusable workflow for consumer repositories (spec section 20, decision 4 of the
+# distribution brief). Call it with `uses:` pinned to a release tag or a full commit
+# SHA. The analyzer version is NOT implied by that ref: it is the required
+# `shockharness-version` input, installed from PyPI. See docs/integration.md.
+
+on:
+  workflow_call:
+    inputs:
+      shockharness-version:
+        description: "Exact shockharness version to install from PyPI (the analyzer pin)"
+        required: true
+        type: string
+      config:
+        description: "Configuration file path; empty discovers it in the repository root"
+        required: false
+        type: string
+        default: ""
+      base:
+        description: "Base git ref: when set, runs `gate --base <base> --head HEAD`; when empty, runs `check .`"
+        required: false
+        type: string
+        default: ""
+      python-version:
+        description: "Python used to run the analyzer (the analyzed code need not be Python)"
+        required: false
+        type: string
+        default: "3.12"
+
+jobs:
+  shockharness:
+    name: shockharness ${{ inputs.shockharness-version }}
+    runs-on: ubuntu-latest
+    # The only permissions this workflow needs. The caller's job must grant at least these.
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      SHOCKHARNESS_VERSION: ${{ inputs.shockharness-version }}
+      SHOCKHARNESS_CONFIG: ${{ inputs.config }}
+      SHOCKHARNESS_BASE: ${{ inputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `gate --base` needs the base commit; a shallow clone would not have it.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install the pinned analyzer
+        run: python -m pip install --disable-pip-version-check "shockharness==${SHOCKHARNESS_VERSION}"
+      - name: Run shockharness
+        run: |
+          args=(--format sarif --output shockharness.sarif)
+          if [ -n "${SHOCKHARNESS_CONFIG}" ]; then
+            args+=(--config "${SHOCKHARNESS_CONFIG}")
+          fi
+          if [ -n "${SHOCKHARNESS_BASE}" ]; then
+            shockharness gate --base "${SHOCKHARNESS_BASE}" --head HEAD "${args[@]}"
+          else
+            shockharness check . "${args[@]}"
+          fi
+      - name: Upload SARIF to code scanning
+        # The report is written even when the gate fails (exit 1); it is absent only when
+        # the run could not start (exit 2: invalid configuration or invocation).
+        if: ${{ !cancelled() && hashFiles('shockharness.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: shockharness.sarif
+          category: shockharness

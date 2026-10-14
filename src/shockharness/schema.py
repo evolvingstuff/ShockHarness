@@ -149,6 +149,15 @@ def type_name(value: Any) -> str:
 
 SEVERITY_MODES = ("forbid", "review", "allow")
 LANGUAGES = ("python", "javascript")
+# Built-in profiles, strictest first. "strict" is the bundled defaults; the others are
+# overlays shipped as package data under shockharness/profiles/.
+PROFILE_STRICT = "strict"
+PROFILE_RECOMMENDED = "recommended"
+PROFILE_MINIMAL = "minimal"
+PROFILES = (PROFILE_STRICT, PROFILE_RECOMMENDED, PROFILE_MINIMAL)
+# A rule section's `severity`: "error" keeps each rule's documented severity; "review" caps
+# every error finding of the section at review (reported, never gating).
+SECTION_SEVERITIES = ("error", "review")
 
 BOUNDARY_SCHEMA = TableField(
     fields={
@@ -171,7 +180,7 @@ OVERRIDE_SCHEMA = TableField(
 
 CONFIG_SCHEMA = TableField(
     fields={
-        "profile": EnumField(("strict",)),
+        "profile": EnumField(PROFILES),
         "include": ListField(StrField(allow_empty=False)),
         "exclude": ListField(StrField(allow_empty=False)),
         "parse_errors": EnumField(("fail", "warn")),
@@ -181,6 +190,7 @@ CONFIG_SCHEMA = TableField(
                 "magic_numbers": TableField(
                     fields={
                         "enabled": BoolField(),
+                        "severity": EnumField(SECTION_SEVERITIES),
                         "allowed_values": ListField(NumberField()),
                         "allow_unary_negative_one": BoolField(),
                         "exclude_configuration_files": BoolField(),
@@ -195,6 +205,7 @@ CONFIG_SCHEMA = TableField(
                 "exceptions": TableField(
                     fields={
                         "enabled": BoolField(),
+                        "severity": EnumField(SECTION_SEVERITIES),
                         "mode": EnumField(("boundary_whitelist",)),
                         "transparent_rethrow": BoolField(),
                         "boundaries": ListField(BOUNDARY_SCHEMA),
@@ -204,6 +215,7 @@ CONFIG_SCHEMA = TableField(
                 "defaults": TableField(
                     fields={
                         "enabled": BoolField(),
+                        "severity": EnumField(SECTION_SEVERITIES),
                         "function_parameters": EnumField(SEVERITY_MODES),
                         "dataclass_fields": EnumField(SEVERITY_MODES),
                         "missing_value_fallbacks": EnumField(SEVERITY_MODES),

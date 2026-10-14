@@ -66,6 +66,7 @@ from shockharness.rules.registry import (
     SEVERITY_REVIEW,
     RuleSpec,
 )
+from shockharness.rules.severity import section_severity
 from shockharness.source import SourceText
 
 MODE_FORBID = "forbid"
@@ -142,13 +143,16 @@ def mode_key_for(fact: DefaultFact) -> str | None:
 def _severity(fact: DefaultFact, settings: Mapping[str, Any]) -> str | None:
     key = mode_key_for(fact)
     if key is None:
-        return SEVERITY_ERROR
+        return section_severity(settings, SEVERITY_ERROR)
     mode = str(settings[key])
     if mode == MODE_ALLOW:
         return None
     if fact.kind in IMPLICIT_KINDS:
         return SEVERITY_REVIEW
-    return severity_for_mode(mode)
+    by_mode = severity_for_mode(mode)
+    if by_mode is None:
+        return None
+    return section_severity(settings, by_mode)
 
 
 def _message(fact: DefaultFact, language: str) -> str:
@@ -240,7 +244,7 @@ def run_default_rules(
             findings.append(
                 _finding(
                     DEF005,
-                    SEVERITY_ERROR,
+                    section_severity(settings, SEVERITY_ERROR),
                     path,
                     catch.span,
                     f"{KIND_LABELS[catch.kind]} converts the exception into a fallback value: "

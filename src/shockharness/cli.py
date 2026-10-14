@@ -15,7 +15,13 @@ from pathlib import Path
 
 from shockharness.analysis import AnalysisOptions
 from shockharness.api import analyze_paths, apply_baseline, with_history
-from shockharness.config import DEDICATED_FILENAME, load_config, render_default_config_toml
+from shockharness.config import (
+    DEDICATED_FILENAME,
+    CliOverrides,
+    EffectiveConfig,
+    load_config_with_overrides,
+    render_profile_config_toml,
+)
 from shockharness.constants import (
     EXIT_INTERNAL_ERROR,
     EXIT_INVALID_CONFIG,
@@ -32,6 +38,7 @@ from shockharness.output import sarif as sarif_output
 from shockharness.output import text as text_output
 from shockharness.report import Report
 from shockharness.rules import registry
+from shockharness.schema import PROFILE_STRICT, PROFILES
 from shockharness.version import __version__
 
 PROGRAM = "shockharness"
@@ -40,6 +47,10 @@ FORMAT_JSON = "json"
 FORMAT_SARIF = "sarif"
 FORMATS = (FORMAT_TEXT, FORMAT_JSON, FORMAT_SARIF)
 WORKING_TREE_REVISION = "HEAD"
+PARSE_ERROR_POLICIES = ("fail", "warn")
+COMMAND_CHECK = "check"
+COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
+COMMAND_VERSION = "version"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,17 +61,20 @@ def build_parser() -> argparse.ArgumentParser:
             "no magic numbers."
         ),
     )
-    parser.add_argument("--version", action="version", version=f"{PROGRAM} {__version__}")
+    parser.add_argument("--version", action="version", version=version_string())
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    scan = commands.add_parser(
-        "scan", help="analyze files and directories, print a report, exit with the gate status"
+    check = commands.add_parser(
+        COMMAND_CHECK,
+        help="analyze files and directories, print a report, exit with the gate status",
     )
-    scan.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
-    _add_config_arguments(scan)
-    _add_analysis_arguments(scan)
-    _add_output_arguments(scan)
-    _add_baseline_argument(scan)
+    _add_check_arguments(check)
+    # `scan` is the pre-Milestone-F name: same arguments, same behaviour. A subparser added
+    # without `help` is accepted but not listed in --help, which is how it stays hidden.
+    scan = commands.add_parser(COMMAND_SCAN)
+    _add_check_arguments(scan)
+
+    commands.add_parser(COMMAND_VERSION, help="print the tool version (same as --version)")
 
     baseline = commands.add_parser("baseline", help="create a reviewed baseline of findings")
     baseline_commands = baseline.add_subparsers(
@@ -114,8 +128,16 @@ def build_parser() -> argparse.ArgumentParser:
     explain = rules_commands.add_parser("explain", help="print the full description of one rule")
     explain.add_argument("rule_id")
 
-    init = commands.add_parser("init", help=f"write a {DEDICATED_FILENAME} with the strict profile")
-    init.add_argument("--profile", choices=("strict",), default="strict")
+    init = commands.add_parser(
+        "init", help=f"write a {DEDICATED_FILENAME} selecting a built-in profile"
+    )
+    init.add_argument(
+        "--profile",
+        choices=PROFILES,
+        default=PROFILE_STRICT,
+        help="strict writes the bundled defaults in full; other profiles write a short file "
+        "that selects the profile (default: strict)",
+    )
     init.add_argument(
         "--path", type=Path, default=Path(DEDICATED_FILENAME), help="where to write the file"
     )
@@ -123,11 +145,37 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def version_string() -> str:
+    return f"{PROGRAM} {__version__}"
+
+
+def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
+    _add_config_arguments(parser)
+    _add_analysis_arguments(parser)
+    _add_output_arguments(parser)
+    _add_baseline_argument(parser)
+
+
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--root", type=Path, default=Path.cwd(), help="analysis root (default: current directory)"
     )
     parser.add_argument("--config", type=Path, default=None, help="explicit configuration file")
+    # The only two configuration keys the command line may override (docs/configuration.md).
+    parser.add_argument(
+        "--profile",
+        choices=PROFILES,
+        default=None,
+        help="use this built-in profile instead of the configured one; the configuration "
+        "file's other keys still apply on top of it",
+    )
+    parser.add_argument(
+        "--parse-errors",
+        choices=PARSE_ERROR_POLICIES,
+        default=None,
+        help="override parse_errors: fail (exit 3 on an unparseable file) or warn",
+    )
 
 
 def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
@@ -181,8 +229,13 @@ def _options(args: argparse.Namespace) -> AnalysisOptions:
     return AnalysisOptions(inline_suppressions=not args.no_inline_suppressions)
 
 
+def _load_config(args: argparse.Namespace) -> EffectiveConfig:
+    overrides = CliOverrides(profile=args.profile, parse_errors=args.parse_errors)
+    return load_config_with_overrides(args.root, args.config, overrides)
+
+
 def _analyze_working_tree(args: argparse.Namespace) -> Report:
-    config = load_config(args.root, args.config)
+    config = _load_config(args)
     report = analyze_paths(list(args.paths), args.root, config, _options(args))
     if args.baseline is not None:
         report = apply_baseline(report, load_baseline(args.baseline), config)
@@ -227,7 +280,7 @@ def _run_baseline(args: argparse.Namespace) -> int:
             "pass --force to replace it after review",
             str(target),
         )
-    config = load_config(args.root, args.config)
+    config = _load_config(args)
     report = analyze_paths(list(args.paths), args.root, config, _options(args))
     if report.gate.status == GATE_ERROR:
         sys.stderr.write(text_output.render(report))
@@ -247,7 +300,7 @@ def _run_baseline(args: argparse.Namespace) -> int:
 
 
 def _run_diff_like(args: argparse.Namespace) -> DiffReport:
-    config = load_config(args.root, args.config)
+    config = _load_config(args)
     diff = diff_revisions(args.root, args.base, args.head, config, _options(args))
     metrics = dict(diff.metrics)
     metrics["history"] = collect_history(args.root, diff.head.commit, head_paths(diff), config)
@@ -286,10 +339,11 @@ def _run_gate(args: argparse.Namespace) -> int:
 
 
 def _run_config(args: argparse.Namespace) -> int:
-    config = load_config(args.root, args.config)
+    config = _load_config(args)
     if args.config_command == "validate":
         sys.stdout.write(
-            f"{PROGRAM}: configuration is valid ({config.source.tier}: {config.source.path})\n"
+            f"{PROGRAM}: configuration is valid ({config.source.tier}: {config.source.path}; "
+            f"profile {config.values['profile']})\n"
         )
         for note in config.notes:
             sys.stdout.write(f"  note: {note}\n")
@@ -318,14 +372,21 @@ def _run_init(args: argparse.Namespace) -> int:
         raise UsageError(
             "configuration file already exists; pass --force to overwrite it", str(target)
         )
-    _write_output(render_default_config_toml(), target)
+    _write_output(render_profile_config_toml(args.profile), target)
     sys.stdout.write(f"{PROGRAM}: wrote {target} ({args.profile} profile)\n")
     return EXIT_OK
 
 
+def _run_version() -> int:
+    sys.stdout.write(version_string() + "\n")
+    return EXIT_OK
+
+
 def _dispatch(args: argparse.Namespace) -> int:
-    if args.command == "scan":
+    if args.command == COMMAND_CHECK or args.command == COMMAND_SCAN:
         return _run_scan(args)
+    if args.command == COMMAND_VERSION:
+        return _run_version()
     if args.command == "baseline":
         return _run_baseline(args)
     if args.command == "diff":

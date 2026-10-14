@@ -1,0 +1,12 @@
+# Dependabot for the ShockHarness repository itself (spec section 20, decision 10).
+# Consumers get their own snippet in docs/integration.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

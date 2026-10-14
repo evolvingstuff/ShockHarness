@@ -46,6 +46,7 @@ from shockharness.ir.model import (
     Span,
 )
 from shockharness.rules.registry import EXC001, EXC002, EXC003, RuleSpec
+from shockharness.rules.severity import section_severity
 from shockharness.source import SourceText
 
 KIND_LABELS: Mapping[str, str] = {
@@ -174,6 +175,7 @@ def evaluate_approval(catch: CatchFact, applicable: tuple[Boundary, ...]) -> App
 
 def _finding(
     rule: RuleSpec,
+    settings: Mapping[str, Any],
     path: str,
     span: Span,
     message: str,
@@ -184,7 +186,7 @@ def _finding(
     return Finding(
         rule_id=rule.rule_id,
         rule_version=rule.version,
-        severity=rule.default_severity,
+        severity=section_severity(settings, rule.default_severity),
         path=path,
         span=span,
         message=message,
@@ -217,7 +219,13 @@ def _exc002_message(catch: CatchFact) -> str:
     return f"{label} replaces the exception without preserving its cause: {catch.body.detail}"
 
 
-def _exc003(catch: CatchFact, approval: Approval, path: str, source: SourceText) -> Finding | None:
+def _exc003(
+    catch: CatchFact,
+    approval: Approval,
+    settings: Mapping[str, Any],
+    path: str,
+    source: SourceText,
+) -> Finding | None:
     label = KIND_LABELS[catch.kind]
     approved_by = ", ".join(sorted({b.label() for b in approval.boundaries}))
     statements = catch.try_statements
@@ -225,6 +233,7 @@ def _exc003(catch: CatchFact, approval: Approval, path: str, source: SourceText)
         span = statements[1].span if len(statements) > 1 else catch.span
         return _finding(
             EXC003,
+            settings,
             path,
             span,
             f"approved {label} protects {len(statements)} statements; a boundary may wrap only "
@@ -238,6 +247,7 @@ def _exc003(catch: CatchFact, approval: Approval, path: str, source: SourceText)
         return None
     return _finding(
         EXC003,
+        settings,
         path,
         statement.span,
         f"approved {label} protects a statement that cannot be attributed to one external "
@@ -275,6 +285,7 @@ def run_exception_rules(
             findings.append(
                 _finding(
                     EXC001,
+                    settings,
                     path,
                     catch.span,
                     f"{label}{_written(catch)} is forbidden: " + "; ".join(approval.problems),
@@ -291,6 +302,7 @@ def run_exception_rules(
             findings.append(
                 _finding(
                     EXC002,
+                    settings,
                     path,
                     catch.span,
                     _exc002_message(catch),
@@ -300,7 +312,7 @@ def run_exception_rules(
                 )
             )
         if EXC003.rule_id in active_rule_ids and approval.approved:
-            scope_finding = _exc003(catch, approval, path, source)
+            scope_finding = _exc003(catch, approval, settings, path, source)
             if scope_finding is not None:
                 findings.append(scope_finding)
     return findings

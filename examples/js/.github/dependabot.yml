@@ -1,0 +1,6 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions # bumps the reusable workflow ref (not the analyzer)
+    directory: /
+    schedule:
+      interval: weekly

@@ -3,7 +3,7 @@
 
 [tool.shockharness]
 profile = "strict"
-include = ["src/**/*.py", "tests/**/*.py"]
+include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
 exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**"]
 parse_errors = "fail"
 

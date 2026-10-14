@@ -85,7 +85,8 @@ def render(report: Report) -> str:
         lines.append(f"  policy deviation: {deviation}")
     lines.append(
         f"  config: {report.config.source.tier} {report.config.source.path} "
-        f"(digest {report.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
+        f"(profile {report.config.values['profile']}, "
+        f"digest {report.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
     )
     lines.extend(_history_lines(dict(report.metrics)))
     lines.append(f"  analysis status: {report.analysis_status}")
@@ -133,7 +134,8 @@ def render_diff(diff: DiffReport) -> str:
         lines.append(f"  policy deviation: {deviation}")
     lines.append(
         f"  config: {diff.config.source.tier} {diff.config.source.path} "
-        f"(digest {diff.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
+        f"(profile {diff.config.values['profile']}, "
+        f"digest {diff.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
     )
     lines.extend(_history_lines(diff.metrics))
     lines.append(f"  analysis status: {head.report.analysis_status}")

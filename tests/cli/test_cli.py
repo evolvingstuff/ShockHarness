@@ -629,3 +629,158 @@ def test_scan_report_carries_history(empty_root: Path, capsys: pytest.CaptureFix
     assert history["files"]["src/a.py"]["commits"] == 1
     code, out, _ = run(["scan", str(empty_root / "src"), "--root", str(empty_root)], capsys)
     assert "history: 1 commit(s) in 90 day(s)" in out
+
+
+# --- Milestone F part 2: check, version, profiles, CLI overrides ---------------------------
+
+
+def test_check_is_canonical_and_scan_is_a_hidden_alias(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(empty_root, "src/a.py", "x = 2\n")
+    write(empty_root, "src/b.js", "const y = 3;\n")
+    tail = [str(empty_root / "src"), "--root", str(empty_root), "--format", "json"]
+    check_code, check_out, _ = run(["check", *tail], capsys)
+    scan_code, scan_out, _ = run(["scan", *tail], capsys)
+    assert check_code == scan_code == 1
+    assert check_out == scan_out
+    assert json.loads(check_out)["effective_profile"] == "strict"
+    assert "policy_profile" not in check_out
+    for args in (["check", *tail, "--format", "sarif"], ["scan", *tail, "--format", "sarif"]):
+        _, out, _ = run(args, capsys)
+        assert json.loads(out)["runs"][0]["properties"]["effective_profile"] == "strict"
+
+    with pytest.raises(SystemExit) as info:
+        main(["--help"])
+    assert info.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "check" in help_text
+    assert "scan" not in help_text
+    assert "version" in help_text
+    with pytest.raises(SystemExit) as info:
+        main(["scan", "--help"])
+    assert info.value.code == 0
+    assert "usage: shockharness scan" in capsys.readouterr().out
+
+
+def test_version_subcommand_matches_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, _ = run(["version"], capsys)
+    assert code == 0
+    with pytest.raises(SystemExit):
+        main(["--version"])
+    assert out == capsys.readouterr().out == f"shockharness {__version__}\n"
+    completed = subprocess.run(
+        [sys.executable, "-m", "shockharness", "version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0
+    assert completed.stdout == f"shockharness {__version__}\n"
+
+
+def test_profile_override_on_the_command_line(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(
+        empty_root, "src/a.py", "x = 2\ndef f(a, b=None):\n    return a if a is not None else b\n"
+    )
+    root = ["--root", str(empty_root)]
+    code, out, _ = run(["check", str(empty_root / "src"), *root], capsys)
+    assert code == 1
+    code, out, _ = run(["check", str(empty_root / "src"), "--profile", "minimal", *root], capsys)
+    assert code == 0
+    assert "MAGIC001 review" in out and "DEF001 review" in out and "DEF004 review" in out
+    assert "policy deviation: profile is 'minimal', below 'strict'" in out
+    assert "config note: profile 'minimal' selected by --profile" in out
+    assert "(profile minimal, digest" in out
+    code, out, _ = run(
+        ["check", str(empty_root / "src"), "--profile", "recommended", "--format", "json", *root],
+        capsys,
+    )
+    assert code == 1
+    data = json.loads(out)
+    assert data["effective_profile"] == "recommended"
+    assert {f["rule_id"]: f["severity"] for f in data["findings"]} == {
+        "MAGIC001": "error",
+        "DEF001": "error",
+        "DEF004": "review",
+    }
+    assert data["config"]["deviations"][0].startswith("profile is 'recommended'")
+    # the repository's profile is overridden, its other keys are kept
+    write(
+        empty_root,
+        ".shockharness.toml",
+        '[tool.shockharness]\nprofile = "minimal"\ninclude = ["src/**/*.py"]\n',
+    )
+    code, out, _ = run(["config", "effective", "--profile", "strict", *root], capsys)
+    assert code == 0
+    effective = json.loads(out)
+    assert effective["values"]["profile"] == "strict"
+    assert effective["origins"]["profile"] == "cli_override"
+    assert effective["origins"]["include"] == "dedicated"
+    assert effective["values"]["parse_errors"] == "fail"
+    assert effective["deviations"] == []
+    with pytest.raises(SystemExit) as info:
+        main(["check", str(empty_root / "src"), "--profile", "lenient", *root])
+    assert info.value.code == 2
+
+
+def test_parse_errors_override_on_the_command_line(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(empty_root, "src/ok.py", "x = 1\n")
+    write(empty_root, "src/bad.js", "function (\n")
+    root = ["--root", str(empty_root)]
+    code, _, _ = run(["check", str(empty_root / "src"), *root], capsys)
+    assert code == 3
+    code, out, _ = run(["check", str(empty_root / "src"), "--parse-errors", "warn", *root], capsys)
+    assert code == 0
+    assert "parse_error" in out
+    assert "analysis status: incomplete" in out
+    assert "policy deviation: parse_errors is 'warn'" in out
+    assert "config note: parse_errors = 'warn' set by --parse-errors" in out
+    write(empty_root, ".shockharness.toml", '[tool.shockharness]\nparse_errors = "warn"\n')
+    code, _, _ = run(["check", str(empty_root / "src"), *root], capsys)
+    assert code == 0
+    code, _, _ = run(["check", str(empty_root / "src"), "--parse-errors", "fail", *root], capsys)
+    assert code == 3
+    code, out, _ = run(["config", "effective", "--parse-errors", "fail", *root], capsys)
+    assert json.loads(out)["origins"]["parse_errors"] == "cli_override"
+
+
+def test_config_validate_reports_profile_and_deviations(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(empty_root, "shockharness.toml", '[tool.shockharness]\nprofile = "recommended"\n')
+    code, out, _ = run(["config", "validate", "--root", str(empty_root)], capsys)
+    assert code == 0
+    assert "configuration is valid (dedicated:" in out
+    assert "shockharness.toml; profile recommended)" in out
+    assert "  policy deviation: profile is 'recommended', below 'strict'" in out
+    assert "  policy deviation: rules.defaults.nullish_fallbacks is 'review'" in out
+    write(empty_root, ".shockharness.toml", "[tool.shockharness]\n")
+    code, _, err = run(["config", "validate", "--root", str(empty_root)], capsys)
+    assert code == 2
+    assert "two dedicated configuration files exist" in err
+    assert ".shockharness.toml" in err and "shockharness.toml" in err
+
+
+def test_init_writes_a_short_file_for_profiles_below_strict(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = empty_root / ".shockharness.toml"
+    code, out, _ = run(["init", "--profile", "minimal", "--path", str(target)], capsys)
+    assert code == 0
+    assert "(minimal profile)" in out
+    text = target.read_text(encoding="utf-8")
+    assert 'profile = "minimal"' in text and "parse_errors" not in text
+    code, out, _ = run(["config", "effective", "--root", str(empty_root)], capsys)
+    assert code == 0
+    data = json.loads(out)
+    assert data["values"]["profile"] == "minimal"
+    assert data["values"]["parse_errors"] == "warn"
+    assert data["origins"]["parse_errors"] == "profile:minimal"
+    code, _, _ = run(["init", "--profile", "strict", "--path", str(target), "--force"], capsys)
+    assert code == 0
+    assert 'parse_errors = "fail"' in target.read_text(encoding="utf-8")

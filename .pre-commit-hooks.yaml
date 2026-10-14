@@ -1,7 +1,7 @@
 - id: shockharness
   name: shockharness
   description: Strict quality gate - no magic numbers, no silent catches, no implicit defaults.
-  entry: shockharness scan
+  entry: shockharness check
   language: python
   types_or: [python, javascript]
   pass_filenames: true

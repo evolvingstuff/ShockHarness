@@ -78,8 +78,8 @@ subprocess. Every call is local and every failure comes back as data (a
 metrics into `status = "unavailable"`. Reading a baseline file is the other
 Milestone F boundary (`gating/baseline.py`).
 
-**Self-compliance.** ShockHarness scans its own `src/` and `tests/` as a hard
-CI gate with `.shockharness.toml`. The only MAGIC001 exemption is
+**Self-compliance.** ShockHarness checks its own `src/`, `tests/` and
+`scripts/` as a hard CI gate with `.shockharness.toml`. The only MAGIC001 exemption is
 `constants.py`; declared exception boundaries list each `try/except` in the
 tool with the exception it catches and why, and `EXC001`-`EXC003` enforce them:
 every `try` in the tool wraps exactly one external call. `DEF001`-`DEF006`
@@ -105,9 +105,10 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 |---|---|
 | `constants.py` | Every numeric constant (exit codes, schema version, caps); the one MAGIC001 exemption |
 | `errors.py` | `ShockHarnessError`, `ConfigError`, `UsageError`, `UnsupportedFeatureError` |
-| `defaults.toml` | Bundled strict profile |
-| `schema.py` | Field descriptors and shape validation with key paths |
-| `config.py` | Source discovery, precedence, semantic checks, merge with origins, digest |
+| `defaults.toml` | Bundled defaults (the `strict` profile) |
+| `profiles/*.toml` | Built-in profile overlays (`strict` empty, `recommended`, `minimal`) |
+| `schema.py` | Field descriptors and shape validation with key paths; profile names and section severities |
+| `config.py` | Source discovery (both dedicated filenames), layers (defaults < profile < source < CLI overrides) with origins, semantic checks, deviations, digest |
 | `globs.py` | Glob validation and compilation |
 | `discovery.py` | Target resolution, walking, pruning, language routing |
 | `source.py` | Line splitting, byte-to-character columns, evidence excerpts |
@@ -118,6 +119,7 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `ir/python_defaults.py` | Python parameter/dataclass defaults, mapping/attribute fallbacks, `or`/`is None` fallbacks, environment fallbacks, DEF005 traces |
 | `ir/javascript_defaults.py` | JavaScript parameter/destructuring defaults, `||`/`??`/ternary fallbacks, `process.env` fallbacks, DEF005 traces |
 | `rules/registry.py` | Every rule ID with metadata and implementation status |
+| `rules/severity.py` | The per-section `severity` cap shared by the rule families |
 | `rules/magic_numbers.py` | MAGIC001 |
 | `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
@@ -131,6 +133,6 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `analysis.py` | Per-file pipeline and rule-disable resolution |
 | `gate.py` | Verdict and exit code |
 | `report.py` | Report assembly, coverage, sorting |
-| `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (scan reports and diff reports) |
+| `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (check reports and diff reports) |
 | `api.py` | `analyze_source`, `analyze_paths`, `apply_baseline`, `evaluate_gate`, `with_history` |
-| `cli.py` | Argument parsing, dispatch, process boundary |
+| `cli.py` | Argument parsing (`check`, hidden `scan`, `version`, `--profile`/`--parse-errors`), dispatch, process boundary |

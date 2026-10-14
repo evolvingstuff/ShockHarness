@@ -1,0 +1,11 @@
+{
+  "name": "example-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A tiny JavaScript consumer of ShockHarness (example only)",
+  "type": "module",
+  "scripts": {
+    "policy": "shockharness check .",
+    "test": "node --test"
+  }
+}

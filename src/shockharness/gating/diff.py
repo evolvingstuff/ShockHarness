@@ -101,7 +101,7 @@ class DiffReport:
             "report_kind": "diff",
             "analysis_status": self.head.report.analysis_status,
             "config_digest": self.config.digest,
-            "policy_profile": self.config.values["profile"],
+            "effective_profile": self.config.values["profile"],
             "config": {
                 "source": {"tier": self.config.source.tier, "path": self.config.source.path},
                 "notes": list(self.config.notes),

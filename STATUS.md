@@ -491,6 +491,7 @@ built.
   (a `.get(k)` whose result is checked against `None` on the next statement),
   and scope-aware mapping knowledge, if the review noise proves costly.
 - Decide `.gitignore` handling (spec: only if configured) and `-0` policy wording in docs if challenged.
+- Milestone F part 2 (profiles, `check`, release automation) is recorded below; the first `v*` tag exercises `publish.yml` for real.
 - CI verified 2026-10-14 on the first push (run 1 at https://github.com/evolvingstuff/ShockHarness/actions/runs/38646310534): all 13 jobs green, ubuntu/macos/windows x Python 3.11-3.14 plus the wheel build job.
 
 ## Milestone F part 1: baselines, diff gate, SARIF, git history — DONE (2026-10-14)
@@ -736,3 +737,262 @@ report and exits 0.
   possible later refinement.
 * `diff` analyzes both whole trees; on large repositories that is two full
   analyses per run. Cross-file rules (none yet) are the reason.
+
+## Milestone F part 2: profiles, check command, release automation — DONE (2026-10-14)
+
+The distribution half of Milestone F, per specification section 20 decisions
+1, 3, 4, 7, 9, 10, 11, 13 and the brief's sections 2-5 and 8. One commit,
+not pushed, not tagged, version left at `0.1.0a1` (the bump to `0.1.0` is the
+maintainer's call).
+
+Delivered:
+
+* **CLI (decision 1).** `check` is the canonical analysis command; `scan` is
+  the same parser built by the same helper (`_add_check_arguments`) and is
+  hidden from `--help` by being added without a `help` string (argparse lists
+  only subcommands that have one; `help=argparse.SUPPRESS` prints the literal
+  `==SUPPRESS==` on CPython 3.14, which is why it is not used). `version`
+  prints exactly what `--version` prints. Every doc, README example, CI step
+  and the pre-commit entry say `check`.
+* **Config filename (decision 3).** `shockharness.toml` joins
+  `.shockharness.toml` at the dedicated tier (`DEDICATED_FILENAMES`); both
+  present is a `ConfigError` whose origin names both paths (exit 2). Either
+  file shadows a `pyproject.toml` table with the existing note.
+* **Profiles (decision 4).** Three overlays as package data
+  (`src/shockharness/profiles/{strict,recommended,minimal}.toml`, a package so
+  `importlib.resources` finds them in the wheel). `strict` is an empty overlay:
+  the bundled defaults *are* strict, so nothing can drift between the two.
+  `recommended` sets `rules.defaults.nullish_fallbacks = "review"` (DEF003 is
+  already `review` in strict). `minimal` sets `parse_errors = "warn"`,
+  `complexity.enabled = false`, and `severity = "review"` on the three rule
+  sections. Layering in `load_config_with_overrides`: bundled defaults <
+  overlay (origin `profile:<name>`) < source (origin tier) < CLI overrides
+  (origin `cli_override`). The profile name is resolved first (`--profile`,
+  else the source's `profile`, else `strict`), so the repository's own keys
+  always sit above whichever profile is in force. Overlays are validated with
+  the user schema and may not contain `profile`.
+* **Per-section severity.** `rules.magic_numbers.severity`,
+  `rules.exceptions.severity`, `rules.defaults.severity` in `{"error",
+  "review"}` (`rules/severity.py`, applied in the three rule runners; for
+  `rules.defaults` it also caps DEF005, which has no mode). `SUPP001` is not
+  in any section and still fails under `minimal`. Each cap is a deviation
+  line; so is `complexity.enabled = false`, which was previously silent
+  because `complexity` is not under `rules`.
+* **CLI overrides.** `--profile NAME` and `--parse-errors fail|warn` on every
+  command that loads configuration. Both add a config note naming the flag
+  and the replaced value, enter `origins` as `cli_override`, and change the
+  digest. `docs/configuration.md` says why these two and no others.
+* **`effective_profile` (decision 13).** Renamed from `policy_profile` in
+  `report.py`, `gating/diff.py`, both JSON schemas, SARIF run properties
+  (which also gained `config_deviations` so the deviation line reaches every
+  format) and the tests. `schema_version` stays `"1"`; CHANGELOG says why.
+  Specification section 10 still lists `policy_profile` in its field list;
+  per the brief for this session the spec was not edited (no deviation from
+  section 20 was needed). Maintainer: a one-word edit in section 10 would
+  align it with decision 13.
+* **Release automation (decision 9).** `.github/workflows/publish.yml`: on
+  `v*` tags, `uses: ./.github/workflows/ci.yml` (ci.yml gained
+  `workflow_call`), then build, tag-equals-`version.py` check, artifact
+  filename check, clean-venv install with `shockharness version`, then
+  `pypa/gh-action-pypi-publish@release/v1` in environment `pypi` with
+  `id-token: write` and no token. `docs/releasing.md` holds the one-time PyPI
+  publisher values (project `shockharness`, owner `evolvingstuff`, repository
+  `ShockHarness`, workflow `publish.yml`, environment `pypi`) and the
+  per-release steps.
+* **Reusable workflow.** `.github/workflows/check.yml` (`workflow_call`;
+  inputs `shockharness-version` required, `config`, `base`, `python-version`
+  default `"3.12"`); inputs reach the shell through `env:` so no expression
+  is interpolated into a command; `fetch-depth: 0` so `gate --base` can see
+  the base; SARIF uploaded with `github/codeql-action/upload-sarif@v3` under
+  `if: !cancelled() && hashFiles(...)` so a failing gate still uploads and a
+  config error (no file) does not; permissions `contents: read`,
+  `security-events: write` only.
+* **Dependabot (decision 10).** `.github/dependabot.yml` (github-actions +
+  pip, weekly). `docs/integration.md` gives consumers the snippet and states
+  where the pin may live (pyproject, requirements file, workflow input) and
+  never in a shell string; it also states plainly that Dependabot does not
+  rewrite the `shockharness-version` input.
+* **Examples (decision 11).** `examples/python` (hatchling package
+  `example_service`, `shockharness==0.1.0a1` under optional-dependencies
+  `dev`, `.shockharness.toml`, workflow calling `check.yml@v0.1.0`, four
+  source files, one suppressed `404` with an RFC citation, tests exempt by
+  override) and `examples/js` (`package.json` with `npm run policy`, analyzer
+  via `uv tool install`/`pipx`, never an npm dependency, `.shockharness.toml`,
+  workflow, three ES modules, one suppressed `404`, `node --test` tests).
+  `scripts/consumer_upgrade_check.py` (stdlib only, passes the self-gate with
+  no override: its only literals are 0 and 1) copies each example, `git init`
+  + commit, creates a venv, installs the wheel from `dist/` by path (with
+  `--no-index --find-links WHEELHOUSE` when given, which CI does), asserts
+  `shockharness version` equals the wheel's version, that the example's pins
+  agree, `check .` exit 0, then commits one injected `= 25` and asserts
+  `check .` exit 1 and `gate --base HEAD~1 --head HEAD` exit 1. CI runs it in
+  a new ubuntu-only `consumer-examples` job whose only network access is
+  `pip download` of the wheel's dependencies.
+* **Tests.** 34 new (443 total): `tests/unit/test_profiles.py` (effective
+  values, severities, deviation lines, origins, precedence, CLI overrides,
+  init text), CLI tests (`check` == `scan` byte for byte, `scan` absent from
+  `--help`, `version`, `--profile`, `--parse-errors`, both filenames and the
+  both-present error, `init --profile`), config tests, `tests/unit/
+  test_workflows.py` (key lines of every workflow, dependabot, hook, example
+  workflows, and that README/docs no longer say `shockharness scan`),
+  `tests/unit/test_consumer_script.py` (the script's helpers, and an
+  in-process twin of its check steps on both examples).
+
+Decisions recorded here (not in the specification or the brief):
+
+* **Profile below strict in `init`.** `init --profile recommended|minimal`
+  writes only `profile = "<name>"` plus comments. Writing the full defaults
+  with the profile line changed would put every strict value in the
+  repository layer and silently override the profile.
+* **`--profile` replaces the layer, not the file.** A repository configured
+  for `minimal` run with `--profile strict` keeps its includes, boundaries,
+  overrides and any `severity` keys it set explicitly (those are repository
+  policy and win over the profile); only the profile's own keys change. The
+  note in the report says so.
+* **Example workflow refs.** Both example workflows pin `check.yml@v0.1.0`
+  with a comment showing the SHA form. No tag exists yet, so the ref is a
+  forward reference until the first release; the alternative (`@main`) is
+  exactly what the docs tell consumers not to do. `docs/limitations.md`
+  records this.
+* **Two pins in the Python example.** The analyzer version appears in
+  `pyproject.toml` (Dependabot-visible) and as the workflow input (not
+  Dependabot-visible). The upgrade script asserts they agree so drift fails
+  CI rather than passing unnoticed.
+* **SARIF `config_deviations`.** Added so "every report" includes the
+  profile deviation line; SARIF had no deviation list before.
+
+### Dogfooding: what the gate found in the new code
+
+Nothing in `src/`. The script's first draft had `None if x is None else
+x.resolve()`, replaced by an explicit branch before the gate ran on it; the
+self-gate now covers `scripts/` and passes with no new override.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts && ruff format --check src tests scripts
+All checks passed!
+73 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+443 passed in 4.56s
+$ pytest -q                      # CPython 3.13.1
+443 passed in 4.46s
+$ pytest -q                      # CPython 3.12.8
+443 passed in 4.57s
+$ pytest -q                      # CPython 3.11.11
+443 passed in 5.04s
+
+$ shockharness check src tests scripts    # self-compliance (3.11 and 3.14 shown identical)
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+  ... (19 policy deviations: 17 boundaries, 2 overrides)
+
+$ shockharness version
+shockharness 0.1.0a1
+$ shockharness --help | grep -c scan
+0
+$ shockharness scan --help | head -1
+usage: shockharness scan [-h] [--root ROOT] [--config CONFIG]
+
+$ python -m build
+Successfully built shockharness-0.1.0a1.tar.gz and shockharness-0.1.0a1-py3-none-any.whl
+$ unzip -l dist/shockharness-0.1.0a1-py3-none-any.whl | grep -c profiles/
+4
+
+$ python3.12 -m pip download --dest wheelhouse dist/shockharness-*.whl
+$ python3.12 scripts/consumer_upgrade_check.py --dist dist --examples examples --wheelhouse wheelhouse
+wheel under test: .../dist/shockharness-0.1.0a1-py3-none-any.whl
+js: git init + commit: clean example committed: ok
+js: install wheel: (no output): ok
+js: shockharness version: shockharness 0.1.0a1 (wheel 0.1.0a1): ok
+js: analyzer pins agree: pins: 0.1.0a1: ok
+js: check . (clean): exit 0: ok
+js: check . (after violation in src/pages.js): exit 1;   1 new hard violation(s) and gates.new_hard_violations = "fail": ok
+js: gate --base HEAD~1 --head HEAD: exit 1;   0 legacy finding(s) matched the base revision e2b6ddd57af1 (0 hard) and do not fail the gate (gates.legacy = "baseline"); they are still counted: ok
+python: git init + commit: clean example committed: ok
+python: install wheel: (no output): ok
+python: shockharness version: shockharness 0.1.0a1 (wheel 0.1.0a1): ok
+python: analyzer pins agree: pins: 0.1.0a1, 0.1.0a1: ok
+python: check . (clean): exit 0: ok
+python: check . (after violation in src/example_service/pages.py): exit 1;   1 new hard violation(s) and gates.new_hard_violations = "fail": ok
+python: gate --base HEAD~1 --head HEAD: exit 1;   0 legacy finding(s) matched the base revision 7827b14d10cf (0 hard) and do not fail the gate (gates.legacy = "baseline"); they are still counted: ok
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Smoke corpus (`src/a.py`: `x = 2`, a parameter default, a `KeyError` handler
+returning `None`; `src/b.js`: `const y = 3 ?? 4;`), no configuration file:
+
+```text
+$ shockharness check src                      # strict: 7 errors, gate FAIL (exit 1)
+$ shockharness check src --profile recommended --format json
+effective_profile = recommended; DEF004 review, everything else error; exit 1
+  deviations: "profile is 'recommended', below 'strict'; ...",
+              "rules.defaults.nullish_fallbacks is 'review' (strict profile: 'forbid'); DEF004 ..."
+$ shockharness check src --profile minimal
+src/a.py:1:5: MAGIC001 review: Numeric literal 2 has no permitted justification in executable code  [x = 2]
+src/a.py:2:12: DEF001 review: parameter 'b' of f() has a default value: None  [def f(a, b=None):]
+src/a.py:5:5: DEF005 review: except handler converts the exception into a fallback value: return None (...)  [except KeyError:]
+src/a.py:5:5: EXC001 review: except handler of 'KeyError' is forbidden: ...  [except KeyError:]
+src/b.js:1:11: DEF004 review: 3 falls back to 4 when null or undefined; ...  [const y = 3 ?? 4;]
+src/b.js:1:11: MAGIC001 review: Numeric literal 3 has no permitted justification in executable code  [const y = 3 ?? 4;]
+src/b.js:1:16: MAGIC001 review: Numeric literal 4 has no permitted justification in executable code  [const y = 3 ?? 4;]
+
+shockharness 0.1.0a1: 2 file(s), 2 analyzed, 0 failed; 7 finding(s), 0 suppressed
+  by severity: review=7
+  ...
+  config note: profile 'minimal' selected by --profile on the command line replaces profile 'strict'; the configuration file's other keys still apply on top of it
+  policy deviation: profile is 'minimal', below 'strict'; the lines that follow are what it changes (see docs/configuration.md, Profiles)
+  policy deviation: rules.magic_numbers.severity is 'review'; MAGIC001 findings are reported as review and never fail the gate
+  policy deviation: rules.exceptions.severity is 'review'; EXC001-EXC003 findings are reported as review and never fail the gate
+  policy deviation: rules.defaults.severity is 'review'; DEF001-DEF006 findings are reported as review and never fail the gate
+  policy deviation: complexity is disabled
+  policy deviation: parse_errors is 'warn'; syntax failures do not fail the gate
+  config: bundled defaults.toml (profile minimal, digest c91d6f67462897d8)
+  analysis status: complete
+gate: PASS (exit 0)
+
+$ printf '[tool.shockharness]\nprofile = "minimal"\n' > shockharness.toml
+$ shockharness config effective | jq '.origins | with_entries(select(.value != "bundled"))'
+{"complexity.enabled": "profile:minimal", "parse_errors": "profile:minimal", "profile": "dedicated",
+ "rules.defaults.severity": "profile:minimal", "rules.exceptions.severity": "profile:minimal",
+ "rules.magic_numbers.severity": "profile:minimal"}
+$ shockharness config effective --profile strict --parse-errors warn | jq '.origins.profile, .origins.parse_errors, .notes'
+"cli_override"  "cli_override"
+["profile 'strict' selected by --profile on the command line replaces profile 'minimal'; ...",
+ "parse_errors = 'warn' set by --parse-errors on the command line (configured value: 'fail')"]
+$ printf '[tool.shockharness]\n' > .shockharness.toml && shockharness config validate
+shockharness: error: .../.shockharness.toml and .../shockharness.toml: two dedicated configuration files exist; keep exactly one of .shockharness.toml, shockharness.toml   (exit 2)
+```
+
+### Failures observed during development (and what was done)
+
+1. `help=argparse.SUPPRESS` on the `scan` subparser rendered as a literal
+   `==SUPPRESS==` row in `--help` on CPython 3.14. Replaced by adding the
+   subparser without `help`, which argparse omits from the list on 3.11-3.14
+   (asserted by a test).
+2. One existing schema test enumerated the known keys of
+   `rules.magic_numbers`; it gained `severity`. The `profile` enum message
+   test gained the two new names. Both are test updates, not code changes.
+3. My own workflow test flagged the word `password:` inside a comment of
+   `publish.yml` that explained there is no password. The comment was
+   reworded; the assertion stays.
+
+### Not run here
+
+* `publish.yml` and `check.yml` have not executed on GitHub (no tag has been
+  pushed and nothing is pushed from this session). Their structure is
+  tested; their first real run is the first `v*` tag.
+* The `consumer-examples` CI job was run locally with the same commands
+  (above), not on GitHub.
+
+### Limitations and next tasks
+
+* Profiles are the three built-in ones; no user-defined or remote profiles.
+* The example workflows reference `check.yml@v0.1.0`, which exists after the
+  first tagged release.
+* Specification section 10 still names `policy_profile`; one word to align
+  with section 20 decision 13.
+* Milestone E (complexity + graph) and Milestone G (skills) are unchanged.

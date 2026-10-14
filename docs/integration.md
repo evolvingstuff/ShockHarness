@@ -1,0 +1,186 @@
+# Integrating ShockHarness into a repository
+
+ShockHarness is a development-time tool distributed as a versioned Python
+package. A consumer repository, Python or JavaScript, pins one version, keeps
+its policy in a small checked-in file, and runs one command in CI. Nothing here
+requires Python as an *application* dependency: a JavaScript project installs
+the analyzer into an isolated tool environment.
+
+Two worked consumers live in this repository: [`examples/python`](../examples/python)
+and [`examples/js`](../examples/js). `scripts/consumer_upgrade_check.py` turns
+each into a throwaway git repository, installs the wheel under test, and proves
+the gate passes clean and fails after one injected violation; CI runs it on
+every push.
+
+## 1. Install a pinned version
+
+Pick one. In every case the version is an exact pin.
+
+```bash
+# Python project: a development dependency (Dependabot-visible)
+#   pyproject.toml -> [project.optional-dependencies] dev = ["shockharness==0.1.0a1"]
+#   or requirements-dev.txt -> shockharness==0.1.0a1
+pip install -e ".[dev]"
+
+# JavaScript project or any repository: an isolated tool environment
+uv tool install 'shockharness==0.1.0a1'
+pipx install 'shockharness==0.1.0a1'
+```
+
+Runtime dependencies are `tree-sitter` and `tree-sitter-javascript` only.
+
+## 2. Add a policy file
+
+```bash
+shockharness init                       # .shockharness.toml, strict profile
+shockharness init --profile recommended # a short file selecting the profile
+shockharness config validate
+```
+
+`.shockharness.toml` or `shockharness.toml` (one of them) or a
+`[tool.shockharness]` table in `pyproject.toml`. See
+[`configuration.md`](configuration.md) for the schema, the three built-in
+profiles and the two command-line overrides.
+
+## 3. Run it
+
+```bash
+shockharness check .                                  # exit 0 pass, 1 violations, 2 config, 3 tool failure
+shockharness check . --format sarif --output shockharness.sarif
+shockharness gate --base origin/main --head HEAD      # exit 1 only on NEW hard violations
+```
+
+## 4. CI
+
+### A. Direct invocation (any CI system)
+
+```yaml
+- run: pip install "shockharness==0.1.0a1"   # or: pip install -e ".[dev]" with the pin in pyproject.toml
+- run: shockharness check . --format sarif --output shockharness.sarif
+```
+
+Works on GitHub Actions, GitLab CI, local hooks (`.pre-commit-hooks.yaml`
+exposes `shockharness check`), anywhere. The pin must be in a manifest, not in
+the shell line (see section 5).
+
+### B. The reusable GitHub Actions workflow
+
+`.github/workflows/check.yml` in this repository is a `workflow_call` workflow.
+
+| Input | Required | Default | Meaning |
+|---|---|---|---|
+| `shockharness-version` | yes | | Exact version installed from PyPI. **This is the analyzer pin.** |
+| `config` | no | `""` | Configuration file path; empty means discovery in the repository root |
+| `base` | no | `""` | Base ref: when set the job runs `gate --base <base> --head HEAD`; when empty, `check .` |
+| `python-version` | no | `"3.12"` | Python used to run the analyzer |
+
+It checks out the repository with full history (the base commit must be
+present for `gate`), installs `shockharness==<input>`, runs the command with
+`--format sarif --output shockharness.sarif`, and uploads the SARIF to GitHub
+code scanning with `github/codeql-action/upload-sarif`. Its only permissions
+are `contents: read` and `security-events: write`; the calling job must grant
+at least those and no more.
+
+Pinned to a release tag:
+
+```yaml
+name: ShockHarness
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  shockharness:
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.1.0
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      shockharness-version: "0.1.0a1"
+      config: .shockharness.toml
+      base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+```
+
+Pinned to a full commit SHA (strongest reproducibility; the comment keeps the
+human-readable tag next to it, which is also what Dependabot updates):
+
+```yaml
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@0123456789abcdef0123456789abcdef01234567  # v0.1.0
+```
+
+**The workflow ref and the analyzer version are two separate pins.** The
+`uses:` ref decides which copy of `check.yml` runs; the `shockharness-version`
+input decides which analyzer it installs. A newer workflow tag does not upgrade
+the analyzer and vice versa. Keep the input equal to the pin in your
+`pyproject.toml` or requirements file when you have one (the Python example
+does; its upgrade check asserts the two agree).
+
+Exit codes are unchanged inside the workflow: the job fails on violations
+(exit 1), on an invalid configuration (exit 2) and on a tool failure or strict
+parse failure (exit 3). The SARIF file is uploaded whenever it was written,
+which includes the violations case, so findings appear in the *Security* tab
+of the pull request even when the job is red.
+
+## 5. Keeping up to date with Dependabot
+
+Add `.github/dependabot.yml` to the consumer repository:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: pip            # bumps shockharness==X in pyproject.toml / requirements*.txt
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions # bumps the `uses:` ref of the reusable workflow
+    directory: /
+    schedule:
+      interval: weekly
+```
+
+Rules that make this work:
+
+* **The pin must live where an updater can see it**: `pyproject.toml`
+  (`[project.dependencies]` or `[project.optional-dependencies]`), a
+  requirements file, or a workflow input. **Never inside a shell string** such
+  as `uvx --from shockharness==0.1.0a1 shockharness check .` or
+  `pip install shockharness==0.1.0a1` in a `run:` line: Dependabot does not
+  read shell commands, and that pin would silently rot.
+* Dependabot's `github-actions` ecosystem updates the `uses:` ref of the
+  reusable workflow. It does **not** rewrite the `shockharness-version` input;
+  that bump is yours to make in the same PR (or let the `pip` ecosystem bump
+  the `pyproject.toml` pin and copy it over). The JavaScript example therefore
+  has exactly one pin, in the workflow input, and documents that it is bumped
+  by hand.
+* Review every ShockHarness upgrade PR as a policy change: the changelog lists
+  rule changes first, and a tightened default is a breaking change for your
+  gate. Repositories may defer an upgrade; nothing updates to `latest`.
+* For a broad rollout across many repositories, open reviewable PRs with a
+  script; do not commit upgrades directly.
+
+## 6. Adopting on a legacy codebase
+
+1. Start with `profile = "minimal"` (everything reported, nothing gating) or
+   `recommended`, and read the report.
+2. Create a reviewed baseline: `shockharness baseline create src --output
+   .shockharness-baseline.json`, commit it, and pass `--baseline` to `check`.
+   Legacy findings stay listed but do not gate; new ones do.
+3. Use `gate --base <default branch> --head HEAD` on pull requests so only new
+   hard violations fail.
+4. Move to `strict` when the baseline is paid down; every deviation from strict
+   is printed in every report until then.
+
+## 7. Acceptance checks this repository runs
+
+* The wheel builds, installs into a fresh venv, and exposes `shockharness` on `PATH` (`package` job).
+* The Python example and the JavaScript example pass `check .` with the local
+  wheel, fail with exit 1 after one injected violation, and fail
+  `gate --base HEAD~1 --head HEAD` on the commit that introduced it
+  (`consumer-examples` job, `scripts/consumer_upgrade_check.py`); the install
+  uses `--no-index` so the PyPI release can never stand in for the checkout.
+* `shockharness version` equals the wheel's version after installation.
+* The example workflows call the reusable workflow pinned to a tag, with a
+  pinned analyzer version, and the two pins of the Python example agree
+  (`tests/unit/test_consumer_script.py`, `tests/unit/test_workflows.py`).

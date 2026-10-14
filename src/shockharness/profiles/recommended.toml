@@ -1,0 +1,7 @@
+# Profile "recommended": strict, except that DEF003 (truthiness fallbacks) and
+# DEF004 (nullish fallbacks) are reported at review instead of failing the gate.
+# DEF003 is already "review" in the strict profile; DEF004 is loosened here.
+# Everything else is inherited from the bundled defaults.
+
+[tool.shockharness.rules.defaults]
+nullish_fallbacks = "review"

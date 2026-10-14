@@ -6,6 +6,49 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Milestone F (distribution half). `shockharness check` is the canonical
+  analysis command (identical arguments and behaviour to `scan`, which stays as
+  a hidden alias); `shockharness version` prints the same string as
+  `--version`.
+- Built-in profiles shipped as package data (`shockharness/profiles/*.toml`),
+  selected with `profile = "strict" | "recommended" | "minimal"`: `strict` is
+  the bundled defaults; `recommended` reports `DEF003`/`DEF004` at review;
+  `minimal` caps `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` at
+  review, sets `parse_errors = "warn"` and disables complexity. Precedence:
+  bundled defaults < profile < repository configuration < command-line
+  overrides. Every profile below `strict` is a policy deviation in every
+  report and in `config validate`; `config effective` records profile keys
+  with origin `profile:<name>`.
+- `rules.magic_numbers.severity`, `rules.exceptions.severity`,
+  `rules.defaults.severity` (`"error"` | `"review"`): a per-section cap that
+  turns error findings into review findings; each cap is a reported deviation.
+- The only two command-line overrides, on every configuration-loading command:
+  `--profile NAME` (replaces the profile layer; the repository's other keys
+  still apply) and `--parse-errors fail|warn`. Both are recorded with origin
+  `cli_override`, noted in the report, and part of the configuration digest.
+- `shockharness.toml` is accepted alongside `.shockharness.toml` at the
+  dedicated tier; both present in one root is a configuration error naming
+  both files.
+- `init --profile recommended|minimal` writes a short file selecting the profile.
+- Release automation: `.github/workflows/publish.yml` (tag `v*` -> full CI
+  workflow -> build wheel and sdist -> tag equals `version.py` -> PyPI trusted
+  publishing with `id-token: write`, environment `pypi`, no stored token);
+  `docs/releasing.md` with the one-time PyPI steps and the per-release steps.
+- Reusable consumer workflow `.github/workflows/check.yml` (`workflow_call`;
+  inputs `shockharness-version` (required), `config`, `base`,
+  `python-version`; SARIF upload to code scanning; permissions
+  `contents: read`, `security-events: write` only); `.github/dependabot.yml`
+  for this repository; `docs/integration.md` (pinning to a tag and to a SHA,
+  Dependabot snippet, where the pin may live).
+- Consumer examples `examples/python` (dev dependency pinned to `0.1.0a1`)
+  and `examples/js` (analyzer in an isolated tool environment, never an npm
+  dependency), each with a policy file, a workflow and one deliberate
+  suppressed finding; `scripts/consumer_upgrade_check.py` (stdlib only)
+  copies each into a throwaway git repository, installs the wheel built from
+  the checkout, and asserts `check` exits 0, then 1 after one injected
+  violation, and `gate --base HEAD~1 --head HEAD` exits 1; run by CI on ubuntu.
+- `effective_profile` is also in SARIF run properties, next to
+  `config_deviations`.
 - Milestone F (analysis half): stable finding fingerprints (`findings[].fingerprint`;
   rule ID, path, enclosing scope, whitespace-free evidence, occurrence index)
   that survive line moves and reformatting; `shockharness baseline create PATH...
@@ -39,6 +82,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   (`subprocess.CalledProcessError`, `OSError`, `UnicodeDecodeError`).
 
 ### Changed
+- **`policy_profile` is renamed to `effective_profile`** in the JSON report,
+  the diff report, both JSON schemas and SARIF run properties (specification
+  section 20, decision 13). `schema_version` stays `"1"`: no tagged release
+  has shipped the old field (0.1.0a1 was published only to claim the name and
+  predates the schema's first tagged release), so the rename is made before
+  schema v1 is published rather than versioned around.
+- The text report's `config:` line names the effective profile; `config
+  validate` prints it.
+- CI, the pre-commit hook, the README and the docs invoke `shockharness
+  check`; the self-gate and Ruff also cover `scripts/`.
 - Report schema (still `schema_version` 1, additive): `findings[].fingerprint`,
   `findings[].baseline`, `gate.baselined`, `gate.new_hard_violations`,
   `gate.baseline`, `execution_summary.baselined`, `metrics.history`. The gate

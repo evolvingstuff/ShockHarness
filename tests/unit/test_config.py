@@ -219,3 +219,32 @@ def test_transparent_rethrow_is_validated_and_defaults_off(empty_root: Path) -> 
     with pytest.raises(ConfigError) as info:
         load_config(empty_root, None)
     assert "rules.exceptions.transparent_rethrow: expected true or false" in str(info.value)
+
+
+def test_shockharness_toml_without_the_dot_is_accepted(empty_root: Path) -> None:
+    write(empty_root, "shockharness.toml", '[tool.shockharness]\nparse_errors = "warn"\n')
+    config = load_config(empty_root, None)
+    assert config.source.tier == TIER_DEDICATED
+    assert config.source.path == str(empty_root / "shockharness.toml")
+    assert config.values["parse_errors"] == "warn"
+    assert config.origins["parse_errors"] == TIER_DEDICATED
+
+
+def test_both_dedicated_filenames_present_is_an_error_naming_both(empty_root: Path) -> None:
+    write(empty_root, ".shockharness.toml", "[tool.shockharness]\n")
+    write(empty_root, "shockharness.toml", "[tool.shockharness]\n")
+    with pytest.raises(ConfigError) as info:
+        load_config(empty_root, None)
+    message = str(info.value)
+    assert "two dedicated configuration files exist" in message
+    assert str(empty_root / ".shockharness.toml") in message
+    assert str(empty_root / "shockharness.toml") in message
+
+
+def test_undotted_dedicated_file_also_shadows_pyproject(empty_root: Path) -> None:
+    write(empty_root, "pyproject.toml", '[tool.shockharness]\nparse_errors = "warn"\n')
+    write(empty_root, "shockharness.toml", "[tool.shockharness]\nfollow_symlinks = true\n")
+    config = load_config(empty_root, None)
+    assert config.source.tier == TIER_DEDICATED
+    assert config.values["parse_errors"] == "fail"
+    assert any("shadowed" in note for note in config.notes)
