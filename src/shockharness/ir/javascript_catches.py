@@ -118,7 +118,8 @@ def node_text(node: Node) -> str:
 def scope_for(node: Node, scope: str) -> str:
     if node.type in NAMED_SCOPE_TYPES:
         name_node = node.child_by_field_name("name")
-        name = ANONYMOUS_SCOPE if name_node is None else node_text(name_node)
+        assert name_node is not None, f"{node.type} without a name field"
+        name = node_text(name_node)
     elif node.type in ANONYMOUS_FUNCTION_TYPES:
         name = binding_name(node)
     else:
@@ -149,17 +150,17 @@ def block_statements(block: Node) -> list[Node]:
     return [child for child in block.named_children if child.type not in IGNORED_IN_BLOCK]
 
 
-def _first_expression(node: Node) -> Node | None:
+def first_expression(node: Node) -> Node | None:
     for child in node.named_children:
         if child.type != "comment":
             return child
     return None
 
 
-def _unwrap_parens(node: Node) -> Node:
+def unwrap_parens(node: Node) -> Node:
     current = node
     while current.type == "parenthesized_expression":
-        inner = _first_expression(current)
+        inner = first_expression(current)
         if inner is None:
             return current
         current = inner
@@ -168,7 +169,7 @@ def _unwrap_parens(node: Node) -> Node:
 
 def _unwrap_await(node: Node) -> tuple[Node, bool]:
     if node.type == "await_expression":
-        inner = _first_expression(node)
+        inner = first_expression(node)
         if inner is not None:
             return inner, True
     return node, False
@@ -188,9 +189,11 @@ def _count_operations(node: Node) -> int:
 def _callee_text(call: Node) -> str:
     if call.type == "new_expression":
         constructor = call.child_by_field_name("constructor")
-        return "new " + ("" if constructor is None else node_text(constructor))
+        assert constructor is not None, "new_expression without a constructor field"
+        return "new " + node_text(constructor)
     function = call.child_by_field_name("function")
-    return "" if function is None else node_text(function)
+    assert function is not None, "call_expression without a function field"
+    return node_text(function)
 
 
 ASSIGNMENT_TYPES = frozenset({"assignment_expression", "augmented_assignment_expression"})
@@ -205,7 +208,7 @@ def _unwrap_assignment(node: Node) -> Node:
 
 
 def _attribute_operation(span: Span, statement: Node, value: Node) -> TryStatement:
-    inner, awaited = _unwrap_await(_unwrap_parens(_unwrap_assignment(value)))
+    inner, awaited = _unwrap_await(unwrap_parens(_unwrap_assignment(value)))
     if inner.type not in ("call_expression", "new_expression"):
         return TryStatement(span, None, f"statement value is not a call ({inner.type})")
     extra = _count_operations(statement) - (1 if awaited else 0)
@@ -226,7 +229,7 @@ def try_statement(source: SourceText, statement: Node) -> TryStatement:
             span, None, f"compound statement ({kind}) wraps more than one operation"
         )
     if kind == "expression_statement":
-        value = _first_expression(statement)
+        value = first_expression(statement)
         if value is None:
             return TryStatement(span, None, "empty statement")
         return _attribute_operation(span, statement, value)
@@ -239,20 +242,20 @@ def try_statement(source: SourceText, statement: Node) -> TryStatement:
             return TryStatement(span, None, "declaration has no value")
         return _attribute_operation(span, statement, value)
     if kind == "return_statement":
-        value = _first_expression(statement)
+        value = first_expression(statement)
         if value is None:
             return TryStatement(span, None, "statement (return) does not perform a call")
         return _attribute_operation(span, statement, value)
     return TryStatement(span, None, f"statement ({kind}) does not perform a call")
 
 
-def _is_literal_like(node: Node) -> bool:
+def is_literal_like(node: Node) -> bool:
     kind = node.type
     if kind in LITERAL_TYPES:
         return True
     if kind == "parenthesized_expression":
-        inner = _first_expression(node)
-        return inner is not None and _is_literal_like(inner)
+        inner = first_expression(node)
+        return inner is not None and is_literal_like(inner)
     if kind == "unary_expression":
         argument = node.child_by_field_name("argument")
         return argument is not None and argument.type == "number"
@@ -260,7 +263,7 @@ def _is_literal_like(node: Node) -> bool:
         return all(child.type != "template_substitution" for child in node.named_children)
     if kind == "array":
         return all(
-            _is_literal_like(child) for child in node.named_children if child.type != "comment"
+            is_literal_like(child) for child in node.named_children if child.type != "comment"
         )
     if kind == "object":
         for child in node.named_children:
@@ -269,14 +272,14 @@ def _is_literal_like(node: Node) -> bool:
             if child.type != "pair":
                 return False
             value = child.child_by_field_name("value")
-            if value is None or not _is_literal_like(value):
+            if value is None or not is_literal_like(value):
                 return False
         return True
     return False
 
 
 def _callee_name(statement: Node) -> str | None:
-    expression = _first_expression(statement)
+    expression = first_expression(statement)
     if expression is None or expression.type != "call_expression":
         return None
     function = expression.child_by_field_name("function")
@@ -297,7 +300,7 @@ def is_logging_statement(statement: Node) -> bool:
 def _is_throw_of(statement: Node, name: str | None) -> bool:
     if statement.type != "throw_statement" or name is None:
         return False
-    thrown = _first_expression(statement)
+    thrown = first_expression(statement)
     return thrown is not None and thrown.type == "identifier" and node_text(thrown) == name
 
 
@@ -337,14 +340,14 @@ def _guard(statements: list[Node], name: str | None) -> tuple[str | None, list[N
     alternative = guard.child_by_field_name("alternative")
     if condition is None or consequence is None:
         return None, statements
-    test = _unwrap_parens(condition)
+    test = unwrap_parens(condition)
     rest = statements[1:]
     if test.type == "unary_expression":
         operator = test.child_by_field_name("operator")
         argument = test.child_by_field_name("argument")
         if operator is None or argument is None or node_text(operator) != "!":
             return None, statements
-        klass = _instanceof_class(_unwrap_parens(argument), name)
+        klass = _instanceof_class(unwrap_parens(argument), name)
         single = _single_statement(consequence)
         if klass is None or alternative is not None or single is None:
             return None, statements
@@ -354,7 +357,7 @@ def _guard(statements: list[Node], name: str | None) -> tuple[str | None, list[N
     klass = _instanceof_class(test, name)
     if klass is None or alternative is None:
         return None, statements
-    else_body = _first_expression(alternative)
+    else_body = first_expression(alternative)
     if else_body is None:
         return None, statements
     single = _single_statement(else_body)
@@ -366,7 +369,7 @@ def _guard(statements: list[Node], name: str | None) -> tuple[str | None, list[N
 
 
 def _classify_throw(statement: Node, name: str | None) -> HandlerBody:
-    thrown = _first_expression(statement)
+    thrown = first_expression(statement)
     described = node_text(statement).split("\n")[0].strip()
     if thrown is None:
         return HandlerBody(BODY_RAISE_OTHER, described)
@@ -409,8 +412,8 @@ def classify_statements(statements: list[Node], name: str | None) -> HandlerBody
         return HandlerBody(BODY_OTHER, "handler body is not classified")
     statement = remaining[0]
     if statement.type == "return_statement":
-        value = _first_expression(statement)
-        if value is None or _is_literal_like(value):
+        value = first_expression(statement)
+        if value is None or is_literal_like(value):
             return HandlerBody(BODY_RETURN_FALLBACK, node_text(statement).strip())
         return HandlerBody(BODY_OTHER, "handler body is not classified")
     if statement.type == "throw_statement":
@@ -424,7 +427,7 @@ def _parameter_name(parameter: Node | None) -> str | None:
     if parameter.type == "identifier":
         return node_text(parameter)
     if parameter.type == "formal_parameters":
-        first = _first_expression(parameter)
+        first = first_expression(parameter)
         if first is not None and first.type == "identifier":
             return node_text(first)
     return None
@@ -439,10 +442,11 @@ def _identities(klass: str | None) -> tuple[ExceptionIdentity, ...]:
 def _catch_clause(source: SourceText, scope: str, try_node: Node, clause: Node) -> CatchFact:
     body = clause.child_by_field_name("body")
     try_body = try_node.child_by_field_name("body")
-    statements = [] if body is None else block_statements(body)
+    assert body is not None and try_body is not None, "try/catch without a body field"
+    statements = block_statements(body)
     name = _parameter_name(clause.child_by_field_name("parameter"))
     klass, remaining = _guard(statements, name)
-    protected = () if try_body is None else block_statements(try_body)
+    protected = block_statements(try_body)
     return CatchFact(
         span=node_span(source, clause),
         kind=CATCH_CLAUSE,
@@ -457,7 +461,7 @@ def _catch_clause(source: SourceText, scope: str, try_node: Node, clause: Node) 
 
 def _receiver_statement(source: SourceText, receiver: Node) -> TryStatement:
     span = node_span(source, receiver)
-    inner, _awaited = _unwrap_await(_unwrap_parens(receiver))
+    inner, _awaited = _unwrap_await(unwrap_parens(receiver))
     if inner.type not in ("call_expression", "new_expression"):
         return TryStatement(
             span, None, f"rejection source ({inner.type}) is not a call; it cannot be attributed"
@@ -475,11 +479,11 @@ def _rejection_handler(
 ) -> CatchFact:
     receiver = member.child_by_field_name("object")
     property_node = member.child_by_field_name("property")
-    start = call if property_node is None else property_node
-    start_span = node_span(source, start)
+    assert receiver is not None and property_node is not None, "member_expression without fields"
+    start_span = node_span(source, property_node)
     end_span = node_span(source, call)
     span = Span(start_span.line, start_span.column, end_span.end_line, end_span.end_column)
-    protected = () if receiver is None else (_receiver_statement(source, receiver),)
+    protected = (_receiver_statement(source, receiver),)
     if handler.type not in ("arrow_function", "function_expression"):
         return CatchFact(
             span=span,
@@ -509,7 +513,7 @@ def _rejection_handler(
         classified = classify_statements(statements, name)
     else:
         klass = None
-        if _is_literal_like(body):
+        if is_literal_like(body):
             classified = HandlerBody(BODY_RETURN_FALLBACK, "=> " + node_text(body).strip())
         else:
             classified = HandlerBody(BODY_OTHER, "handler body is not classified")

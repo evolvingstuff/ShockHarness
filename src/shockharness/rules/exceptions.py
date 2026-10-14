@@ -254,8 +254,13 @@ def run_exception_rules(
     path: str,
     language: str,
     active_rule_ids: frozenset[str],
+    defer_return_fallback: bool,
 ) -> list[Finding]:
-    """Run EXC001-EXC003 over the module's catch facts; only ``active_rule_ids`` report."""
+    """Run EXC001-EXC003 over the module's catch facts; only ``active_rule_ids`` report.
+
+    With ``defer_return_fallback`` (DEF005 is active) the ``return_fallback``
+    classification is left to DEF005 so that one handler yields one hard finding.
+    """
     boundaries = load_boundaries(settings)
     applicable = tuple(b for b in boundaries if b.language == language and b.paths.matches(path))
     transparent_rethrow = bool(settings["transparent_rethrow"])
@@ -276,7 +281,10 @@ def run_exception_rules(
                     catch.scope,
                 )
             )
-        suppressed = catch.body.classification in EXC002_CLASSIFICATIONS
+        classification = catch.body.classification
+        suppressed = classification in EXC002_CLASSIFICATIONS and not (
+            defer_return_fallback and classification == BODY_RETURN_FALLBACK
+        )
         if EXC002.rule_id in active_rule_ids and suppressed:
             findings.append(
                 _finding(

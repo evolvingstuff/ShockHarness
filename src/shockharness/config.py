@@ -22,6 +22,7 @@ from typing import Any
 from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
 from shockharness.rules import registry
+from shockharness.rules.defaults import loosened_modes
 from shockharness.schema import ConfigIssue, validate_shape
 
 TOOL_TABLE = ("tool", "shockharness")
@@ -276,6 +277,7 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
             f"rules.exceptions.boundaries[{index}] approves catching {boundary['exception']} "
             f"in {boundary['path']} ({boundary['language']}): {boundary['reason']}"
         )
+    found.extend(loosened_modes(rules["defaults"]))
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])
         paths = ", ".join(override["paths"])

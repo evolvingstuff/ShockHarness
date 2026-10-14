@@ -57,11 +57,15 @@ mode = "boundary_whitelist"               # the only mode
 transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
 boundaries = []                           # see below
 
-[tool.shockharness.rules.defaults]        # DEF001-DEF006: registered, not implemented
+[tool.shockharness.rules.defaults]        # DEF001-DEF006; each mode: "forbid" -> error, "review" -> review, "allow" -> off
 enabled = true
-function_parameters = "forbid"
-missing_value_fallbacks = "forbid"
-truthiness_fallbacks = "review"
+function_parameters = "forbid"            # DEF001: parameter defaults, destructured parameter defaults
+dataclass_fields = "forbid"               # DEF001: dataclass field defaults and default_factory
+missing_value_fallbacks = "forbid"        # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
+truthiness_fallbacks = "review"           # DEF003: x or v, x || v (also replace legitimate falsy values)
+nullish_fallbacks = "forbid"              # DEF004: x ?? v, x if x is not None else v
+configuration_fallbacks = "forbid"        # DEF006: os.getenv("X", v), process.env.X || v
+                                          # DEF005 (a handler that returns a default) has no mode: always an error
 
 [tool.shockharness.complexity]            # CPLX001-CPLX005: registered, not implemented
 enabled = true
@@ -108,9 +112,25 @@ is listed in `config.deviations` so the approval is never silent.
 * Approving a catch does not exempt it from `EXC002` (what the handler does) or
   `EXC003` (what the `try` body wraps).
 
-Keys for unimplemented rule families are validated and stored so that a
-configuration written today keeps working when the rules land. They have no
-effect on findings yet; the report's `coverage.rules_not_implemented` says so.
+## Default and fallback modes
+
+`rules.defaults` has one switch (`enabled`) for the whole family and one *mode*
+per kind of default. `forbid` makes the finding an `error` (fails the gate),
+`review` reports it without failing, `allow` turns that kind off. The strict
+profile forbids everything except `truthiness_fallbacks`, which is `review`
+because `x or v` is also ordinary Boolean logic. A mode looser than the strict
+value is listed in `config.deviations`; tightening (`truthiness_fallbacks =
+"forbid"`) is not a deviation. `DEF005` has no mode: a handler that returns a
+default is always an error; disable the rule by override if a path needs it.
+
+The two *implicit* shapes, `m.get(k)` and `os.getenv("X")` with no fallback, are
+`review` under both `forbid` and `review`, and off under `allow`: they may
+yield `None` for a missing value, but nothing proves the value was required.
+
+Keys for unimplemented rule families (`magic_strings`, `complexity`) are
+validated and stored so that a configuration written today keeps working when
+the rules land. They have no effect on findings yet; the report's
+`coverage.rules_not_implemented` says so.
 
 ## Glob semantics
 
@@ -140,7 +160,8 @@ const status = 404; // shockharness: ignore[MAGIC001] reason="RFC 9110 section 1
 const other = 500;  /* shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.6" */
 ```
 
-* Same line as the construct. Several IDs: `ignore[MAGIC001, DEF001]`.
+* Same line as the construct. Several IDs: `ignore[MAGIC001, DEF001]`. A multi-line
+  construct is suppressed on the line where the finding is reported (its start).
 * Reason is mandatory and non-empty. Rule IDs must exist.
 * A malformed, unknown-rule, or reason-less suppression is a `SUPP001` error and suppresses nothing.
 * A suppression that silences nothing is a `SUPP002` warning.
@@ -153,7 +174,8 @@ Everything that loosens the strict profile is surfaced, never silent:
 
 * `config.deviations` lists disabled rules, extra `allowed_values`,
   `allow_unary_negative_one`, `parse_errors = "warn"`, `transparent_rethrow`,
-  every exception boundary, and every override, each with its reason.
+  every exception boundary, every `rules.defaults` mode looser than the strict
+  profile, and every override, each with its reason.
 * `files[].rules_disabled` lists, per file, which rules did not run and why
   (`config`, `overrides[i]`, or `configuration_file`).
 * `coverage.rules_not_implemented` lists rules that exist in the registry but produce nothing yet.

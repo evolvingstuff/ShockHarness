@@ -24,6 +24,7 @@ from shockharness.ir.javascript_catches import (
     node_text,
     scope_for,
 )
+from shockharness.ir.javascript_defaults import collect_javascript_defaults
 from shockharness.ir.model import (
     MODULE_SCOPE,
     Comment,
@@ -114,6 +115,7 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
             numeric_literals=(),
             comments=(),
             catches=(),
+            defaults=(),
             parse_failure=ParseFailure(
                 span=node_span(source, error),
                 message=f"{kind} near {first_line!r} in {filename}",
@@ -169,5 +171,6 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         numeric_literals=tuple(literals),
         comments=tuple(comments),
         catches=collect_javascript_catches(source, root),
+        defaults=collect_javascript_defaults(source, root),
         parse_failure=None,
     )

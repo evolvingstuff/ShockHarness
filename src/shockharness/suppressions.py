@@ -155,7 +155,9 @@ def apply_suppressions(
 
     by_line: dict[int, list[Suppression]] = {}
     for suppression in suppressions:
-        by_line.setdefault(suppression.span.line, []).append(suppression)
+        if suppression.span.line not in by_line:
+            by_line[suppression.span.line] = []
+        by_line[suppression.span.line].append(suppression)
 
     used: set[tuple[int, str]] = set()
     for finding in findings:

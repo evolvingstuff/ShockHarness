@@ -165,14 +165,15 @@ class SymbolTable:
                     root = alias.name.split(".")[0]
                     self.bindings[root] = _Binding(root, confidence)
             return
-        module = "" if node.module is None else node.module
-        prefix = "." * node.level + module
+        prefix = "." * node.level
+        if node.module is not None:
+            prefix += node.module
         if node.level > 0:
             confidence = CONFIDENCE_APPROXIMATE
         for alias in node.names:
             if alias.name == "*":
                 continue
-            bound = alias.name if alias.asname is None else alias.asname
+            bound = bound_name(alias)
             if prefix == "" or prefix.endswith("."):
                 qualified = prefix + alias.name
             else:
@@ -203,12 +204,19 @@ def _assigned_names(stmt: ast.stmt) -> list[str]:
     return names
 
 
-def _dotted(expr: ast.expr) -> str | None:
+def bound_name(alias: ast.alias) -> str:
+    """The local name an import alias binds: its ``as`` name when present, else the name."""
+    if alias.asname is not None:
+        return alias.asname
+    return alias.name
+
+
+def dotted_name(expr: ast.expr) -> str | None:
     """``a.b.c`` as text when the expression is a plain name/attribute chain."""
     if isinstance(expr, ast.Name):
         return expr.id
     if isinstance(expr, ast.Attribute):
-        base = _dotted(expr.value)
+        base = dotted_name(expr.value)
         if base is None:
             return None
         return f"{base}.{expr.attr}"
@@ -222,9 +230,10 @@ def _normalize(qualified: str) -> str:
 
 
 def resolve_identity(expr: ast.expr, table: SymbolTable, source: SourceText) -> ExceptionIdentity:
-    text = ast.get_source_segment(source.text, expr)
-    written = "" if text is None else text
-    dotted = _dotted(expr)
+    written = ast.get_source_segment(source.text, expr)
+    if written is None:
+        written = ""
+    dotted = dotted_name(expr)
     if dotted is None:
         return ExceptionIdentity(written, None, CONFIDENCE_UNRESOLVED, False)
     parts = dotted.split(".")
@@ -247,7 +256,7 @@ def handler_identities(
     return (resolve_identity(handler.type, table, source),)
 
 
-def _is_pass(stmt: ast.stmt) -> bool:
+def is_pass(stmt: ast.stmt) -> bool:
     if isinstance(stmt, ast.Pass):
         return True
     return (
@@ -258,7 +267,7 @@ def _is_pass(stmt: ast.stmt) -> bool:
 
 
 def _call_name(call: ast.Call) -> str | None:
-    return _dotted(call.func)
+    return dotted_name(call.func)
 
 
 def is_logging_statement(stmt: ast.stmt) -> bool:
@@ -292,7 +301,7 @@ def is_literal_like(expr: ast.expr | None) -> bool:
     return False
 
 
-def _describe(stmt: ast.stmt, source: SourceText) -> str:
+def describe_statement(stmt: ast.stmt, source: SourceText) -> str:
     text = ast.get_source_segment(source.text, stmt)
     if text is None:
         return type(stmt).__name__
@@ -301,9 +310,9 @@ def _describe(stmt: ast.stmt, source: SourceText) -> str:
 
 def classify_handler(handler: ast.ExceptHandler, source: SourceText) -> HandlerBody:
     statements = list(handler.body)
-    if all(_is_pass(stmt) for stmt in statements):
+    if all(is_pass(stmt) for stmt in statements):
         return HandlerBody(BODY_EMPTY, "handler body is pass/...; the failure vanishes")
-    remaining = [s for s in statements if not _is_pass(s) and not is_logging_statement(s)]
+    remaining = [s for s in statements if not is_pass(s) and not is_logging_statement(s)]
     if len(remaining) == 0:
         return HandlerBody(
             BODY_LOGGING_ONLY, "handler only logs; the failure is recorded, not handled"
@@ -312,7 +321,7 @@ def classify_handler(handler: ast.ExceptHandler, source: SourceText) -> HandlerB
         return HandlerBody(BODY_OTHER, "handler body is not classified")
     stmt = remaining[0]
     if isinstance(stmt, ast.Return) and is_literal_like(stmt.value):
-        return HandlerBody(BODY_RETURN_FALLBACK, _describe(stmt, source))
+        return HandlerBody(BODY_RETURN_FALLBACK, describe_statement(stmt, source))
     if isinstance(stmt, ast.Raise):
         return _classify_raise(stmt, handler.name, source)
     return HandlerBody(BODY_OTHER, "handler body is not classified")
@@ -323,7 +332,7 @@ def _classify_raise(stmt: ast.Raise, bound_name: str | None, source: SourceText)
         return HandlerBody(BODY_RERAISE, "bare raise")
     if isinstance(stmt.exc, ast.Name) and bound_name is not None and stmt.exc.id == bound_name:
         return HandlerBody(BODY_RERAISE, f"raise {bound_name}")
-    described = _describe(stmt, source)
+    described = describe_statement(stmt, source)
     if stmt.cause is None:
         return HandlerBody(
             BODY_RAISE_OTHER, f"{described} (no 'from' clause; cause is not preserved)"
@@ -346,7 +355,7 @@ def _statement_value(stmt: ast.stmt) -> ast.expr | None:
 def try_statement(stmt: ast.stmt, source: SourceText) -> TryStatement:
     span = node_span(source, stmt)
     if isinstance(stmt, ast.Import | ast.ImportFrom):
-        return TryStatement(span, _describe(stmt, source), None)
+        return TryStatement(span, describe_statement(stmt, source), None)
     if isinstance(stmt, COMPOUND_STATEMENTS):
         kind = type(stmt).__name__.lower()
         return TryStatement(
@@ -369,13 +378,18 @@ def try_statement(stmt: ast.stmt, source: SourceText) -> TryStatement:
             None,
             f"statement performs {extra} operations; only one can be attributed to the boundary",
         )
-    name = _call_name(inner)
-    return TryStatement(span, _describe(stmt, source) if name is None else name, None)
+    operation = _call_name(inner)
+    if operation is None:
+        operation = describe_statement(stmt, source)
+    return TryStatement(span, operation, None)
 
 
 def node_span(source: SourceText, node: ast.stmt | ast.expr | ast.excepthandler) -> Span:
-    end_line = node.end_lineno if node.end_lineno is not None else node.lineno
-    end_col = node.end_col_offset if node.end_col_offset is not None else node.col_offset
+    # ``ast`` sets end positions on every statement, expression and handler it parses; the
+    # Optional in the type stubs covers hand-built nodes, which this tool never creates.
+    end_line = node.end_lineno
+    end_col = node.end_col_offset
+    assert end_line is not None and end_col is not None, "parsed node without an end position"
     return Span(
         line=node.lineno,
         column=source.column_from_byte_offset(node.lineno, node.col_offset),

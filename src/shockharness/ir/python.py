@@ -24,6 +24,7 @@ from shockharness.ir.python_catches import (
     node_span,
     scope_name,
 )
+from shockharness.ir.python_defaults import collect_python_defaults
 from shockharness.source import SourceText
 
 PARSER_NAME = "python-ast"
@@ -63,9 +64,10 @@ def _parse(source: SourceText, filename: str) -> ast.Module | ParseFailure:
         return ast.parse(source.text, filename=filename)
     except SyntaxError as exc:
         span = None
-        if exc.lineno is not None:
-            column = exc.offset if exc.offset is not None else FIRST_COLUMN
-            span = Span(line=exc.lineno, column=column, end_line=exc.lineno, end_column=column)
+        if exc.lineno is not None and exc.offset is not None:
+            span = Span(
+                line=exc.lineno, column=exc.offset, end_line=exc.lineno, end_column=exc.offset
+            )
         return ParseFailure(span=span, message=f"{type(exc).__name__}: {exc.msg}")
     except ValueError as exc:
         # Python 3.11 raises ValueError (not SyntaxError) for NUL bytes in source.
@@ -165,6 +167,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
             numeric_literals=(),
             comments=(),
             catches=(),
+            defaults=(),
             parse_failure=parsed,
         )
     comments = _comments(source)
@@ -175,6 +178,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
             numeric_literals=(),
             comments=(),
             catches=(),
+            defaults=(),
             parse_failure=comments,
         )
     return ModuleFacts(
@@ -183,5 +187,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         numeric_literals=_collect_literals(source, parsed),
         comments=comments,
         catches=collect_python_catches(source, parsed, filename),
+        defaults=collect_python_defaults(source, parsed),
         parse_failure=None,
     )

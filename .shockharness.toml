@@ -88,8 +88,11 @@ reason = "Process boundary: an unexpected internal failure prints its full trace
 [tool.shockharness.rules.defaults]
 enabled = true
 function_parameters = "forbid"
+dataclass_fields = "forbid"
 missing_value_fallbacks = "forbid"
 truthiness_fallbacks = "review"
+nullish_fallbacks = "forbid"
+configuration_fallbacks = "forbid"
 
 [tool.shockharness.rules.magic_strings]
 enabled = true

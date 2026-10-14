@@ -15,6 +15,631 @@
       ]
     ]
   },
+  "javascript/def_destructuring.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF002",
+        2,
+        19,
+        "destructuring default for 'retries' in a",
+        false
+      ],
+      [
+        "MAGIC001",
+        2,
+        19,
+        "3",
+        false
+      ],
+      [
+        "DEF002",
+        3,
+        19,
+        "destructuring default for 'n' in a destr",
+        false
+      ],
+      [
+        "MAGIC001",
+        3,
+        19,
+        "10",
+        false
+      ],
+      [
+        "DEF002",
+        3,
+        40,
+        "destructuring default for 'deep' in a de",
+        false
+      ],
+      [
+        "DEF002",
+        4,
+        16,
+        "destructuring default for 'first' in a d",
+        false
+      ],
+      [
+        "DEF002",
+        5,
+        17,
+        "destructuring default for 'timeout' in a",
+        false
+      ],
+      [
+        "DEF006",
+        9,
+        16,
+        "destructuring default for 'PORT' in a de",
+        false
+      ],
+      [
+        "DEF002",
+        12,
+        19,
+        "destructuring default for 'items' in a d",
+        false
+      ],
+      [
+        "DEF002",
+        16,
+        26,
+        "destructuring default for 'label' in a l",
+        false
+      ],
+      [
+        "DEF002",
+        20,
+        11,
+        "destructuring default for 'port' in a de",
+        false
+      ],
+      [
+        "MAGIC001",
+        20,
+        11,
+        "80",
+        false
+      ],
+      [
+        "DEF006",
+        21,
+        12,
+        "destructuring default for 'SHELL' in a d",
+        false
+      ]
+    ]
+  },
+  "javascript/def_exception_default.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF005",
+        14,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        14,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "DEF005",
+        22,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        22,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "DEF005",
+        30,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        30,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        39,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "DEF005",
+        47,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        47,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "DEF005",
+        55,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        55,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        63,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        71,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ]
+    ]
+  },
+  "javascript/def_logical_or.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF003",
+        3,
+        16,
+        "items falls back to [] when falsy; '||' ",
+        false
+      ],
+      [
+        "DEF003",
+        4,
+        17,
+        "name falls back to \"anonymous\" when fals",
+        false
+      ],
+      [
+        "DEF003",
+        5,
+        15,
+        "count falls back to 0 when falsy; '||' s",
+        false
+      ],
+      [
+        "DEF003",
+        6,
+        3,
+        "total falls back to 1 when falsy; '||=' ",
+        false
+      ],
+      [
+        "DEF003",
+        7,
+        10,
+        "items falls back to {} when falsy; '||' ",
+        false
+      ],
+      [
+        "DEF003",
+        8,
+        18,
+        "items falls back to [] when falsy; '||' ",
+        false
+      ],
+      [
+        "DEF003",
+        8,
+        38,
+        "name falls back to `anon` when falsy; '|",
+        false
+      ],
+      [
+        "DEF003",
+        12,
+        18,
+        "primary falls back to secondary when fal",
+        false
+      ],
+      [
+        "DEF003",
+        13,
+        10,
+        "primary || secondary falls back to terti",
+        false
+      ],
+      [
+        "DEF003",
+        17,
+        10,
+        "a || b falls back to \"z\" when falsy; '||",
+        false
+      ],
+      [
+        "DEF003",
+        34,
+        10,
+        "ok || done || found falls back to both w",
+        false
+      ],
+      [
+        "DEF003",
+        38,
+        17,
+        "x falls back to \"empty\" when falsy; 'x ?",
+        false
+      ],
+      [
+        "DEF003",
+        39,
+        18,
+        "y falls back to \"empty\" when falsy; 'x ?",
+        false
+      ]
+    ]
+  },
+  "javascript/def_nullish.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF004",
+        3,
+        13,
+        "count falls back to 0 when null or undef",
+        false
+      ],
+      [
+        "DEF004",
+        4,
+        17,
+        "count falls back to other when null or u",
+        false
+      ],
+      [
+        "DEF004",
+        6,
+        3,
+        "state falls back to {} when null or unde",
+        false
+      ],
+      [
+        "DEF004",
+        7,
+        10,
+        "n falls back to label when null or undef",
+        false
+      ],
+      [
+        "DEF002",
+        11,
+        19,
+        "options?.retries falls back to 3; '??' s",
+        false
+      ],
+      [
+        "MAGIC001",
+        11,
+        39,
+        "3",
+        false
+      ],
+      [
+        "DEF002",
+        12,
+        16,
+        "options.mode falls back to \"fast\"; '??' ",
+        false
+      ],
+      [
+        "DEF002",
+        13,
+        17,
+        "map.get(key) falls back to null; '??' su",
+        false
+      ],
+      [
+        "DEF002",
+        14,
+        19,
+        "options[key] falls back to []; '??' subs",
+        false
+      ],
+      [
+        "DEF002",
+        15,
+        3,
+        "options.cache falls back to new Map(); '",
+        false
+      ],
+      [
+        "DEF004",
+        20,
+        13,
+        "value falls back to 100 when null or und",
+        false
+      ],
+      [
+        "MAGIC001",
+        20,
+        35,
+        "100",
+        false
+      ],
+      [
+        "DEF004",
+        21,
+        13,
+        "value falls back to [] when null or unde",
+        false
+      ],
+      [
+        "DEF004",
+        22,
+        13,
+        "value falls back to \"x\" when null or und",
+        false
+      ],
+      [
+        "DEF004",
+        23,
+        13,
+        "value falls back to 0 when null or undef",
+        false
+      ],
+      [
+        "DEF004",
+        24,
+        13,
+        "value falls back to other when null or u",
+        false
+      ],
+      [
+        "DEF002",
+        27,
+        13,
+        "other.x falls back to 1; ternary on a nu",
+        false
+      ],
+      [
+        "DEF002",
+        32,
+        13,
+        "o[k] falls back to 0 when the key is mis",
+        false
+      ],
+      [
+        "DEF002",
+        33,
+        13,
+        "o[k] falls back to \"none\" when the key i",
+        false
+      ],
+      [
+        "DEF002",
+        34,
+        13,
+        "o.k falls back to [] when the key is mis",
+        false
+      ],
+      [
+        "DEF002",
+        35,
+        13,
+        "o[k] falls back to 1 when the key is mis",
+        false
+      ],
+      [
+        "MAGIC001",
+        36,
+        32,
+        "2",
+        false
+      ]
+    ]
+  },
+  "javascript/def_parameters.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF001",
+        2,
+        23,
+        "parameter 'b' of plain has a default val",
+        false
+      ],
+      [
+        "DEF001",
+        2,
+        30,
+        "parameter 'c' of plain has a default val",
+        false
+      ],
+      [
+        "DEF001",
+        6,
+        31,
+        "parameter 'timeout' of arrow has a defau",
+        false
+      ],
+      [
+        "DEF001",
+        10,
+        31,
+        "parameter 'cache' of constructor has a d",
+        false
+      ],
+      [
+        "DEF001",
+        15,
+        14,
+        "parameter 'mode' of run has a default va",
+        false
+      ],
+      [
+        "DEF001",
+        19,
+        27,
+        "parameter 'options' of create has a defa",
+        false
+      ],
+      [
+        "DEF001",
+        24,
+        35,
+        "destructuring default for 'retries' in p",
+        false
+      ],
+      [
+        "MAGIC001",
+        24,
+        35,
+        "3",
+        false
+      ],
+      [
+        "DEF001",
+        24,
+        58,
+        "destructuring default for 'first' in par",
+        false
+      ],
+      [
+        "DEF001",
+        24,
+        71,
+        "parameter '[first = 0, second]' of destr",
+        false
+      ],
+      [
+        "DEF001",
+        28,
+        30,
+        "destructuring default for 'n' in paramet",
+        false
+      ],
+      [
+        "MAGIC001",
+        28,
+        30,
+        "10",
+        false
+      ],
+      [
+        "DEF001",
+        28,
+        51,
+        "destructuring default for 'deep' in para",
+        false
+      ],
+      [
+        "DEF001",
+        32,
+        35,
+        "parameter 'limit' of generator has a def",
+        false
+      ],
+      [
+        "MAGIC001",
+        32,
+        35,
+        "100",
+        false
+      ]
+    ]
+  },
+  "javascript/def_process_env.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF006",
+        2,
+        14,
+        "environment variable PORT falls back to ",
+        false
+      ],
+      [
+        "DEF006",
+        3,
+        14,
+        "environment variable HOST falls back to ",
+        false
+      ],
+      [
+        "DEF006",
+        4,
+        16,
+        "environment variable \"REGION\" falls back",
+        false
+      ],
+      [
+        "DEF006",
+        5,
+        24,
+        "environment variable WORKERS falls back ",
+        false
+      ],
+      [
+        "DEF006",
+        6,
+        14,
+        "environment variable MODE falls back to ",
+        false
+      ],
+      [
+        "DEF006",
+        7,
+        15,
+        "environment variable LEVEL falls back to",
+        false
+      ],
+      [
+        "DEF006",
+        8,
+        1,
+        "environment variable NODE_ENV falls back",
+        false
+      ],
+      [
+        "DEF006",
+        9,
+        1,
+        "environment variable TZ falls back to \"U",
+        false
+      ],
+      [
+        "DEF006",
+        10,
+        16,
+        "destructuring default for 'USER' in a de",
+        false
+      ]
+    ]
+  },
   "javascript/exc_async_await.js": {
     "status": "analyzed",
     "findings": [
@@ -26,17 +651,17 @@
         false
       ],
       [
+        "DEF005",
+        17,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
         "EXC001",
         17,
         5,
         "catch clause is forbidden: untyped catch",
-        false
-      ],
-      [
-        "EXC002",
-        17,
-        5,
-        "catch clause converts the exception into",
         false
       ],
       [
@@ -137,17 +762,17 @@
         false
       ],
       [
+        "DEF005",
+        25,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
         "EXC001",
         25,
         5,
         "catch clause is forbidden: untyped catch",
-        false
-      ],
-      [
-        "EXC002",
-        25,
-        5,
-        "catch clause converts the exception into",
         false
       ]
     ]
@@ -194,17 +819,17 @@
         false
       ],
       [
+        "DEF005",
+        12,
+        12,
+        "promise .then rejection handler converts",
+        false
+      ],
+      [
         "EXC001",
         12,
         12,
         "promise .then rejection handler is forbi",
-        false
-      ],
-      [
-        "EXC002",
-        12,
-        12,
-        "promise .then rejection handler converts",
         false
       ],
       [
@@ -274,6 +899,13 @@
     "status": "analyzed",
     "findings": [
       [
+        "DEF005",
+        4,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
         "EXC001",
         4,
         5,
@@ -281,8 +913,8 @@
         false
       ],
       [
-        "EXC002",
-        4,
+        "DEF005",
+        12,
         5,
         "catch clause converts the exception into",
         false
@@ -295,8 +927,8 @@
         false
       ],
       [
-        "EXC002",
-        12,
+        "DEF005",
+        20,
         5,
         "catch clause converts the exception into",
         false
@@ -309,8 +941,8 @@
         false
       ],
       [
-        "EXC002",
-        20,
+        "DEF005",
+        28,
         5,
         "catch clause converts the exception into",
         false
@@ -323,8 +955,8 @@
         false
       ],
       [
-        "EXC002",
-        28,
+        "DEF005",
+        36,
         5,
         "catch clause converts the exception into",
         false
@@ -337,8 +969,8 @@
         false
       ],
       [
-        "EXC002",
-        36,
+        "DEF005",
+        44,
         5,
         "catch clause converts the exception into",
         false
@@ -348,13 +980,6 @@
         44,
         5,
         "catch clause is forbidden: untyped catch",
-        false
-      ],
-      [
-        "EXC002",
-        44,
-        5,
-        "catch clause converts the exception into",
         false
       ],
       [
@@ -365,17 +990,17 @@
         false
       ],
       [
+        "DEF005",
+        58,
+        70,
+        "promise .catch handler converts the exce",
+        false
+      ],
+      [
         "EXC001",
         58,
         70,
         "promise .catch handler is forbidden: rej",
-        false
-      ],
-      [
-        "EXC002",
-        58,
-        70,
-        "promise .catch handler converts the exce",
         false
       ]
     ]
@@ -398,17 +1023,17 @@
         false
       ],
       [
+        "DEF005",
+        12,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
         "EXC001",
         12,
         5,
         "catch clause is forbidden: untyped catch",
-        false
-      ],
-      [
-        "EXC002",
-        12,
-        5,
-        "catch clause converts the exception into",
         false
       ],
       [
@@ -810,6 +1435,594 @@
     "status": "analyzed",
     "findings": []
   },
+  "python/def_dataclasses.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF001",
+        11,
+        17,
+        "dataclass field 'port' of Settings has a",
+        false
+      ],
+      [
+        "MAGIC001",
+        11,
+        17,
+        "5432",
+        false
+      ],
+      [
+        "DEF001",
+        12,
+        17,
+        "dataclass field 'name' of Settings has a",
+        false
+      ],
+      [
+        "DEF001",
+        13,
+        40,
+        "dataclass field 'tags' of Settings has a",
+        false
+      ],
+      [
+        "DEF001",
+        14,
+        32,
+        "dataclass field 'label' of Settings has ",
+        false
+      ],
+      [
+        "DEF001",
+        22,
+        20,
+        "dataclass field 'scale' of Frozen has a ",
+        false
+      ],
+      [
+        "MAGIC001",
+        26,
+        13,
+        "10",
+        false
+      ]
+    ]
+  },
+  "python/def_environment.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF006",
+        7,
+        8,
+        "environment variable \"PORT\" falls back t",
+        false
+      ],
+      [
+        "DEF006",
+        8,
+        8,
+        "environment variable \"HOST\" falls back t",
+        false
+      ],
+      [
+        "DEF006",
+        9,
+        8,
+        "environment variable \"MODE\" falls back t",
+        false
+      ],
+      [
+        "DEF006",
+        10,
+        9,
+        "environment variable \"DEBUG\" falls back ",
+        false
+      ],
+      [
+        "DEF006",
+        11,
+        10,
+        "environment variable \"REGION\" falls back",
+        false
+      ],
+      [
+        "DEF006",
+        12,
+        9,
+        "os.getenv(\"TOKEN\") yields None when the ",
+        false
+      ],
+      [
+        "DEF006",
+        13,
+        10,
+        "os.environ.get(\"SECRET\") yields None whe",
+        false
+      ],
+      [
+        "DEF006",
+        14,
+        10,
+        "environment variable \"SEED\" falls back t",
+        false
+      ],
+      [
+        "DEF006",
+        15,
+        11,
+        "environment variable \"ALIASED\" falls bac",
+        false
+      ],
+      [
+        "DEF006",
+        16,
+        15,
+        "environment variable \"FROM_IMPORT\" falls",
+        false
+      ],
+      [
+        "DEF006",
+        17,
+        10,
+        "environment variable \"GETENV\" falls back",
+        false
+      ],
+      [
+        "DEF006",
+        18,
+        11,
+        "environment variable \"TERNARY\" falls bac",
+        false
+      ],
+      [
+        "DEF006",
+        21,
+        11,
+        "os.getenv(\"CHECKED\") yields None when th",
+        false
+      ]
+    ]
+  },
+  "python/def_exception_default.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "MAGIC001",
+        4,
+        14,
+        "100",
+        false
+      ],
+      [
+        "DEF005",
+        20,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        20,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "DEF005",
+        27,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        27,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "DEF005",
+        34,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        34,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "DEF005",
+        41,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        41,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "DEF005",
+        49,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        49,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "DEF005",
+        56,
+        5,
+        "exception handler converts the failure i",
+        false
+      ],
+      [
+        "EXC001",
+        56,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        63,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        70,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        77,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ]
+    ]
+  },
+  "python/def_mapping_get.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF002",
+        11,
+        15,
+        "CONFIG[\"timeout\"] falls back to 30 when ",
+        false
+      ],
+      [
+        "MAGIC001",
+        11,
+        37,
+        "30",
+        false
+      ],
+      [
+        "DEF002",
+        12,
+        15,
+        "options[\"retries\"] falls back to 3 when ",
+        false
+      ],
+      [
+        "MAGIC001",
+        12,
+        38,
+        "3",
+        false
+      ],
+      [
+        "DEF002",
+        13,
+        12,
+        ".get(key) yields None for a missing key;",
+        false
+      ],
+      [
+        "DEF002",
+        14,
+        5,
+        "counts[\"hits\"] falls back to 0 when the ",
+        false
+      ],
+      [
+        "DEF002",
+        19,
+        13,
+        "payload[\"items\"] falls back to [] when t",
+        false
+      ],
+      [
+        "DEF002",
+        20,
+        12,
+        ".get(key) yields None for a missing key;",
+        false
+      ],
+      [
+        "DEF002",
+        27,
+        15,
+        "obj.\"retries\" falls back to 3 when the a",
+        false
+      ],
+      [
+        "MAGIC001",
+        27,
+        39,
+        "3",
+        false
+      ],
+      [
+        "DEF002",
+        35,
+        13,
+        "table[key] falls back to None when the k",
+        false
+      ],
+      [
+        "DEF002",
+        40,
+        13,
+        "table[key] falls back to \"missing\" when ",
+        false
+      ],
+      [
+        "DEF002",
+        41,
+        13,
+        "table[key] falls back to \"missing\" when ",
+        false
+      ],
+      [
+        "DEF002",
+        47,
+        11,
+        ".get(key) yields None for a missing key;",
+        false
+      ]
+    ]
+  },
+  "python/def_nullish.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF004",
+        5,
+        13,
+        "limit falls back to 100 when None; condi",
+        false
+      ],
+      [
+        "MAGIC001",
+        5,
+        45,
+        "100",
+        false
+      ],
+      [
+        "DEF004",
+        6,
+        12,
+        "rows falls back to [] when None; conditi",
+        false
+      ],
+      [
+        "DEF004",
+        7,
+        13,
+        "name falls back to \"anon\" when None; con",
+        false
+      ],
+      [
+        "DEF004",
+        12,
+        12,
+        "value falls back to other when None; con",
+        false
+      ]
+    ]
+  },
+  "python/def_parameters.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF001",
+        7,
+        16,
+        "parameter 'b' of plain() has a default v",
+        false
+      ],
+      [
+        "DEF001",
+        7,
+        21,
+        "parameter 'c' of plain() has a default v",
+        false
+      ],
+      [
+        "DEF001",
+        11,
+        32,
+        "parameter 'retries' of keyword_only() ha",
+        false
+      ],
+      [
+        "MAGIC001",
+        11,
+        32,
+        "3",
+        false
+      ],
+      [
+        "DEF001",
+        11,
+        43,
+        "parameter 'verbose' of keyword_only() ha",
+        false
+      ],
+      [
+        "DEF001",
+        15,
+        33,
+        "parameter 'encoding' of none_default() h",
+        false
+      ],
+      [
+        "DEF001",
+        23,
+        32,
+        "parameter 'c' of positional_only() has a",
+        false
+      ],
+      [
+        "DEF001",
+        27,
+        34,
+        "parameter 'timeout' of coroutine() has a",
+        false
+      ],
+      [
+        "DEF001",
+        31,
+        26,
+        "parameter 'power' of lambda has a defaul",
+        false
+      ],
+      [
+        "MAGIC001",
+        31,
+        26,
+        "2",
+        false
+      ],
+      [
+        "DEF001",
+        35,
+        38,
+        "parameter 'cache' of __init__() has a de",
+        false
+      ],
+      [
+        "DEF001",
+        40,
+        24,
+        "parameter 'mode' of run() has a default ",
+        false
+      ],
+      [
+        "DEF001",
+        44,
+        32,
+        "parameter 'scale' of inner() has a defau",
+        false
+      ],
+      [
+        "MAGIC001",
+        44,
+        32,
+        "1.5",
+        false
+      ]
+    ]
+  },
+  "python/def_truthiness.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "DEF003",
+        5,
+        13,
+        "items falls back to [] when falsy; 'or' ",
+        false
+      ],
+      [
+        "DEF003",
+        6,
+        13,
+        "name falls back to \"anonymous\" when fals",
+        false
+      ],
+      [
+        "DEF003",
+        7,
+        13,
+        "count falls back to 0 when falsy; 'or' s",
+        false
+      ],
+      [
+        "DEF003",
+        8,
+        19,
+        "items falls back to () when falsy; 'or' ",
+        false
+      ],
+      [
+        "DEF003",
+        12,
+        14,
+        "primary falls back to secondary when fal",
+        false
+      ],
+      [
+        "DEF003",
+        13,
+        12,
+        "primary or secondary falls back to terti",
+        false
+      ],
+      [
+        "DEF003",
+        17,
+        13,
+        "a or b falls back to \"z\" when falsy; 'or",
+        false
+      ],
+      [
+        "DEF003",
+        35,
+        13,
+        "x falls back to \"empty\" when falsy; 'x i",
+        false
+      ],
+      [
+        "DEF003",
+        36,
+        14,
+        "y falls back to \"empty\" when falsy; 'x i",
+        false
+      ],
+      [
+        "DEF003",
+        42,
+        13,
+        "a falls back to 0 when falsy; 'or' subst",
+        false
+      ]
+    ]
+  },
   "python/exc_bare.py": {
     "status": "analyzed",
     "findings": [
@@ -1038,17 +2251,17 @@
         false
       ],
       [
+        "DEF005",
+        10,
+        9,
+        "except handler converts the exception in",
+        false
+      ],
+      [
         "EXC001",
         10,
         9,
         "except handler of 'OSError' is forbidden",
-        false
-      ],
-      [
-        "EXC002",
-        10,
-        9,
-        "except handler converts the exception in",
         false
       ],
       [
@@ -1140,6 +2353,13 @@
     "status": "analyzed",
     "findings": [
       [
+        "DEF005",
+        4,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
         "EXC001",
         4,
         5,
@@ -1147,8 +2367,8 @@
         false
       ],
       [
-        "EXC002",
-        4,
+        "DEF005",
+        11,
         5,
         "except handler converts the exception in",
         false
@@ -1161,8 +2381,8 @@
         false
       ],
       [
-        "EXC002",
-        11,
+        "DEF005",
+        18,
         5,
         "except handler converts the exception in",
         false
@@ -1175,8 +2395,8 @@
         false
       ],
       [
-        "EXC002",
-        18,
+        "DEF005",
+        25,
         5,
         "except handler converts the exception in",
         false
@@ -1189,8 +2409,8 @@
         false
       ],
       [
-        "EXC002",
-        25,
+        "DEF005",
+        32,
         5,
         "except handler converts the exception in",
         false
@@ -1203,8 +2423,8 @@
         false
       ],
       [
-        "EXC002",
-        32,
+        "DEF005",
+        39,
         5,
         "except handler converts the exception in",
         false
@@ -1214,13 +2434,6 @@
         39,
         5,
         "except handler of 'OSError' is forbidden",
-        false
-      ],
-      [
-        "EXC002",
-        39,
-        5,
-        "except handler converts the exception in",
         false
       ],
       [
@@ -1231,17 +2444,17 @@
         false
       ],
       [
+        "DEF005",
+        46,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
         "EXC001",
         46,
         5,
         "except handler of 'OSError' is forbidden",
-        false
-      ],
-      [
-        "EXC002",
-        46,
-        5,
-        "except handler converts the exception in",
         false
       ],
       [
@@ -1288,7 +2501,7 @@
         false
       ],
       [
-        "EXC002",
+        "DEF005",
         47,
         5,
         "except handler converts the exception in",

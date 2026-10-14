@@ -72,14 +72,22 @@ def _coverage(
 ) -> dict[str, Any]:
     by_language: dict[str, dict[str, Any]] = {}
     for file in files:
-        entry = by_language.setdefault(
-            file.language, {"files": 0, "failed": 0, "parser": file.parser}
-        )
+        if file.language not in by_language:
+            by_language[file.language] = {"files": 0, "failed": 0, "parser": file.parser}
+        entry = by_language[file.language]
         entry["files"] += 1
         if file.failed:
             entry["failed"] += 1
         if entry["parser"] is None and file.parser is not None:
             entry["parser"] = file.parser
+    # analyze_source has no discovery step; the report says so with empty sections.
+    discovery_counts: dict[str, Any] = {}
+    explicit_excluded: list[dict[str, str]] = []
+    if discovery is not None:
+        discovery_counts = discovery.counts_json()
+        explicit_excluded = [
+            {"path": s.relative, "reason": s.reason} for s in discovery.explicit_excluded
+        ]
     disabled_globally: list[str] = []
     for rule in registry.implemented_rules():
         if (
@@ -96,10 +104,8 @@ def _coverage(
         "rules_disabled_globally": disabled_globally,
         "files_analyzed": sum(1 for f in files if not f.failed),
         "files_failed": sum(1 for f in files if f.failed),
-        "discovery": {} if discovery is None else discovery.counts_json(),
-        "explicit_targets_excluded": []
-        if discovery is None
-        else [{"path": s.relative, "reason": s.reason} for s in discovery.explicit_excluded],
+        "discovery": discovery_counts,
+        "explicit_targets_excluded": explicit_excluded,
         "limitations": [
             "Only rules listed in rules_implemented produced findings; every other registered "
             "rule is not analyzed.",
@@ -122,7 +128,9 @@ def build_report(
     )
     severity_counts: dict[str, int] = {}
     for finding in findings:
-        severity_counts[finding.severity] = severity_counts.setdefault(finding.severity, 0) + 1
+        if finding.severity not in severity_counts:
+            severity_counts[finding.severity] = 0
+        severity_counts[finding.severity] += 1
     return Report(
         schema_version=REPORT_SCHEMA_VERSION,
         tool_version=__version__,

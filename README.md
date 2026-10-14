@@ -22,11 +22,27 @@ linter. It runs offline, needs no LLM, and never uploads source.
 ## Status
 
 Pre-release. Milestones A (skeleton and contracts), B (parsers and
-`MAGIC001`) and C (exception rules `EXC001`-`EXC003`) are implemented. Default
-rules, complexity, baselines, SARIF, and agent skills are registered but **not
-yet implemented**;
-every report lists them under `rules_not_implemented` so a clean run never
-implies coverage the tool does not have. See `STATUS.md` for exact evidence.
+`MAGIC001`), C (exception rules `EXC001`-`EXC003`) and D (default and fallback
+rules `DEF001`-`DEF006`) are implemented. `MAGIC002`, complexity, baselines,
+SARIF, and agent skills are registered but **not yet implemented**; every
+report lists them under `rules_not_implemented` so a clean run never implies
+coverage the tool does not have. See `STATUS.md` for exact evidence.
+
+Implemented rules:
+
+| ID | What it reports | Default |
+|---|---|---|
+| `MAGIC001` | numeric literal other than `0`/`1` in executable code | error |
+| `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
+| `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
+| `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |
+| `DEF001` | parameter default, dataclass field default / `default_factory` | error |
+| `DEF002` | `m.get(k, v)`, `getattr(o, a, v)`, `o?.x ?? v`, `const {x = v} = o`; `.get(k)` implicit `None` as review | error |
+| `DEF003` | `x or v`, `x || v` outside Boolean logic | review |
+| `DEF004` | `x ?? v`, `x if x is not None else v` | error |
+| `DEF005` | handler that returns a default (literal, module constant, one-return helper) | error |
+| `DEF006` | `os.getenv("X", v)`, `process.env.X || v`, `const { X = v } = process.env` | error |
+| `SUPP001` / `SUPP002` | malformed / unused suppression comment | error / warning |
 
 ## Install
 
@@ -63,14 +79,17 @@ Example:
 
 ```text
 src/client.py:12:11: MAGIC001 error: Numeric literal 30 has no permitted justification in executable code  [timeout = 30]
-src/client.py:20:16: MAGIC001 error: Numeric literal 2 has no permitted justification in executable code  [for i in range(2):]
+src/client.py:15:24: DEF001 error: parameter 'port' of connect() has a default value: 5432  [def connect(host, port=5432):]
+src/client.py:18:15: DEF006 error: environment variable "RETRIES" falls back to "3"; os.getenv(...) substitutes a fallback when environment variable "RETRIES" is unset (getenv)  [retries = os.getenv("RETRIES", "3")]
+src/client.py:24:5: DEF005 error: except handler converts the exception into a fallback value: return None (EXC002 classification return_fallback; the handler is reported once, here)  [except OSError:]
+src/client.py:24:5: EXC001 error: except handler of 'OSError' is forbidden: catch of 'OSError' is not approved by any boundary for this file  [except OSError:]
 
-shockharness 0.1.0: 1 file(s), 1 analyzed, 0 failed; 2 finding(s), 0 suppressed
-  by severity: error=2
-  rules applied: MAGIC001, EXC001, EXC002, EXC003, SUPP001, SUPP002
-  rules not implemented (not analyzed): MAGIC002, DEF001, DEF002, DEF003, ...
+shockharness 0.1.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
+  by severity: error=5
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005
 gate: FAIL (exit 1)
-  2 hard violation(s) and gates.new_hard_violations = "fail"
+  5 hard violation(s) and gates.new_hard_violations = "fail"
 ```
 
 ## Configuration
@@ -136,7 +155,8 @@ ShockHarness runs on itself as a hard CI gate. Its one `MAGIC001` exemption is
 `src/shockharness/constants.py`; its declared exception boundaries are listed in
 `.shockharness.toml` with reasons and enforced by `EXC001`-`EXC003`: every
 `try` in the tool wraps exactly one external call and converts the failure into
-a typed diagnostic.
+a typed diagnostic. `DEF001`-`DEF006` hold too: the tool has no parameter
+defaults outside tests, no mapping fallbacks, and no `or`/`is None` defaults.
 
 ## License
 

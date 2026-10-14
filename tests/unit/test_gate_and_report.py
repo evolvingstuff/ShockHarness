@@ -95,13 +95,20 @@ def test_hard_violations_warn_mode(
 def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: EffectiveConfig) -> None:
     write(empty_root, "src/a.py", "x = 1\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
-    assert "DEF001" in report.coverage["rules_not_implemented"]
+    assert "CPLX001" in report.coverage["rules_not_implemented"]
+    assert "DEF001" not in report.coverage["rules_not_implemented"]
     assert "EXC001" not in report.coverage["rules_not_implemented"]
     assert report.coverage["rules_implemented"] == [
         "MAGIC001",
         "EXC001",
         "EXC002",
         "EXC003",
+        "DEF001",
+        "DEF002",
+        "DEF003",
+        "DEF004",
+        "DEF005",
+        "DEF006",
         "SUPP001",
         "SUPP002",
     ]
@@ -187,10 +194,13 @@ def _check(schema: dict, value: object, path: str) -> list[str]:
     if "enum" in schema and value not in schema["enum"]:
         problems.append(f"{path}: {value!r} not in {schema['enum']}")
     if isinstance(value, dict):
-        for key in schema["required"] if "required" in schema else []:
-            if key not in value:
-                problems.append(f"{path}.{key}: missing")
-        props = schema["properties"] if "properties" in schema else {}
+        if "required" in schema:
+            for key in schema["required"]:
+                if key not in value:
+                    problems.append(f"{path}.{key}: missing")
+        props: dict[str, object] = {}
+        if "properties" in schema:
+            props = schema["properties"]
         for key, sub in props.items():
             if key in value:
                 problems.extend(_check(sub, value[key], f"{path}.{key}"))

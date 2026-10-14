@@ -65,8 +65,11 @@ def exceptions_config_toml(section: dict[str, object]) -> str:
             lines.append(f"{key} = {'true' if value else 'false'}")
         else:
             lines.append(f"{key} = {json.dumps(value)}")
-    boundaries = section["boundaries"] if "boundaries" in section else []
-    assert isinstance(boundaries, list)
+    boundaries: list[dict[str, str]] = []
+    if "boundaries" in section:
+        listed = section["boundaries"]
+        assert isinstance(listed, list)
+        boundaries = listed
     for boundary in boundaries:
         lines.append("[[tool.shockharness.rules.exceptions.boundaries]]")
         for key, value in boundary.items():

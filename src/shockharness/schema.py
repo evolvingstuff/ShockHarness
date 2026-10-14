@@ -205,8 +205,11 @@ CONFIG_SCHEMA = TableField(
                     fields={
                         "enabled": BoolField(),
                         "function_parameters": EnumField(SEVERITY_MODES),
+                        "dataclass_fields": EnumField(SEVERITY_MODES),
                         "missing_value_fallbacks": EnumField(SEVERITY_MODES),
                         "truthiness_fallbacks": EnumField(SEVERITY_MODES),
+                        "nullish_fallbacks": EnumField(SEVERITY_MODES),
+                        "configuration_fallbacks": EnumField(SEVERITY_MODES),
                     },
                     required=(),
                 ),

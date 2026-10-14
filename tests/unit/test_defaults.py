@@ -1,0 +1,626 @@
+"""DEF001-DEF006: default and fallback rules, per rule, per language, per confidence level."""
+
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+import pytest
+
+from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.config import EffectiveConfig
+from shockharness.errors import ConfigError
+from shockharness.ir.javascript import extract_javascript_facts
+from shockharness.ir.model import (
+    CONTEXT_ARGUMENT,
+    CONTEXT_ASSIGNMENT,
+    CONTEXT_RETURN,
+    FAMILY_TRUTHINESS,
+    KIND_DATACLASS_FACTORY,
+    KIND_DATACLASS_FIELD,
+    KIND_MAPPING_GET_IMPLICIT,
+    KIND_PARAMETER,
+)
+from shockharness.ir.python import extract_python_facts
+from shockharness.source import SourceText
+from tests.conftest import FIXTURES, fixture_config, language_for_fixture
+
+OPTIONS = AnalysisOptions(inline_suppressions=True)
+PY = "python"
+JS = "javascript"
+
+
+def _run(config: EffectiveConfig, language: str, text: str) -> FileResult:
+    return analyze_text("t.py" if language == PY else "t.js", language, text, config, OPTIONS)
+
+
+def _rows(result: FileResult, rule_id: str) -> list[tuple[int, str, str]]:
+    return [
+        (f.span.line, f.severity, f.confidence) for f in result.findings if f.rule_id == rule_id
+    ]
+
+
+def _ids(result: FileResult) -> list[str]:
+    return [f.rule_id for f in result.findings]
+
+
+def _defaults_config(make_config: Callable[[str], EffectiveConfig], body: str) -> EffectiveConfig:
+    return make_config("[tool.shockharness.rules.defaults]\n" + body)
+
+
+# --- DEF001: parameter defaults ---------------------------------------------------------------
+
+
+def test_def001_python_parameter_forms(strict_config: EffectiveConfig) -> None:
+    text = (
+        "def f(a, b=1, *args, c=None, **kwargs):\n    return a\n"
+        "g = lambda x, y=2: x\n"
+        "async def h(url, timeout=TIMEOUT):\n    return url\n"
+    )
+    result = _run(strict_config, PY, text)
+    rows = [
+        (f.span.line, f.span.column, f.message) for f in result.findings if f.rule_id == "DEF001"
+    ]
+    assert [(r[0], r[1]) for r in rows] == [(1, 12), (1, 24), (3, 17), (4, 26)]
+    assert rows[0][2] == "parameter 'b' of f() has a default value: 1"
+    assert rows[2][2] == "parameter 'y' of lambda has a default value: 2"
+    assert all(f.severity == "error" and f.confidence == "exact" for f in result.findings)
+    assert all(f.safe_autofix is False for f in result.findings)
+
+
+def test_def001_overload_ellipsis_and_variadics_are_not_defaults(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = (
+        "from typing import overload\n"
+        "@overload\ndef read(path: str, binary: bool = ...) -> str: ...\n"
+        "def read(path, binary):\n    return path\n"
+        "def v(*args, **kwargs):\n    return args\n"
+    )
+    assert _ids(_run(strict_config, PY, text)) == []
+    plain = "def read(path, binary=...):\n    return path\n"
+    assert _ids(_run(strict_config, PY, plain)) == ["DEF001"]
+
+
+def test_def001_javascript_parameter_forms(strict_config: EffectiveConfig) -> None:
+    text = (
+        "function f(a, b = 1, ...rest) {}\n"
+        "const g = (x, y = []) => x;\n"
+        "class K { constructor(c = null) {} m(d = {}) {} }\n"
+        "function d({ retries = 3, verbose }, [first = 0] = []) {}\n"
+    )
+    result = _run(strict_config, JS, text)
+    rows = [(f.span.line, f.span.column, f.scope) for f in result.findings if f.rule_id == "DEF001"]
+    assert rows == [
+        (1, 19, "f"),
+        (2, 19, "g"),
+        (3, 27, "K.constructor"),
+        (3, 42, "K.m"),
+        (4, 24, "d"),
+        (4, 47, "d"),
+        (4, 52, "d"),
+    ]
+    messages = [f.message for f in result.findings if f.rule_id == "DEF001"]
+    assert "parameter 'b' of f has a default value: 1" in messages
+    assert "destructuring default for 'retries' in parameters: 3" in messages
+    assert "parameter '[first = 0]' of d has a default value: []" in messages
+
+
+def test_def001_dataclass_fields_have_their_own_kinds_and_key(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "from dataclasses import dataclass, field\nfrom typing import ClassVar\n"
+        "@dataclass\nclass S:\n    host: str\n    port: int = 1\n"
+        "    tags: list = field(default_factory=list)\n    label: str = field(default='x')\n"
+        "    registry: ClassVar[dict] = {}\n    required: float = field()\n"
+        "class Plain:\n    limit: int = 1\n"
+    )
+    facts = extract_python_facts(SourceText.from_text(text), "t.py")
+    kinds = [(f.span.line, f.kind, f.subject) for f in facts.defaults]
+    assert kinds == [
+        (6, KIND_DATACLASS_FIELD, "port"),
+        (7, KIND_DATACLASS_FACTORY, "tags"),
+        (8, KIND_DATACLASS_FIELD, "label"),
+    ]
+    assert _rows(_run(strict_config, PY, text), "DEF001") == [
+        (6, "error", "exact"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+    ]
+    review = _defaults_config(make_config, 'dataclass_fields = "review"\n')
+    assert {r[1] for r in _rows(_run(review, PY, text), "DEF001")} == {"review"}
+    allowed = _defaults_config(make_config, 'dataclass_fields = "allow"\n')
+    assert _rows(_run(allowed, PY, text), "DEF001") == []
+    # The dataclass key does not touch ordinary parameter defaults.
+    assert _rows(_run(allowed, PY, "def f(x=1):\n    return x\n"), "DEF001") == [
+        (1, "error", "exact")
+    ]
+
+
+# --- DEF002: mapping / attribute / property fallbacks --------------------------------------------
+
+
+def test_def002_receiver_knowledge_sets_confidence(strict_config: EffectiveConfig) -> None:
+    text = (
+        "from collections.abc import Mapping\nCONFIG = {}\n"
+        "def f(options: dict, payload, extra: Mapping):\n"
+        "    a = CONFIG.get('timeout', 1)\n"
+        "    b = options.get('retries', 1)\n"
+        "    c = payload.get('items', [])\n"
+        "    d = extra.setdefault('k', 0)\n"
+        "    e = payload.pop('k', None)\n"
+        "    return a, b, c, d, e\n"
+    )
+    assert _rows(_run(strict_config, PY, text), "DEF002") == [
+        (4, "error", "exact"),
+        (5, "error", "exact"),
+        (6, "error", "approximate"),
+        (7, "error", "exact"),
+        (8, "error", "approximate"),
+    ]
+    approximate = next(f for f in _run(strict_config, PY, text).findings if f.span.line == 6)
+    assert "receiver's type is not established" in approximate.message
+    assert approximate.message.startswith(
+        "payload['items'] falls back to [] when the key is missing"
+    )
+
+
+def test_def002_implicit_none_is_review_and_conservative(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "def f(table: dict, payload, client, url):\n"
+        "    a = table.get('a')\n"  # known mapping: exact review
+        "    b = payload.get('b')\n"  # unknown receiver, string key: approximate review
+        "    c = payload.get(url)\n"  # unknown receiver, variable key: nothing
+        "    d = client.get(url)\n"  # looks like an HTTP client: nothing
+        "    if table.get('e') is None:\n"  # compared with None: handled, nothing
+        "        raise KeyError('e')\n"
+        "    g = table.get('g') or []\n"  # the 'or' is the finding (DEF003), not the .get
+        "    return a, b, c, d, g\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF002") == [(2, "review", "exact"), (3, "review", "approximate")]
+    assert _rows(result, "DEF003") == [(8, "review", "exact")]
+    assert "yields None for a missing key" in result.findings[0].message
+    # The mode applies to explicit fallbacks; implicit None stays review unless allowed.
+    forbid = _run(strict_config, PY, "def f(t: dict):\n    return t.get('a')\n")
+    assert _rows(forbid, "DEF002") == [(2, "review", "exact")]
+    allowed = _defaults_config(make_config, 'missing_value_fallbacks = "allow"\n')
+    assert _rows(_run(allowed, PY, "def f(t: dict):\n    return t.get('a', 1)\n"), "DEF002") == []
+    awaited = "async def f(c):\n    return await c.get('a')\n"
+    assert _rows(_run(strict_config, PY, awaited), "DEF002") == []
+
+
+def test_def002_getattr_and_membership_ternary(strict_config: EffectiveConfig) -> None:
+    text = (
+        "def f(obj, table, key):\n"
+        "    a = getattr(obj, 'retries', 1)\n"
+        "    b = getattr(obj, 'retries')\n"
+        "    c = table[key] if key in table else 'missing'\n"
+        "    d = 'missing' if key not in table else table[key]\n"
+        "    e = table[key] if key in table else table['other']\n"
+        "    return a, b, c, d, e\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF002") == [
+        (2, "error", "exact"),
+        (4, "error", "exact"),
+        (5, "error", "exact"),
+        (6, "error", "approximate"),
+    ]
+    assert result.findings[0].message.startswith(
+        "obj.'retries' falls back to 1 when the attribute is missing"
+    )
+
+
+def test_def002_javascript_property_and_destructuring_forms(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = (
+        "const { retries = 3, verbose } = options;\n"
+        "const [first = 0] = pair;\n"
+        "const a = options?.retries ?? 1;\n"
+        "const b = options.mode ?? other;\n"
+        "const c = map.get(key) ?? null;\n"
+        "options.cache ??= new Map();\n"
+        "const d = k in o ? o[k] : 0;\n"
+        "const e = o.hasOwnProperty(k) ? o[k] : [];\n"
+        "const f = Object.hasOwn(o, 'k') ? o.k : {};\n"
+        "const g = other.x == null ? 1 : other.x;\n"
+        "for (const { id, label = 'none' } of rows) {}\n"
+        "({ port = 80 } = options);\n"
+        "const bare = o.x;\nconst chained = o?.x?.y;\nconst got = map.get(k);\n"
+    )
+    result = _run(strict_config, JS, text)
+    assert _rows(result, "DEF002") == [
+        (1, "error", "exact"),
+        (2, "error", "exact"),
+        (3, "error", "exact"),
+        (4, "error", "approximate"),
+        (5, "error", "exact"),
+        (6, "error", "exact"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+        (9, "error", "exact"),
+        (10, "error", "exact"),
+        (11, "error", "exact"),
+        (12, "error", "exact"),
+    ]
+    assert _ids(result).count("DEF004") == 0
+
+
+# --- DEF003: truthiness fallbacks ---------------------------------------------------------------
+
+
+def test_def003_is_review_by_default_and_forbid_makes_it_an_error(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = "def f(items):\n    return items or []\n"
+    assert _rows(_run(strict_config, PY, text), "DEF003") == [(2, "review", "exact")]
+    forbid = _defaults_config(make_config, 'truthiness_fallbacks = "forbid"\n')
+    assert _rows(_run(forbid, PY, text), "DEF003") == [(2, "error", "exact")]
+    assert "truthiness_fallbacks" not in "\n".join(forbid.deviations)
+    allowed = _defaults_config(make_config, 'truthiness_fallbacks = "allow"\n')
+    assert _rows(_run(allowed, PY, text), "DEF003") == []
+    assert any("rules.defaults.truthiness_fallbacks is 'allow'" in d for d in allowed.deviations)
+
+
+def test_def003_contexts_and_boolean_logic(strict_config: EffectiveConfig) -> None:
+    text = (
+        "def f(a, b, flag, items):\n"
+        "    x = a or b\n"  # assignment, non-constant: approximate
+        "    call(a or b)\n"  # argument, non-constant: nothing
+        "    call(a or 0)\n"  # argument, constant: exact
+        "    if a or b:\n"  # Boolean test: nothing
+        "        pass\n"
+        "    ok = a == b or flag\n"  # Boolean logic: nothing
+        "    found = a in items or b in items\n"  # Boolean logic: nothing
+        "    y = a or b or 'z'\n"  # chain, constant end: exact, reported once
+        "    z = a if a else 'empty'\n"  # ternary spelling: exact
+        "    both = a and b\n"  # 'and' is never a fallback
+        "    return a or b\n"  # return, non-constant: approximate
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF003") == [
+        (2, "review", "approximate"),
+        (4, "review", "exact"),
+        (9, "review", "exact"),
+        (10, "review", "exact"),
+        (12, "review", "approximate"),
+    ]
+    approximate = result.findings[0]
+    assert "may be a fallback or a legitimate alternative" in approximate.message
+    chain = next(f for f in result.findings if f.span.line == 9)
+    assert chain.message.startswith("a or b falls back to 'z' when falsy")
+    facts = extract_python_facts(SourceText.from_text(text), "t.py")
+    contexts = {f.span.line: f.context for f in facts.defaults if f.family == FAMILY_TRUTHINESS}
+    assert contexts == {
+        2: CONTEXT_ASSIGNMENT,
+        4: CONTEXT_ARGUMENT,
+        9: CONTEXT_ASSIGNMENT,
+        10: CONTEXT_ASSIGNMENT,
+        12: CONTEXT_RETURN,
+    }
+
+
+def test_def003_javascript_forms(strict_config: EffectiveConfig) -> None:
+    text = (
+        "function f(a, b, items) {\n"
+        "  const list = items || [];\n"
+        "  let total = a || b;\n"
+        "  total ||= 1;\n"
+        "  if (a || b) { step(); }\n"
+        "  const ok = a === b || flag;\n"
+        "  const done = !(a || b);\n"
+        "  const t = a ? a : 'empty';\n"
+        "  return a || b || 'z';\n"
+        "}\n"
+    )
+    assert _rows(_run(strict_config, JS, text), "DEF003") == [
+        (2, "review", "exact"),
+        (3, "review", "approximate"),
+        (4, "review", "exact"),
+        (8, "review", "exact"),
+        (9, "review", "exact"),
+    ]
+
+
+# --- DEF004: nullish fallbacks ------------------------------------------------------------------
+
+
+def test_def004_python_conditional_expressions(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "def f(limit, rows, node, flag, other):\n"
+        "    a = limit if limit is not None else 1\n"
+        "    b = [] if rows is None else rows\n"
+        "    c = limit if limit != None else other\n"
+        "    d = None if node is None else node.strip()\n"  # propagation: nothing
+        "    e = 'on' if flag is not None else 'off'\n"  # a choice: nothing
+        "    if limit is None:\n        limit = 1\n"  # statement form: nothing
+        "    return a, b, c, d, e\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF004") == [
+        (2, "error", "exact"),
+        (3, "error", "exact"),
+        (4, "error", "approximate"),
+    ]
+    assert result.findings[0].message.startswith("limit falls back to 1 when None")
+    review = _defaults_config(make_config, 'nullish_fallbacks = "review"\n')
+    assert {r[1] for r in _rows(_run(review, PY, text), "DEF004")} == {"review"}
+    assert any("rules.defaults.nullish_fallbacks is 'review'" in d for d in review.deviations)
+
+
+def test_def004_javascript_forms(strict_config: EffectiveConfig) -> None:
+    text = (
+        "function f(count, other, value) {\n"
+        "  const n = count ?? 0;\n"
+        "  const l = count ?? other;\n"
+        "  let s = count;\n  s ??= {};\n"
+        "  const a = value === undefined ? 1 : value;\n"
+        "  const b = value != null ? value : [];\n"
+        "  const c = typeof value === 'undefined' ? 0 : value;\n"
+        "  const d = value == null ? null : value.name;\n"  # propagation: nothing
+        "  const e = value === null ? 'on' : 'off';\n"  # a choice: nothing
+        "  const g = count ?? null;\n"  # still a substitution
+        "  if (count ?? other) {}\n"  # Boolean test: nothing
+        "  return [n, l, s, a, b, c, d, e, g];\n"
+        "}\n"
+    )
+    result = _run(strict_config, JS, text)
+    assert _rows(result, "DEF004") == [
+        (2, "error", "exact"),
+        (3, "error", "approximate"),
+        (5, "error", "exact"),
+        (6, "error", "exact"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+        (11, "error", "exact"),
+    ]
+    assert result.findings[0].message.startswith("count falls back to 0 when null or undefined")
+
+
+# --- DEF005: exception-to-default ---------------------------------------------------------------
+
+
+def test_def005_literal_returns_are_exact_and_traces_are_approximate(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = (
+        "DEFAULT = {}\n"
+        "def empty():\n    return []\n"
+        "def a(p):\n    try:\n        return read(p)\n    except OSError:\n        return None\n"
+        "def b(p):\n    try:\n        return read(p)\n    except OSError:\n        return DEFAULT\n"
+        "def c(p):\n    try:\n        return read(p)\n    except OSError as exc:\n"
+        "        print(exc)\n        return empty()\n"
+        "def d(p):\n    try:\n        return read(p)\n    except OSError:\n        return dict()\n"
+        "def e(p, default):\n    try:\n        return read(p)\n    except OSError:\n"
+        "        return default\n"
+        "def f(p):\n    try:\n        return read(p)\n    except OSError:\n"
+        "        return IMPORTED\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF005") == [
+        (7, "error", "exact"),
+        (12, "error", "approximate"),
+        (17, "error", "approximate"),
+        (23, "error", "exact"),
+    ]
+    messages = [f.message for f in result.findings if f.rule_id == "DEF005"]
+    assert "return None (EXC002 classification return_fallback" in messages[0]
+    assert "returns DEFAULT, bound at module level to {}" in messages[1]
+    assert "delegates to empty(), a module-level helper whose body is 'return []'" in messages[2]
+    assert "fabricates an empty value in place: return dict()" in messages[3]
+    assert "EXC002" not in _ids(result)  # return_fallback is counted once, as DEF005
+    assert _ids(result).count("EXC001") == 6
+
+
+def test_def005_javascript_traces(strict_config: EffectiveConfig) -> None:
+    text = (
+        "const EMPTY = [];\nfunction rows() { return []; }\nconst obj = () => ({});\n"
+        "function a(r) { try { return JSON.parse(r); } catch (e) { return EMPTY; } }\n"
+        "function b(r) { try { return JSON.parse(r); } catch (e) { return rows(); } }\n"
+        "function c(r) { try { return JSON.parse(r); } catch (e) { return obj(); } }\n"
+        "function d(r) { try { return JSON.parse(r); } catch (e) { return new Map(); } }\n"
+        "function e(r) { try { return JSON.parse(r); } catch (e) { return null; } }\n"
+        "function f(r) { try { return JSON.parse(r); } catch (e) { return OTHER; } }\n"
+        "const g = fetch(u).catch(() => null);\n"
+    )
+    result = _run(strict_config, JS, text)
+    assert _rows(result, "DEF005") == [
+        (4, "error", "approximate"),
+        (5, "error", "approximate"),
+        (6, "error", "approximate"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+        (10, "error", "exact"),
+    ]
+
+
+def test_def005_disabled_restores_exc002_return_fallback(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    text = "def a(p):\n    try:\n        return read(p)\n    except OSError:\n        return None\n"
+    config = make_config("[tool.shockharness.rules.defaults]\nenabled = false\n")
+    result = _run(config, PY, text)
+    assert _ids(result) == ["EXC001", "EXC002"]
+    assert [d.rule_id for d in result.rules_disabled] == [
+        "DEF001",
+        "DEF002",
+        "DEF003",
+        "DEF004",
+        "DEF005",
+        "DEF006",
+    ]
+    assert "rules.defaults is disabled" in config.deviations
+
+
+# --- DEF006: configuration fallbacks ------------------------------------------------------------
+
+
+def test_def006_python_forms_follow_every_import_spelling(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "import os\nimport os as o\nfrom os import environ, getenv as ge\n"
+        "a = os.getenv('A', '1')\n"
+        "b = os.environ.get('B', '1')\n"
+        "c = os.getenv('C', default='1')\n"
+        "d = os.environ.get('D') or '1'\n"
+        "e = os.environ['E'] if 'E' in os.environ else '1'\n"
+        "f = os.getenv('F')\n"
+        "g = os.environ.setdefault('G', '1')\n"
+        "h = o.getenv('H', '1')\n"
+        "i = environ.get('I', '1')\n"
+        "j = ge('J', '1')\n"
+        "k = ge('K') if ge('K') is not None else '1'\n"
+        "m = os.environ['M']\n"
+        "n = os.getenv('N')\nif n is None:\n    raise RuntimeError('N')\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _rows(result, "DEF006") == [
+        (4, "error", "exact"),
+        (5, "error", "exact"),
+        (6, "error", "exact"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+        (9, "review", "exact"),
+        (10, "error", "exact"),
+        (11, "error", "exact"),
+        (12, "error", "exact"),
+        (13, "error", "exact"),
+        (14, "error", "exact"),
+        (16, "review", "exact"),
+    ]
+    assert {"DEF002", "DEF003", "DEF004"}.isdisjoint(_ids(result))  # DEF006 owns env reads
+    assert result.findings[0].message.startswith("environment variable 'A' falls back to '1'")
+    implicit = next(f for f in result.findings if f.span.line == 9)
+    assert "yields None when the variable is unset" in implicit.message
+    allowed = _defaults_config(make_config, 'configuration_fallbacks = "allow"\n')
+    assert _rows(_run(allowed, PY, text), "DEF006") == []
+    assert any("configuration_fallbacks is 'allow'" in d for d in allowed.deviations)
+
+
+def test_def006_javascript_forms(strict_config: EffectiveConfig) -> None:
+    text = (
+        "const port = process.env.PORT || '3000';\n"
+        "const host = process.env.HOST ?? 'localhost';\n"
+        "const region = process.env['REGION'] || 'eu';\n"
+        "const workers = Number(process.env.WORKERS || 1);\n"
+        "const mode = process.env.MODE === undefined ? 'dev' : process.env.MODE;\n"
+        "process.env.NODE_ENV ||= 'development';\n"
+        "process.env.TZ ??= 'UTC';\n"
+        "const { USER = 'me', HOME } = process.env;\n"
+        "const token = process.env.TOKEN;\n"
+        "const level = process.env.LEVEL ?? process.env.FALLBACK;\n"
+    )
+    result = _run(strict_config, JS, text)
+    assert _rows(result, "DEF006") == [
+        (1, "error", "exact"),
+        (2, "error", "exact"),
+        (3, "error", "exact"),
+        (4, "error", "exact"),
+        (5, "error", "exact"),
+        (6, "error", "exact"),
+        (7, "error", "exact"),
+        (8, "error", "exact"),
+        (10, "error", "exact"),  # process.env.FALLBACK is constant-shaped (UPPER_CASE)
+    ]
+    assert {"DEF002", "DEF003", "DEF004"}.isdisjoint(_ids(result))
+    assert result.findings[0].message.startswith("environment variable PORT falls back to '3000'")
+
+
+# --- shared behaviour -------------------------------------------------------------------------
+
+
+def test_default_findings_are_suggestions_only_and_carry_scope(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = "class C:\n    def m(self):\n        def inner(x=1):\n            return x or 0\n"
+    result = _run(strict_config, PY, text)
+    assert [(f.rule_id, f.scope) for f in result.findings] == [
+        ("DEF001", "C.m.inner"),
+        ("DEF003", "C.m.inner"),
+    ]
+    assert all(f.safe_autofix is False for f in result.findings)
+    assert all(f.remediation != "" for f in result.findings)
+
+
+def test_default_findings_can_be_suppressed_inline(strict_config: EffectiveConfig) -> None:
+    text = (
+        'def f(x=None):  # shockharness: ignore[DEF001] reason="public API compatibility"\n'
+        "    return x\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert [(f.rule_id, f.is_suppressed) for f in result.findings] == [("DEF001", True)]
+
+
+def test_overrides_can_disable_one_default_rule(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(
+        '[[tool.shockharness.overrides]]\npaths = ["tests/**"]\ndisable = ["DEF001"]\n'
+        'reason = "fixture signatures"\n'
+    )
+    text = "def f(x=1):\n    return x or 0\n"
+    inside = analyze_text("tests/t.py", PY, text, config, OPTIONS)
+    assert _ids(inside) == ["DEF003"]
+    assert [d.rule_id for d in inside.rules_disabled] == ["DEF001"]
+    outside = analyze_text("src/t.py", PY, text, config, OPTIONS)
+    assert _ids(outside) == ["DEF001", "DEF003"]
+
+
+def test_new_mode_keys_are_validated(make_config: Callable[[str], EffectiveConfig]) -> None:
+    for key in ("dataclass_fields", "nullish_fallbacks", "configuration_fallbacks"):
+        with pytest.raises(ConfigError) as info:
+            _defaults_config(make_config, f'{key} = "maybe"\n')
+        assert f"rules.defaults.{key}" in str(info.value)
+        assert "'forbid', 'review', 'allow'" in str(info.value)
+    with pytest.raises(ConfigError) as unknown:
+        _defaults_config(make_config, 'exception_fallbacks = "forbid"\n')
+    assert "unknown key" in str(unknown.value)
+
+
+def test_strict_defaults_report_no_deviation_and_loosening_is_listed(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    assert not any("rules.defaults." in d for d in strict_config.deviations)
+    loosened = _defaults_config(
+        make_config,
+        'function_parameters = "review"\nmissing_value_fallbacks = "allow"\n'
+        'truthiness_fallbacks = "forbid"\n',
+    )
+    listed = [d for d in loosened.deviations if d.startswith("rules.defaults.")]
+    assert listed == [
+        "rules.defaults.function_parameters is 'review' (strict profile: 'forbid'); DEF001 "
+        "findings of that kind are reported as review",
+        "rules.defaults.missing_value_fallbacks is 'allow' (strict profile: 'forbid'); DEF002 "
+        "findings of that kind are not reported",
+    ]
+
+
+def test_every_fixture_finding_is_a_suggestion(empty_root: Path) -> None:
+    expected = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
+    seen: set[str] = set()
+    for name in sorted(expected):
+        text = (FIXTURES / name).read_text(encoding="utf-8")
+        config = fixture_config(name, expected[name], empty_root)
+        result = analyze_text(name, language_for_fixture(name), text, config, OPTIONS)
+        for finding in result.findings:
+            seen.add(finding.rule_id)
+            assert finding.safe_autofix is False, (name, finding)
+            assert finding.confidence in ("exact", "approximate", "unresolved"), (name, finding)
+    assert {"DEF001", "DEF002", "DEF003", "DEF004", "DEF005", "DEF006"} <= seen
+
+
+def test_javascript_facts_record_kind_and_context() -> None:
+    text = "function f(a = 1) { const m = o.get(k); return a ?? 0; }\n"
+    facts = extract_javascript_facts(SourceText.from_text(text), "t.js")
+    assert [(f.kind, f.context) for f in facts.defaults] == [
+        (KIND_PARAMETER, "declaration"),
+        ("coalesce", CONTEXT_RETURN),
+    ]
+    assert all(f.kind != KIND_MAPPING_GET_IMPLICIT for f in facts.defaults)

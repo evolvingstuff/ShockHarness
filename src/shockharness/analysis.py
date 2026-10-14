@@ -18,6 +18,7 @@ from shockharness.ir.javascript import extract_javascript_facts
 from shockharness.ir.model import ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.rules import registry
+from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.magic_numbers import run_magic001
 from shockharness.source import SourceText
@@ -161,6 +162,9 @@ def analyze_text(
             )
         )
 
+    active_default_rules = frozenset(
+        rule.rule_id for rule in DEFAULT_RULES if rule.rule_id not in disabled_ids
+    )
     active_exception_rules = frozenset(
         rule.rule_id
         for rule in (registry.EXC001, registry.EXC002, registry.EXC003)
@@ -176,6 +180,19 @@ def analyze_text(
                 relative_path,
                 language,
                 active_exception_rules,
+                registry.DEF005.rule_id in active_default_rules,
+            )
+        )
+    if len(active_default_rules) > 0:
+        applied.extend(sorted(active_default_rules))
+        findings.extend(
+            run_default_rules(
+                facts,
+                source,
+                config.section(str(registry.DEF001.config_section)),
+                relative_path,
+                language,
+                active_default_rules,
             )
         )
 

@@ -1,6 +1,7 @@
 """EXC001-EXC003 rule semantics: boundaries, identities, handler bodies, try scope."""
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
@@ -35,7 +36,10 @@ NARROW_PY = (
 
 
 def _run(config: EffectiveConfig, path: str, language: str, text: str) -> FileResult:
-    return analyze_text(path, language, text, config, OPTIONS)
+    """Analyze and keep the exception family plus DEF005, which co-owns return_fallback."""
+    result = analyze_text(path, language, text, config, OPTIONS)
+    kept = tuple(f for f in result.findings if f.rule_id.startswith("EXC") or f.rule_id == "DEF005")
+    return replace(result, findings=kept)
 
 
 def _messages(result: FileResult, rule_id: str) -> list[str]:
@@ -236,6 +240,7 @@ def test_javascript_opaque_rejection_handler_fails_closed(
 def test_exc002_flags_suppression_shapes_inside_boundary(
     make_config: Callable[[str], EffectiveConfig], body: str, fragment: str
 ) -> None:
+    """return_fallback is reported once, as DEF005, while DEF005 is active (Milestone D)."""
     config = make_config(TIMEOUT_BOUNDARY)
     text = (
         "import logging\nfrom requests.exceptions import Timeout\n"
@@ -243,9 +248,20 @@ def test_exc002_flags_suppression_shapes_inside_boundary(
         f"    except Timeout as exc:\n        {body}\n"
     )
     result = _run(config, "src/net/a.py", "python", text)
-    assert [f.rule_id for f in result.findings] == ["EXC002"], result.findings
+    expected = "DEF005" if body.startswith("return") else "EXC002"
+    assert [f.rule_id for f in result.findings] == [expected], result.findings
     assert fragment in result.findings[0].message
     assert result.findings[0].confidence == "exact"
+    if expected == "DEF005":
+        assert "EXC002 classification return_fallback" in result.findings[0].message
+        without_def005 = make_config(
+            TIMEOUT_BOUNDARY
+            + '[[tool.shockharness.overrides]]\npaths = ["src/**"]\ndisable = ["DEF005"]\n'
+            'reason = "exercise the EXC002 fallback path"\n'
+        )
+        again = _run(without_def005, "src/net/a.py", "python", text)
+        assert [f.rule_id for f in again.findings] == ["EXC002"], again.findings
+        assert fragment in again.findings[0].message
 
 
 @pytest.mark.parametrize(
@@ -276,17 +292,17 @@ def test_exc002_javascript_shapes(make_config: Callable[[str], EffectiveConfig])
     config = make_config(JS_BOUNDARY)
     guard = "if (!(e instanceof TimeoutError)) throw e;"
     cases = {
-        "": "swallows",
-        "console.error(e);": "only logs",
-        "return null;": "fallback value: return null",
-        "return undefined;": "fallback value",
-        "return { items: [], n: 0 };": "fallback value",
-        "throw new Error('x');": "without preserving its cause",
+        "": ("EXC002", "swallows"),
+        "console.error(e);": ("EXC002", "only logs"),
+        "return null;": ("DEF005", "fallback value: return null"),
+        "return undefined;": ("DEF005", "fallback value"),
+        "return { items: [], n: 0 };": ("DEF005", "fallback value"),
+        "throw new Error('x');": ("EXC002", "without preserving its cause"),
     }
-    for body, fragment in cases.items():
+    for body, (rule_id, fragment) in cases.items():
         text = f"try {{ f(); }} catch (e) {{ {guard} {body} }}\n"
         result = _run(config, "web/a.js", "javascript", text)
-        assert [f.rule_id for f in result.findings] == ["EXC002"], (body, result.findings)
+        assert [f.rule_id for f in result.findings] == [rule_id], (body, result.findings)
         assert fragment in result.findings[0].message, body
     for body in ("throw e;", "throw new Error('x', { cause: e });", "retry(); return null;"):
         text = f"try {{ f(); }} catch (e) {{ {guard} {body} }}\n"
@@ -424,7 +440,19 @@ def test_single_exception_rule_can_be_disabled_by_override(
     )
     result = _run(config, "legacy/a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert [f.rule_id for f in result.findings] == ["EXC001"]
-    assert result.rules_applied == ("EXC001", "EXC003", "MAGIC001", "SUPP001", "SUPP002")
+    assert result.rules_applied == (
+        "DEF001",
+        "DEF002",
+        "DEF003",
+        "DEF004",
+        "DEF005",
+        "DEF006",
+        "EXC001",
+        "EXC003",
+        "MAGIC001",
+        "SUPP001",
+        "SUPP002",
+    )
 
 
 def test_boundaries_are_reported_as_deviations(

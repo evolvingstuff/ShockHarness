@@ -50,9 +50,16 @@ boundaries = []
 
 [tool.shockharness.rules.defaults]
 enabled = true
-function_parameters = "forbid"
-missing_value_fallbacks = "forbid"
-truthiness_fallbacks = "review"
+# Each mode: "forbid" -> error (fails the gate), "review" -> reported, never fails,
+# "allow" -> no finding. Anything looser than the strict value below is reported
+# as a policy deviation.
+function_parameters = "forbid"      # DEF001: def f(x=v), function f(x = v), destructured parameter defaults
+dataclass_fields = "forbid"         # DEF001: x: int = v, field(default=...), field(default_factory=...) in a @dataclass
+missing_value_fallbacks = "forbid"  # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
+truthiness_fallbacks = "review"     # DEF003: x or v, x || v (also replace legitimate falsy values)
+nullish_fallbacks = "forbid"        # DEF004: x ?? v, x if x is not None else v
+configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X || v
+# DEF005 (a handler that returns a default) has no mode: it is always an error.
 
 [tool.shockharness.complexity]
 enabled = true

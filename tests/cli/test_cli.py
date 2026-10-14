@@ -49,7 +49,9 @@ def test_rules_list_and_explain(capsys: pytest.CaptureFixture[str]) -> None:
     assert code == 0
     assert "MAGIC001  error    implemented" in out
     assert "EXC001    error    implemented" in out
-    assert "DEF001    error    planned" in out
+    assert "DEF001    error    implemented" in out
+    assert "DEF003    review   implemented" in out
+    assert "CPLX001   warning  planned" in out
     code, out, _ = run(["rules", "explain", "MAGIC001"], capsys)
     assert code == 0
     assert "Detection guarantees" in out
@@ -211,8 +213,8 @@ def test_milestone_c_acceptance_exceptions(
     rows = [(f["path"], f["rule_id"], f["span"]["line"], f["confidence"]) for f in data["findings"]]
     assert rows == [
         ("src/core/client.py", "EXC001", 5, "exact"),
+        ("src/net/broad.py", "DEF005", 4, "exact"),  # return_fallback: DEF005 owns it (Milestone D)
         ("src/net/broad.py", "EXC001", 4, "exact"),
-        ("src/net/broad.py", "EXC002", 4, "exact"),
         ("src/net/unknown.py", "EXC001", 4, "unresolved"),
         ("src/net/wide.py", "EXC003", 5, "exact"),
     ]

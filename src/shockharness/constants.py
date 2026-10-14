@@ -45,3 +45,9 @@ RADIX_BINARY: Final[int] = 2
 RADIX_OCTAL: Final[int] = 8
 RADIX_DECIMAL: Final[int] = 10
 RADIX_HEX: Final[int] = 16
+
+# Call arities that distinguish a fallback form from a plain lookup (DEF002, DEF006).
+LOOKUP_WITH_FALLBACK_ARITY: Final[int] = (
+    2  # m.get(k, v), m.pop(k, v), os.getenv("X", v), Object.hasOwn(o, k)
+)
+GETATTR_WITH_FALLBACK_ARITY: Final[int] = 3  # getattr(o, name, v)

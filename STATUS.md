@@ -256,25 +256,239 @@ gate: FAIL (exit 1)
    operation counts, and `except` being a valid identifier that the boundary
    name check correctly accepts); the tests were corrected, not the code.
 
+## Milestone D: default and fallback rules DEF001-DEF006 — DONE (2026-10-14)
+
+Delivered: default facts in the IR (`ir/model.py`: `DefaultFact` with family,
+kind, subject, fallback text, constant-shapedness, syntactic context,
+exact/approximate confidence, and a one-line explanation), Python extractor
+(`ir/python_defaults.py`: parameter and keyword-only and lambda defaults,
+`typing.overload` `...` excluded; dataclass fields with `default` and
+`default_factory` as distinct kinds, `ClassVar` excluded; `.get`/`.setdefault`/
+`.pop` with a fallback, `getattr` with three arguments, membership ternaries,
+`.get(key)` implicit `None`; `or` outside Boolean tests with context tracking
+through assignment/return/argument/test positions; `is None` ternaries with
+propagation and plain choices excluded; `os.getenv`/`os.environ` in every
+import spelling; DEF005 traces to module constants, empty constructors and
+one-return helpers), JavaScript extractor (`ir/javascript_defaults.py`:
+function/arrow/method/constructor parameter defaults, destructuring defaults in
+parameters, declarations, for-of loops and assignment patterns, rest parameters
+excluded; `||`, `||=`, `??`, `??=`, `x ? x : v`, null/undefined/`typeof`
+ternaries, membership and `hasOwnProperty`/`Object.hasOwn` ternaries;
+`process.env` in member, subscript, destructuring and operator forms; DEF005
+traces including `const` arrow helpers with expression bodies),
+`rules/defaults.py` (mode to severity: forbid -> error, review -> review,
+allow -> off; implicit shapes always review unless allowed; DEF005 always
+error), three new configuration keys (`dataclass_fields`, `nullish_fallbacks`,
+`configuration_fallbacks`, all `forbid`) in `schema.py`, `defaults.toml`,
+`.shockharness.toml` and `docs/configuration.md`, loosened modes reported in
+`config.deviations`, registry metadata for the six rules, 13 golden fixtures
+(expectations regenerated and reviewed row by row; every pre-existing row is
+unchanged except the eleven `EXC002` `return_fallback` rows that became
+`DEF005`), 25 unit tests in `tests/unit/test_defaults.py`, and documentation.
+
+Decisions recorded here (not in the specification):
+
+* **DEF005 replaces EXC002 for `return_fallback`.** Both rules describe one
+  handler; counting it twice would double a gate failure. While DEF005 is
+  active, EXC002 skips `return_fallback` and DEF005 reports it with the EXC002
+  classification named in the message. Disabling DEF005 (override or
+  `rules.defaults.enabled = false`) restores the EXC002 finding, so nothing is
+  lost under any configuration. Tested both ways.
+* **Dataclass field defaults are forbidden** (`dataclass_fields = "forbid"`):
+  a field default is a parameter default on the generated `__init__`.
+  `default_factory` is recorded as its own kind so reports can tell them apart.
+  Configurable independently of `function_parameters`.
+* **Destructuring defaults** split by position: in parameters they are DEF001,
+  in declarations/loops/assignments DEF002, and from `process.env` DEF006.
+  `??` splits on its left operand: a property or lookup is DEF002, a plain
+  identifier DEF004. Environment reads always win (DEF006 claims the `or`,
+  `??`, ternary and implicit-`None` shapes so a file is not told twice).
+* **Boolean logic is not a fallback.** An `or`/`||` with any operand that is a
+  comparison, `and`/`&&`, `not`/`!`, a Boolean constant, or (Python) an
+  `isinstance`-style builtin call is skipped. Boolean *variables* cannot be
+  told from values and remain approximate review findings.
+* **Implicit `.get(key)`** is reported (review) when the receiver is a known
+  mapping, or when the receiver is unknown and the key is a string literal;
+  `client.get(url)` is not reported because nothing says it is a lookup.
+  A result that is awaited or compared with `None` in the same expression is
+  not reported either. A check on the following statement is not seen.
+* **DEF005 traces, never guesses.** Only module-level bindings to
+  constant-shaped values and module-level one-return helpers are followed.
+  Imported names and `UPPER_CASE` names the module does not bind are not
+  DEF005 findings (see dogfooding below).
+* **Confidence**: `exact` when the fallback is constant-shaped (literal,
+  container of literals, `UPPER_CASE` name/attribute, empty constructor) and
+  the shape is unambiguous; `approximate` when the receiver type is unknown or
+  the right operand of `or` is not a constant. Approximate findings keep the
+  configured severity: under `forbid` they fail the gate, as EXC001's
+  `unresolved` identities do.
+* **Statement-level defaults** (`if x is None: x = v`) are out of scope by
+  design and documented as such; the rules target value-substituting
+  expressions.
+
+### Dogfooding: what the rules found in the tool
+
+The first self-scan reported 38 findings. Two groups were rule imprecision,
+fixed in the rules; the rest were real and fixed in the code. No policy was
+loosened: `.shockharness.toml` gained only the three new keys at `forbid`.
+
+Rule precision (fixed in the rule, recorded here because it changed detection):
+
+1. `DEF003` flagged `return name in LOGGING_EXACT or LOGGING_CALL.match(name)
+   is not None` and four similar Boolean chains. An `or` whose operands are
+   comparisons is logic, not substitution. Boolean operands now exclude the
+   `or` (both languages).
+2. `DEF005` flagged the CLI's process boundary (`except ShockHarnessError:
+   ... return EXIT_INVALID_CONFIG`) through a naming-convention heuristic:
+   "an `UPPER_CASE` name the module does not bind is probably a constant".
+   An exit code returned from the sanctioned process boundary is not a
+   success-shaped default, and a name's casing is not a static trace. The
+   heuristic was removed; DEF005 now traces only module-bound constants and
+   helpers. Imported defaults are a documented limitation.
+
+Code (fixed in the code, behaviour unchanged unless stated):
+
+3. `DEF002`: three `dict.setdefault(key, accumulator)` calls (`report.py` x2,
+   `suppressions.py`) became explicit `if key not in d: d[key] = ...`.
+4. `DEF002`: three `m[k] if k in m else v` ternaries in `tests/conftest.py`
+   and `tests/unit/test_gate_and_report.py` became explicit branches.
+5. `DEF004`: nineteen `x if x is not None else v` expressions. Thirteen were on
+   tree-sitter/`ast` fields that the grammar always populates (`name` of a
+   named scope, `constructor` of `new`, `function` of a call, `body` of
+   `try`/`catch`, `object`/`property` of a member expression, `operator` of a
+   binary expression, `end_lineno`/`end_col_offset` of parsed nodes); these
+   now assert the invariant, so an unexpected tree fails visibly (exit 3)
+   instead of being papered over. Six were genuinely optional values (import
+   `as` names, `from . import`, `get_source_segment` returning `None`, the
+   report's missing discovery step, my own fact texts) and became explicit
+   branches. One changed behaviour: a Python `SyntaxError` with a line but no
+   column used to get column 1; it now gets no span (CPython always supplies
+   both, so no test moved).
+6. `MAGIC001`: my own `range(n - 1, -1, -1)` in the new JavaScript walker was
+   caught by the gate and became `reversed(list(enumerate(...)))`; the
+   lookup arities `2`/`3` moved to `constants.py`.
+
+Acceptance criterion from the spec (Milestone D): representative Python and
+JavaScript examples produce exact diagnostics for all six rules (golden
+fixtures `def_*.py` / `def_*.js`, 164 reviewed rows, and the smoke corpus
+below), and every finding has `safe_autofix = false`
+(`tests/unit/test_defaults.py::test_every_fixture_finding_is_a_suggestion`).
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+56 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+363 passed in 2.18s
+$ pytest -q                      # CPython 3.13.1
+363 passed in 2.02s
+$ pytest -q                      # CPython 3.12.8
+363 passed in 1.97s
+$ pytest -q                      # CPython 3.11.11
+363 passed in 2.46s
+
+$ shockharness scan src tests    # self-compliance, all four interpreters
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml)
+  ... (13 policy deviations: 11 boundaries, 2 overrides; no rules.defaults deviation)
+
+$ python -m build
+Successfully built shockharness-0.1.0.tar.gz and shockharness-0.1.0-py3-none-any.whl
+```
+
+Sample text output on a smoke corpus (`src/app/settings.py`: a dataclass with
+defaults, a function with defaults, `os.getenv` with a fallback, `.get` with
+and without a fallback, `or`, an `is None` ternary, and a handler returning
+`None`; `src/app/client.js`: `process.env` in two spellings, destructured
+parameter defaults, `??` on an identifier and on an optional chain, `||`, and
+a handler returning `null`), bundled strict defaults:
+
+```text
+src/app/client.js:1:14: DEF006 error: environment variable HOST falls back to "localhost"; '||' replaces an unset or empty environment variable HOST with a fallback  [const host = process.env.HOST || "localhost";]
+src/app/client.js:2:16: DEF006 error: destructuring default for 'PORT' in a destructuring of process.env: "3000"  [const { PORT = "3000" } = process.env;]
+src/app/client.js:4:42: DEF001 error: destructuring default for 'retries' in parameters: 3  [export function connect(url, { retries = 3, timeout } = {}) {]
+src/app/client.js:4:42: MAGIC001 error: Numeric literal 3 has no permitted justification in executable code  [export function connect(url, { retries = 3, timeout } = {}) {]
+src/app/client.js:4:57: DEF001 error: parameter '{ retries = 3, timeout }' of connect has a default value: {}  [export function connect(url, { retries = 3, timeout } = {}) {]
+src/app/client.js:5:17: DEF004 error: timeout falls back to 30 when null or undefined; '??' substitutes a fallback when the left operand is null or undefined  [const limit = timeout ?? 30;]
+src/app/client.js:5:28: MAGIC001 error: Numeric literal 30 has no permitted justification in executable code  [const limit = timeout ?? 30;]
+src/app/client.js:6:17: DEF003 review: url.label falls back to "default" when falsy; '||' substitutes a constant for every falsy value of the left operand (undefined, null, 0, '', NaN, false alike)  [const label = url.label || "default";]
+src/app/client.js:7:16: DEF002 error: options?.mode falls back to "fast"; '??' substitutes a fallback when the property or lookup result is null or undefined  [const mode = options?.mode ?? "fast";]
+src/app/client.js:10:5: DEF005 error: catch clause converts the exception into a fallback value: return null; (EXC002 classification return_fallback; the handler is reported once, here)  [} catch (err) {]
+src/app/client.js:10:5: EXC001 error: catch clause is forbidden: untyped catch binds every error; a JavaScript catch passes only inside an approved boundary whose error class the handler checks with instanceof and otherwise rethrows  [} catch (err) {]
+src/app/settings.py:8:17: DEF001 error: dataclass field 'port' of Settings has a default value: 5432  [port: int = 5432]
+src/app/settings.py:8:17: MAGIC001 error: Numeric literal 5432 has no permitted justification in executable code  [port: int = 5432]
+src/app/settings.py:9:40: DEF001 error: dataclass field 'tags' of Settings has a default_factory: list  [tags: list = field(default_factory=list)]
+src/app/settings.py:12:24: DEF001 error: parameter 'port' of connect() has a default value: 5432  [def connect(host, port=5432, timeout=None):]
+src/app/settings.py:12:24: MAGIC001 error: Numeric literal 5432 has no permitted justification in executable code  [def connect(host, port=5432, timeout=None):]
+src/app/settings.py:12:38: DEF001 error: parameter 'timeout' of connect() has a default value: None  [def connect(host, port=5432, timeout=None):]
+src/app/settings.py:13:15: DEF006 error: environment variable "RETRIES" falls back to "3"; os.getenv(...) substitutes a fallback when environment variable "RETRIES" is unset (getenv)  [retries = os.getenv("RETRIES", "3")]
+src/app/settings.py:15:15: DEF002 error: options["verbose"] falls back to False when the key is missing; .get(key, fallback) substitutes the fallback for a missing key; the receiver's type is not established, so this is approximate  [verbose = options.get("verbose", False)]
+src/app/settings.py:16:13: DEF003 review: options.get("label") falls back to "default" when falsy; 'or' substitutes a constant for every falsy value of the left operand (None, 0, '', empty containers alike)  [label = options.get("label") or "default"]
+src/app/settings.py:17:13: DEF004 error: timeout falls back to 30 when None; conditional expression on 'is None' substitutes a value when the subject is missing  [limit = timeout if timeout is not None else 30]
+src/app/settings.py:17:49: MAGIC001 error: Numeric literal 30 has no permitted justification in executable code  [limit = timeout if timeout is not None else 30]
+src/app/settings.py:20:5: DEF005 error: except handler converts the exception into a fallback value: return None (EXC002 classification return_fallback; the handler is reported once, here)  [except OSError:]
+src/app/settings.py:20:5: EXC001 error: except handler of 'OSError' is forbidden: catch of 'OSError' is not approved by any boundary for this file  [except OSError:]
+
+shockharness 0.1.0: 2 file(s), 2 analyzed, 0 failed; 24 finding(s), 0 suppressed
+  by severity: error=22, review=2
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005
+  config note: no project configuration found; bundled strict defaults apply
+  analysis status: complete
+gate: FAIL (exit 1)
+  22 hard violation(s) and gates.new_hard_violations = "fail"
+```
+
+### Failures observed during development (and what was done)
+
+1. **Self-gate: 38 findings on the tool** (listed above). Two rule-precision
+   fixes, 26 code fixes, no policy change.
+2. **The gate caught new code twice more** while I was writing it: a `-1` in
+   my JavaScript walker (MAGIC001) and an `"a loop" if right is None else ...`
+   in the for-of extractor I added after the first clean scan (DEF004; the
+   grammar always supplies the iterable, so it is asserted). The gate works on
+   its author, again.
+3. **`session.get(url)` noise.** The first implicit-`None` design reported every
+   one-argument `.get` call as a review finding, which put a `DEF002` row on
+   every HTTP-client line in the Milestone C tests and acceptance corpus.
+   Narrowed as described under decisions; the exception tests now filter to
+   their own family so a future default rule cannot silently change them.
+4. **Four hand-counted columns and one confidence** in the new unit tests were
+   wrong on first run (`process.env.FALLBACK` is constant-shaped by the
+   `UPPER_CASE` rule, so `exact`); the tests were corrected, not the code.
+5. **Golden review** surfaced one gap: `for (const { id, label = "none" } of
+   rows)` produced nothing. tree-sitter puts the pattern directly on the
+   `for_in_statement`, not in a declarator; handled, fixture row added. Also
+   added the `({ x = v } = o)` assignment-pattern form while there.
+
 ## Known limitations
 
 See `docs/limitations.md`. Headline: only MAGIC001, EXC001-EXC003,
-SUPP001/SUPP002 produce findings; exception identity resolution is static and
-best effort (star imports, runtime rebinding, class hierarchies are not
-followed; unresolved names fail closed); the JavaScript guard convention is a
-proof obligation, not a type proof; rejection handlers passed by reference are
-opaque; EXC002 does not classify handlers that return variables; Python syntax
-coverage equals the host interpreter; UTF-8 only; JS bare-`\r` line breaks may
-shift line numbers; `.gitignore` is not consulted; SARIF, baselines, diff mode,
-Git features, and skills are not built.
+DEF001-DEF006, SUPP001/SUPP002 produce findings; exception identity resolution
+is static and best effort (star imports, runtime rebinding, class hierarchies
+are not followed; unresolved names fail closed); the JavaScript guard convention
+is a proof obligation, not a type proof; rejection handlers passed by reference
+are opaque; the default rules are syntactic (statement-level defaults are not
+inspected, mapping receivers are known by name only, Boolean variables look
+like values, DEF005 traces one step within the module, bare `process.env.X`
+reads are not findings); Python syntax coverage equals the host interpreter;
+UTF-8 only; JS bare-`\r` line breaks may shift line numbers; `.gitignore` is
+not consulted; SARIF, baselines, diff mode, Git features, and skills are not
+built.
 
 ## Next tasks
 
-- **Milestone C (exceptions)**: `EXC001`-`EXC003` for Python (`ast.Try`,
-  `ast.TryStar`, handler type resolution via import/symbol table with
-  confidence) and JavaScript (`catch` clauses, `.catch()` handlers), boundary
-  matching against `rules.exceptions.boundaries`, broad-try detection. The
-  repository's own `.shockharness.toml` already declares its boundaries so the
-  self-gate will exercise the rule immediately.
+- **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
+  cyclomatic/cognitive/nesting, approximate NPath, call graph with
+  unresolved-edge reports; separate advisory family, never averaged into the
+  gate.
+- Consider a flow-sensitive refinement for the implicit-`None` review finding
+  (a `.get(k)` whose result is checked against `None` on the next statement),
+  and scope-aware mapping knowledge, if the review noise proves costly.
 - Decide `.gitignore` handling (spec: only if configured) and `-0` policy wording in docs if challenged.
 - CI has not run yet (nothing pushed). The matrix is defined; first push will show Linux/Windows results.
