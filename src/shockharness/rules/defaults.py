@@ -199,6 +199,8 @@ def _finding(
         safe_autofix=False,
         scope=scope,
         suppression=None,
+        fingerprint=None,
+        baseline=None,
     )
 
 

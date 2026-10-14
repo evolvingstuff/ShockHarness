@@ -67,6 +67,14 @@ cognitive_warn = 15
 cyclomatic_warn = 15
 max_nesting_warn = 4
 
+# Local git history (file-level granularity, never gating). Read with `git log` on the
+# analyzed root; no remote is contacted. When git is missing or the root is not inside a
+# repository the report says `metrics.history.status = "unavailable"` with the reason.
+[tool.shockharness.history]
+enabled = true
+horizon_days = 90     # commits newer than (head commit date - horizon_days) are counted
+min_support = 3       # co-change pairs need at least this many shared commits to be reported
+
 [tool.shockharness.gates]
 new_hard_violations = "fail"
 legacy = "baseline"

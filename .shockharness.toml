@@ -71,7 +71,43 @@ reason = "Comment extraction tokenizes external source; failure becomes a ParseF
 path = "src/shockharness/cli.py"
 language = "python"
 exception = "OSError"
-reason = "Writing the report or init file to a user path is I/O; failure becomes a UsageError (exit 2)"
+reason = "Writing the report, baseline, or init file to a user path is I/O; failure becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/gating/baseline.py"
+language = "python"
+exception = "OSError"
+reason = "Reading a user-supplied baseline file is I/O; failure becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/gating/baseline.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Baseline file bytes are external input; non-UTF-8 becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/gating/baseline.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Baseline file content is external input; malformed JSON becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/history/git.py"
+language = "python"
+exception = "subprocess.CalledProcessError"
+reason = "The git subprocess is the outside world; a non-zero exit (not a repository, unknown revision) becomes a GitResult error: diff/gate turn it into a UsageError (exit 2), history metrics into status = unavailable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/history/git.py"
+language = "python"
+exception = "OSError"
+reason = "Launching git can fail when the binary is absent (FileNotFoundError) or cannot be executed; the failure becomes a GitResult error, never a silent empty history"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/history/git.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "git output is external bytes; undecodable output becomes a GitResult error"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/cli.py"

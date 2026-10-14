@@ -1,6 +1,8 @@
 """Shared fixtures. Tests never need network, git, or an LLM."""
 
 import json
+import os
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -96,3 +98,42 @@ def language_for_fixture(name: str) -> str:
     if name.endswith(".py"):
         return "python"
     return "javascript"
+
+
+def git(repo: Path, *args: str) -> str:
+    """Run git in ``repo`` with a fixed identity; tests never touch the user's git config."""
+    completed = subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout
+
+
+def init_repo(repo: Path) -> None:
+    repo.mkdir(parents=True, exist_ok=True)
+    git(repo, "init", "-q", "-b", "main")
+
+
+def commit_all(repo: Path, message: str, date: str, author_email: str) -> str:
+    """Stage everything and commit with fixed author and committer dates; return the hash."""
+    git(repo, "add", "-A")
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_DATE": date,
+        "GIT_COMMITTER_DATE": date,
+        "GIT_AUTHOR_EMAIL": author_email,
+        "GIT_COMMITTER_EMAIL": author_email,
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_COMMITTER_NAME": "Test",
+    }
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", message],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        check=True,
+    )
+    return git(repo, "rev-parse", "HEAD").strip()

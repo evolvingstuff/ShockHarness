@@ -1,22 +1,54 @@
 """Human-readable rendering of a report."""
 
 import textwrap
+from typing import Any
 
-from shockharness.constants import CONFIG_DIGEST_SHORT_HEX, TEXT_WRAP_WIDTH
+from shockharness.constants import COMMIT_SHORT_HEX, CONFIG_DIGEST_SHORT_HEX, TEXT_WRAP_WIDTH
+from shockharness.findings import Finding
+from shockharness.gate import GateResult
+from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
 from shockharness.report import Report
 from shockharness.rules.registry import RuleSpec
+
+
+def _finding_line(finding: Finding) -> str:
+    location = f"{finding.path}:{finding.span.line}:{finding.span.column}"
+    line = f"{location}: {finding.rule_id} {finding.severity}: {finding.message}"
+    if finding.evidence != "":
+        line += f"  [{finding.evidence}]"
+    if finding.suppression is not None:
+        line += f"  (suppressed: {finding.suppression.reason})"
+    if finding.baseline is not None:
+        line += f"  (baseline: {finding.baseline})"
+    return line
+
+
+def _gate_lines(gate: GateResult) -> list[str]:
+    lines = [f"gate: {gate.status.upper()} (exit {gate.exit_code})"]
+    for reason in gate.reasons:
+        lines.append(f"  {reason}")
+    return lines
+
+
+def _history_lines(metrics: dict[str, Any]) -> list[str]:
+    if "history" not in metrics:
+        return []
+    history = metrics["history"]
+    if history["status"] != "available":
+        return [f"  history: {history['status']} ({history['reason']})"]
+    horizon = history["horizon"]
+    return [
+        f"  history: {history['commits_considered']} commit(s) in {horizon['days']} day(s) "
+        f"before {horizon['until']} (file granularity); {len(history['cochange'])} "
+        f"co-change pair(s) with support >= {history['cochange_min_support']}; "
+        f"hotspots: {history['hotspots_reason']}"
+    ]
 
 
 def render(report: Report) -> str:
     lines: list[str] = []
     for finding in report.findings:
-        location = f"{finding.path}:{finding.span.line}:{finding.span.column}"
-        line = f"{location}: {finding.rule_id} {finding.severity}: {finding.message}"
-        if finding.evidence != "":
-            line += f"  [{finding.evidence}]"
-        if finding.suppression is not None:
-            line += f"  (suppressed: {finding.suppression.reason})"
-        lines.append(line)
+        lines.append(_finding_line(finding))
 
     for file in report.files:
         if not file.failed:
@@ -55,11 +87,57 @@ def render(report: Report) -> str:
         f"  config: {report.config.source.tier} {report.config.source.path} "
         f"(digest {report.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
     )
+    lines.extend(_history_lines(dict(report.metrics)))
     lines.append(f"  analysis status: {report.analysis_status}")
-    gate = report.gate
-    lines.append(f"gate: {gate.status.upper()} (exit {gate.exit_code})")
-    for reason in gate.reasons:
-        lines.append(f"  {reason}")
+    lines.extend(_gate_lines(report.gate))
+    return "\n".join(lines) + "\n"
+
+
+def render_diff(diff: DiffReport) -> str:
+    """New and fixed findings line by line; unchanged ones are counted, not listed."""
+    lines: list[str] = []
+    for entry in diff.findings:
+        if entry.status == STATUS_UNCHANGED:
+            continue
+        lines.append(f"{entry.status}: {_finding_line(entry.finding)}")
+    for file in diff.head.report.files:
+        if not file.failed:
+            continue
+        lines.append(f"head {file.path}: {file.status}: {file.error}")
+    if len(lines) > 0:
+        lines.append("")
+    summary = diff.summary()
+    base = diff.base
+    head = diff.head
+    lines.append(
+        f"shockharness {diff.tool_version} diff: base {base.ref} "
+        f"({base.commit[:COMMIT_SHORT_HEX]}) -> head {head.ref} "
+        f"({head.commit[:COMMIT_SHORT_HEX]}); {summary['new']} new, {summary['fixed']} fixed, "
+        f"{summary['unchanged']} unchanged finding(s)"
+    )
+    lines.append(
+        f"  hard violations: {summary['new_hard_violations']} new, "
+        f"{summary['fixed_hard_violations']} fixed, "
+        f"{summary['unchanged_hard_violations']} unchanged"
+    )
+    lines.append(
+        f"  base: {base.report.coverage['files_analyzed']} analyzed, "
+        f"{base.report.coverage['files_failed']} failed, status {base.report.analysis_status}; "
+        f"head: {head.report.coverage['files_analyzed']} analyzed, "
+        f"{head.report.coverage['files_failed']} failed, status {head.report.analysis_status}"
+    )
+    lines.append("  uncommitted changes are not part of HEAD; only committed trees are compared")
+    for note in diff.config.notes:
+        lines.append(f"  config note: {note}")
+    for deviation in diff.config.deviations:
+        lines.append(f"  policy deviation: {deviation}")
+    lines.append(
+        f"  config: {diff.config.source.tier} {diff.config.source.path} "
+        f"(digest {diff.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
+    )
+    lines.extend(_history_lines(diff.metrics))
+    lines.append(f"  analysis status: {head.report.analysis_status}")
+    lines.extend(_gate_lines(diff.gate))
     return "\n".join(lines) + "\n"
 
 

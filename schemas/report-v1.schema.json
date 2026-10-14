@@ -79,7 +79,7 @@
         "type": "object",
         "required": [
           "rule_id", "rule_version", "severity", "path", "span", "message", "evidence",
-          "confidence", "remediation", "safe_autofix", "scope", "suppression"
+          "confidence", "remediation", "safe_autofix", "scope", "suppression", "fingerprint", "baseline"
         ],
         "properties": {
           "rule_id": {"type": "string"},
@@ -100,14 +100,44 @@
           "evidence": {"type": "string"},
           "confidence": {"type": "string", "enum": ["exact", "approximate", "unresolved"]},
           "remediation": {"type": "string"},
-          "safe_autofix": {"type": "boolean"}
+          "safe_autofix": {"type": "boolean"},
+          "fingerprint": {"type": "string"},
+          "baseline": {"enum": ["matched", "ignored", null]}
         }
       }
     },
-    "metrics": {"type": "object"},
+    "metrics": {
+      "type": "object",
+      "required": ["history"],
+      "properties": {
+        "history": {
+          "type": "object",
+          "required": ["status", "reason", "granularity", "files", "cochange", "hotspots", "hotspots_reason"],
+          "properties": {
+            "status": {"type": "string", "enum": ["available", "unavailable", "disabled", "not_collected"]},
+            "granularity": {"type": "string", "enum": ["file"]},
+            "files": {"type": "object"},
+            "cochange": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["paths", "support", "confidence"],
+                "properties": {
+                  "paths": {"type": "array", "items": {"type": "string"}},
+                  "support": {"type": "integer"},
+                  "confidence": {"type": "object", "required": ["first_to_second", "second_to_first"]}
+                }
+              }
+            },
+            "hotspots": {"enum": [null]},
+            "hotspots_reason": {"type": "string"}
+          }
+        }
+      }
+    },
     "gate": {
       "type": "object",
-      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "reasons"],
+      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "baselined", "new_hard_violations", "baseline", "reasons"],
       "properties": {
         "status": {"type": "string", "enum": ["pass", "fail", "error"]},
         "exit_code": {"type": "integer", "enum": [0, 1, 3]},
@@ -116,12 +146,32 @@
         "warnings": {"type": "integer"},
         "review": {"type": "integer"},
         "analysis_failures": {"type": "integer"},
+        "baselined": {"type": "integer"},
+        "new_hard_violations": {"type": "integer"},
+        "baseline": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["source", "origin", "mode", "applied", "matched", "stale", "tool_version", "config_digest_matches", "notes"],
+              "properties": {
+                "source": {"type": "string", "enum": ["file", "base_revision"]},
+                "origin": {"type": "string"},
+                "mode": {"type": "string", "enum": ["baseline", "fail", "ignore"]},
+                "applied": {"type": "boolean"},
+                "matched": {"type": "integer"},
+                "stale": {"type": "array"},
+                "notes": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          ]
+        },
         "reasons": {"type": "array", "items": {"type": "string"}}
       }
     },
     "execution_summary": {
       "type": "object",
-      "required": ["files", "findings", "findings_by_severity", "suppressed"]
+      "required": ["files", "findings", "findings_by_severity", "suppressed", "baselined"]
     }
   }
 }

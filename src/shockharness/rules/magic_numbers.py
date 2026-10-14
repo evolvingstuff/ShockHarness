@@ -50,6 +50,8 @@ def run_magic001(
                 safe_autofix=False,
                 scope=literal.scope,
                 suppression=None,
+                fingerprint=None,
+                baseline=None,
             )
         )
     return findings

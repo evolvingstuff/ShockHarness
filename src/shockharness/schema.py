@@ -225,6 +225,14 @@ CONFIG_SCHEMA = TableField(
             },
             required=(),
         ),
+        "history": TableField(
+            fields={
+                "enabled": BoolField(),
+                "horizon_days": IntField(minimum=1),
+                "min_support": IntField(minimum=1),
+            },
+            required=(),
+        ),
         "gates": TableField(
             fields={
                 "new_hard_violations": EnumField(("fail", "warn")),

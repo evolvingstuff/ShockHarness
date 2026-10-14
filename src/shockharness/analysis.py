@@ -13,6 +13,7 @@ from typing import Any
 from shockharness.config import EffectiveConfig
 from shockharness.discovery import DiscoveredFile
 from shockharness.findings import Finding
+from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts
 from shockharness.ir.model import ModuleFacts, ParseFailure
@@ -212,6 +213,7 @@ def analyze_text(
         supp002_enabled,
     )
     findings.sort(key=lambda f: f.sort_key())
+    findings = assign_fingerprints(findings)
 
     return FileResult(
         path=relative_path,

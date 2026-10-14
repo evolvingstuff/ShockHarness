@@ -113,13 +113,61 @@ Stated so that a clean report is never read as more than it is.
 * Columns are 1-based character columns; editors that count UTF-16 code units
   (some IDEs) will differ on lines containing astral-plane characters such as emoji.
 
+## Baselines and revision diff
+
+* A fingerprint is built from the rule, path, enclosing scope, and the evidence
+  line without whitespace. Two identical constructs in one file are told apart
+  by an occurrence index in source order, so inserting a third identical
+  construct *before* existing ones renumbers them and makes them look new.
+  Renaming a file, a function, or changing the literal makes the finding new.
+* A baseline does not freeze the policy. Fingerprints do not depend on the
+  configuration; a stricter configuration produces new findings that are not
+  in the baseline (the digest mismatch is reported, not refused).
+* `diff` and `gate --base/--head` compare **committed trees only**. The
+  working tree, the index, and untracked files are not analyzed; `--head HEAD`
+  means the last commit. Trees are exported with `git archive`, which honours
+  `export-ignore` attributes: a file excluded that way is absent from both
+  sides. Symlinks inside the exported tree are extracted only where the host
+  Python's `tarfile` data filter allows them.
+* A file that failed to parse at the base revision contributes no findings
+  there, so every finding in it at head is `new`. Parse failures at head follow
+  `parse_errors`; at base they are only recorded.
+* Both revisions are analyzed under the working tree's configuration (one
+  digest for the whole report). The configuration committed at either revision
+  is not consulted.
+
+## Git history
+
+* File granularity only. Per-function attribution, rename following
+  (`--no-renames`: a renamed file's history starts at the rename), and merge
+  commits (which list no files in `git log --name-only`) are not handled.
+* Author counts are distinct author e-mail addresses as recorded by git; no
+  identity merging. The addresses themselves are not written to the report.
+* Co-change pairs are counted per commit; a commit touching more than fifty
+  analyzed files is excluded from pairing (and counted in
+  `commits_excluded_from_cochange`) because a sweep says nothing about which
+  files belong together.
+* `commits_considered` is bounded by `git log --since`, which git evaluates on
+  committer dates and which can stop a traversal early in histories with
+  out-of-order dates; the result is deterministic for a given head commit.
+* No hotspot score: it needs the complexity metrics of Milestone E and is
+  reported as `null` with the reason until then.
+
+## SARIF
+
+* One run per document. `baselineState` is present only when a baseline file
+  or base revision was applied; otherwise consumers see no state at all rather
+  than a guessed one. Fixed findings of a diff appear as `absent` results with
+  their base-revision locations.
+* URIs are root-relative with `uriBaseId = "%SRCROOT%"`; the absolute root is
+  not written so the document is byte-identical across machines.
+
 ## Not yet built (see the specification)
 
-Complexity metrics, call graphs, Git history features, baselines and diff
-mode, SARIF output, `.gitignore` awareness, agent skills and `skills install`. Each of these fails loudly
-today: unknown CLI commands are argparse errors (exit 2), `--format sarif` is
-refused with exit 2, and `evaluate_gate` rejects a baseline with
-`UnsupportedFeatureError`.
+Complexity metrics and the hotspot score, call graphs, profiles below
+`strict`, `check` as the canonical command name, `version` subcommand,
+`.gitignore` awareness, release automation, agent skills and `skills install`.
+Unknown CLI commands are argparse errors (exit 2).
 
 ## Platform
 

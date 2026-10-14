@@ -51,3 +51,19 @@ LOOKUP_WITH_FALLBACK_ARITY: Final[int] = (
     2  # m.get(k, v), m.pop(k, v), os.getenv("X", v), Object.hasOwn(o, k)
 )
 GETATTR_WITH_FALLBACK_ARITY: Final[int] = 3  # getattr(o, name, v)
+
+# Baseline files and finding fingerprints (Milestone F). Bumped on an incompatible change.
+BASELINE_SCHEMA_VERSION: Final[str] = "1"
+FINGERPRINT_VERSION: Final[str] = "1"
+
+# SARIF output (Milestone F).
+SARIF_VERSION: Final[str] = "2.1.0"
+SARIF_SCHEMA_URI: Final[str] = "https://json.schemastore.org/sarif-2.1.0.json"
+
+# Git history (Milestone F). A commit touching more analyzed files than this is excluded
+# from co-change pairing: a repository-wide sweep says nothing about which files belong
+# together, and pairing it would cost O(n^2) rows of noise.
+COCHANGE_MAX_FILES_PER_COMMIT: Final[int] = 50
+
+# Length of the abbreviated commit hash in human-readable output.
+COMMIT_SHORT_HEX: Final[int] = 12

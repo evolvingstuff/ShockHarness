@@ -95,6 +95,8 @@ def _problem_finding(path: str, problem: SuppressionProblem, evidence: str) -> F
         safe_autofix=False,
         scope=None,
         suppression=None,
+        fingerprint=None,
+        baseline=None,
     )
 
 
@@ -112,6 +114,8 @@ def _unused_finding(path: str, suppression: Suppression, rule_id: str, evidence:
         safe_autofix=False,
         scope=None,
         suppression=None,
+        fingerprint=None,
+        baseline=None,
     )
 
 

@@ -4,6 +4,11 @@ Hard violations are counted, never averaged. Suppressed findings do not count.
 Analysis failures (parse, read, decode) are a separate dimension controlled by
 ``parse_errors``; with ``fail`` they produce the internal-error exit code so a
 broken file can never look like a passing one.
+
+Legacy findings (fingerprint in a baseline file, or present at the base revision
+of a diff) carry a ``baseline`` marker set before the gate runs. ``matched`` ones
+are counted in the totals but never fail the gate; ``ignored`` ones are not
+counted at all. Both stay in the report.
 """
 
 from collections.abc import Sequence
@@ -12,8 +17,14 @@ from typing import Any
 
 from shockharness.analysis import FileResult
 from shockharness.config import EffectiveConfig
-from shockharness.constants import EXIT_INTERNAL_ERROR, EXIT_OK, EXIT_VIOLATIONS
+from shockharness.constants import COMMIT_SHORT_HEX, EXIT_INTERNAL_ERROR, EXIT_OK, EXIT_VIOLATIONS
 from shockharness.findings import Finding
+from shockharness.gating.baseline import (
+    LEGACY_IGNORE,
+    MARKER_IGNORED,
+    SOURCE_FILE,
+    BaselineApplication,
+)
 from shockharness.rules.registry import SEVERITY_ERROR, SEVERITY_REVIEW, SEVERITY_WARNING
 
 GATE_PASS = "pass"
@@ -30,6 +41,9 @@ class GateResult:
     warnings: int
     review: int
     analysis_failures: int
+    baselined: int
+    new_hard_violations: int
+    baseline: BaselineApplication | None
     reasons: tuple[str, ...]
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -41,27 +55,42 @@ class GateResult:
             "warnings": self.warnings,
             "review": self.review,
             "analysis_failures": self.analysis_failures,
+            "baselined": self.baselined,
+            "new_hard_violations": self.new_hard_violations,
+            "baseline": None if self.baseline is None else self.baseline.to_json_dict(),
             "reasons": list(self.reasons),
         }
 
 
 def evaluate(
-    findings: Sequence[Finding], files: Sequence[FileResult], config: EffectiveConfig
+    findings: Sequence[Finding],
+    files: Sequence[FileResult],
+    config: EffectiveConfig,
+    baseline: BaselineApplication | None,
 ) -> GateResult:
     hard = 0
+    legacy_hard = 0
     suppressed = 0
     warnings = 0
     review = 0
+    baselined = 0
     for finding in findings:
         if finding.is_suppressed:
             suppressed += 1
             continue
+        if finding.baseline is not None:
+            baselined += 1
+            if finding.baseline == MARKER_IGNORED:
+                continue
         if finding.severity == SEVERITY_ERROR:
             hard += 1
+            if finding.baseline is not None:
+                legacy_hard += 1
         elif finding.severity == SEVERITY_WARNING:
             warnings += 1
         elif finding.severity == SEVERITY_REVIEW:
             review += 1
+    new_hard = hard - legacy_hard
     failures = sum(1 for f in files if f.failed)
 
     reasons: list[str] = []
@@ -72,8 +101,8 @@ def evaluate(
         reasons.append(f'{failures} file(s) could not be analyzed and parse_errors = "fail"')
         status = GATE_ERROR
         exit_code = EXIT_INTERNAL_ERROR
-    elif hard > 0 and hard_policy == "fail":
-        reasons.append(f'{hard} hard violation(s) and gates.new_hard_violations = "fail"')
+    elif new_hard > 0 and hard_policy == "fail":
+        reasons.append(f'{new_hard} new hard violation(s) and gates.new_hard_violations = "fail"')
         status = GATE_FAIL
         exit_code = EXIT_VIOLATIONS
     else:
@@ -84,11 +113,12 @@ def evaluate(
                 f'{failures} file(s) could not be analyzed; parse_errors = "warn" '
                 "so the gate passes"
             )
-        if hard > 0:
+        if new_hard > 0:
             reasons.append(
-                f"{hard} hard violation(s) reported as warnings because "
+                f"{new_hard} new hard violation(s) reported as warnings because "
                 'gates.new_hard_violations = "warn"'
             )
+    reasons.extend(_baseline_reasons(baseline, baselined, legacy_hard))
 
     return GateResult(
         status=status,
@@ -98,5 +128,39 @@ def evaluate(
         warnings=warnings,
         review=review,
         analysis_failures=failures,
+        baselined=baselined,
+        new_hard_violations=new_hard,
+        baseline=baseline,
         reasons=tuple(reasons),
     )
+
+
+def _baseline_reasons(
+    baseline: BaselineApplication | None, baselined: int, legacy_hard: int
+) -> list[str]:
+    if baseline is None:
+        return []
+    if baseline.source == SOURCE_FILE:
+        what = "baseline"
+    else:
+        what = f"base revision {baseline.origin[:COMMIT_SHORT_HEX]}"
+    reasons: list[str] = []
+    if baseline.applied:
+        if baseline.mode == LEGACY_IGNORE:
+            reasons.append(
+                f"{baselined} legacy finding(s) matched the {what} and were not counted "
+                f'(gates.legacy = "{baseline.mode}"); they are still listed'
+            )
+        else:
+            reasons.append(
+                f"{baselined} legacy finding(s) matched the {what} ({legacy_hard} hard) and do "
+                f'not fail the gate (gates.legacy = "{baseline.mode}"); they are still counted'
+            )
+    if len(baseline.stale) > 0:
+        reasons.append(
+            f"{len(baseline.stale)} baseline entry(ies) stale (no longer produced); the "
+            "baseline is never updated automatically, recreate it with "
+            "`shockharness baseline create`"
+        )
+    reasons.extend(baseline.notes)
+    return reasons

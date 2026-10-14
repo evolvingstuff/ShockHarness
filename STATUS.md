@@ -492,3 +492,247 @@ built.
   and scope-aware mapping knowledge, if the review noise proves costly.
 - Decide `.gitignore` handling (spec: only if configured) and `-0` policy wording in docs if challenged.
 - CI verified 2026-10-14 on the first push (run 1 at https://github.com/evolvingstuff/ShockHarness/actions/runs/38646310534): all 13 jobs green, ubuntu/macos/windows x Python 3.11-3.14 plus the wheel build job.
+
+## Milestone F part 1: baselines, diff gate, SARIF, git history — DONE (2026-10-14)
+
+Scope per section 20 decision 6 (F before E), split in two sessions. This is
+the analysis half. The distribution half (profiles, `check` rename, `version`
+subcommand, release workflows, consumer examples, `effective_profile`) is a
+separate follow-on session and is **not** in this commit.
+
+Delivered: finding fingerprints (`gating/baseline.py`: rule ID, root-relative
+path, enclosing scope or `null`, whitespace-free evidence, occurrence index;
+assigned in `analysis.py` once a file's findings are sorted, so
+`analyze_source` results carry them too), baseline files
+(`schemas/baseline-v1.schema.json`; `baseline create PATH... --output FILE
+[--force]`), `--baseline FILE` on `scan` and `gate PATH...` with the three
+`gates.legacy` modes, stale-entry reporting, `apply_baseline` /
+`evaluate_gate` / `with_history` in `api.py`, revision diff (`gating/diff.py`:
+local `git rev-parse` + `git archive` into a temporary directory per revision,
+full-tree analysis, new / fixed / unchanged by fingerprint;
+`schemas/diff-v1.schema.json`), `diff` (reporting only) and `gate --base
+--head` (exit 1 only on new hard violations) commands, SARIF 2.1.0 output
+(`output/sarif.py`) for `scan`, `diff`, `gate`, git history metrics
+(`history/git.py` subprocess wrapper, `history/hotspots.py` churn,
+`history/cochange.py` pairs) under `metrics.history` with `history.enabled`,
+`history.horizon_days`, `history.min_support` keys in `schema.py`,
+`defaults.toml` and the docs, six new declared boundaries in
+`.shockharness.toml`, 46 new tests, and documentation (`docs/configuration.md`
+baselines / diff / history sections, `docs/limitations.md`,
+`docs/architecture.md`, README, CHANGELOG, report schema).
+
+Decisions recorded here (not in the specification or the brief):
+
+* **Fingerprint material** is a JSON array `[fingerprint_version, rule_id,
+  path, scope-or-null, evidence-without-whitespace, occurrence]` hashed with
+  SHA-256. The message is deliberately *not* included so wording changes
+  between tool versions do not invalidate baselines; the rule ID and the
+  evidence identify the construct. A scope-less finding (SUPP001/SUPP002) hashes
+  `null`, not a substitute string: the first draft used `"" if scope is None`
+  and the self-gate flagged it as DEF004, which was the right call.
+* **Occurrence index** is per file and per identity, in source order. Inserting
+  an identical construct *before* existing ones renumbers them; documented as
+  a limitation. Within one report fingerprints are unique (asserted in
+  `diff_revisions`).
+* **`baseline` vs `ignore`.** The brief describes both as "listed, not
+  gating". The implemented difference: `baseline` keeps matched findings in
+  `hard_violations` / `findings_by_severity` and adds `new_hard_violations`,
+  which drives the verdict, so legacy debt stays visible in the counts;
+  `ignore` removes matched findings from every count except `gate.baselined`.
+  Markers: `baseline = "matched"` / `"ignored"`. `fail` records the baseline
+  (`gate.baseline.applied = false`) and applies nothing.
+* **Stale entries** are a gate reason plus `gate.baseline.stale` (full
+  entries), not a finding: a finding needs a rule ID and a span, and a stale
+  entry has neither. They never change the verdict.
+* **Config digest mismatch** is noted (`config_digest_matches = false` and a
+  note), not refused: fingerprints are policy-independent, and refusing would
+  make every policy tightening require a new baseline before the first run.
+* **What goes into a baseline:** every unsuppressed finding of any severity.
+  Suppressed findings already do not gate and are left out so that removing a
+  suppression surfaces the finding again.
+* **`baseline create` refuses** an existing file without `--force` and refuses
+  to write when analysis did not complete (gate status `error`): a baseline
+  from a partial analysis would silently legitimise whatever the failed files
+  contain.
+* **`gate` has two forms**: `gate --base REF --head REF` (the spec's) and
+  `gate PATH... [--baseline FILE]` (a working-tree gate with the same verdict
+  as `scan`; it exists because the brief says `--baseline` applies to `gate`).
+  `--baseline` with `--base/--head` is a usage error: the base revision is the
+  legacy source of a revision gate, and two legacy sources would need two
+  `gate.baseline` records.
+* **Diff export** uses `git archive --format=tar` read through `tarfile`
+  (with `data_filter` where the host Python has it), not `git worktree add`,
+  so the user's `.git` is never modified. `git archive` runs at the toplevel
+  so a subdirectory `--root` works (`git rev-parse --show-prefix`); it honours
+  `export-ignore`, which is documented.
+* **Head parse failure** under `parse_errors = "fail"` makes `diff` exit 3,
+  not 0: the tool could not analyze, which is a tool failure in the brief's
+  sense. Base parse failures are recorded only; such a file's head findings are
+  all `new`.
+* **Both revisions use the working tree's configuration** (one digest). The
+  committed configuration at either revision is not consulted, so the diff
+  compares code, not policy.
+* **History horizon** is anchored on the head commit's committer date
+  (`until`), not the wall clock, so `metrics.history` for a commit is
+  reproducible (tested by running it twice). `--since` bounds the git walk; the
+  cutoff is re-applied in Python on committer dates so the semantics are the
+  tool's, not git's.
+* **Churn dates** are author dates (`first_change`, `last_change`); authors are
+  counted as distinct author e-mails and never written to the report.
+  `--no-renames`: a rename restarts a file's history. Merge commits list no
+  files and count for nothing. A commit touching more than fifty analyzed
+  files (`COCHANGE_MAX_FILES_PER_COMMIT`) is excluded from pairing and counted.
+* **`analyze_paths` stays pure** (no git) and reports `metrics.history.status
+  = "not_collected"` with the reason; the CLI attaches history through
+  `with_history`. Library consumers opt in.
+* **Boundaries beyond the brief.** The brief named git as the only new
+  try/except site. Reading a user-supplied baseline file is the same class of
+  boundary as reading a configuration file, so `gating/baseline.py` declares
+  `OSError`, `UnicodeDecodeError`, `json.JSONDecodeError`, each converting to a
+  `UsageError` (exit 2). The git wrapper declares
+  `subprocess.CalledProcessError`, `OSError`, `UnicodeDecodeError`; each
+  handler returns a `GitResult` error (data), never a value that looks like
+  success. Six boundaries were added and none was widened; the existing
+  `cli.py` `OSError` reason now also names the baseline file.
+* **SARIF choices**: `uriBaseId = "%SRCROOT%"` with no `originalUriBaseIds`
+  so the document carries no machine-specific absolute path; `baselineState`
+  only when a baseline or base revision was applied; fixed diff findings as
+  `absent` results at their base location; `columnKind =
+  "unicodeCodePoints"` (our columns are character columns); suppressed
+  findings keep their level and carry an `inSource` suppression; every
+  registered rule (implemented or not) is in `rules` with
+  `properties.implemented`.
+* **Report schema** stays `schema_version` 1; every addition is a new key
+  (`findings[].fingerprint`, `findings[].baseline`, `gate.baselined`,
+  `gate.new_hard_violations`, `gate.baseline`, `execution_summary.baselined`,
+  `metrics.history`). `policy_profile` is untouched; the rename to
+  `effective_profile` belongs to part 2 (section 20 decision 13).
+
+Acceptance (brief's "done when"), verified by
+`tests/cli/test_cli.py::test_baseline_create_then_scan_with_baseline`
+(`baseline create` then `scan --baseline` passes with the legacy findings
+listed as `baseline: matched`, fails on one new finding),
+`tests/cli/test_cli.py::test_gate_between_two_commits` (two-commit repository
+with a dirty working tree: `gate --base c1 --head HEAD` exits 1 on the one new
+violation and reports both commits, the digest and the tool version; `gate
+--base c1 --head c3` with only fixed violations exits 0; `diff` exits 0),
+`tests/unit/test_sarif.py` (structural check against the required SARIF 2.1.0
+keys, level mapping, fingerprints, suppressions, baseline states),
+`tests/unit/test_history.py` (temporary repository churn and co-change, and
+`unavailable` for a non-repository directory, an absent git binary, and an
+unknown revision).
+
+### Dogfooding: what the gate found in the new code
+
+Three real findings on the first self-scan, all fixed in code; no policy was
+loosened beyond declaring the six boundaries the brief asked for (plus the
+three baseline-file ones recorded above):
+
+1. `MAGIC001`: `key[2]` to pull the scope out of the identity tuple. Replaced
+   by tuple unpacking.
+2. `DEF004`: `NO_SCOPE if finding.scope is None else finding.scope` in the
+   fingerprint. Replaced by JSON-encoding the identity so `null` is its own
+   value; `BaselineEntry.scope` became `str | None`.
+3. `EXC001` x6 before the boundaries were declared: exactly the six sites the
+   brief anticipated, each wrapping one call (`subprocess.run`, `bytes.decode`,
+   `path.read_bytes`, `json.loads`). `EXC003` had nothing to say.
+
+Ruff additionally wanted a context manager around `tarfile.open` and three
+line wraps.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+67 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+409 passed in 4.50s
+$ pytest -q                      # CPython 3.13.1
+409 passed in 4.08s
+$ pytest -q                      # CPython 3.12.8
+409 passed in 4.09s
+$ pytest -q                      # CPython 3.11.11
+409 passed in 4.65s
+
+$ shockharness scan src tests    # self-compliance, all four interpreters
+  history: 8 commit(s) in 90 day(s) before 2026-10-14T15:18:14-07:00 (file granularity); 66 co-change pair(s) with support >= 3; hotspots: not computed: the hotspot score (log1p(churn) * normalized complexity) needs the complexity metrics of Milestone E, which are not implemented
+  analysis status: complete
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml)
+  ... (19 policy deviations: 17 boundaries, 2 overrides)
+
+$ shockharness scan src tests --format sarif | jq '.runs[0] | {rules: (.tool.driver.rules|length), results: (.results|length)}'
+{"rules": 18, "results": 0}
+
+$ python -m build
+Successfully built shockharness-0.1.0a1.tar.gz and shockharness-0.1.0a1-py3-none-any.whl
+```
+
+Smoke corpus: a two-commit repository (`c1`: `x = 2` and `return 3` in
+`src/a.py`, `const y = 4` in `src/b.js`; `c2`: two lines inserted above `x = 2`,
+`return 3` -> `return 5`, `b.js` deleted, `src/c.js` with `const z = 7` added)
+plus an uncommitted `src/dirty.py` with `dirty = 9`:
+
+```text
+$ shockharness baseline create src --output base.json
+shockharness: wrote base.json with 4 fingerprint(s) from 3 file(s) (config digest 776d6504...); review it before committing it
+
+$ shockharness scan src --baseline base.json
+src/a.py:3:5: MAGIC001 error: Numeric literal 2 has no permitted justification in executable code  [x = 2]  (baseline: matched)
+src/a.py:5:12: MAGIC001 error: Numeric literal 5 has no permitted justification in executable code  [return 5]  (baseline: matched)
+src/c.js:1:11: MAGIC001 error: Numeric literal 7 has no permitted justification in executable code  [const z = 7;]  (baseline: matched)
+src/dirty.py:1:9: MAGIC001 error: Numeric literal 9 has no permitted justification in executable code  [dirty = 9]  (baseline: matched)
+...
+gate: PASS (exit 0)
+  4 legacy finding(s) matched the baseline (4 hard) and do not fail the gate (gates.legacy = "baseline"); they are still counted
+
+$ shockharness gate --base HEAD~1 --head HEAD
+fixed: src/a.py:3:12: MAGIC001 error: Numeric literal 3 has no permitted justification in executable code  [return 3]
+new: src/a.py:5:12: MAGIC001 error: Numeric literal 5 has no permitted justification in executable code  [return 5]
+fixed: src/b.js:1:11: MAGIC001 error: Numeric literal 4 has no permitted justification in executable code  [const y = 4;]
+new: src/c.js:1:11: MAGIC001 error: Numeric literal 7 has no permitted justification in executable code  [const z = 7;]
+
+shockharness 0.1.0a1 diff: base HEAD~1 (a56894b07dc4) -> head HEAD (0a06daf5a821); 2 new, 2 fixed, 1 unchanged finding(s)
+  hard violations: 2 new, 2 fixed, 1 unchanged
+  base: 2 analyzed, 0 failed, status complete; head: 2 analyzed, 0 failed, status complete
+  uncommitted changes are not part of HEAD; only committed trees are compared
+  config: bundled defaults.toml (digest 776d6504309fe651)
+  history: 2 commit(s) in 90 day(s) before 2026-10-14T15:36:41-07:00 (file granularity); 0 co-change pair(s) with support >= 3; hotspots: not computed: ...
+  analysis status: complete
+gate: FAIL (exit 1)
+  2 new hard violation(s) and gates.new_hard_violations = "fail"
+  1 legacy finding(s) matched the base revision a56894b07dc4 (1 hard) and do not fail the gate (gates.legacy = "baseline"); they are still counted
+```
+
+The moved `x = 2` (line 1 at `c1`, line 3 at `c2`) is `unchanged`; `dirty.py`
+takes no part in the diff. `diff` with the same arguments prints the same
+report and exits 0.
+
+### Failures observed during development (and what was done)
+
+1. The three self-gate findings above (fixed in code).
+2. Two test expectations were wrong on first run: `c1` has three findings, not
+   two, and the test's own uncommitted `dirty.py` was swept into a later
+   commit by `git add -A`, making the "fixed only" gate fail. Both corrected
+   in the tests, not the code.
+3. Two Milestone A tests asserted the old refusals (`--format sarif` exits 2,
+   `evaluate_gate` raises `UnsupportedFeatureError`); replaced by tests of the
+   new behaviour.
+
+### Limitations and next tasks
+
+* Part 2 of Milestone F (separate session): profiles, `check` with `scan`
+  alias, `version` subcommand, `shockharness.toml` filename,
+  `effective_profile`, release and reusable workflows, Dependabot, consumer
+  examples.
+* Hotspot score waits for Milestone E complexity metrics
+  (`metrics.history.hotspots = null` with the reason until then).
+* Fingerprints are file-scoped: a file rename makes every finding in it new.
+  Following renames through `git log --follow` or content hashing is a
+  possible later refinement.
+* `diff` analyzes both whole trees; on large repositories that is two full
+  analyses per run. Cross-file rules (none yet) are the reason.

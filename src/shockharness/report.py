@@ -7,7 +7,7 @@ timestamps are included for the same reason.
 
 import platform
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from shockharness.analysis import FileResult
@@ -20,6 +20,18 @@ from shockharness.rules import registry
 from shockharness.version import __version__
 
 STATUS_COMPLETE = "complete"
+HISTORY_NOT_COLLECTED = {
+    "status": "not_collected",
+    "reason": (
+        "git history is collected by the CLI (or shockharness.api.with_history); "
+        "analyze_paths alone never runs git"
+    ),
+    "granularity": "file",
+    "files": {},
+    "cochange": [],
+    "hotspots": None,
+    "hotspots_reason": "not computed: history was not collected",
+}
 STATUS_INCOMPLETE = "incomplete"
 STATUS_FAILED = "failed"
 
@@ -139,12 +151,30 @@ def build_report(
         coverage=_coverage(ordered_files, discovery, config),
         files=ordered_files,
         findings=findings,
-        metrics={},
+        metrics={"history": dict(HISTORY_NOT_COLLECTED)},
         gate=gate,
         execution_summary={
             "files": len(ordered_files),
             "findings": len(findings),
             "findings_by_severity": dict(sorted(severity_counts.items())),
             "suppressed": sum(1 for f in findings if f.is_suppressed),
+            "baselined": 0,
         },
     )
+
+
+def rebuild_with_findings(report: Report, findings: Sequence[Finding], gate: GateResult) -> Report:
+    """The same report with its findings replaced (same identities, new markers) and a new gate."""
+    by_path: dict[str, list[Finding]] = {}
+    for finding in findings:
+        if finding.path not in by_path:
+            by_path[finding.path] = []
+        by_path[finding.path].append(finding)
+    files = tuple(
+        replace(file, findings=tuple(by_path[file.path]) if file.path in by_path else ())
+        for file in report.files
+    )
+    ordered = tuple(sorted(findings, key=lambda f: f.sort_key()))
+    summary = dict(report.execution_summary)
+    summary["baselined"] = sum(1 for f in ordered if f.baseline is not None)
+    return replace(report, files=files, findings=ordered, gate=gate, execution_summary=summary)

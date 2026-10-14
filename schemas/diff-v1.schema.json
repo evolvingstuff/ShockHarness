@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/evolvingstuff/ShockHarness/schemas/diff-v1.schema.json",
+  "title": "ShockHarness revision diff report, schema_version 1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_version",
+    "report_kind",
+    "analysis_status",
+    "config_digest",
+    "policy_profile",
+    "config",
+    "coverage",
+    "base",
+    "head",
+    "findings",
+    "summary",
+    "metrics",
+    "gate"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "report_kind": {
+      "type": "string",
+      "enum": [
+        "diff"
+      ]
+    },
+    "analysis_status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete",
+        "failed"
+      ]
+    },
+    "config_digest": {
+      "type": "string"
+    },
+    "policy_profile": {
+      "type": "string"
+    },
+    "base": {
+      "$ref": "#/$defs/revision"
+    },
+    "head": {
+      "$ref": "#/$defs/revision"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "status",
+          "rule_id",
+          "severity",
+          "path",
+          "span",
+          "message",
+          "fingerprint",
+          "baseline",
+          "suppression"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "fixed",
+              "unchanged"
+            ]
+          },
+          "fingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "new",
+        "fixed",
+        "unchanged",
+        "new_hard_violations",
+        "fixed_hard_violations",
+        "unchanged_hard_violations"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "history"
+      ]
+    },
+    "gate": {
+      "type": "object",
+      "required": [
+        "status",
+        "exit_code",
+        "new_hard_violations",
+        "baseline",
+        "reasons"
+      ]
+    }
+  },
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "required": [
+        "ref",
+        "commit",
+        "analysis_status",
+        "files_analyzed",
+        "files_failed",
+        "files",
+        "findings",
+        "suppressed"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array"
+        }
+      }
+    }
+  }
+}

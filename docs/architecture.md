@@ -15,11 +15,20 @@ Per-file analysis                                                      (analysis
 Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py, rules/defaults.py)
 Suppressions -> attach / SUPP001 / SUPP002                            (suppressions.py)
     |
-Gate: counts, never averages                                           (gate.py)
+Fingerprints: rule + path + scope + evidence, occurrence index         (gating/baseline.py)
+Baseline file / base revision -> legacy markers on findings            (gating/baseline.py, gating/diff.py)
+Gate: counts, never averages; new hard violations drive the verdict    (gate.py)
 Report: schema-versioned, deterministic ordering                       (report.py)
+History: local git log -> churn, co-change (file granularity)          (history/git.py, hotspots.py, cochange.py)
     |
-Renderers: text, JSON                                                  (output/)
+Renderers: text, JSON, SARIF 2.1.0                                     (output/)
 ```
+
+Revision diff (`diff`, `gate --base/--head`): `gating/diff.py` resolves both
+refs with local git, exports each whole tree with `git archive` into a
+temporary directory, runs the per-file pipeline on each, and classifies
+findings by fingerprint (new / fixed / unchanged). Unchanged findings are
+marked legacy exactly like baseline matches before the gate runs.
 
 ## Design rules the code follows
 
@@ -45,8 +54,12 @@ entirely in `rules/exceptions.py` and the mode-to-severity mapping in
 re-reads source.
 
 **Determinism.** Files are sorted by relative path; findings by path, line,
-column, rule ID, message; IR literals by span. JSON output has sorted keys and
-no timestamps. Two runs over the same inputs are byte-identical.
+column, rule ID, message; IR literals by span; baseline entries by path, rule,
+scope, evidence, occurrence; diff entries by finding then status. JSON and
+SARIF output have sorted keys and no timestamps; the only dates are git commit
+dates inside `metrics.history`, which are data, and the history horizon is
+anchored on the head commit rather than the clock. Two runs over the same
+inputs are byte-identical.
 
 **Positions.** Both parsers report UTF-8 byte columns. `SourceText` maps them to
 1-based character columns; `end_column` is exclusive. Line breaks are CRLF, CR,
@@ -58,6 +71,12 @@ nested input cannot exhaust the Python recursion limit.
 **JavaScript parse failures.** tree-sitter recovers from errors; any `ERROR` or
 `MISSING` node is a parse failure with the span of the first such node, and the
 tree is not analyzed further.
+
+**Git is a boundary.** `history/git.py` is the only module that runs a
+subprocess. Every call is local and every failure comes back as data (a
+`GitResult` with a reason): `diff`/`gate` turn it into a `UsageError`, history
+metrics into `status = "unavailable"`. Reading a baseline file is the other
+Milestone F boundary (`gating/baseline.py`).
 
 **Self-compliance.** ShockHarness scans its own `src/` and `tests/` as a hard
 CI gate with `.shockharness.toml`. The only MAGIC001 exemption is
@@ -74,7 +93,7 @@ a value.
 
 Runtime: `tree-sitter` 0.25.x and `tree-sitter-javascript` 0.25.x. Everything
 else is the standard library (`argparse`, `tomllib`, `ast`, `tokenize`, `json`,
-`hashlib`). Development: `pytest`, `hypothesis`, `ruff`, `build`.
+`hashlib`, `subprocess` and `tarfile` for git). Development: `pytest`, `hypothesis`, `ruff`, `build`.
 
 `tree-sitter` 0.26.0 is excluded on purpose: with CPython 3.14 it segfaults when
 walking trees nested deeper than about 200 levels. CPython 3.13 with 0.26.0 and
@@ -103,10 +122,15 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
-| `findings.py` | `Finding`, `SuppressionRecord` |
+| `findings.py` | `Finding` (with `fingerprint` and `baseline` marker), `SuppressionRecord` |
+| `gating/baseline.py` | Fingerprints, baseline file model and validation, legacy marking under `gates.legacy` |
+| `gating/diff.py` | Revision export and analysis, new / fixed / unchanged classification, `DiffReport` |
+| `history/git.py` | The git subprocess wrapper (the only `subprocess` user) and log parsing |
+| `history/hotspots.py` | `metrics.history`: per-file churn, horizon, explicit statuses; `hotspots = null` |
+| `history/cochange.py` | Co-change pairs with support and directional confidence |
 | `analysis.py` | Per-file pipeline and rule-disable resolution |
 | `gate.py` | Verdict and exit code |
 | `report.py` | Report assembly, coverage, sorting |
-| `output/text.py`, `output/json.py` | Renderers |
-| `api.py` | `analyze_source`, `analyze_paths`, `evaluate_gate` |
+| `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (scan reports and diff reports) |
+| `api.py` | `analyze_source`, `analyze_paths`, `apply_baseline`, `evaluate_gate`, `with_history` |
 | `cli.py` | Argument parsing, dispatch, process boundary |

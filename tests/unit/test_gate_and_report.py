@@ -5,7 +5,7 @@ from pathlib import Path
 from shockharness.analysis import AnalysisOptions
 from shockharness.api import analyze_paths, analyze_source, evaluate_gate
 from shockharness.config import EffectiveConfig
-from shockharness.errors import UnsupportedFeatureError, UsageError
+from shockharness.errors import UsageError
 from shockharness.output import json as json_output
 from shockharness.output import text as text_output
 from tests.conftest import REPO_ROOT
@@ -169,7 +169,7 @@ def test_analyze_source_rejects_unknown_language(strict_config: EffectiveConfig)
     assert len(result.findings) == 1
 
 
-def test_evaluate_gate_refuses_baselines_for_now(
+def test_evaluate_gate_rejects_untyped_baselines(
     empty_root: Path, strict_config: EffectiveConfig
 ) -> None:
     import pytest
@@ -177,8 +177,8 @@ def test_evaluate_gate_refuses_baselines_for_now(
     write(empty_root, "src/a.py", "x = 2\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
     assert evaluate_gate(report, None, strict_config).status == "fail"
-    with pytest.raises(UnsupportedFeatureError):
-        evaluate_gate(report, {"baseline": True}, strict_config)
+    with pytest.raises(UsageError, match="must be a shockharness"):
+        evaluate_gate(report, {"baseline": True}, strict_config)  # type: ignore[arg-type]
 
 
 def _check(schema: dict, value: object, path: str) -> list[str]:

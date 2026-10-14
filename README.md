@@ -22,10 +22,12 @@ linter. It runs offline, needs no LLM, and never uploads source.
 ## Status
 
 Pre-release. Milestones A (skeleton and contracts), B (parsers and
-`MAGIC001`), C (exception rules `EXC001`-`EXC003`) and D (default and fallback
-rules `DEF001`-`DEF006`) are implemented. `MAGIC002`, complexity, baselines,
-SARIF, and agent skills are registered but **not yet implemented**; every
-report lists them under `rules_not_implemented` so a clean run never implies
+`MAGIC001`), C (exception rules `EXC001`-`EXC003`), D (default and fallback
+rules `DEF001`-`DEF006`) and the analysis half of F (baselines, revision diff
+and gate, SARIF output, git churn and co-change metrics) are implemented.
+`MAGIC002`, complexity metrics, the hotspot score, profiles, release
+automation and agent skills are **not yet implemented**; every report lists
+unimplemented rules under `rules_not_implemented` so a clean run never implies
 coverage the tool does not have. See `STATUS.md` for exact evidence.
 
 Implemented rules:
@@ -67,9 +69,23 @@ shockharness config validate            # exit 0 if the configuration is valid
 shockharness config effective           # merged config with per-key origins
 shockharness scan src/                  # human-readable report, exit = gate status
 shockharness scan src/ --format json --output report.json
+shockharness scan src/ --format sarif --output report.sarif   # GitHub code scanning
+shockharness baseline create src/ --output .shockharness-baseline.json
+shockharness scan src/ --baseline .shockharness-baseline.json  # legacy findings do not gate
+shockharness diff --base main --head HEAD                      # new / fixed / unchanged, exit 0
+shockharness gate --base main --head HEAD                      # exit 1 only on new hard violations
 shockharness rules list
 shockharness rules explain MAGIC001
 ```
+
+Baselines are reviewed files of stable finding fingerprints (rule, path,
+scope, whitespace-free evidence, occurrence index) that survive line moves;
+nothing ever updates one automatically. `diff` and `gate` compare the full
+trees of two **committed** revisions through local git only (uncommitted
+changes are not part of `HEAD`). Every CLI report also carries
+`metrics.history`: per-file churn and co-change pairs from local `git log`,
+at file granularity, never gating, and explicitly `unavailable` outside a
+repository.
 
 Exit codes: `0` gates pass, `1` policy violations, `2` invalid configuration or
 invocation, `3` internal error or (with `parse_errors = "fail"`) a file that
@@ -140,6 +156,13 @@ from shockharness.config import load_config
 config = load_config(Path("."), None)
 report = analyze_paths([Path("src")], Path("."), config, AnalysisOptions(inline_suppressions=True))
 print(report.gate.status, len(report.findings))
+
+# Optional: apply a reviewed baseline and attach git history metrics.
+from shockharness.api import apply_baseline, with_history
+from shockharness.gating.baseline import load_baseline
+
+report = apply_baseline(report, load_baseline(Path(".shockharness-baseline.json")), config)
+report = with_history(report, Path("."), "HEAD", config)
 ```
 
 ## Development

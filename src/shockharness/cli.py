@@ -14,12 +14,23 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from shockharness.analysis import AnalysisOptions
-from shockharness.api import analyze_paths
+from shockharness.api import analyze_paths, apply_baseline, with_history
 from shockharness.config import DEDICATED_FILENAME, load_config, render_default_config_toml
-from shockharness.constants import EXIT_INTERNAL_ERROR, EXIT_INVALID_CONFIG, EXIT_OK, JSON_INDENT
-from shockharness.errors import ShockHarnessError, UnsupportedFeatureError, UsageError
+from shockharness.constants import (
+    EXIT_INTERNAL_ERROR,
+    EXIT_INVALID_CONFIG,
+    EXIT_OK,
+    JSON_INDENT,
+)
+from shockharness.errors import ShockHarnessError, UsageError
+from shockharness.gate import GATE_ERROR
+from shockharness.gating.baseline import build_baseline, load_baseline, render_baseline
+from shockharness.gating.diff import DiffReport, diff_revisions, head_paths, with_metrics
+from shockharness.history.hotspots import collect_history
 from shockharness.output import json as json_output
+from shockharness.output import sarif as sarif_output
 from shockharness.output import text as text_output
+from shockharness.report import Report
 from shockharness.rules import registry
 from shockharness.version import __version__
 
@@ -27,6 +38,8 @@ PROGRAM = "shockharness"
 FORMAT_TEXT = "text"
 FORMAT_JSON = "json"
 FORMAT_SARIF = "sarif"
+FORMATS = (FORMAT_TEXT, FORMAT_JSON, FORMAT_SARIF)
+WORKING_TREE_REVISION = "HEAD"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,17 +58,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
     _add_config_arguments(scan)
-    scan.add_argument(
-        "--format", choices=(FORMAT_TEXT, FORMAT_JSON, FORMAT_SARIF), default=FORMAT_TEXT
+    _add_analysis_arguments(scan)
+    _add_output_arguments(scan)
+    _add_baseline_argument(scan)
+
+    baseline = commands.add_parser("baseline", help="create a reviewed baseline of findings")
+    baseline_commands = baseline.add_subparsers(
+        dest="baseline_command", required=True, metavar="SUBCOMMAND"
     )
-    scan.add_argument(
-        "--output", type=Path, default=None, help="write the report here instead of stdout"
+    create = baseline_commands.add_parser(
+        "create", help="analyze PATH... and write every current finding's fingerprint"
     )
-    scan.add_argument(
-        "--no-inline-suppressions",
-        action="store_true",
-        help="ignore inline suppression comments and report each one",
+    create.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
+    _add_config_arguments(create)
+    _add_analysis_arguments(create)
+    create.add_argument("--output", type=Path, required=True, help="baseline file to write")
+    create.add_argument("--force", action="store_true", help="overwrite an existing baseline file")
+
+    diff = commands.add_parser(
+        "diff", help="compare findings between two committed revisions (reporting only)"
     )
+    _add_revision_arguments(diff, True)
+    _add_config_arguments(diff)
+    _add_analysis_arguments(diff)
+    _add_output_arguments(diff)
+
+    gate = commands.add_parser(
+        "gate",
+        help=(
+            "exit 1 on new hard violations: between --base and --head, "
+            "or in PATH... against a --baseline"
+        ),
+    )
+    gate.add_argument("paths", nargs="*", type=Path, help="files or directories to analyze")
+    _add_revision_arguments(gate, False)
+    _add_config_arguments(gate)
+    _add_analysis_arguments(gate)
+    _add_output_arguments(gate)
+    _add_baseline_argument(gate)
 
     config = commands.add_parser("config", help="validate or print the effective configuration")
     config_commands = config.add_subparsers(
@@ -90,6 +130,42 @@ def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path, default=None, help="explicit configuration file")
 
 
+def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-inline-suppressions",
+        action="store_true",
+        help="ignore inline suppression comments and report each one",
+    )
+
+
+def _add_output_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--format", choices=FORMATS, default=FORMAT_TEXT)
+    parser.add_argument(
+        "--output", type=Path, default=None, help="write the report here instead of stdout"
+    )
+
+
+def _add_baseline_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="reviewed baseline file; matched findings are legacy under gates.legacy",
+    )
+
+
+def _add_revision_arguments(parser: argparse.ArgumentParser, required: bool) -> None:
+    parser.add_argument(
+        "--base", default=None, required=required, help="base revision (any local git ref)"
+    )
+    parser.add_argument(
+        "--head",
+        default=None,
+        required=required,
+        help="head revision (any local git ref, e.g. HEAD; uncommitted changes are not included)",
+    )
+
+
 def _write_output(text: str, output: Path | None) -> None:
     if output is None:
         sys.stdout.write(text)
@@ -101,25 +177,112 @@ def _write_output(text: str, output: Path | None) -> None:
         raise UsageError(f"cannot write report: {exc}", str(output)) from exc
 
 
-def _run_scan(args: argparse.Namespace) -> int:
-    if args.format == FORMAT_SARIF:
-        raise UnsupportedFeatureError(
-            "SARIF output is not implemented until Milestone F", "--format sarif"
-        )
+def _options(args: argparse.Namespace) -> AnalysisOptions:
+    return AnalysisOptions(inline_suppressions=not args.no_inline_suppressions)
+
+
+def _analyze_working_tree(args: argparse.Namespace) -> Report:
     config = load_config(args.root, args.config)
-    options = AnalysisOptions(inline_suppressions=not args.no_inline_suppressions)
-    report = analyze_paths(list(args.paths), args.root, config, options)
-    if args.format == FORMAT_JSON:
-        rendered = json_output.render(report)
-    else:
-        rendered = text_output.render(report)
-    _write_output(rendered, args.output)
+    report = analyze_paths(list(args.paths), args.root, config, _options(args))
+    if args.baseline is not None:
+        report = apply_baseline(report, load_baseline(args.baseline), config)
+    return with_history(report, args.root, WORKING_TREE_REVISION, config)
+
+
+def _render_report(report: Report, fmt: str) -> str:
+    if fmt == FORMAT_JSON:
+        return json_output.render(report)
+    if fmt == FORMAT_SARIF:
+        return sarif_output.render(report)
+    return text_output.render(report)
+
+
+def _render_diff(diff: DiffReport, fmt: str) -> str:
+    if fmt == FORMAT_JSON:
+        return json_output.render_diff(diff)
+    if fmt == FORMAT_SARIF:
+        return sarif_output.render_diff(diff)
+    return text_output.render_diff(diff)
+
+
+def _report_written(args: argparse.Namespace, status: str, exit_code: int) -> None:
     if args.output is not None:
         sys.stdout.write(
-            f"{PROGRAM}: report written to {args.output}; "
-            f"gate {report.gate.status} (exit {report.gate.exit_code})\n"
+            f"{PROGRAM}: report written to {args.output}; gate {status} (exit {exit_code})\n"
         )
+
+
+def _run_scan(args: argparse.Namespace) -> int:
+    report = _analyze_working_tree(args)
+    _write_output(_render_report(report, args.format), args.output)
+    _report_written(args, report.gate.status, report.gate.exit_code)
     return report.gate.exit_code
+
+
+def _run_baseline(args: argparse.Namespace) -> int:
+    target: Path = args.output
+    if target.exists() and not args.force:
+        raise UsageError(
+            "baseline file already exists; a baseline is never updated automatically, "
+            "pass --force to replace it after review",
+            str(target),
+        )
+    config = load_config(args.root, args.config)
+    report = analyze_paths(list(args.paths), args.root, config, _options(args))
+    if report.gate.status == GATE_ERROR:
+        sys.stderr.write(text_output.render(report))
+        raise UsageError(
+            "analysis did not complete, so the findings are not a complete picture; "
+            "no baseline was written",
+            None,
+        )
+    baseline = build_baseline(report.findings, report.tool_version, config.digest)
+    _write_output(render_baseline(baseline), target)
+    sys.stdout.write(
+        f"{PROGRAM}: wrote {target} with {len(baseline.entries)} fingerprint(s) from "
+        f"{len(report.files)} file(s) (config digest {config.digest}); review it before "
+        "committing it\n"
+    )
+    return EXIT_OK
+
+
+def _run_diff_like(args: argparse.Namespace) -> DiffReport:
+    config = load_config(args.root, args.config)
+    diff = diff_revisions(args.root, args.base, args.head, config, _options(args))
+    metrics = dict(diff.metrics)
+    metrics["history"] = collect_history(args.root, diff.head.commit, head_paths(diff), config)
+    return with_metrics(diff, metrics)
+
+
+def _run_diff(args: argparse.Namespace) -> int:
+    diff = _run_diff_like(args)
+    _write_output(_render_diff(diff, args.format), args.output)
+    _report_written(args, diff.gate.status, diff.gate.exit_code)
+    if diff.gate.status == GATE_ERROR:
+        return diff.gate.exit_code
+    return EXIT_OK
+
+
+def _run_gate(args: argparse.Namespace) -> int:
+    revisions = (args.base is not None, args.head is not None)
+    if revisions == (True, False) or revisions == (False, True):
+        raise UsageError("--base and --head must be given together", None)
+    if revisions == (True, True):
+        if len(args.paths) > 0:
+            raise UsageError("PATH arguments cannot be combined with --base/--head", None)
+        if args.baseline is not None:
+            raise UsageError(
+                "--baseline cannot be combined with --base/--head: the base revision is the "
+                "legacy source for a revision gate",
+                None,
+            )
+        diff = _run_diff_like(args)
+        _write_output(_render_diff(diff, args.format), args.output)
+        _report_written(args, diff.gate.status, diff.gate.exit_code)
+        return diff.gate.exit_code
+    if len(args.paths) == 0:
+        raise UsageError("gate needs PATH... or --base and --head", None)
+    return _run_scan(args)
 
 
 def _run_config(args: argparse.Namespace) -> int:
@@ -163,6 +326,12 @@ def _run_init(args: argparse.Namespace) -> int:
 def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "scan":
         return _run_scan(args)
+    if args.command == "baseline":
+        return _run_baseline(args)
+    if args.command == "diff":
+        return _run_diff(args)
+    if args.command == "gate":
+        return _run_gate(args)
     if args.command == "config":
         return _run_config(args)
     if args.command == "rules":

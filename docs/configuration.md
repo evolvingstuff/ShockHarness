@@ -73,9 +73,14 @@ cognitive_warn = 15
 cyclomatic_warn = 15
 max_nesting_warn = 4
 
+[tool.shockharness.history]               # local `git log`, file granularity, never gating
+enabled = true
+horizon_days = 90                         # commits newer than (head commit date - horizon_days)
+min_support = 3                           # co-change pairs need at least this many shared commits
+
 [tool.shockharness.gates]
-new_hard_violations = "fail"              # "fail" -> exit 1 on any unsuppressed error finding; "warn" -> exit 0, reported
-legacy = "baseline"                       # baselines arrive in Milestone F
+new_hard_violations = "fail"              # "fail" -> exit 1 on any new unsuppressed error finding; "warn" -> exit 0, reported
+legacy = "baseline"                       # what a finding matched by a baseline or base revision means; see below
 complexity_regressions = "warn"
 
 [[tool.shockharness.overrides]]           # per-path rule disables; every one is a reported deviation
@@ -131,6 +136,99 @@ Keys for unimplemented rule families (`magic_strings`, `complexity`) are
 validated and stored so that a configuration written today keeps working when
 the rules land. They have no effect on findings yet; the report's
 `coverage.rules_not_implemented` says so.
+
+## Baselines
+
+A baseline is a reviewed JSON file of finding fingerprints. It lets a project
+adopt the strict profile with existing debt: findings in the baseline are
+*legacy* and do not fail the gate, anything else is *new* and does.
+
+```bash
+shockharness baseline create src/ --output .shockharness-baseline.json
+# review the file, then commit it
+shockharness scan src/ --baseline .shockharness-baseline.json
+shockharness gate src/ --baseline .shockharness-baseline.json
+```
+
+* **Fingerprint.** SHA-256 over the fingerprint version, rule ID, root-relative
+  path, enclosing scope (`null` for scope-less findings such as `SUPP002`), the
+  evidence line with every whitespace character removed, and an occurrence
+  index that distinguishes identical constructs in one file (in source order).
+  Moving a line, inserting lines above it, or reformatting whitespace keeps the
+  fingerprint; changing the construct, the rule, the scope, or the file changes
+  it. Every finding carries its fingerprint in the JSON report
+  (`findings[].fingerprint`) and in SARIF (`partialFingerprints`).
+* **File.** `schema_version`, `tool_version`, `config_digest`,
+  `fingerprint_version`, and `fingerprints` (each with its fingerprint plus
+  `rule_id`, `path`, `scope`, `evidence`, `occurrence` so a reviewer can read
+  it). Sorted and byte-stable; see `schemas/baseline-v1.schema.json`.
+  Suppressed findings are not baselined (they already do not gate). Every
+  unsuppressed finding of any severity is.
+* **Never automatic.** `baseline create` refuses to overwrite an existing file
+  without `--force`, refuses to write anything when analysis did not complete
+  (a parse failure under `parse_errors = "fail"`), and no command ever
+  rewrites a baseline. Regenerating it is a reviewed, explicit act.
+* **`gates.legacy`** decides what a matched finding means:
+  * `baseline` (default): the finding is listed with `baseline = "matched"`,
+    counted in `gate.hard_violations` and `findings_by_severity`, and excluded
+    from the verdict (`gate.new_hard_violations` drives it). Legacy debt stays
+    visible in the counts.
+  * `ignore`: listed with `baseline = "ignored"` and excluded from the counts
+    and the verdict (`gate.baselined` is the only place it is counted).
+  * `fail`: the baseline is recorded (`gate.baseline.applied = false`) but not
+    applied; every finding counts and fails.
+* **Stale entries** (fingerprints the current analysis no longer produces) are
+  listed under `gate.baseline.stale` with a gate reason line. They never fail
+  the gate; they are the prompt to recreate the baseline. A baseline created
+  under a different configuration is applied anyway and noted
+  (`gate.baseline.config_digest_matches = false`): fingerprints do not depend
+  on the policy, but findings the old policy did not produce are new.
+
+## Revision diff and gate
+
+```bash
+shockharness diff --base main --head HEAD [--format text|json|sarif]
+shockharness gate --base main --head HEAD
+```
+
+Both commands resolve the two revisions with local git only (no remote is
+contacted), export each **whole** tree at that commit with `git archive` into
+a temporary directory, analyze it completely under the working tree's
+configuration, and classify every finding by fingerprint: `new` (head only),
+`fixed` (base only), `unchanged` (both). The working tree itself is not
+analyzed: **uncommitted changes are not part of `HEAD`**. A dirty working tree
+is fine; it is simply not compared. The analysis root may be a subdirectory of
+the repository; only that subtree is analyzed at each revision.
+
+`diff` is reporting only and exits 0 (3 if the head tree could not be
+analyzed under `parse_errors = "fail"`; 2 for a bad revision or no
+repository). `gate` exits 1 only on **new** unsuppressed hard violations;
+fixed violations never fail, and unchanged ones are legacy under
+`gates.legacy` exactly as baseline matches are (`baseline` or `ignore`: not
+gating; `fail`: they count). The report records both refs and their resolved
+commit hashes, the configuration digest, and the tool version; see
+`schemas/diff-v1.schema.json`. `--baseline` cannot be combined with
+`--base/--head`: the base revision is the legacy source of a revision gate.
+
+## History
+
+`[tool.shockharness.history]` controls `metrics.history` in every CLI report
+(`scan`, `diff`, `gate`). It reads `git log` locally for the analyzed files at
+the analyzed revision (`HEAD` for `scan`, the head commit for `diff`/`gate`)
+and reports, at **file granularity**: per file the number of commits, distinct
+authors, first and last change (author dates); `cochange` pairs of analyzed
+files that appear in the same commits with `support` (shared commits) and a
+directional `confidence` (support over each file's own commit count), for
+pairs with `support >= min_support`. The horizon is anchored on the head
+commit's committer date, not on the wall clock, so the metrics for a commit are
+reproducible. `hotspots` is always `null` with a `hotspots_reason`: the score
+needs the complexity metrics of Milestone E.
+
+The section never gates. When git cannot be run, the root is not inside a
+repository, or the revision is unknown, `status` is `"unavailable"` with the
+reason; with `enabled = false` it is `"disabled"`; a report produced by the
+library's `analyze_paths` alone is `"not_collected"` (use
+`shockharness.api.with_history`). It is never silently empty.
 
 ## Glob semantics
 

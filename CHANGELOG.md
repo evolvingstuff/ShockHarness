@@ -5,6 +5,49 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- Milestone F (analysis half): stable finding fingerprints (`findings[].fingerprint`;
+  rule ID, path, enclosing scope, whitespace-free evidence, occurrence index)
+  that survive line moves and reformatting; `shockharness baseline create PATH...
+  --output FILE` writing a reviewed, byte-stable baseline
+  (`schemas/baseline-v1.schema.json`) that is never updated automatically;
+  `--baseline FILE` on `scan` and `gate` with `gates.legacy` semantics
+  (`baseline`: matched findings listed and counted but not gating; `ignore`:
+  listed, not counted; `fail`: baseline recorded but not applied); stale
+  baseline entries reported under `gate.baseline.stale`; `evaluate_gate` and
+  `apply_baseline` in the library API.
+- `shockharness diff --base REF --head REF` (reporting only) and
+  `shockharness gate --base REF --head REF` (exit 1 only on new hard
+  violations): both revisions resolved and exported with local git only, full
+  trees analyzed, findings classified new / fixed / unchanged by fingerprint,
+  provenance (both commits, config digest, tool version) in the report
+  (`schemas/diff-v1.schema.json`).
+- SARIF 2.1.0 output (`--format sarif`) for `scan`, `diff`, and `gate`: one
+  run, every registered rule with full descriptions, results with level mapping
+  (error, warning, review/note -> note), root-relative URIs, exclusive end
+  columns, `partialFingerprints` carrying the baseline fingerprint, in-source
+  suppressions, and `baselineState` when a baseline or base revision applies.
+- `metrics.history` in every CLI report: per-file commit count, author count,
+  first and last change, and co-change pairs with support and directional
+  confidence, read from local `git log` over `history.horizon_days` anchored
+  on the head commit date; `history.enabled`, `history.horizon_days`,
+  `history.min_support` configuration keys; explicit `unavailable`,
+  `disabled`, and `not_collected` statuses with reasons; `hotspots` is `null`
+  with a reason until Milestone E provides complexity.
+- Six declared exception boundaries: reading a baseline file (`OSError`,
+  `UnicodeDecodeError`, `json.JSONDecodeError`) and the git subprocess
+  (`subprocess.CalledProcessError`, `OSError`, `UnicodeDecodeError`).
+
+### Changed
+- Report schema (still `schema_version` 1, additive): `findings[].fingerprint`,
+  `findings[].baseline`, `gate.baselined`, `gate.new_hard_violations`,
+  `gate.baseline`, `execution_summary.baselined`, `metrics.history`. The gate
+  verdict is driven by `new_hard_violations`; without a baseline it equals
+  `hard_violations` as before.
+- `--format sarif` no longer exits 2; `evaluate_gate` no longer raises
+  `UnsupportedFeatureError` for a baseline (it rejects anything that is not a
+  `Baseline` with a `UsageError`).
+
 ## [0.1.0a1] - 2026-10-14
 
 First public alpha, published to PyPI to claim the `shockharness` name.

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/evolvingstuff/ShockHarness/schemas/baseline-v1.schema.json",
+  "title": "ShockHarness baseline file, schema_version 1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_version",
+    "config_digest",
+    "fingerprint_version",
+    "fingerprints"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "config_digest": {
+      "type": "string"
+    },
+    "fingerprint_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "fingerprints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fingerprint",
+          "rule_id",
+          "path",
+          "scope",
+          "evidence",
+          "occurrence"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "occurrence": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}
