@@ -40,6 +40,12 @@ mode = "review"
 [tool.shockharness.rules.exceptions]
 enabled = true
 mode = "boundary_whitelist"
+# When true, a handler that only re-raises the caught exception (bare `raise`,
+# `raise err`, `throw err`) passes EXC001 outside any boundary. Off in strict:
+# wrapping and re-raising is not the same as no catch.
+transparent_rethrow = false
+# Each boundary approves catching exactly one qualified exception in files that
+# match `path` for one language. Every entry is reported as a policy deviation.
 boundaries = []
 
 [tool.shockharness.rules.defaults]

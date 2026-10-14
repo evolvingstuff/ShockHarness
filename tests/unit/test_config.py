@@ -194,3 +194,28 @@ def test_effective_config_json_shape(empty_root: Path) -> None:
     data = load_config(empty_root, None).to_json_dict()
     assert set(data) == {"source", "digest", "notes", "deviations", "origins", "values"}
     assert data["values"]["profile"] == "strict"
+
+
+def test_boundary_exception_must_be_a_class_name(empty_root: Path) -> None:
+    for bad in ("*", "Timeout | Abort", "errors.*", "", "3rd.Error"):
+        write(
+            empty_root,
+            ".shockharness.toml",
+            "[tool.shockharness]\n[[tool.shockharness.rules.exceptions.boundaries]]\n"
+            f'path = "src/**"\nlanguage = "python"\nexception = "{bad}"\nreason = "r"\n',
+        )
+        with pytest.raises(ConfigError) as info:
+            load_config(empty_root, None)
+        assert "boundaries[0].exception" in str(info.value), bad
+
+
+def test_transparent_rethrow_is_validated_and_defaults_off(empty_root: Path) -> None:
+    assert load_config(empty_root, None).section("rules.exceptions")["transparent_rethrow"] is False
+    write(
+        empty_root,
+        ".shockharness.toml",
+        '[tool.shockharness.rules.exceptions]\ntransparent_rethrow = "yes"\n',
+    )
+    with pytest.raises(ConfigError) as info:
+        load_config(empty_root, None)
+    assert "rules.exceptions.transparent_rethrow: expected true or false" in str(info.value)

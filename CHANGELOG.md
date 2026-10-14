@@ -16,6 +16,21 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   `MAGIC001` (value-based 0/1, folded unary sign, annotations flagged),
   `SUPP001`/`SUPP002` inline suppression checks, per-path overrides,
   configuration-file exemption, JSON report (`schema_version` 1) and text output.
+- Milestone C: catch facts in the IR (exception identities with
+  exact/approximate/unresolved confidence, handler body classification,
+  try-body operation attribution) for Python `except`/`except*` and JavaScript
+  `catch`, `.catch(handler)`, `.then(ok, handler)`; `EXC001` forbidden catch
+  (boundary whitelist, fail-closed on bare/unresolved identities, JavaScript
+  instanceof-guard convention), `EXC002` suppressed or converted exception,
+  `EXC003` broad try scope; `rules.exceptions.transparent_rethrow` (default
+  false); boundary `exception` names validated as dotted class names; every
+  boundary and `transparent_rethrow` reported under `config.deviations`.
+
+### Changed
+- The tool's own boundaries were narrowed to satisfy `EXC003`: config decoding
+  and TOML parsing are two `try` blocks, analyzed-file decoding is bound before
+  the result is returned, and comment tokenization materializes the token list
+  in the one protected call. Behaviour is unchanged.
 
 ### Dependencies
 - `tree-sitter` 0.25.x (MIT) and `tree-sitter-javascript` 0.25.x (MIT). Pinned

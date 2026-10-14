@@ -51,9 +51,10 @@ configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs",
 enabled = true
 mode = "review"
 
-[tool.shockharness.rules.exceptions]      # EXC001-EXC003: registered, not implemented
+[tool.shockharness.rules.exceptions]      # EXC001-EXC003
 enabled = true
-mode = "boundary_whitelist"
+mode = "boundary_whitelist"               # the only mode
+transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
 boundaries = []                           # see below
 
 [tool.shockharness.rules.defaults]        # DEF001-DEF006: registered, not implemented
@@ -78,12 +79,34 @@ paths = ["tests/**"]
 disable = ["MAGIC001"]
 reason = "Fixtures encode literal expected outputs"
 
-[[tool.shockharness.rules.exceptions.boundaries]]   # validated now, enforced from Milestone C
-path = "src/integrations/**"
+[[tool.shockharness.rules.exceptions.boundaries]]   # one approved catch site
+path = "src/integrations/**"                        # glob, same semantics as include/exclude
 language = "python"
-exception = "requests.exceptions.Timeout"
+exception = "requests.exceptions.Timeout"           # qualified class name; wildcards are rejected
 reason = "External network timeout"
 ```
+
+## Exception boundaries
+
+A boundary approves catching **one** exception class in files matching one glob
+for one language. It is the only way a catch passes `EXC001`, and every boundary
+is listed in `config.deviations` so the approval is never silent.
+
+* `exception` must be a dotted class name (`OSError`,
+  `requests.exceptions.Timeout`, `pkg.errors.Upstream`, JavaScript
+  `TimeoutError`). `*`, `|`, and empty strings are configuration errors. A bare
+  `except` cannot be approved at all.
+* The name is compared with the identity the analyzer resolved for the handler
+  (see `docs/rules.md`): exact identities must match exactly; approximate ones
+  (relative imports, classes defined in the analyzed module, JavaScript guards)
+  match by dotted suffix.
+* A tuple handler needs a matching boundary for each member; several boundaries
+  may apply to one file.
+* Class hierarchies are not consulted: approve the class you catch.
+* JavaScript: the boundary alone is not enough. The handler must open with an
+  `instanceof` guard for that class that re-throws everything else.
+* Approving a catch does not exempt it from `EXC002` (what the handler does) or
+  `EXC003` (what the `try` body wraps).
 
 Keys for unimplemented rule families are validated and stored so that a
 configuration written today keeps working when the rules land. They have no
@@ -129,7 +152,8 @@ const other = 500;  /* shockharness: ignore[MAGIC001] reason="RFC 9110 section 1
 Everything that loosens the strict profile is surfaced, never silent:
 
 * `config.deviations` lists disabled rules, extra `allowed_values`,
-  `allow_unary_negative_one`, `parse_errors = "warn"`, and every override with its reason.
+  `allow_unary_negative_one`, `parse_errors = "warn"`, `transparent_rethrow`,
+  every exception boundary, and every override, each with its reason.
 * `files[].rules_disabled` lists, per file, which rules did not run and why
   (`config`, `overrides[i]`, or `configuration_file`).
 * `coverage.rules_not_implemented` lists rules that exist in the registry but produce nothing yet.

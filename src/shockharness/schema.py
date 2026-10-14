@@ -196,6 +196,7 @@ CONFIG_SCHEMA = TableField(
                     fields={
                         "enabled": BoolField(),
                         "mode": EnumField(("boundary_whitelist",)),
+                        "transparent_rethrow": BoolField(),
                         "boundaries": ListField(BOUNDARY_SCHEMA),
                     },
                     required=(),

@@ -48,7 +48,8 @@ def test_rules_list_and_explain(capsys: pytest.CaptureFixture[str]) -> None:
     code, out, _ = run(["rules", "list"], capsys)
     assert code == 0
     assert "MAGIC001  error    implemented" in out
-    assert "EXC001    error    planned" in out
+    assert "EXC001    error    implemented" in out
+    assert "DEF001    error    planned" in out
     code, out, _ = run(["rules", "explain", "MAGIC001"], capsys)
     assert code == 0
     assert "Detection guarantees" in out
@@ -151,6 +152,76 @@ def test_milestone_b_acceptance_python_and_js(
         in f["rules_disabled"]
         for f in data["files"]
     )
+
+
+def test_milestone_c_acceptance_exceptions(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Approved network failure handling passes only inside its verified boundary.
+
+    Broad catches fail; an unresolved exception type is an explicit diagnostic.
+    """
+    narrow = (
+        "from requests.exceptions import Timeout\n"
+        "def fetch(session, url):\n"
+        "    try:\n"
+        "        response = session.get(url)\n"
+        "    except Timeout as exc:\n"
+        "        raise Upstream(url) from exc\n"
+        "    return response.json()\n"
+    )
+    write(empty_root, "src/net/client.py", narrow)
+    write(empty_root, "src/core/client.py", narrow)
+    write(
+        empty_root,
+        "src/net/broad.py",
+        "def load(raw):\n    try:\n        return parse(raw)\n    except Exception:\n"
+        "        return None\n",
+    )
+    write(
+        empty_root,
+        "src/net/unknown.py",
+        "def load(raw):\n    try:\n        return parse(raw)\n    except Mystery as exc:\n"
+        "        raise Failed() from exc\n",
+    )
+    write(
+        empty_root,
+        "src/net/wide.py",
+        "from requests.exceptions import Timeout\n"
+        "def fetch(session, url):\n"
+        "    try:\n"
+        "        response = session.get(url)\n"
+        "        data = response.json()\n"
+        "    except Timeout as exc:\n"
+        "        raise Upstream(url) from exc\n"
+        "    return data\n",
+    )
+    write(
+        empty_root,
+        ".shockharness.toml",
+        "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "src/net/**"\nlanguage = "python"\n'
+        'exception = "requests.exceptions.Timeout"\nreason = "external HTTP call"\n',
+    )
+    code, out, _ = run(
+        ["scan", str(empty_root / "src"), "--root", str(empty_root), "--format", "json"], capsys
+    )
+    assert code == 1
+    data = json.loads(out)
+    rows = [(f["path"], f["rule_id"], f["span"]["line"], f["confidence"]) for f in data["findings"]]
+    assert rows == [
+        ("src/core/client.py", "EXC001", 5, "exact"),
+        ("src/net/broad.py", "EXC001", 4, "exact"),
+        ("src/net/broad.py", "EXC002", 4, "exact"),
+        ("src/net/unknown.py", "EXC001", 4, "unresolved"),
+        ("src/net/wide.py", "EXC003", 5, "exact"),
+    ]
+    by_path = {f["path"]: f["message"] for f in data["findings"] if f["rule_id"] == "EXC001"}
+    assert "not approved by any boundary" in by_path["src/core/client.py"]
+    assert "broad catch of 'Exception'" in by_path["src/net/broad.py"]
+    assert "'Mystery' could not be resolved" in by_path["src/net/unknown.py"]
+    assert any("boundaries[0] approves catching" in d for d in data["config"]["deviations"])
+    assert "EXC001" in data["coverage"]["rules_implemented"]
 
 
 def test_scan_json_output_file(empty_root: Path, capsys: pytest.CaptureFixture[str]) -> None:

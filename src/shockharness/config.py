@@ -11,6 +11,7 @@ Nothing here reads environment variables or executes configuration content.
 import copy
 import hashlib
 import json
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +27,9 @@ from shockharness.schema import ConfigIssue, validate_shape
 TOOL_TABLE = ("tool", "shockharness")
 DEDICATED_FILENAME = ".shockharness.toml"
 PYPROJECT_FILENAME = "pyproject.toml"
+
+# A boundary names one exception class: a dotted identifier path, never a wildcard.
+EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
 
 TIER_CLI = "cli"
 TIER_DEDICATED = "dedicated"
@@ -79,11 +83,13 @@ def _read_toml(path: Path) -> dict[str, Any]:
     except OSError as exc:
         raise ConfigError(f"cannot read configuration file: {exc}", str(path)) from exc
     try:
-        return tomllib.loads(raw_bytes.decode("utf-8"))
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"invalid TOML: {exc}", str(path)) from exc
+        text = raw_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ConfigError(f"configuration file is not valid UTF-8: {exc}", str(path)) from exc
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"invalid TOML: {exc}", str(path)) from exc
 
 
 def _extract_tool_table(document: Mapping[str, Any], origin: str) -> dict[str, Any] | None:
@@ -213,6 +219,14 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
         problem = validate_glob(boundary["path"])
         if problem is not None:
             issues.append(ConfigIssue(f"rules.exceptions.boundaries[{index}].path", problem))
+        if EXCEPTION_NAME.fullmatch(boundary["exception"]) is None:
+            issues.append(
+                ConfigIssue(
+                    f"rules.exceptions.boundaries[{index}].exception",
+                    "must be a dotted exception class name such as 'OSError' or "
+                    "'requests.exceptions.Timeout'; wildcards and bare except cannot be approved",
+                )
+            )
     magic = values["rules"]["magic_numbers"]
     for index, pattern in enumerate(magic["configuration_files"]):
         problem = validate_glob(pattern)
@@ -250,6 +264,17 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
     if values["parse_errors"] != "fail":
         found.append(
             f"parse_errors is {values['parse_errors']!r}; syntax failures do not fail the gate"
+        )
+    exceptions = rules["exceptions"]
+    if exceptions["transparent_rethrow"] is True:
+        found.append(
+            "rules.exceptions.transparent_rethrow is enabled; handlers that only re-raise "
+            "pass EXC001 outside any boundary"
+        )
+    for index, boundary in enumerate(exceptions["boundaries"]):
+        found.append(
+            f"rules.exceptions.boundaries[{index}] approves catching {boundary['exception']} "
+            f"in {boundary['path']} ({boundary['language']}): {boundary['reason']}"
         )
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])

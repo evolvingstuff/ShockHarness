@@ -11,7 +11,6 @@ import tokenize
 
 from shockharness.constants import FIRST_COLUMN
 from shockharness.ir.model import (
-    ANONYMOUS_SCOPE,
     MODULE_SCOPE,
     Comment,
     ModuleFacts,
@@ -19,11 +18,16 @@ from shockharness.ir.model import (
     ParseFailure,
     Span,
 )
+from shockharness.ir.python_catches import (
+    SCOPE_NODES,
+    collect_python_catches,
+    node_span,
+    scope_name,
+)
 from shockharness.source import SourceText
 
 PARSER_NAME = "python-ast"
 ANNOTATION_FIELDS = frozenset({"annotation", "returns"})
-SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 NUMERIC_TYPES = (int, float, complex)
 
 
@@ -46,30 +50,11 @@ def _fold_unary(node: ast.AST) -> tuple[ast.Constant, bool] | None:
     return current, negative
 
 
-def _span(source: SourceText, node: ast.expr) -> Span:
-    end_line = node.end_lineno if node.end_lineno is not None else node.lineno
-    end_col = node.end_col_offset if node.end_col_offset is not None else node.col_offset
-    return Span(
-        line=node.lineno,
-        column=source.column_from_byte_offset(node.lineno, node.col_offset),
-        end_line=end_line,
-        end_column=source.column_from_byte_offset(end_line, end_col),
-    )
-
-
 def _raw(source: SourceText, node: ast.expr) -> str:
     segment = ast.get_source_segment(source.text, node)
     if segment is None:
         return ""
     return segment
-
-
-def _scope_name(node: ast.AST) -> str:
-    if isinstance(node, ast.Lambda):
-        return "<lambda>"
-    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-        return node.name
-    return ANONYMOUS_SCOPE
 
 
 def _parse(source: SourceText, filename: str) -> ast.Module | ParseFailure:
@@ -88,30 +73,34 @@ def _parse(source: SourceText, filename: str) -> ast.Module | ParseFailure:
 
 
 def _comments(source: SourceText) -> tuple[Comment, ...] | ParseFailure:
-    # Boundary (declared in .shockharness.toml): tokenizing external source text.
-    found: list[Comment] = []
+    # Boundary (declared in .shockharness.toml): tokenizing external source text. Only
+    # the call that drives the tokenizer is inside the try; building facts is not.
+    reader = io.StringIO(source.text).readline
+    tokens = tokenize.generate_tokens(reader)
     try:
-        for token in tokenize.generate_tokens(io.StringIO(source.text).readline):
-            if token.type != tokenize.COMMENT:
-                continue
-            start_line, start_col = token.start
-            end_line, end_col = token.end
-            found.append(
-                Comment(
-                    span=Span(
-                        line=start_line,
-                        column=start_col + FIRST_COLUMN,
-                        end_line=end_line,
-                        end_column=end_col + FIRST_COLUMN,
-                    ),
-                    text=token.string,
-                )
-            )
+        materialized = list(tokens)
     except (tokenize.TokenError, SyntaxError, ValueError) as exc:
         # ValueError covers UnicodeDecodeError, which CPython's tokenizer raises for some
         # inputs (for example a bare CR followed by a multibyte character) even when
         # ast.parse accepted the same text.
         return ParseFailure(span=None, message=f"comment tokenization failed: {exc}")
+    found: list[Comment] = []
+    for token in materialized:
+        if token.type != tokenize.COMMENT:
+            continue
+        start_line, start_col = token.start
+        end_line, end_col = token.end
+        found.append(
+            Comment(
+                span=Span(
+                    line=start_line,
+                    column=start_col + FIRST_COLUMN,
+                    end_line=end_line,
+                    end_column=end_col + FIRST_COLUMN,
+                ),
+                text=token.string,
+            )
+        )
     return tuple(found)
 
 
@@ -129,7 +118,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
                 value = -value
             literals.append(
                 NumericLiteral(
-                    span=_span(source, node),
+                    span=node_span(source, node),
                     raw=_raw(source, node),
                     value=value,
                     negated=negated,
@@ -142,7 +131,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
             assert isinstance(node, ast.Constant)
             literals.append(
                 NumericLiteral(
-                    span=_span(source, node),
+                    span=node_span(source, node),
                     raw=_raw(source, node),
                     value=node.value,
                     negated=False,
@@ -153,7 +142,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
             continue
         child_scope = scope
         if isinstance(node, SCOPE_NODES):
-            name = _scope_name(node)
+            name = scope_name(node)
             child_scope = name if scope == MODULE_SCOPE else f"{scope}.{name}"
         for field_name, value in ast.iter_fields(node):
             child_annotation = in_annotation or field_name in ANNOTATION_FIELDS
@@ -175,6 +164,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
             parser=PARSER_NAME,
             numeric_literals=(),
             comments=(),
+            catches=(),
             parse_failure=parsed,
         )
     comments = _comments(source)
@@ -184,6 +174,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
             parser=PARSER_NAME,
             numeric_literals=(),
             comments=(),
+            catches=(),
             parse_failure=comments,
         )
     return ModuleFacts(
@@ -191,5 +182,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         parser=PARSER_NAME,
         numeric_literals=_collect_literals(source, parsed),
         comments=comments,
+        catches=collect_python_catches(source, parsed, filename),
         parse_failure=None,
     )

@@ -18,6 +18,7 @@ from shockharness.ir.javascript import extract_javascript_facts
 from shockharness.ir.model import ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.rules import registry
+from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.magic_numbers import run_magic001
 from shockharness.source import SourceText
 from shockharness.suppressions import apply_suppressions
@@ -160,6 +161,24 @@ def analyze_text(
             )
         )
 
+    active_exception_rules = frozenset(
+        rule.rule_id
+        for rule in (registry.EXC001, registry.EXC002, registry.EXC003)
+        if rule.rule_id not in disabled_ids
+    )
+    if len(active_exception_rules) > 0:
+        applied.extend(sorted(active_exception_rules))
+        findings.extend(
+            run_exception_rules(
+                facts,
+                source,
+                config.section(str(registry.EXC001.config_section)),
+                relative_path,
+                language,
+                active_exception_rules,
+            )
+        )
+
     supp001_enabled = registry.SUPP001.rule_id not in disabled_ids
     supp002_enabled = registry.SUPP002.rule_id not in disabled_ids
     if supp001_enabled:
@@ -199,9 +218,10 @@ def _read_source(path: Path) -> tuple[str | None, str | None, str | None]:
     except OSError as exc:
         return None, STATUS_READ_ERROR, f"cannot read file: {exc}"
     try:
-        return raw.decode("utf-8-sig"), None, None
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         return None, STATUS_DECODE_ERROR, f"file is not valid UTF-8: {exc}"
+    return text, None, None
 
 
 def analyze_file(

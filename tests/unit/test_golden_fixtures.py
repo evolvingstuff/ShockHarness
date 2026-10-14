@@ -1,12 +1,18 @@
-"""Golden fixture corpus: every file under tests/fixtures has reviewed expectations."""
+"""Golden fixture corpus: every file under tests/fixtures has reviewed expectations.
+
+A fixture entry may carry an ``exceptions`` table (``rules.exceptions`` settings
+such as boundaries or ``transparent_rethrow``); the fixture is then analyzed under
+the strict profile plus exactly those settings. The fixture's own path is what the
+boundary globs match against.
+"""
 
 import json
+from pathlib import Path
 
 import pytest
 
 from shockharness.analysis import AnalysisOptions, analyze_text
-from shockharness.config import EffectiveConfig
-from tests.conftest import FIXTURES, language_for_fixture
+from tests.conftest import FIXTURES, fixture_config, language_for_fixture
 
 EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 
@@ -21,12 +27,11 @@ def test_every_fixture_file_has_expectations() -> None:
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
-def test_golden(name: str, strict_config: EffectiveConfig) -> None:
+def test_golden(name: str, empty_root: Path) -> None:
     text = (FIXTURES / name).read_text(encoding="utf-8")
-    result = analyze_text(
-        name, language_for_fixture(name), text, strict_config, AnalysisOptions(True)
-    )
     expected = EXPECTED[name]
+    config = fixture_config(name, expected, empty_root)
+    result = analyze_text(name, language_for_fixture(name), text, config, AnalysisOptions(True))
     assert result.status == expected["status"]
     actual = [
         [f.rule_id, f.span.line, f.span.column, f.message, f.is_suppressed] for f in result.findings

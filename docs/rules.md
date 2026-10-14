@@ -38,6 +38,116 @@ cites its source. Never move the number into an unexplained constant and never
 add a fallback. A `0` or `1` that carries meaning (an exit code, a sentinel)
 deserves a name too, even though the rule permits it.
 
+### EXC001: forbidden catch (error, Python and JavaScript)
+
+Every catch is forbidden unless the file sits inside a configured boundary
+(`rules.exceptions.boundaries`: `path` glob, `language`, qualified `exception`,
+`reason`) **and** every exception identity the handler names matches that
+boundary's exception. There is no global whitelist: `ValueError` around
+parsing external input may be a boundary; `ValueError` around your own
+arithmetic is a hidden bug, and the rule cannot tell them apart, so the
+boundary has to say which file it is.
+
+**Python.** Every `except` / `except*` handler of a `try` is checked. The
+handler type is resolved through the module's symbol table and the finding
+records the confidence:
+
+| Resolution | Confidence | Example |
+|---|---|---|
+| Builtin not shadowed in the module | `exact` | `except OSError` is `OSError` |
+| Module-level absolute import, with aliases and dotted access | `exact` | `from requests.exceptions import Timeout as T` then `except T` is `requests.exceptions.Timeout`; `import tomllib` then `except tomllib.TOMLDecodeError` |
+| Relative import | `approximate` | `from .errors import X` is `.errors.X` |
+| Class defined in the module | `approximate` | `class X(Exception)` in `src/pkg/m.py` is `src.pkg.m.X` |
+| Import nested in a function or in a module-level `if`/`try` | `approximate` | |
+| Anything else: unbound name, name rebound by assignment, `except kinds[0]`, `except make()`, `*rest`, star imports | `unresolved` | |
+
+A bare `except`, an unresolved identity, and a dynamic type expression can never
+be approved: the finding says so explicitly ("strict mode fails closed") and
+carries `confidence = "unresolved"`. `Exception` and `BaseException` are
+reported as broad catches; a boundary may still name them (the tool's own
+process boundary in `cli.py` does), which is visible in `config.deviations`.
+Tuples are checked member by member and every member must be approved. An
+`exact` identity must equal the boundary's `exception` string; an `approximate`
+identity matches when one dotted name is a suffix of the other, so `.errors.X`
+and `src.pkg.errors.X` both match a boundary for `pkg.errors.X`.
+
+**JavaScript.** A `catch` has no type. The convention is: a JavaScript catch is
+approved only inside a boundary whose `exception` names an error class, and only
+when the handler's first statement is a guard that re-throws everything else:
+
+```javascript
+catch (err) {
+  if (!(err instanceof TimeoutError)) throw err;   // or the block form { throw err; }
+  ...
+}
+catch (err) {
+  if (err instanceof TimeoutError) { ... } else { throw err; }
+}
+```
+
+The guarded class is the catch's identity with `approximate` confidence
+(nothing proves what `TimeoutError` is bound to). A boundary `exception` of `*`
+is rejected at configuration time. `err.name === "..."` checks, guards joined
+with `||`, and a catch without a binding are untyped and fail. Promise
+`.catch(handler)` and `.then(onFulfilled, onRejected)` are checked the same
+way when the handler is an inline function; a handler passed by reference is
+opaque and fails closed.
+
+**`transparent_rethrow`.** Off by default. When true, a handler whose only
+non-logging statement re-raises the caught exception (`raise`, `raise err`,
+`throw err`) passes EXC001 outside any boundary, including a bare `except:
+raise`. `raise Other from err` is a conversion, not a re-raise, and is not
+transparent.
+
+**Limitations.** Class hierarchies are not known: a boundary for `OSError` does
+not approve `FileNotFoundError`, and a broad library base class other than
+`Exception`/`BaseException` is only flagged for not being approved. Shadowing by
+a nested import that rebinds a module-level name is not tracked. Context
+managers, `__exit__`, `contextlib.suppress`, signal handlers, and
+`addEventListener("error")` are not catches and are not inspected.
+
+### EXC002: suppressed or converted exception (error, Python and JavaScript)
+
+The handler's body is classified; four shapes are findings, approved boundary or
+not:
+
+| Classification | Python | JavaScript |
+|---|---|---|
+| `empty` | `pass`, `...` | `{}` |
+| `logging_only` | only `logging.*`, `logger.*`, `log.*` (any receiver chain ending in a logger name), `print`, `warnings.warn`, `traceback.print_*`, `sys.stderr.write` | only `console.*`, `logger.*`, `log.*`, `process.stderr.write` |
+| `return_fallback` | the one non-logging statement returns nothing, `None`, a constant, or a list/tuple/set/dict built only of constants | returns nothing, `null`, `undefined`, `true`/`false`, a number, string, substitution-free template, or an array/object built only of those |
+| `raise_other` | `raise X`, `raise X from None`, `raise X from something_else` | `throw new X()` without `{ cause: err }`, `throw other` |
+
+Not flagged: bare `raise`, `raise err`, `raise X from err`, `throw err`,
+`throw new X(msg, { cause: err })`, and any handler with several non-logging
+statements or a non-literal return (`return default`, `return compute()`),
+which is reported as `other` and left to EXC001. For a guarded JavaScript
+handler the statements after the guard are classified. A returned variable may
+still be a fabricated default; DEF005 (Milestone D) will cross-reference
+catches with defaults.
+
+### EXC003: broad try scope / unverified boundary (error, Python and JavaScript)
+
+Runs only on catches EXC001 approved through a boundary. The `try` body must be
+exactly one statement that performs exactly one operation:
+
+* Python: an expression, assignment, annotated or augmented assignment, or
+  `return` whose value is a single call (optionally `await`ed), or an `import`.
+  Nested calls in arguments, comprehensions, lambdas, generator expressions,
+  subscripts (`table[key]`), compound statements (`with`, `for`, `if`, nested
+  `try`) and `assert` are not attributable.
+* JavaScript: an expression statement, single-variable declaration, assignment,
+  or `return` of one call or `new` expression (optionally `await`ed). For a
+  promise handler the receiver of `.catch`/`.then` must itself be one call:
+  `fetch(u).catch(h)` is attributable; `pending.catch(h)` and
+  `fetch(u).then(f).catch(h)` are not.
+
+A body with more than one statement is reported on the second statement with
+`exact` confidence. A single statement that cannot be attributed is reported on
+that statement with `approximate` confidence and the message says that static
+analysis cannot tell which part may raise: the boundary is unverified, not
+proven wrong. `finally` and `else` clauses are not inspected.
+
 ### SUPP001: invalid suppression comment (error)
 
 A comment containing `shockharness:` that is not exactly
@@ -59,9 +169,6 @@ listed in every report under `coverage.rules_not_implemented`.
 | ID | Name | Planned milestone |
 |---|---|---|
 | MAGIC002 | suspicious string literal (advisory) | post-B |
-| EXC001 | forbidden catch | C |
-| EXC002 | suppressed or converted exception | C |
-| EXC003 | broad try scope / unverified boundary | C |
 | DEF001 | function parameter default | D |
 | DEF002 | missing mapping/object fallback | D |
 | DEF003 | truthiness fallback | D |

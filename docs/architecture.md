@@ -9,10 +9,10 @@ Discovery: targets -> include/exclude -> language router               (discover
     |
 Per-file analysis                                                      (analysis.py)
     read bytes -> decode UTF-8 -> parser adapter -> ModuleFacts
-    Python: ast + tokenize                                             (ir/python.py)
-    JavaScript: tree-sitter + tree-sitter-javascript                   (ir/javascript.py)
+    Python: ast + tokenize                                             (ir/python.py, ir/python_catches.py)
+    JavaScript: tree-sitter + tree-sitter-javascript                   (ir/javascript.py, ir/javascript_catches.py)
     |
-Rules over facts -> Findings                                           (rules/magic_numbers.py)
+Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py)
 Suppressions -> attach / SUPP001 / SUPP002                            (suppressions.py)
     |
 Gate: counts, never averages                                           (gate.py)
@@ -31,9 +31,12 @@ anything unexpected prints a traceback and exits 3. No path turns a failure
 into a passing result.
 
 **Observations before policy.** Parser adapters produce `ModuleFacts`
-(numeric literals with folded sign, comments, parse failure). Rules consume
-facts and never touch parser nodes. The gate consumes findings and file statuses
-and never re-reads source.
+(numeric literals with folded sign, comments, catch facts, parse failure). A
+catch fact records the resolved exception identities with a confidence, the
+handler body classification, and each statement of the protected `try` body
+with the one operation it could be attributed to. Rules consume facts and never
+touch parser nodes; the boundary policy lives entirely in `rules/exceptions.py`.
+The gate consumes findings and file statuses and never re-reads source.
 
 **Determinism.** Files are sorted by relative path; findings by path, line,
 column, rule ID, message; IR literals by span. JSON output has sorted keys and
@@ -53,9 +56,10 @@ tree is not analyzed further.
 **Self-compliance.** ShockHarness scans its own `src/` and `tests/` as a hard
 CI gate with `.shockharness.toml`. The only MAGIC001 exemption is
 `constants.py`; declared exception boundaries list each `try/except` in the
-tool with the exception it catches and why. The tool's code also avoids
-parameter defaults, `dict.get(key, default)`, and `x or default`, ahead of the
-rules that will enforce them.
+tool with the exception it catches and why, and `EXC001`-`EXC003` enforce them:
+every `try` in the tool wraps exactly one external call. The tool's code also
+avoids parameter defaults, `dict.get(key, default)`, and `x or default`, ahead
+of the rules that will enforce them.
 
 ## Dependencies
 
@@ -79,10 +83,13 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `globs.py` | Glob validation and compilation |
 | `discovery.py` | Target resolution, walking, pruning, language routing |
 | `source.py` | Line splitting, byte-to-character columns, evidence excerpts |
-| `ir/model.py` | `Span`, `NumericLiteral`, `Comment`, `ParseFailure`, `ModuleFacts` |
+| `ir/model.py` | `Span`, `NumericLiteral`, `Comment`, `CatchFact`, `ExceptionIdentity`, `HandlerBody`, `TryStatement`, `ParseFailure`, `ModuleFacts` |
 | `ir/python.py`, `ir/javascript.py` | Parser adapters |
+| `ir/python_catches.py` | Python symbol table, exception identity resolution, handler classification, try-body attribution |
+| `ir/javascript_catches.py` | JavaScript catch clauses, promise rejection handlers, instanceof guards, handler classification |
 | `rules/registry.py` | Every rule ID with metadata and implementation status |
 | `rules/magic_numbers.py` | MAGIC001 |
+| `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
 | `findings.py` | `Finding`, `SuppressionRecord` |
 | `analysis.py` | Per-file pipeline and rule-disable resolution |

@@ -109,12 +109,164 @@ gate: ERROR (exit 3)
    it, shifting golden lines. Fixtures restored; regenerated expectations
    diffed byte-identical against the reviewed set.
 
+## Milestone C: exception rules EXC001-EXC003 — DONE (2026-10-14)
+
+Delivered: catch facts in the IR (`ir/model.py`: `CatchFact`,
+`ExceptionIdentity` with exact/approximate/unresolved confidence, `HandlerBody`
+classification, `TryStatement` attribution), Python extractor
+(`ir/python_catches.py`: module symbol table over builtins, absolute and
+relative imports, aliases, module-level classes, nested and guarded imports;
+`except`/`except*`; handler classification empty / logging-only /
+return-fallback / reraise / raise-chained / raise-other / other), JavaScript
+extractor (`ir/javascript_catches.py`: `catch` clauses, `.catch(handler)`,
+`.then(ok, handler)`, the two `instanceof` guard forms, opaque handlers),
+`rules/exceptions.py` (EXC001 boundary whitelist that fails closed on bare,
+unresolved, and dynamic identities; EXC002 on the four suppressing shapes even
+inside a boundary; EXC003 one-statement/one-operation try bodies, reported on
+the offending statement), `rules.exceptions.transparent_rethrow` (default
+false, reported as a deviation), boundary `exception` validated as a dotted
+class name (wildcards rejected), every boundary listed in `config.deviations`,
+registry metadata for the three rules, 19 new golden fixtures (expectations
+regenerated and reviewed row by row; the golden test now accepts per-fixture
+`rules.exceptions` settings so boundary cases are covered), unit tests for
+identity resolution confidence and for every rule verdict, a CLI acceptance
+test, and documentation.
+
+Decisions recorded here (not in the specification):
+
+* **JavaScript convention.** A `catch` is approved only inside a boundary whose
+  `exception` names an error class *and* whose handler opens with
+  `if (!(err instanceof C)) throw err;` (or the block form, or
+  `if (err instanceof C) {...} else { throw err; }`). `exception = "*"` is a
+  configuration error. `err.name === "..."` and `||`-joined guards are untyped.
+  The guarded identity is `approximate`: nothing proves what `C` is bound to.
+* **Approximate matching.** Relative imports (`.errors.X`), classes defined in
+  the analyzed module (`src.pkg.m.X`), nested imports, and JavaScript guards
+  match a boundary by dotted suffix in either direction. Exact identities must
+  match exactly.
+* **`transparent_rethrow`** also lets a bare `except: raise` pass: it changes
+  nothing about the flow. `raise X from err` is a conversion and is never
+  transparent.
+* **EXC003 counts operations**, not just statements: `parse(session.get(url))`
+  under a Timeout boundary is flagged with `approximate` confidence because the
+  handler would also catch a Timeout raised by `parse`. Import statements are
+  attributable operations (optional-dependency boundaries).
+* **EXC002 `other`.** A handler that returns a variable or has several
+  non-logging statements is not classified; EXC001 still applies. DEF005 will
+  cross-reference catches with defaults.
+
+Acceptance criterion from the spec (Milestone C), verified by
+`tests/cli/test_cli.py::test_milestone_c_acceptance_exceptions`: the same
+narrow `requests.exceptions.Timeout` handler passes in `src/net/` (boundary)
+and fails in `src/core/` (no boundary); `except Exception: return None` fails
+EXC001 and EXC002; `except Mystery` is an EXC001 finding with
+`confidence = "unresolved"` saying the name could not be resolved; a
+boundary-approved handler around two statements fails EXC003 on the second
+statement.
+
+### Dogfooding: what the rule found in the tool
+
+With `.shockharness.toml` unchanged, the first self-scan failed with four
+EXC003 findings. All were real over-wide boundaries and were fixed in code;
+no boundary was added or widened:
+
+1. `analysis.py` `_read_source` returned `raw.decode("utf-8-sig"), None, None`
+   from inside the `UnicodeDecodeError` try (a tuple, not a call). Now the
+   decode is bound in the try and the tuple is built after it.
+2. `config.py` `_read_toml` had `tomllib.loads(raw_bytes.decode("utf-8"))`
+   under two handlers, so the TOML boundary also caught decode errors and vice
+   versa. Now two try blocks, one call each.
+3. `ir/python.py` `_comments` wrapped a whole `for` loop (tokenize, build
+   `Comment` facts, append) under the tokenizer boundary. Now `list(tokens)` is
+   the one protected call; facts are built outside it. The pre-existing
+   `(tokenize.TokenError, SyntaxError, ValueError)` tuple handler is approved
+   member by member by boundaries 5-7.
+
+Behaviour is unchanged (all Milestone B tests still pass); the gate is green on
+all four interpreters.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+52 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+325 passed in 1.65s
+$ pytest -q                      # CPython 3.13.1
+325 passed in 1.79s
+$ pytest -q                      # CPython 3.12.8
+325 passed in 1.65s
+$ pytest -q                      # CPython 3.11.11
+325 passed in 1.89s
+
+$ shockharness scan src tests    # self-compliance, all four interpreters
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml)
+  policy deviation: rules.exceptions.boundaries[0] approves catching OSError in src/shockharness/config.py (python): ...
+  ... (11 boundaries, 2 overrides)
+
+$ python -m build
+Successfully built shockharness-0.1.0.tar.gz and shockharness-0.1.0-py3-none-any.whl
+```
+
+Sample text output on a smoke corpus (`src/net/client.py` with a narrow
+approved handler, a two-statement try, a broad catch, and an unknown name;
+`src/net/client.js` with a guarded catch and a logging-only `.catch`; boundaries
+for `requests.exceptions.Timeout` and `TimeoutError` on `src/net/**`). The
+narrow Python handler and the guarded JavaScript catch produce nothing:
+
+```text
+src/net/client.js:9:12: EXC001 error: promise .catch handler is forbidden: rejection handler binds every rejection; it passes only inside an approved boundary whose error class the handler checks with instanceof and otherwise rethrows  [fetch(url).catch((err) => { console.error(err); });]
+src/net/client.js:9:12: EXC002 error: promise .catch handler only logs the exception; logging is not handling  [fetch(url).catch((err) => { console.error(err); });]
+src/net/client.py:15:9: EXC003 error: approved except handler protects 2 statements; a boundary may wrap only the one sanctioned external operation (approved by boundaries[0] (requests.exceptions.Timeout: External HTTP call may time out))  [data = response.json()]
+src/net/client.py:24:5: EXC001 error: except handler of 'Exception' is forbidden: broad catch of 'Exception' is not approved by any boundary for this file  [except Exception:]
+src/net/client.py:24:5: EXC002 error: except handler converts the exception into a fallback value: return None  [except Exception:]
+src/net/client.py:31:5: EXC001 error: except handler of 'Mystery' is forbidden: 'Mystery' could not be resolved to a known exception (not a builtin, an import, or a class defined in this module); strict mode fails closed  [except Mystery as exc:]
+
+shockharness 0.1.0: 2 file(s), 2 analyzed, 0 failed; 6 finding(s), 0 suppressed
+  by severity: error=6
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005
+  policy deviation: rules.exceptions.boundaries[0] approves catching requests.exceptions.Timeout in src/net/** (python): External HTTP call may time out
+  policy deviation: rules.exceptions.boundaries[1] approves catching TimeoutError in src/net/** (javascript): External HTTP call may time out
+  analysis status: complete
+gate: FAIL (exit 1)
+  6 hard violation(s) and gates.new_hard_violations = "fail"
+```
+
+### Failures observed during development (and what was done)
+
+1. **Self-gate found four over-wide boundaries** in the tool (listed above).
+   Code narrowed; policy untouched.
+2. **Golden generator tokens**: regenerating `expected.json` with a fixed
+   40-character message prefix would have rewritten three hand-shortened
+   Milestone B tokens. The generator now keeps a reviewed token when it still
+   matches the message; the 23 Milestone B entries are byte-identical.
+3. **`from .. import errors`** produced `...errors.X` (three dots). Fixed the
+   relative-prefix join; covered by
+   `test_relative_local_and_nested_bindings_are_approximate`.
+4. **`x = new Client(u)`** in a JavaScript try body was "not a call" because
+   the statement is an assignment expression; the attribution now unwraps
+   assignments. Covered by `test_try_statement_attribution_in_javascript`.
+5. Four unit-test expectations were wrong on first run (line numbers,
+   operation counts, and `except` being a valid identifier that the boundary
+   name check correctly accepts); the tests were corrected, not the code.
+
 ## Known limitations
 
-See `docs/limitations.md`. Headline: only MAGIC001/SUPP001/SUPP002 produce
-findings; Python syntax coverage equals the host interpreter; UTF-8 only; JS
-bare-`\r` line breaks may shift line numbers; `.gitignore` is not consulted;
-SARIF, baselines, diff mode, Git features, and skills are not built.
+See `docs/limitations.md`. Headline: only MAGIC001, EXC001-EXC003,
+SUPP001/SUPP002 produce findings; exception identity resolution is static and
+best effort (star imports, runtime rebinding, class hierarchies are not
+followed; unresolved names fail closed); the JavaScript guard convention is a
+proof obligation, not a type proof; rejection handlers passed by reference are
+opaque; EXC002 does not classify handlers that return variables; Python syntax
+coverage equals the host interpreter; UTF-8 only; JS bare-`\r` line breaks may
+shift line numbers; `.gitignore` is not consulted; SARIF, baselines, diff mode,
+Git features, and skills are not built.
 
 ## Next tasks
 

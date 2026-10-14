@@ -3,11 +3,20 @@
 from dataclasses import dataclass, replace
 from typing import Any
 
-from shockharness.ir.model import Span
+from shockharness.ir.model import (
+    CONFIDENCE_APPROXIMATE,
+    CONFIDENCE_EXACT,
+    CONFIDENCE_UNRESOLVED,
+    Span,
+)
 
-CONFIDENCE_EXACT = "exact"
-CONFIDENCE_APPROXIMATE = "approximate"
-CONFIDENCE_UNRESOLVED = "unresolved"
+__all__ = [
+    "CONFIDENCE_APPROXIMATE",
+    "CONFIDENCE_EXACT",
+    "CONFIDENCE_UNRESOLVED",
+    "Finding",
+    "SuppressionRecord",
+]
 
 
 @dataclass(frozen=True)

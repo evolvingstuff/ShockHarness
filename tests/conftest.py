@@ -1,5 +1,6 @@
 """Shared fixtures. Tests never need network, git, or an LLM."""
 
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -48,6 +49,40 @@ def analyze(strict_config: EffectiveConfig) -> Callable[[str, str], FileResult]:
         )
 
     return run
+
+
+def exceptions_config_toml(section: dict[str, object]) -> str:
+    """Render golden-fixture ``rules.exceptions`` settings as a ``.shockharness.toml`` body.
+
+    Supports exactly the shapes the corpus uses: booleans, strings, and a list of
+    boundary tables with string values.
+    """
+    lines = ["[tool.shockharness.rules.exceptions]"]
+    for key, value in section.items():
+        if key == "boundaries":
+            continue
+        if isinstance(value, bool):
+            lines.append(f"{key} = {'true' if value else 'false'}")
+        else:
+            lines.append(f"{key} = {json.dumps(value)}")
+    boundaries = section["boundaries"] if "boundaries" in section else []
+    assert isinstance(boundaries, list)
+    for boundary in boundaries:
+        lines.append("[[tool.shockharness.rules.exceptions.boundaries]]")
+        for key, value in boundary.items():
+            lines.append(f"{key} = {json.dumps(value)}")
+    return "\n".join(lines) + "\n"
+
+
+def fixture_config(name: str, expected: dict[str, object], root: Path) -> EffectiveConfig:
+    """The configuration a golden fixture is analyzed under: strict, plus its own settings."""
+    body = ""
+    if "exceptions" in expected:
+        section = expected["exceptions"]
+        assert isinstance(section, dict)
+        body = exceptions_config_toml(section)
+    (root / ".shockharness.toml").write_text("[tool.shockharness]\n" + body, encoding="utf-8")
+    return load_config(root, None)
 
 
 def finding_tuples(result: FileResult) -> list[tuple[str, int, int]]:

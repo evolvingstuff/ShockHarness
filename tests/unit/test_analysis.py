@@ -111,4 +111,11 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     assert data["path"] == "t.py"
     assert data["status"] == "analyzed"
     assert data["finding_count"] == 1
-    assert data["rules_applied"] == ["MAGIC001", "SUPP001", "SUPP002"]
+    assert data["rules_applied"] == [
+        "EXC001",
+        "EXC002",
+        "EXC003",
+        "MAGIC001",
+        "SUPP001",
+        "SUPP002",
+    ]

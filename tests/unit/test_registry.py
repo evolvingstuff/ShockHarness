@@ -36,8 +36,15 @@ def test_severities_are_valid() -> None:
         assert rule.default_severity in registry.SEVERITIES, rule.rule_id
 
 
-def test_implemented_rules_are_exactly_the_milestone_b_set() -> None:
-    assert {r.rule_id for r in registry.implemented_rules()} == {"MAGIC001", "SUPP001", "SUPP002"}
+def test_implemented_rules_are_exactly_the_milestone_c_set() -> None:
+    assert {r.rule_id for r in registry.implemented_rules()} == {
+        "MAGIC001",
+        "EXC001",
+        "EXC002",
+        "EXC003",
+        "SUPP001",
+        "SUPP002",
+    }
 
 
 def test_implemented_rules_have_full_metadata() -> None:

@@ -21,9 +21,10 @@ linter. It runs offline, needs no LLM, and never uploads source.
 
 ## Status
 
-Pre-release. Milestones A (skeleton and contracts) and B (parsers and
-`MAGIC001`) are implemented. Exception rules, default rules, complexity,
-baselines, SARIF, and agent skills are registered but **not yet implemented**;
+Pre-release. Milestones A (skeleton and contracts), B (parsers and
+`MAGIC001`) and C (exception rules `EXC001`-`EXC003`) are implemented. Default
+rules, complexity, baselines, SARIF, and agent skills are registered but **not
+yet implemented**;
 every report lists them under `rules_not_implemented` so a clean run never
 implies coverage the tool does not have. See `STATUS.md` for exact evidence.
 
@@ -66,8 +67,8 @@ src/client.py:20:16: MAGIC001 error: Numeric literal 2 has no permitted justific
 
 shockharness 0.1.0: 1 file(s), 1 analyzed, 0 failed; 2 finding(s), 0 suppressed
   by severity: error=2
-  rules applied: MAGIC001, SUPP001, SUPP002
-  rules not implemented (not analyzed): MAGIC002, EXC001, EXC002, EXC003, DEF001, ...
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002, DEF001, DEF002, DEF003, ...
 gate: FAIL (exit 1)
   2 hard violation(s) and gates.new_hard_violations = "fail"
 ```
@@ -133,7 +134,9 @@ shockharness scan src tests     # the tool gates its own source
 
 ShockHarness runs on itself as a hard CI gate. Its one `MAGIC001` exemption is
 `src/shockharness/constants.py`; its declared exception boundaries are listed in
-`.shockharness.toml` with reasons.
+`.shockharness.toml` with reasons and enforced by `EXC001`-`EXC003`: every
+`try` in the tool wraps exactly one external call and converts the failure into
+a typed diagnostic.
 
 ## License
 

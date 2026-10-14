@@ -15,6 +15,425 @@
       ]
     ]
   },
+  "javascript/exc_async_await.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        6,
+        7,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        17,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        17,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        25,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        31,
+        21,
+        "promise .catch handler is forbidden: rej",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_boundary_catch.js": {
+    "status": "analyzed",
+    "exceptions": {
+      "boundaries": [
+        {
+          "path": "javascript/exc_boundary_catch.js",
+          "language": "javascript",
+          "exception": "TimeoutError",
+          "reason": "External HTTP call may time out"
+        }
+      ]
+    },
+    "findings": [
+      [
+        "EXC002",
+        39,
+        5,
+        "catch clause swallows the exception: han",
+        false
+      ],
+      [
+        "EXC002",
+        47,
+        5,
+        "catch clause only logs the exception; lo",
+        false
+      ],
+      [
+        "EXC001",
+        56,
+        5,
+        "catch clause of 'AbortError' is forbidde",
+        false
+      ],
+      [
+        "EXC003",
+        65,
+        5,
+        "approved catch clause protects 2 stateme",
+        false
+      ],
+      [
+        "EXC001",
+        75,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        84,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_nested_catches.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        7,
+        7,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        7,
+        7,
+        "catch clause only logs the exception; lo",
+        false
+      ],
+      [
+        "EXC001",
+        25,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        25,
+        5,
+        "catch clause converts the exception into",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_promise_catch.js": {
+    "status": "analyzed",
+    "exceptions": {
+      "boundaries": [
+        {
+          "path": "javascript/exc_promise_catch.js",
+          "language": "javascript",
+          "exception": "TimeoutError",
+          "reason": "External HTTP call may time out"
+        }
+      ]
+    },
+    "findings": [
+      [
+        "EXC001",
+        2,
+        12,
+        "promise .catch handler is forbidden: rej",
+        false
+      ],
+      [
+        "EXC002",
+        2,
+        12,
+        "promise .catch handler only logs the exc",
+        false
+      ],
+      [
+        "EXC001",
+        6,
+        12,
+        "promise .catch handler is forbidden: rej",
+        false
+      ],
+      [
+        "EXC001",
+        10,
+        12,
+        "promise .catch handler is forbidden: rej",
+        false
+      ],
+      [
+        "EXC001",
+        12,
+        12,
+        "promise .then rejection handler is forbi",
+        false
+      ],
+      [
+        "EXC002",
+        12,
+        12,
+        "promise .then rejection handler converts",
+        false
+      ],
+      [
+        "EXC003",
+        14,
+        1,
+        "approved promise .catch handler protects",
+        false
+      ],
+      [
+        "EXC003",
+        26,
+        1,
+        "approved promise .catch handler protects",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_rethrow.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        12,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        20,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        28,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        28,
+        5,
+        "catch clause replaces the exception with",
+        false
+      ],
+      [
+        "EXC001",
+        36,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_return_fallback.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        4,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        12,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        12,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        20,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        20,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        28,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        28,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        36,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        36,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        44,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        44,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        53,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC001",
+        58,
+        70,
+        "promise .catch handler is forbidden: rej",
+        false
+      ],
+      [
+        "EXC002",
+        58,
+        70,
+        "promise .catch handler converts the exce",
+        false
+      ]
+    ]
+  },
+  "javascript/exc_untyped_catch.js": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        4,
+        5,
+        "catch clause only logs the exception; lo",
+        false
+      ],
+      [
+        "EXC001",
+        12,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        12,
+        5,
+        "catch clause converts the exception into",
+        false
+      ],
+      [
+        "EXC001",
+        20,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ],
+      [
+        "EXC002",
+        20,
+        5,
+        "catch clause replaces the exception with",
+        false
+      ],
+      [
+        "EXC001",
+        28,
+        5,
+        "catch clause is forbidden: untyped catch",
+        false
+      ]
+    ]
+  },
   "javascript/jsx.js": {
     "status": "analyzed",
     "findings": [
@@ -390,6 +809,607 @@
   "python/clean.py": {
     "status": "analyzed",
     "findings": []
+  },
+  "python/exc_bare.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "except handler is forbidden: bare except",
+        false
+      ],
+      [
+        "EXC002",
+        4,
+        5,
+        "except handler swallows the exception: h",
+        false
+      ],
+      [
+        "EXC001",
+        11,
+        5,
+        "except handler is forbidden: bare except",
+        false
+      ],
+      [
+        "EXC002",
+        11,
+        5,
+        "except handler swallows the exception: h",
+        false
+      ]
+    ]
+  },
+  "python/exc_broad.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        9,
+        5,
+        "except handler of 'Exception' is forbidd",
+        false
+      ],
+      [
+        "EXC002",
+        9,
+        5,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        16,
+        5,
+        "except handler of 'BaseException' is for",
+        false
+      ],
+      [
+        "EXC001",
+        25,
+        5,
+        "except handler of 'builtins.Exception' i",
+        false
+      ]
+    ]
+  },
+  "python/exc_except_star.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        7,
+        5,
+        "except* handler of 'ValueError' is forbi",
+        false
+      ],
+      [
+        "EXC001",
+        9,
+        5,
+        "except* handler of 'OSError' is forbidde",
+        false
+      ],
+      [
+        "EXC002",
+        9,
+        5,
+        "except* handler swallows the exception: ",
+        false
+      ]
+    ]
+  },
+  "python/exc_logging_only.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        16,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        16,
+        9,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        22,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        22,
+        9,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        29,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        29,
+        9,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        35,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        35,
+        9,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        41,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        41,
+        9,
+        "except handler only logs the exception; ",
+        false
+      ],
+      [
+        "EXC001",
+        47,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ]
+    ]
+  },
+  "python/exc_multiple_operations.py": {
+    "status": "analyzed",
+    "exceptions": {
+      "boundaries": [
+        {
+          "path": "python/exc_multiple_operations.py",
+          "language": "python",
+          "exception": "OSError",
+          "reason": "Reading a user file is I/O"
+        }
+      ]
+    },
+    "findings": [
+      [
+        "EXC003",
+        16,
+        9,
+        "approved except handler protects 2 state",
+        false
+      ],
+      [
+        "EXC003",
+        24,
+        9,
+        "approved except handler protects a state",
+        false
+      ],
+      [
+        "EXC003",
+        33,
+        9,
+        "approved except handler protects a state",
+        false
+      ],
+      [
+        "EXC003",
+        41,
+        9,
+        "approved except handler protects a state",
+        false
+      ]
+    ]
+  },
+  "python/exc_nested.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        7,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        10,
+        9,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        10,
+        9,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        26,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ]
+    ]
+  },
+  "python/exc_rethrow.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        7,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ],
+      [
+        "EXC001",
+        14,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ],
+      [
+        "EXC001",
+        21,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ],
+      [
+        "EXC001",
+        28,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ],
+      [
+        "EXC002",
+        28,
+        5,
+        "except handler replaces the exception wi",
+        false
+      ],
+      [
+        "EXC001",
+        35,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ],
+      [
+        "EXC002",
+        35,
+        5,
+        "except handler replaces the exception wi",
+        false
+      ],
+      [
+        "EXC001",
+        42,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ]
+    ]
+  },
+  "python/exc_rethrow_transparent.py": {
+    "status": "analyzed",
+    "exceptions": {
+      "transparent_rethrow": true
+    },
+    "findings": [
+      [
+        "EXC001",
+        22,
+        5,
+        "except handler of 'ValueError' is forbid",
+        false
+      ]
+    ]
+  },
+  "python/exc_return_fallback.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        4,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        4,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        11,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        11,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        18,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        18,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        25,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        25,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        32,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        32,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        39,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        39,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "MAGIC001",
+        40,
+        16,
+        "-1",
+        false
+      ],
+      [
+        "EXC001",
+        46,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC002",
+        46,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        54,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        61,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ]
+    ]
+  },
+  "python/exc_scoped_timeout.py": {
+    "status": "analyzed",
+    "exceptions": {
+      "boundaries": [
+        {
+          "path": "python/exc_scoped_timeout.py",
+          "language": "python",
+          "exception": "requests.exceptions.Timeout",
+          "reason": "External HTTP call may time out"
+        }
+      ]
+    },
+    "findings": [
+      [
+        "EXC003",
+        29,
+        9,
+        "approved except handler protects 3 state",
+        false
+      ],
+      [
+        "EXC003",
+        38,
+        9,
+        "approved except handler protects a state",
+        false
+      ],
+      [
+        "EXC002",
+        47,
+        5,
+        "except handler converts the exception in",
+        false
+      ],
+      [
+        "EXC001",
+        54,
+        5,
+        "except handler of 'requests.exceptions.C",
+        false
+      ]
+    ]
+  },
+  "python/exc_tuple.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        7,
+        5,
+        "except handler of 'Timeout', 'Connection",
+        false
+      ],
+      [
+        "EXC001",
+        14,
+        5,
+        "except handler of 'Timeout', 'Exception'",
+        false
+      ],
+      [
+        "EXC001",
+        21,
+        5,
+        "except handler of 'Timeout', 'NotImporte",
+        false
+      ]
+    ]
+  },
+  "python/exc_unresolved.py": {
+    "status": "analyzed",
+    "findings": [
+      [
+        "EXC001",
+        18,
+        5,
+        "except handler of 'NotImportedAnywhere' ",
+        false
+      ],
+      [
+        "EXC001",
+        25,
+        5,
+        "except handler of 'MyError' is forbidden",
+        false
+      ],
+      [
+        "EXC001",
+        32,
+        5,
+        "except handler of 'errors_to_catch[0]' i",
+        false
+      ],
+      [
+        "EXC001",
+        39,
+        5,
+        "except handler of 'make_error_type()' is",
+        false
+      ],
+      [
+        "EXC001",
+        46,
+        5,
+        "except handler of 'RelativeError' is for",
+        false
+      ],
+      [
+        "EXC001",
+        53,
+        5,
+        "except handler of 'errors.OtherError' is",
+        false
+      ],
+      [
+        "EXC001",
+        60,
+        5,
+        "except handler of 'LocalError' is forbid",
+        false
+      ],
+      [
+        "EXC001",
+        67,
+        5,
+        "except handler of 'Imported', 'Aliased',",
+        false
+      ],
+      [
+        "EXC001",
+        74,
+        5,
+        "except handler of 'os.error' is forbidde",
+        false
+      ],
+      [
+        "EXC001",
+        83,
+        5,
+        "except handler of 'NestedError' is forbi",
+        false
+      ],
+      [
+        "EXC001",
+        90,
+        5,
+        "except handler of 'OSError' is forbidden",
+        false
+      ]
+    ]
   },
   "python/magic_annotations.py": {
     "status": "analyzed",
