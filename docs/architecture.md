@@ -13,13 +13,18 @@ Per-file analysis                                                      (analysis
     JavaScript: tree-sitter + tree-sitter-javascript                   (ir/javascript.py, ir/javascript_catches.py, ir/javascript_defaults.py)
     |
 Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py, rules/defaults.py)
+Per-unit metrics over the control tree -> CPLX001-CPLX004              (complexity/{cyclomatic,cognitive,nesting,npath,size,metrics}.py, rules/complexity.py)
+    |
+Cross-file pass: call graph, module edges, cycles, fan-in/out -> CPLX005 (complexity/{callgraph,coupling,assemble}.py)
+    |
 Suppressions -> attach / SUPP001 / SUPP002                            (suppressions.py)
     |
 Fingerprints: rule + path + scope + evidence, occurrence index         (gating/baseline.py)
 Baseline file / base revision -> legacy markers on findings            (gating/baseline.py, gating/diff.py)
 Gate: counts, never averages; new hard violations drive the verdict    (gate.py)
 Report: schema-versioned, deterministic ordering                       (report.py)
-History: local git log -> churn, co-change (file granularity)          (history/git.py, hotspots.py, cochange.py)
+History: local git log -> churn, co-change, hotspots (file granularity) (history/git.py, hotspots.py, cochange.py)
+Revision diff: per-unit complexity regressions, abstraction displacement (complexity/regressions.py)
     |
 Renderers: text, JSON, SARIF 2.1.0                                     (output/)
 ```
@@ -40,8 +45,12 @@ anything unexpected prints a traceback and exits 3. No path turns a failure
 into a passing result.
 
 **Observations before policy.** Parser adapters produce `ModuleFacts`
-(numeric literals with folded sign, comments, catch facts, default facts, parse
-failure). A catch fact records the resolved exception identities with a
+(numeric literals with folded sign, comments, catch facts, default facts,
+function facts, import facts, module bindings, parse failure). A function fact
+is one *unit* (module body, class body, function, method, lambda, arrow) with
+its language-neutral control tree, size counts, call sites as written, locals
+and writes; the metrics read only the tree, so equivalent Python and
+JavaScript produce equal numbers. A catch fact records the resolved exception identities with a
 confidence, the handler body classification, and each statement of the protected
 `try` body with the one operation it could be attributed to. A default fact
 records one value substitution: its family (parameter, mapping, truthiness,
@@ -66,7 +75,15 @@ inputs are byte-identical.
 or LF. A UTF-8 BOM is stripped before parsing.
 
 **Iterative traversal.** Both adapters walk with an explicit stack so deeply
-nested input cannot exhaust the Python recursion limit.
+nested input cannot exhaust the Python recursion limit; the control-tree
+builders, the metric walks, NPath's post-order evaluation and Tarjan's SCC are
+iterative for the same reason.
+
+**Two-phase analysis.** `analysis.py` runs the per-file rules and measures the
+units first, then builds the call graph over every parsed file (`CPLX005`
+needs it), and only then applies suppressions and fingerprints, so a graph
+finding is suppressed and baselined like any other. Metrics never reach the
+gate except as `complexity_regressions`, a count the revision diff passes in.
 
 **JavaScript parse failures.** tree-sitter recovers from errors; any `ERROR` or
 `MISSING` node is a parse failure with the span of the first such node, and the
@@ -112,7 +129,16 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `globs.py` | Glob validation and compilation |
 | `discovery.py` | Target resolution, walking, pruning, language routing |
 | `source.py` | Line splitting, byte-to-character columns, evidence excerpts |
-| `ir/model.py` | `Span`, `NumericLiteral`, `Comment`, `CatchFact`, `ExceptionIdentity`, `HandlerBody`, `TryStatement`, `DefaultFact`, `ParseFailure`, `ModuleFacts` |
+| `ir/model.py` | `Span`, `NumericLiteral`, `Comment`, `CatchFact`, `ExceptionIdentity`, `HandlerBody`, `TryStatement`, `DefaultFact`, `ControlNode`, `CallSite`, `FunctionFact`, `ImportFact`, `ModuleBinding`, `ParseFailure`, `ModuleFacts` |
+| `ir/lines.py` | Logical line counting shared by both adapters |
+| `ir/python_functions.py` | Python units: control tree, size, calls, locals, writes; imports and module bindings |
+| `ir/javascript_functions.py` | JavaScript units, imports (`import`/`export ... from`/`require`) and module bindings |
+| `complexity/cyclomatic.py`, `cognitive.py`, `nesting.py`, `npath.py`, `size.py` | One versioned convention each, over the control tree |
+| `complexity/metrics.py` | Per-unit measurement, stable unit keys, file aggregates, the conventions block |
+| `complexity/callgraph.py` | Import resolution among analyzed files, call-site classification (resolved / probable / unresolved), edge aggregation |
+| `complexity/coupling.py` | Fan-in/out, iterative Tarjan SCC for module cycles, shared-mutable-state notes, `metrics.graph` shape |
+| `complexity/assemble.py` | `metrics.complexity` + `metrics.graph` for one run, CPLX005 findings, disabled shapes |
+| `complexity/regressions.py` | Per-unit regressions between two revisions; the experimental abstraction-displacement heuristic |
 | `ir/python.py`, `ir/javascript.py` | Parser adapters |
 | `ir/python_catches.py` | Python symbol table, exception identity resolution, handler classification, try-body attribution |
 | `ir/javascript_catches.py` | JavaScript catch clauses, promise rejection handlers, instanceof guards, handler classification |
@@ -123,14 +149,15 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/magic_numbers.py` | MAGIC001 |
 | `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
+| `rules/complexity.py` | CPLX001-CPLX004 per unit, CPLX005 from the graph; messages carry value, threshold and convention |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
 | `findings.py` | `Finding` (with `fingerprint` and `baseline` marker), `SuppressionRecord` |
 | `gating/baseline.py` | Fingerprints, baseline file model and validation, legacy marking under `gates.legacy` |
 | `gating/diff.py` | Revision export and analysis, new / fixed / unchanged classification, `DiffReport` |
 | `history/git.py` | The git subprocess wrapper (the only `subprocess` user) and log parsing |
-| `history/hotspots.py` | `metrics.history`: per-file churn, horizon, explicit statuses; `hotspots = null` |
+| `history/hotspots.py` | `metrics.history`: per-file churn, horizon, explicit statuses, the hotspot score |
 | `history/cochange.py` | Co-change pairs with support and directional confidence |
-| `analysis.py` | Per-file pipeline and rule-disable resolution |
+| `analysis.py` | Per-file phase, cross-file phase, suppressions/fingerprints phase; rule-disable resolution |
 | `gate.py` | Verdict and exit code |
 | `report.py` | Report assembly, coverage, sorting |
 | `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (check reports and diff reports) |

@@ -1307,3 +1307,257 @@ else) is not part of this commit.
   "not implemented" paragraph and quote the real thresholds.
 * The eval corpus has one reference per task; collecting agent runs with and
   without the skills (the protocol in `evals/README.md`) is maintainer work.
+
+## Milestone E: complexity metrics, call graph, hotspots — DONE (2026-10-14)
+
+Delivered (spec sections 0, 9, 13, 14 "Milestone E"):
+
+* **Function facts in the IR** (`ir/model.py`: `ControlNode`, `CallSite`,
+  `FunctionFact`, `ImportFact`, `ModuleBinding`; `ir/python_functions.py`,
+  `ir/javascript_functions.py`, `ir/lines.py`). Every module body, class
+  body, function, method, lambda and arrow is a *unit* with its qualified
+  name, span, parameter count, statement count, logical lines, a
+  language-neutral control tree, its call sites as written, locals and
+  writes. Builders are iterative (explicit work stack, bottom-up freeze);
+  nested units are stopped at and measured on their own, so a parent's
+  numbers exclude nested bodies (documented in `docs/complexity.md`).
+* **Metrics** (`complexity/{cyclomatic,cognitive,nesting,npath,size}.py`,
+  `complexity/metrics.py`), one versioned convention each
+  (`cyclomatic/1`, `cognitive/1`, `nesting/1`, `npath/1`, `size/1`),
+  exposed as `metrics.complexity.conventions` and named in every finding.
+  NPath is clamped at `npath_cap` at every node (no enumeration) and
+  reported as `>= cap` with `saturated = true`. Per unit under
+  `metrics.complexity.functions` (path, then source order, enclosing unit
+  first), per file under `metrics.complexity.files`.
+* **Rules** `CPLX001`-`CPLX004` (`rules/complexity.py`), warnings anchored on
+  the unit's first line with the unit as scope; messages carry value,
+  threshold and convention. A plain `check` never fails on them.
+* **Call graph and coupling** (`complexity/callgraph.py`,
+  `complexity/coupling.py`, `complexity/assemble.py`): edges classified
+  `resolved` / `probable` / `unresolved` with a reason each, targets `unit` /
+  `external` / `builtin` / `unresolved`; counts per class; fan-in/fan-out
+  (builtins excluded, unresolved never counted); module edges for Python
+  (absolute, relative, canonical package-rooted names, `from pkg import
+  submodule` as a submodule edge) and JavaScript (`import`, `export ... from`,
+  `export *`, `require`); iterative Tarjan SCC for cycles;
+  shared-mutable-state notes. `CPLX005` per cycle member (at the closing
+  import) and on fan-out above `fan_out_warn`. All under `metrics.graph`
+  with `confidence` descriptions.
+* **Hotspots** (`history/hotspots.py`): `log1p(churn) * normalized_complexity`
+  at file granularity, `hotspots_formula` in the report, `null` with a reason
+  when history or complexity is unavailable.
+* **Diff mode** (`complexity/regressions.py`, `gating/diff.py`, `gate.py`):
+  `metrics.complexity.regressions`, `gates.complexity_regressions` (`warn`
+  default, `fail`, `ignore`), `gate.complexity_regressions`,
+  `summary.complexity_regressions`; experimental
+  `metrics.graph.abstraction_displacement` behind
+  `complexity.abstraction_displacement = false` (every entry
+  `confidence: approximate`, `experimental: true`, no rule ID).
+* **Pipeline** (`analysis.py`): per-file phase (rules + unit measurement),
+  cross-file phase (graph, `CPLX005`), then suppressions and fingerprints,
+  so graph findings are suppressible and baselined. `build_report` takes
+  the metrics, `collect_history` the complexity section, `gate.evaluate` the
+  regression count; `api.analyze_paths`, `gating/diff.py` and the CLI use
+  `analyze_files`.
+* **Config**: `cyclomatic_counts_boolean_operators`, `npath_cap`,
+  `npath_warn`, `fan_out_warn`, `abstraction_displacement` in `schema.py`,
+  `defaults.toml`, `docs/configuration.md`; profiles inherit them (`minimal`
+  keeps `enabled = false`, now with a comment);
+  `cyclomatic_counts_boolean_operators = false` is a reported deviation.
+* **Docs**: `docs/complexity.md` (new), `docs/rules.md`, `docs/limitations.md`,
+  `docs/configuration.md`, `docs/architecture.md`, README, CHANGELOG,
+  `schemas/report-v1.schema.json` and `schemas/diff-v1.schema.json`
+  (additive), the `refactor-complexity` skill rewritten around the real
+  commands and fields, `pre-commit-review` / `write-compliant-code` no longer
+  say the rules are unimplemented.
+* **Tests** (+47, 530 total): `tests/unit/test_complexity_metrics.py`
+  (parity table of 12 equivalent construct pairs, identical control trees,
+  Python-only and JavaScript-only constructs, boolean-operator switch, NPath
+  saturation with exact 2^40 at a high cap, nested-unit exclusion, size
+  convention, whitespace/rename invariance, helper extraction at depth 0 and
+  1 in both languages, artificial splitting, report shapes, disabled family,
+  per-path disable and inline suppression), `tests/unit/test_callgraph.py`
+  (Python and JavaScript resolution classes: aliases, from-imports, relative
+  imports, re-exports, default imports, `require`, higher-order passes,
+  dynamic calls asserted unresolved, `self`/`this`, nested functions,
+  builtins; canonical module names with `import json` next to an analyzed
+  `json.py`; cycles in both languages with one `CPLX005` per member;
+  fan-out; shared mutable state; SCC on a 5000-node chain; determinism),
+  `tests/unit/test_complexity_diff.py` (regressions under warn/fail/ignore,
+  plain check never failing, new-unit regressions, abstraction displacement
+  off/on), hotspot computation in a temp git repository plus the unavailable,
+  disabled and unparseable-file paths (`test_history.py`), CLI text/JSON/SARIF
+  output and `rules explain CPLX002` (`test_cli.py`),
+  `tests/property/test_complexity_fuzz.py` (Hypothesis grammar rendered to
+  both languages: never raises, same tree and numbers). Golden corpus gains
+  four reviewed `CPLX004` rows (fixture files with many `||`/`or` statements).
+
+### Decisions (mine; review these)
+
+1. **Units include the module body and class bodies**, not only functions,
+   so module-level control flow has a number and file aggregates cover every
+   line. A class body is a unit for its field initializers and class-level
+   statements; methods are separate.
+2. **Nested units are excluded from their parent** (brief), which means
+   extracting deeply nested code lowers the file sum by the nesting
+   increments it stops paying. The metamorphic extraction test therefore
+   pins depth 0 and depth 1 (what "extract method" normally does); the depth
+   >= 2 behavior is documented in `docs/complexity.md` and
+   `docs/limitations.md` rather than asserted away.
+3. **Comprehensions** belong to the containing unit. `cyclomatic/1` counts
+   each `for` and `if` clause; `cognitive/1` and `nesting/1` count only the
+   `if` clauses (a generator expression is linear, idiomatic code; counting
+   the `for` made `metrics.py:file_aggregate`, ten `sum(... for ...)` calls
+   in a dict literal, cognitive 10); `npath/1` treats a comprehension `for`
+   as `(iterable - 1) + body` with no zero-iteration path.
+4. **Cognitive operator runs** are counted per parenthesized group in source
+   order (`a and (b or c) and d` is three runs); conditions are nested at
+   the construct's inner level; `else`, `elif`, loop `else` and `try/else`
+   are +1 without nesting; `case` arms add nothing beyond the `switch`.
+   Explicitly not a Sonar score (registry, conventions block, every
+   `CPLX002` message).
+5. **NPath** follows the classic formulas with every intermediate clamped;
+   `try` is `body * try_else + handlers`, then `* finally`; a `switch`
+   without default adds one path. `npath_warn = 200` (PMD's classic
+   default) and `npath_cap = 10000` are the defaults the brief asked for.
+6. **Optional chaining is never counted** (consistent with `DEF004` treating
+   `o?.x` as propagation); `??`, `&&=`, `||=`, `??=` count as one operator
+   and one run each.
+7. **Python module names are canonical**: a module's absolute name starts at
+   the first directory with an analyzed `__init__.py`; nothing is matched by
+   dotted suffix. The first self-run matched the standard library's `json`
+   to `src/shockharness/output/json.py` and reported a 13-module cycle
+   through the package `__init__`; both were resolution bugs, not code
+   facts. `from pkg import mod` where every name is a submodule is an edge
+   to the submodules, not to `pkg/__init__.py` (the facade pattern this
+   package uses is not a cycle).
+8. **Fan-out** = distinct targets of resolved + probable edges, analyzed units
+   plus external symbols, builtins excluded (`len`, `console.log`); the
+   message states the unresolved count that was not counted.
+9. **Shared mutable state is a note** under `metrics.graph`, not a `CPLX005`
+   finding: it is a module-local heuristic (no alias or cross-module
+   tracking) and a finding would be noise on every module with a cache.
+10. **Regression** = a head unit above a `CPLX001`-`CPLX004` threshold whose
+    value grew since base; a unit absent at base counts as grown from
+    nothing (a renamed complex function shows up once). Matching is by
+    `path::name` key with an occurrence suffix for duplicate names.
+11. **Hotspots** need both inputs; a file that failed to parse has churn but
+    no score (it is omitted from the list, not scored 0).
+12. **`collect_history`, `build_report` and `gate.evaluate` gained required
+    parameters** rather than defaults (DEF001 applies to the tool itself);
+    `shockharness.api` signatures are unchanged.
+13. The self-compliance test now treats only `error` findings as offenders
+    and asserts the complexity findings are unsuppressed warnings and that
+    the tool's own module graph has no cycle. The brief said warnings are
+    not blockers; the test previously asserted zero findings of any severity.
+
+### Dogfooding: what the metrics found in the tool
+
+First self-run, before any fix: the gate **failed** on 24 hard violations in
+the new code (two `[:-1]` slices, nine `_Builder` dataclass defaults, eleven
+`x if y is not None else z` ternaries, two `m[k] if k in m else None`
+spellings), all fixed in code (explicit branches, required dataclass fields
+built through a `_builder()` helper, `[: len(x) - 1]`); plus the two
+resolution bugs of decision 7. Then 42 complexity warnings on the new code
+itself; the genuinely tangled ones were refactored: `_UnitCollector._call`
+(JavaScript, cognitive 49, nesting 5) into `_new_call` / `_member_call` /
+`_mutation_through_call`; `collect_javascript_bindings` (cognitive 64,
+nesting 6) into `_statement_bindings` / `_declaration_bindings` /
+`_declarator_bindings`; `_import_statement` (39) and `_export_statement`
+(32) around shared `_specifier_names` / `_import_clause`;
+`_UnitCollector.run` (36) into `_seed` / `_method_member`;
+`shared_mutable_state` (33) into `_mutable_bindings` / `_writers`.
+
+Final self-run (`shockharness check src tests scripts evals`): **gate PASS**,
+128 `CPLX` warnings (121 in `src/`, 6 in `tests/`, 1 in `evals/`): 61
+`CPLX002`, 40 `CPLX004`, 23 `CPLX001`, 4 `CPLX003`, 0 `CPLX005`; 1245 units in
+98 files, 6 NPath-saturated units (`gate.evaluate`, `config._deviations`,
+`_Collector._call` in both defaults collectors, `_child_context` in both,
+`update_skills`); graph: 2367 resolved / 761 probable / 1229 unresolved call
+edges, 347 resolved / 260 external / 0 unresolved module edges, 0 cycles, 0
+shared mutable bindings. Highest cognitive scores in `src/`:
+`collect_python_bindings` 43, `complexity/cognitive.py:cognitive` 38,
+`python_defaults._Collector._call` 38, `suppressions.apply_suppressions` 37,
+`javascript_functions._UnitCollector._statement` 34 (a dispatcher),
+`config._semantic_issues` 33, `gate.evaluate` 31. None of these is hidden,
+none is suppressed, no threshold was raised. The pre-existing ones (Milestones
+B-G code: `config.py`, `suppressions.py`, both `*_defaults.py` collectors,
+`gate.py`, `skills/install.py`) are left as recorded warnings for a later
+refactoring pass with their own behavior tests; the walkers in the new
+extractors are long `if`/`elif` dispatchers over node kinds and are left as
+such on purpose. Hotspots on the tool's own history (13 commits in the
+90-day horizon): `ir/python_defaults.py` 0.470, `ir/javascript_catches.py`
+0.461, `config.py` 0.404, `ir/javascript_defaults.py` 0.396,
+`ir/python_catches.py` 0.337.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+96 files already formatted
+
+$ pytest -q                      # CPython 3.11.11
+530 passed in 18.37s
+$ pytest -q                      # CPython 3.12.8
+530 passed in 16.35s
+$ pytest -q                      # CPython 3.13.1
+530 passed in 17.17s
+$ pytest -q                      # CPython 3.14.7
+530 passed in 17.23s
+
+$ shockharness check src tests scripts evals --format text   # self-gate
+  ... 128 CPLX warning lines ...
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002
+  complexity: 1245 unit(s) in 98 file(s); conventions cyclomatic/1, cognitive/1, nesting/1, npath/1; 6 NPath saturated; advisory (CPLX001-CPLX004 are warnings)
+  graph: call edges 2367 resolved, 761 probable, 1229 unresolved; module edges 347 resolved, 260 external, 0 unresolved; 0 cycle(s); 0 shared mutable binding(s)
+  history: 13 commit(s) in 90 day(s) before 2026-10-14T17:26:38-07:00 (file granularity); 126 co-change pair(s) with support >= 3
+  hotspots (log1p(churn) * normalized cognitive, file granularity): src/shockharness/ir/python_defaults.py (0.470), src/shockharness/ir/javascript_catches.py (0.461), src/shockharness/config.py (0.404), src/shockharness/ir/javascript_defaults.py (0.396), src/shockharness/ir/python_catches.py (0.337)
+  analysis status: complete
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+  (20 boundaries, 3 overrides reported as deviations, as before)
+
+$ python -m build
+Successfully built shockharness-0.1.0a1.tar.gz and shockharness-0.1.0a1-py3-none-any.whl
+```
+
+Sample finding lines from the self-run:
+
+```text
+src/shockharness/gate.py:86:1: CPLX001 warning: cyclomatic complexity of function evaluate is 24, above cyclomatic_warn = 15 (convention cyclomatic/1)  [def evaluate(]
+src/shockharness/gate.py:86:1: CPLX004 warning: NPath estimate of function evaluate is saturated at the cap (>= 10000) (convention npath/1; a bounded estimate, not an exact count)  [def evaluate(]
+src/shockharness/suppressions.py:122:1: CPLX002 warning: cognitive complexity of function apply_suppressions is 37, above cognitive_warn = 15 (convention cognitive/1; not a Sonar score)  [def apply_suppressions(]
+```
+
+### Failures observed during development (and what was done)
+
+* First self-run: `import json` resolved to `output/json.py` (dotted-suffix
+  matching) and `from shockharness import gate` to the package `__init__`,
+  producing a false 13-module cycle. Replaced suffix matching with canonical
+  package-rooted names and submodule edges (decision 7); regression tests in
+  `test_callgraph.py`.
+* JavaScript import bindings never matched their module edge because the
+  edge key derived a relative-import "level" from the leading dots of
+  `./util.js`. The edge now carries the fact's level explicitly.
+* `class` keyword tokens (anonymous tree-sitter nodes named `class`) were
+  discovered as class units; unit discovery now requires named nodes.
+* The golden corpus gained `CPLX004` rows on four fixture files whose module
+  bodies are long runs of `||`/`or` fallback statements (NPath 256-512 per the
+  convention); reviewed and kept.
+* The tool's own gate caught 24 hard violations in the first draft of the
+  new code (see Dogfooding); all fixed in code, none suppressed.
+
+### Limitations and next tasks
+
+* See `docs/limitations.md` "Complexity metrics and the call graph".
+* The pre-existing high-cognitive functions listed above are candidates for
+  a refactoring pass with the `refactor-complexity` skill and before/after
+  graphs; not done here to keep the milestone to its scope.
+* Per-function churn, rename following, change-impact radius and data flow
+  remain Milestone H.
+* `docs/shockharness_advanced_guardrails_spec.md` existed untracked in the
+  tree before this session and is not part of this commit.

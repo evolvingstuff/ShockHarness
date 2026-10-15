@@ -6,14 +6,30 @@ description: Reduce real complexity in Python or JavaScript code that ShockHarne
 # Refactor complexity
 
 ShockHarness treats complexity as a separate, advisory family, never averaged
-into the hard gate. **The complexity rules `CPLX001` (cyclomatic), `CPLX002`
-(cognitive), `CPLX003` (nesting depth), `CPLX004` (NPath) and `CPLX005`
-(coupling and cycles) are registered but not implemented**: `shockharness
-rules list` shows them as `planned`, and every report lists them under `rules
-not implemented (not analyzed)`. They arrive in Milestone E. Until then the
-tool gives you no complexity number and no call graph; this skill tells you
-how to refactor well without one, and how not to chase a metric once one
-exists.
+into the hard gate. The rules `CPLX001` (cyclomatic), `CPLX002` (cognitive),
+`CPLX003` (nesting depth), `CPLX004` (NPath) and `CPLX005` (coupling and
+cycles) are **warnings**: a plain `shockharness check` never fails because of
+them. The only place a number can reach a verdict is a revision gate with
+`gates.complexity_regressions = "fail"`, and then only for a unit that is
+above a threshold *and* grew since the base revision. This skill tells you
+how to use the numbers without chasing them.
+
+Every number comes with a versioned convention (`cyclomatic/1`,
+`cognitive/1`, `nesting/1`, `npath/1`, `size/1`), named in each finding and
+in `metrics.complexity.conventions` of the JSON report. The cognitive score
+follows the published description of cognitive complexity but is **not a
+SonarSource score**: every function, method, lambda, arrow, class body and
+module body is a *unit* measured on its own, and a unit's numbers exclude the
+units nested in it. Extracting code therefore moves a score; it never makes
+the work vanish, and the call graph records where it went.
+
+| Rule | Fires when | Default threshold |
+|---|---|---|
+| `CPLX001` | cyclomatic complexity of a unit above `complexity.cyclomatic_warn` | 15 |
+| `CPLX002` | cognitive complexity of a unit above `complexity.cognitive_warn` | 15 |
+| `CPLX003` | decision nesting depth above `complexity.max_nesting_warn` | 4 |
+| `CPLX004` | NPath estimate at or above `complexity.npath_warn`, or saturated at `complexity.npath_cap` | 200 / 10000 |
+| `CPLX005` | a module import cycle (resolved edges only), or fan-out above `complexity.fan_out_warn` | 20 |
 
 ## What complexity means here
 
@@ -57,23 +73,42 @@ Do not:
   parameter so a helper has fewer call sites to update (`DEF001`).
 
 Every one of these makes the code easier for a counter and harder for a
-reader. When Milestone E ships, a before/after number that improved while
-behavior tests shrank is a red flag, not a success.
+reader. A before/after number that improved while behavior tests shrank is a
+red flag, not a success; and because the graph records each new call, a split
+that lowers `CPLX002` shows up as fan-out and as resolved edges instead.
 
 ## Workflow
 
 ### 1. Record the current structure
 
-The tool does not yet produce a call graph, so write it down by hand before
-touching anything: which functions in the module call which, which modules
-import this one, and which external effects (I/O, environment, time, random)
-each function has. A short list in the pull-request description is enough.
+Take the numbers and the call graph from the report before touching anything:
+
+```bash
+shockharness check . --format json --output before.json
+```
+
+In `before.json`, `metrics.complexity.functions` lists every unit with its
+`key` (`path::name`), `cyclomatic`, `cognitive`, `nesting`, `npath` (with
+`saturated` and `text`, e.g. `">= 10000"`) and `size`;
+`metrics.complexity.files` sums them per file. `metrics.graph.units` gives
+each unit's `fan_in`, `fan_out`, `fan_out_external` and its call sites per
+confidence (`resolved`, `probable`, `unresolved`); `metrics.graph.edges`
+lists the edges themselves; `metrics.graph.cycles` the module cycles and
+`metrics.graph.shared_mutable_state` the module-level bindings written from
+more than one unit. An `unresolved` call (a computed callee, a method on a
+value of unknown type, a callback) is a gap the tool admits, never a guess.
+Copy the rows for the units you will touch, plus the external effects (I/O,
+environment, time, random) each has, into the pull-request description:
 
 ```text
-load_report(path) -> read_text(path), parse(text), summarize(rows)
-summarize(rows)   -> format_row(row)            # pure
-main(argv)        -> load_report, print          # process boundary
+src/report.py::load_report  cyclomatic 9  cognitive 14  nesting 3  fan_out 3 (read_text, parse, summarize)
+src/report.py::summarize    cyclomatic 4  cognitive 5   nesting 2  fan_out 1 (format_row)   # pure
+src/report.py::main         cyclomatic 2  cognitive 1   nesting 1  fan_out 2 (load_report, print)   # process boundary
 ```
+
+`metrics.history.hotspots` (when the root is a git repository) ranks files by
+`log1p(churn) * normalized cognitive complexity`; a hot file is where a
+refactor pays, not a verdict on it.
 
 ### 2. Pin behavior with tests before changing code
 
@@ -106,12 +141,22 @@ behavior; say so explicitly and get it reviewed as such.
 ```bash
 pytest -q                                           # or: node --test
 shockharness check .                                # must still end in gate: PASS (exit 0)
-shockharness gate --base origin/main --head HEAD    # after committing: no new hard violations
+shockharness check . --format json --output after.json
+shockharness gate --base origin/main --head HEAD    # after committing: no new hard violations;
+                                                    # lists `complexity regressions against base: N`
 ```
 
-Then write the after structure next to the before structure from step 1 and
-check that every edge you removed was a real dependency and every edge you
-added is one a reader would expect.
+Compare `after.json` with `before.json` unit by unit (same `key`). Expect the
+touched unit's `cognitive` and `nesting` to fall and the sum over the file to
+stay close to the original minus what the new helpers now carry; expect one
+new `resolved` edge per helper and the caller's `fan_out` to grow by the same
+number. A file sum that fell far more than the helpers' own scores means
+nesting penalties were removed, which is fine only if the helpers are real
+units with one job and a test. The gate output names per-unit regressions
+under `complexity regressions against base` (reported as warnings under the
+default `gates.complexity_regressions = "warn"`); a regression is a unit above
+a threshold whose number grew, so a refactor that moves work into a new
+helper that is itself above a threshold is reported, as it should be.
 
 ## Examples
 
@@ -214,7 +259,7 @@ without a price is rejected instead of silently priced at zero.
 - [ ] Each extracted helper has one job, no default parameters, no shared mutable state.
 - [ ] Validation hoisted to one load step; no absence handling left in computation.
 - [ ] No new catch outside a declared boundary; no `or`/`??`/`.get(k, v)` introduced; no numeric literal other than `0`/`1`.
-- [ ] `shockharness check .` passes and the report still lists `CPLX001`-`CPLX005` as not implemented; no complexity number was claimed.
+- [ ] `shockharness check .` passes; the before/after `metrics.complexity` rows and `metrics.graph` edges are in the pull-request description, and every new edge is a dependency a reader would expect.
 
 ## Adopting ShockHarness
 

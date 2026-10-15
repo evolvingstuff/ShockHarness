@@ -6,6 +6,49 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Milestone E: complexity metrics, call graph, hotspots. `CPLX001`-`CPLX005`
+  are implemented as advisory warnings that never fail a plain `check`. Every
+  module body, class body, function, method, lambda and arrow is a *unit*
+  measured on its own (nested units are excluded from their parent) with
+  versioned conventions stated in every message and in
+  `metrics.complexity.conventions`: `cyclomatic/1` (boolean operators counted
+  under `complexity.cyclomatic_counts_boolean_operators`, optional chaining
+  never), `cognitive/1` (published-style nesting and interruption increments,
+  explicitly not a SonarSource score, Python/JavaScript parity enforced by a
+  table and a Hypothesis property), `nesting/1`, `npath/1` (bounded by
+  `complexity.npath_cap`, reported as `>= cap` when saturated, never
+  enumerated) and `size/1`. New keys `npath_cap`, `npath_warn`, `fan_out_warn`,
+  `cyclomatic_counts_boolean_operators`, `abstraction_displacement`;
+  `cyclomatic_counts_boolean_operators = false` is a reported deviation.
+  `docs/complexity.md` defines everything.
+- `metrics.graph`: a call graph whose edges are `resolved` (direct call of a
+  module-level, nested or imported definition), `probable` (module alias
+  attribute, `self`/`this` method the class defines, static class call,
+  function passed as an argument) or `unresolved` (computed callee, unknown
+  receiver, unbound name, undefined `self` attribute); counts per confidence,
+  fan-in/fan-out per unit (builtins excluded, unresolved never counted),
+  module import edges for Python (absolute and relative, canonical
+  package-rooted names, never suffix matching) and JavaScript (`import`,
+  `export ... from`, `export *`, `require`), strongly connected components
+  as `cycles`, and `shared_mutable_state` notes. `CPLX005` fires per cycle
+  member and on fan-out above `fan_out_warn`.
+- `metrics.history.hotspots`: `log1p(churn) * normalized_complexity` per file
+  (summed cognitive complexity over the repository maximum), with
+  `hotspots_formula`; `null` with a reason when history or complexity is
+  unavailable.
+- Revision diffs list `metrics.complexity.regressions` (head units above a
+  threshold whose value grew since base) and honour
+  `gates.complexity_regressions` (`warn` default, `fail`, `ignore`);
+  `gate.complexity_regressions` and `summary.complexity_regressions` are new
+  fields. `complexity.abstraction_displacement = true` adds the experimental
+  `metrics.graph.abstraction_displacement` (every entry approximate).
+- The analysis pipeline now has a cross-file phase between the per-file rules
+  and suppressions, so graph findings are suppressible and fingerprinted;
+  `build_report` takes the metrics, `collect_history` takes the complexity
+  section, `gate.evaluate` takes the regression count. Report and diff schemas
+  gain the new sections (additive); SARIF carries CPLX results.
+- The `refactor-complexity` skill now quotes the real rules, thresholds,
+  report fields and commands.
 - Milestone G: four vendor-neutral agent skills shipped as package data
   (`shockharness/skills/<name>/SKILL.md`, open Agent Skills format with
   `name`/`description` frontmatter): `write-compliant-code`,

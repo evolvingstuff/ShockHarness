@@ -281,6 +281,13 @@
         false
       ],
       [
+        "CPLX004",
+        20,
+        1,
+        "NPath estimate of function booleanLogic ",
+        false
+      ],
+      [
         "DEF003",
         34,
         10,
@@ -374,6 +381,13 @@
         15,
         3,
         "options.cache falls back to new Map(); '",
+        false
+      ],
+      [
+        "CPLX004",
+        19,
+        1,
+        "NPath estimate of function ternaries is ",
         false
       ],
       [
@@ -575,6 +589,13 @@
   "javascript/def_process_env.js": {
     "status": "analyzed",
     "findings": [
+      [
+        "CPLX004",
+        1,
+        1,
+        "NPath estimate of module <module> is 512",
+        false
+      ],
       [
         "DEF006",
         2,
@@ -1998,6 +2019,13 @@
         17,
         13,
         "a or b falls back to \"z\" when falsy; 'or",
+        false
+      ],
+      [
+        "CPLX004",
+        21,
+        1,
+        "NPath estimate of function boolean_logic",
         false
       ],
       [

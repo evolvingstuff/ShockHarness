@@ -1,6 +1,7 @@
 """Git history metrics: churn and co-change from a temporary repository, and explicit
 degradation when git or a repository is missing."""
 
+import math
 from collections.abc import Callable
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from shockharness.history.hotspots import collect_history
 from tests.conftest import commit_all, init_repo
 
 OPTIONS = AnalysisOptions(inline_suppressions=True)
+# A metrics.complexity section of a run that had complexity switched off.
+NO_COMPLEXITY = {"status": "disabled", "reason": "complexity.enabled = false", "files": {}}
 DAY_1 = "2026-01-01T12:00:00+00:00"
 DAY_2 = "2026-01-02T12:00:00+00:00"
 DAY_3 = "2026-01-03T12:00:00+00:00"
@@ -48,7 +51,8 @@ def test_history_is_unavailable_outside_a_repository(
     assert "not a git repository" in history["reason"]
     assert history["files"] == {}
     assert history["hotspots"] is None
-    assert "Milestone E" in history["hotspots_reason"]
+    assert history["hotspots_reason"].startswith("not computed: history is unavailable")
+    assert "log1p(churn)" in history["hotspots_formula"]
     assert report.gate.status == "pass"
 
 
@@ -56,7 +60,7 @@ def test_history_is_unavailable_without_git(
     empty_root: Path, strict_config: EffectiveConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(git_module, "GIT", "shockharness-no-such-git-binary")
-    history = collect_history(empty_root, "HEAD", ["src/a.py"], strict_config)
+    history = collect_history(empty_root, "HEAD", ["src/a.py"], strict_config, NO_COMPLEXITY)
     assert history["status"] == "unavailable"
     assert "git could not be run" in history["reason"]
 
@@ -65,7 +69,7 @@ def test_history_disabled_says_so(
     empty_root: Path, make_config: Callable[[str], EffectiveConfig]
 ) -> None:
     config = make_config("[tool.shockharness.history]\nenabled = false\n")
-    history = collect_history(empty_root, "HEAD", ["src/a.py"], config)
+    history = collect_history(empty_root, "HEAD", ["src/a.py"], config, NO_COMPLEXITY)
     assert history["status"] == "disabled"
     assert history["reason"] == "history.enabled = false"
 
@@ -126,7 +130,15 @@ def test_churn_and_cochange_from_a_temporary_repository(
         }
     ]
     assert history["cochange_min_support"] == 2
-    assert history["hotspots"] is None
+    # every file is a flat assignment: cognitive 0 everywhere, so every score is 0
+    assert [
+        (h["path"], h["churn"], h["cognitive_total"], h["score"]) for h in history["hotspots"]
+    ] == [
+        ("src/a.py", 3, 0, 0.0),
+        ("src/b.py", 2, 0, 0.0),
+        ("src/c.py", 1, 0, 0.0),
+    ]
+    assert history["hotspots_reason"] is None
     assert report.gate.status == "pass"
     again = with_history(report, empty_root, "HEAD", config).metrics["history"]
     assert again == history  # deterministic: the horizon is anchored on the head commit
@@ -141,8 +153,10 @@ def test_history_at_an_older_revision_and_in_a_subdirectory_root(
     first = commit_all(empty_root, "one", DAY_1, "one@example.invalid")
     write(empty_root, "pkg/src/a.py", "x = 1\n\n")
     commit_all(empty_root, "two", DAY_2, "one@example.invalid")
-    history = collect_history(empty_root / "pkg", first, ["src/a.py"], strict_config)
+    history = collect_history(empty_root / "pkg", first, ["src/a.py"], strict_config, NO_COMPLEXITY)
     assert history["status"] == "available"
+    assert history["hotspots"] is None
+    assert history["hotspots_reason"] == "not computed: complexity metrics are disabled"
     assert history["revision"]["commit"] == first
     assert history["files"]["src/a.py"]["commits"] == 1
     assert history["files"]["src/a.py"]["last_change"] == DAY_1
@@ -150,7 +164,7 @@ def test_history_at_an_older_revision_and_in_a_subdirectory_root(
 
 def test_unknown_revision_is_unavailable(empty_root: Path, strict_config: EffectiveConfig) -> None:
     init_repo(empty_root)
-    history = collect_history(empty_root, "nope", ["src/a.py"], strict_config)
+    history = collect_history(empty_root, "nope", ["src/a.py"], strict_config, NO_COMPLEXITY)
     assert history["status"] == "unavailable"
     assert "rev-parse failed" in history["reason"]
 
@@ -183,3 +197,50 @@ def test_cochange_excludes_sweeping_commits() -> None:
     assert [(p.first, p.second, p.support) for p in pairs] == [("f0.py", "f1.py", 2)]
     # the sweep still counts towards per-file commit totals (3 commits touched f0.py)
     assert pairs[0].confidence_first_to_second == 2 / 3
+
+
+def test_hotspots_combine_churn_with_normalized_cognitive_complexity(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.history]\nhorizon_days = 30\n")
+    init_repo(empty_root)
+    branchy = "def f(a, b):\n    if a:\n        if b:\n            return 1\n    return 0\n"
+    flat = "x = 1\n"
+    write(empty_root, "src/hot.py", branchy)
+    write(empty_root, "src/cold.py", branchy)
+    write(empty_root, "src/flat.py", flat)
+    commit_all(empty_root, "one", DAY_1, "one@example.invalid")
+    write(empty_root, "src/hot.py", branchy + "\n")
+    write(empty_root, "src/flat.py", flat + "\n")
+    commit_all(empty_root, "two", DAY_2, "one@example.invalid")
+    write(empty_root, "src/hot.py", branchy + "\n\n")
+    commit_all(empty_root, "three", DAY_3, "two@example.invalid")
+
+    report = analyze_paths([empty_root / "src"], empty_root, config, OPTIONS)
+    report = with_history(report, empty_root, "HEAD", config)
+    history = report.metrics["history"]
+    assert history["status"] == "available"
+    assert history["hotspots_reason"] is None
+    assert "log1p(churn)" in history["hotspots_formula"]
+    rows = [
+        (h["path"], h["churn"], h["cognitive_total"], h["normalized_complexity"], h["score"])
+        for h in history["hotspots"]
+    ]
+    assert rows == [
+        ("src/hot.py", 3, 3, 1.0, math.log1p(3)),
+        ("src/cold.py", 1, 3, 1.0, math.log1p(1)),
+        ("src/flat.py", 2, 0, 0.0, 0.0),
+    ]
+    assert report.gate.status == "pass"
+    # the score follows the complexity section it was given: disabled complexity, no score
+    no_score = collect_history(empty_root, "HEAD", ["src/hot.py"], config, NO_COMPLEXITY)
+    assert no_score["hotspots"] is None
+    assert no_score["hotspots_reason"] == "not computed: complexity metrics are disabled"
+    # a file that failed to parse has churn but no complexity: it gets no score, no crash
+    write(empty_root, "src/broken.py", "def (\n")
+    commit_all(empty_root, "four", DAY_3, "two@example.invalid")
+    broken = make_config('parse_errors = "warn"\n')
+    report = analyze_paths([empty_root / "src"], empty_root, broken, OPTIONS)
+    report = with_history(report, empty_root, "HEAD", broken)
+    assert "src/broken.py" in report.metrics["history"]["files"]
+    assert "src/broken.py" not in {h["path"] for h in report.metrics["history"]["hotspots"]}

@@ -388,7 +388,9 @@ def _run_diff_like(args: argparse.Namespace) -> DiffReport:
     config = _load_config(args)
     diff = diff_revisions(args.root, args.base, args.head, config, _options(args))
     metrics = dict(diff.metrics)
-    metrics["history"] = collect_history(args.root, diff.head.commit, head_paths(diff), config)
+    metrics["history"] = collect_history(
+        args.root, diff.head.commit, head_paths(diff), config, metrics["complexity"]
+    )
     return with_metrics(diff, metrics)
 
 

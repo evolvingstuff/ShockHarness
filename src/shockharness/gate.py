@@ -10,6 +10,11 @@ of a diff) carry a ``baseline`` marker set before the gate runs. ``matched`` one
 are counted in the totals but never fail the gate; ``ignored`` ones are not
 counted at all. Both stay in the report.
 
+Complexity never fails a plain ``check``. A revision diff passes the number of
+per-unit complexity regressions it found; ``gates.complexity_regressions``
+decides whether they fail the gate (``fail``), are listed (``warn``), or are
+not mentioned (``ignore``).
+
 An *advisory* run (``--exit-zero``) leaves the verdict, its exit code and every
 count untouched and only changes what the process returns: a ``fail`` verdict
 exits 0. ``error`` (exit 3) is never masked, and configuration or usage errors
@@ -49,6 +54,7 @@ class GateResult:
     analysis_failures: int
     baselined: int
     new_hard_violations: int
+    complexity_regressions: int
     baseline: BaselineApplication | None
     reasons: tuple[str, ...]
     advisory: bool
@@ -64,10 +70,17 @@ class GateResult:
             "analysis_failures": self.analysis_failures,
             "baselined": self.baselined,
             "new_hard_violations": self.new_hard_violations,
+            "complexity_regressions": self.complexity_regressions,
             "baseline": None if self.baseline is None else self.baseline.to_json_dict(),
             "reasons": list(self.reasons),
             "advisory": self.advisory,
         }
+
+
+NO_REGRESSIONS = 0
+REGRESSIONS_FAIL = "fail"
+REGRESSIONS_WARN = "warn"
+REGRESSIONS_IGNORE = "ignore"
 
 
 def evaluate(
@@ -75,7 +88,10 @@ def evaluate(
     files: Sequence[FileResult],
     config: EffectiveConfig,
     baseline: BaselineApplication | None,
+    complexity_regressions: int,
 ) -> GateResult:
+    """``complexity_regressions`` is the number of per-unit regressions a revision diff
+    found against its base; a plain analysis passes :data:`NO_REGRESSIONS`."""
     hard = 0
     legacy_hard = 0
     suppressed = 0
@@ -104,6 +120,8 @@ def evaluate(
     reasons: list[str] = []
     parse_policy = config.values["parse_errors"]
     hard_policy = config.values["gates"]["new_hard_violations"]
+    regression_policy = config.values["gates"]["complexity_regressions"]
+    regressions_fail = complexity_regressions > 0 and regression_policy == REGRESSIONS_FAIL
 
     if failures > 0 and parse_policy == "fail":
         reasons.append(f'{failures} file(s) could not be analyzed and parse_errors = "fail"')
@@ -111,6 +129,13 @@ def evaluate(
         exit_code = EXIT_INTERNAL_ERROR
     elif new_hard > 0 and hard_policy == "fail":
         reasons.append(f'{new_hard} new hard violation(s) and gates.new_hard_violations = "fail"')
+        status = GATE_FAIL
+        exit_code = EXIT_VIOLATIONS
+    elif regressions_fail:
+        reasons.append(
+            f"{complexity_regressions} complexity regression(s) against the base revision and "
+            'gates.complexity_regressions = "fail"'
+        )
         status = GATE_FAIL
         exit_code = EXIT_VIOLATIONS
     else:
@@ -126,6 +151,17 @@ def evaluate(
                 f"{new_hard} new hard violation(s) reported as warnings because "
                 'gates.new_hard_violations = "warn"'
             )
+    if complexity_regressions > 0 and regression_policy == REGRESSIONS_WARN:
+        reasons.append(
+            f"{complexity_regressions} complexity regression(s) against the base revision "
+            'reported as warnings (gates.complexity_regressions = "warn"); see '
+            "metrics.complexity.regressions"
+        )
+    elif regressions_fail and status == GATE_FAIL and new_hard > 0:
+        reasons.append(
+            f"{complexity_regressions} complexity regression(s) against the base revision and "
+            'gates.complexity_regressions = "fail"'
+        )
     reasons.extend(_baseline_reasons(baseline, baselined, legacy_hard))
 
     return GateResult(
@@ -138,6 +174,7 @@ def evaluate(
         analysis_failures=failures,
         baselined=baselined,
         new_hard_violations=new_hard,
+        complexity_regressions=complexity_regressions,
         baseline=baseline,
         reasons=tuple(reasons),
         advisory=False,

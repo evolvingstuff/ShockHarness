@@ -651,6 +651,222 @@ DEF006 = RuleSpec(
     ),
 )
 
+COMPLEXITY_REMEDIATION = (
+    "Reduce repeated cognitive work rather than the number: hoist validation to one load "
+    "step, name a repeated condition as a predicate, separate effects from computation, and "
+    "pin behavior with tests before and after. Do not split a function into helpers that "
+    "share mutable state or hide a branch behind an early return, a catch or a default; the "
+    "graph records the delegation and the metrics stay advisory either way."
+)
+COMPLEXITY_LIMITATIONS_COMMON = (
+    "Advisory: never fails a plain check; in diff/gate a per-unit regression against the base "
+    "revision follows gates.complexity_regressions. A unit is a module body, class body, "
+    "function, method, lambda or arrow; nested units are measured separately and excluded "
+    "from their parent, which lowers the parent's number when code is extracted. Files that "
+    "fail to parse have no metrics."
+)
+
+CPLX001 = RuleSpec(
+    rule_id="CPLX001",
+    version="1",
+    name="cyclomatic complexity",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary="A unit's cyclomatic complexity (convention cyclomatic/1) is above cyclomatic_warn.",
+    rationale=(
+        "Each decision point is a path a test has to cover and a reader has to follow. The "
+        "number is a size of the decision space, not a judgement of correctness, which is why "
+        "it is reported as a warning and kept out of the hard gate."
+    ),
+    guarantees=(
+        "Exact on the control tree: 1 + each if/elif/else-if, each loop (comprehension for "
+        "clauses included) and comprehension if clause, each except/catch handler, each "
+        "non-default match/switch arm, each conditional expression, and, with "
+        "cyclomatic_counts_boolean_operators = true, each and/or, &&/||/??, and logical "
+        "assignment operator. Optional chaining, finally, try/else and else add nothing. "
+        "The message names the value, the threshold and the convention version."
+    ),
+    limitations=COMPLEXITY_LIMITATIONS_COMMON,
+    remediation=COMPLEXITY_REMEDIATION,
+    noncompliant_example=(
+        "def route(req):            # cyclomatic 17 with cyclomatic_warn = 15\n"
+        "    if req.a and req.b: ...\n    elif req.c: ...\n    # ... twelve more branches"
+    ),
+    compliant_example=(
+        "HANDLERS = {'a': handle_a, 'b': handle_b}\n"
+        "def route(req):\n    return HANDLERS[req.kind](req)   # each handler measured on its own"
+    ),
+)
+
+CPLX002 = RuleSpec(
+    rule_id="CPLX002",
+    version="1",
+    name="cognitive complexity",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary="A unit's cognitive complexity (convention cognitive/1) is above cognitive_warn.",
+    rationale=(
+        "Nesting and interrupted flow cost a reader more than a flat sequence of the same "
+        "decisions. The convention follows the published description of cognitive complexity "
+        "(structural increments, nesting increments, flow interruptions) and is explicitly not "
+        "a SonarSource score: nested functions are measured separately here."
+    ),
+    guarantees=(
+        "Exact on the control tree: +1 plus the nesting level for each if, loop, match/switch, "
+        "except/catch handler and conditional expression (each raises the nesting level for its "
+        "contents); +1 without nesting increment for elif/else-if, else, loop else and try/else; "
+        "+1 per maximal run of one short-circuit operator, per logical assignment, per direct "
+        "recursive call and per labeled break/continue. try, finally, with and plain blocks add "
+        "nothing. Python and JavaScript produce the same number for equivalent constructs."
+    ),
+    limitations=(
+        COMPLEXITY_LIMITATIONS_COMMON
+        + " The score is not comparable with tools that include nested functions in their "
+        "parent or count operator runs differently."
+    ),
+    remediation=COMPLEXITY_REMEDIATION,
+    noncompliant_example=(
+        "for item in items:\n    if item.ok:\n        if item.value:\n"
+        "            if valid(item):   # each level costs more than the last\n                ..."
+    ),
+    compliant_example=(
+        "for item in items:\n    if not is_candidate(item):\n        continue\n    process(item)"
+    ),
+)
+
+CPLX003 = RuleSpec(
+    rule_id="CPLX003",
+    version="1",
+    name="nesting depth",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary="A unit's decision nesting depth (convention nesting/1) is above max_nesting_warn.",
+    rationale=(
+        "Deep nesting means a reader must hold every enclosing condition in mind to understand "
+        "one line. It usually marks validation that belongs at a boundary or a loop body that "
+        "wants a name."
+    ),
+    guarantees=(
+        "Exact on the control tree: the deepest chain of if (elif/else branches at the depth of "
+        "the then branch), loops and comprehension for clauses, match/switch arms, except/catch "
+        "handlers and conditional expressions. Parentheses, with blocks, plain blocks, labels, "
+        "try bodies, try/else and finally add no depth. A unit without decisions has depth 0."
+    ),
+    limitations=COMPLEXITY_LIMITATIONS_COMMON,
+    remediation=COMPLEXITY_REMEDIATION,
+    noncompliant_example=(
+        "if a:\n    for x in xs:\n        if b:\n            while c:\n"
+        "                if d:   # depth 5 with max_nesting_warn = 4\n                    ..."
+    ),
+    compliant_example=(
+        "if not a:\n    return\nfor x in xs:\n    handle(x, b, c, d)   # handle measured on its own"
+    ),
+)
+
+CPLX004 = RuleSpec(
+    rule_id="CPLX004",
+    version="1",
+    name="NPath estimate",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A unit's NPath estimate (convention npath/1) is at or above npath_warn, or saturated "
+        "at npath_cap."
+    ),
+    rationale=(
+        "Sequential decisions multiply: three independent if statements have eight paths, ten "
+        "have a thousand. The estimate counts acyclic paths including infeasible ones, so it "
+        "overstates; it is bounded by npath_cap so it can never be mistaken for a measurement "
+        "of something the tool did not compute."
+    ),
+    guarantees=(
+        "Computed bottom-up with every intermediate clamped to npath_cap: blocks multiply, an "
+        "expression is 1 + its short-circuit operators, if/loop/conditional are (condition - 1) "
+        "+ then + else, try is body * try_else + handlers, times finally, match/switch sums its "
+        "arms (+1 without a default). A value at or above the cap is reported as >= cap with "
+        "saturated = true. No path is ever enumerated."
+    ),
+    limitations=(
+        COMPLEXITY_LIMITATIONS_COMMON
+        + " The number is an estimate: infeasible paths are counted, loops count as one branch, "
+        "early returns do not prune later paths."
+    ),
+    remediation=COMPLEXITY_REMEDIATION,
+    noncompliant_example=(
+        "if a: ...\nif b: ...\nif c: ...\nif d: ...\nif e: ...\nif f: ...\nif g: ...\n"
+        "if h: ...   # 256 paths with npath_warn = 200"
+    ),
+    compliant_example=(
+        "settings = load_settings(raw)   # a, b, c validated once\n"
+        "render(settings)                # each branch lives where its data is known"
+    ),
+)
+
+CPLX005 = RuleSpec(
+    rule_id="CPLX005",
+    version="1",
+    name="coupling / cycles",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "Modules import each other in a cycle, or a unit calls more than fan_out_warn distinct "
+        "targets."
+    ),
+    rationale=(
+        "An import cycle means neither module can be understood, tested or loaded without the "
+        "other. A unit with many distinct call targets changes whenever any of them does. Both "
+        "are coupling facts, not correctness verdicts, and both are reported with the "
+        "confidence of the edges behind them."
+    ),
+    guarantees=(
+        "Module cycles: strongly connected components of two or more modules over resolved "
+        "import edges only (Python absolute and relative imports, JavaScript import/export/"
+        "re-export and require with a literal specifier, each resolved to an analyzed file); "
+        "one finding per member module at the import that closes the cycle. Fan-out: distinct "
+        "targets of resolved and probable call edges (analyzed units plus external symbols; "
+        "builtins excluded) above fan_out_warn; unresolved calls are reported in the message "
+        "and in metrics.graph but never counted as targets. Shared mutable state (a "
+        "module-level mutable binding written from more than one unit) is a note under "
+        "metrics.graph.shared_mutable_state, not a finding."
+    ),
+    limitations=(
+        "The call graph is static and best effort: dynamic property calls, getattr/reflection, "
+        "callbacks of unknown origin, method calls on values of unknown type and self/this "
+        "attributes the class body does not define are unresolved and never guessed as "
+        "resolved. Imports of modules outside the analyzed files are external and cannot "
+        "close a cycle. Inheritance, decorators that rebind, star imports and runtime "
+        "rebinding are not followed. Never fails the gate on its own."
+    ),
+    remediation=(
+        "Break a cycle by moving the shared type or constant into a module both sides import, "
+        "not by importing inside a function. Reduce fan-out by giving the unit one job and "
+        "passing it data instead of collaborators. Record the before and after graph "
+        "(metrics.graph) with the behavior tests."
+    ),
+    noncompliant_example=(
+        "# a.py\nfrom b import helper\n# b.py\nfrom a import shared   # a -> b -> a"
+    ),
+    compliant_example=(
+        "# shared.py\nSHARED = ...\n# a.py\nfrom shared import SHARED\n"
+        "# b.py\nfrom shared import SHARED"
+    ),
+)
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -670,46 +886,11 @@ RULES: tuple[RuleSpec, ...] = (
     DEF004,
     DEF005,
     DEF006,
-    _planned(
-        "CPLX001",
-        "cyclomatic complexity",
-        "complexity",
-        "complexity",
-        SEVERITY_WARNING,
-        "Function cyclomatic complexity above the configured threshold.",
-    ),
-    _planned(
-        "CPLX002",
-        "cognitive complexity",
-        "complexity",
-        "complexity",
-        SEVERITY_WARNING,
-        "Function cognitive complexity above the configured threshold.",
-    ),
-    _planned(
-        "CPLX003",
-        "nesting depth",
-        "complexity",
-        "complexity",
-        SEVERITY_WARNING,
-        "Decision nesting deeper than the configured threshold.",
-    ),
-    _planned(
-        "CPLX004",
-        "NPath estimate",
-        "complexity",
-        "complexity",
-        SEVERITY_WARNING,
-        "Bounded acyclic path estimate above threshold or saturated.",
-    ),
-    _planned(
-        "CPLX005",
-        "coupling / cycles",
-        "complexity",
-        "complexity",
-        SEVERITY_WARNING,
-        "Module cycles, fan-in/fan-out and shared mutable state heuristics.",
-    ),
+    CPLX001,
+    CPLX002,
+    CPLX003,
+    CPLX004,
+    CPLX005,
     SUPP001,
     SUPP002,
 )

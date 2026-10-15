@@ -136,11 +136,16 @@ nullish_fallbacks = "forbid"              # DEF004: x ?? v, x if x is not None e
 configuration_fallbacks = "forbid"        # DEF006: os.getenv("X", v), process.env.X || v
                                           # DEF005 (a handler that returns a default) has no mode: always an error
 
-[tool.shockharness.complexity]            # CPLX001-CPLX005: registered, not implemented
-enabled = true
-cognitive_warn = 15
-cyclomatic_warn = 15
-max_nesting_warn = 4
+[tool.shockharness.complexity]            # CPLX001-CPLX005: advisory warnings; see docs/complexity.md
+enabled = true                            # false: no metrics, no CPLX findings (reported as a deviation)
+cognitive_warn = 15                       # CPLX002: cognitive/1 above this value
+cyclomatic_warn = 15                      # CPLX001: cyclomatic/1 above this value
+max_nesting_warn = 4                      # CPLX003: nesting/1 above this value
+cyclomatic_counts_boolean_operators = true   # cyclomatic/1 counts and/or, &&/||/??, ||= (false: a deviation)
+npath_cap = 10000                         # npath/1 saturates here; reported as ">= cap"
+npath_warn = 200                          # CPLX004: npath/1 at or above this value, or saturated
+fan_out_warn = 20                         # CPLX005: distinct call targets of one unit above this value
+abstraction_displacement = false          # experimental, diff mode only; see docs/complexity.md
 
 [tool.shockharness.history]               # local `git log`, file granularity, never gating
 enabled = true
@@ -150,7 +155,7 @@ min_support = 3                           # co-change pairs need at least this m
 [tool.shockharness.gates]
 new_hard_violations = "fail"              # "fail" -> exit 1 on any new unsuppressed error finding; "warn" -> exit 0, reported
 legacy = "baseline"                       # what a finding matched by a baseline or base revision means; see below
-complexity_regressions = "warn"
+complexity_regressions = "warn"           # diff/gate only: "warn" lists per-unit regressions, "fail" fails the gate, "ignore" says nothing
 
 [[tool.shockharness.overrides]]           # per-path rule disables; every one is a reported deviation
 paths = ["tests/**"]
@@ -201,10 +206,24 @@ The two *implicit* shapes, `m.get(k)` and `os.getenv("X")` with no fallback, are
 `review` under both `forbid` and `review`, and off under `allow`: they may
 yield `None` for a missing value, but nothing proves the value was required.
 
-Keys for unimplemented rule families (`magic_strings`, `complexity`) are
-validated and stored so that a configuration written today keeps working when
-the rules land. They have no effect on findings yet; the report's
+Keys for the one unimplemented rule family (`magic_strings`) are validated
+and stored so that a configuration written today keeps working when the rule
+lands. They have no effect on findings yet; the report's
 `coverage.rules_not_implemented` says so.
+
+## Complexity
+
+`[tool.shockharness.complexity]` drives the advisory family `CPLX001`-`CPLX005`
+and the sections `metrics.complexity` (per-unit cyclomatic, cognitive, nesting,
+NPath and size numbers, with their versioned conventions and the thresholds
+in force) and `metrics.graph` (call graph with `resolved` / `probable` /
+`unresolved` edges, module import edges, cycles, fan-in/out, shared mutable
+state). Every finding is a `warning`; a plain `check` never fails because of
+them, and `complexity.enabled = false` (the `minimal` profile) switches the
+whole family off and says so in `config.deviations`. Thresholds above the
+defaults are not deviations; `cyclomatic_counts_boolean_operators = false` is,
+because the number then counts fewer decisions than its convention states.
+`docs/complexity.md` defines every convention.
 
 ## Adopting ShockHarness on an existing codebase
 
@@ -304,6 +323,17 @@ commit hashes, the configuration digest, and the tool version; see
 `schemas/diff-v1.schema.json`. `--baseline` cannot be combined with
 `--base/--head`: the base revision is the legacy source of a revision gate.
 
+Both commands also compare every head unit's complexity numbers with the same
+unit at base. `metrics.complexity.regressions` lists the units that are above
+a `CPLX001`-`CPLX004` threshold at head and grew since base (a unit absent at
+base counts as grown from nothing). `gates.complexity_regressions` decides what
+that means: `"warn"` (default) adds a gate reason, `"fail"` fails the gate with
+exit 1, `"ignore"` says nothing. It is the only way complexity ever reaches a
+verdict, and it never applies to a plain `check`. With
+`complexity.abstraction_displacement = true` the diff also fills
+`metrics.graph.abstraction_displacement` (experimental; see
+`docs/complexity.md`).
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report
@@ -315,8 +345,10 @@ files that appear in the same commits with `support` (shared commits) and a
 directional `confidence` (support over each file's own commit count), for
 pairs with `support >= min_support`. The horizon is anchored on the head
 commit's committer date, not on the wall clock, so the metrics for a commit are
-reproducible. `hotspots` is always `null` with a `hotspots_reason`: the score
-needs the complexity metrics of Milestone E.
+reproducible. `hotspots` scores each analyzed file as `log1p(churn) *
+normalized_complexity` (the file's summed cognitive complexity over the
+largest such sum; `hotspots_formula` repeats this), sorted by score; it is
+`null` with a `hotspots_reason` when history or complexity is unavailable.
 
 The section never gates. When git cannot be run, the root is not inside a
 repository, or the revision is unknown, `status` is `"unavailable"` with the
@@ -365,7 +397,8 @@ const other = 500;  /* shockharness: ignore[MAGIC001] reason="RFC 9110 section 1
 Everything that loosens the strict profile is surfaced, never silent:
 
 * `config.deviations` lists the profile when it is below `strict`, disabled
-  rules (complexity included), every `rules.<section>.severity = "review"`
+  rules (complexity included), `cyclomatic_counts_boolean_operators = false`,
+  every `rules.<section>.severity = "review"`
   cap, extra `allowed_values`, `allow_unary_negative_one`,
   `parse_errors = "warn"`, `transparent_rethrow`, every exception boundary,
   every `rules.defaults` mode looser than the strict profile, and every

@@ -17,4 +17,4 @@ severity = "review"
 severity = "review"
 
 [tool.shockharness.complexity]
-enabled = false
+enabled = false        # CPLX001-CPLX005 off; metrics.complexity and metrics.graph say "disabled"

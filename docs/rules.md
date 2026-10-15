@@ -291,6 +291,50 @@ through wrappers or configuration libraries. The rule does not know where the
 configuration boundary is: a fallback in the one module that validates
 configuration is still reported there.
 
+### CPLX001-CPLX005: complexity and coupling (warning, Python and JavaScript)
+
+The advisory family of Milestone E. Every finding is a `warning`; none fails a
+plain `check`. In a revision diff a per-unit regression against the base
+follows `gates.complexity_regressions` (`warn` by default). Conventions,
+examples and the report shapes are in `docs/complexity.md`; the one-line
+summary of each rule:
+
+| ID | Fires when | Threshold (default) | Convention |
+|---|---|---|---|
+| `CPLX001` | a unit's cyclomatic complexity is above the threshold | `complexity.cyclomatic_warn` (15) | `cyclomatic/1`: 1 + if/elif, loops, handlers, non-default arms, conditionals, short-circuit operators (configurable) |
+| `CPLX002` | a unit's cognitive complexity is above the threshold | `complexity.cognitive_warn` (15) | `cognitive/1`: structural +1 plus nesting, else/elif +1, operator runs, recursion, labeled jumps; not a SonarSource score |
+| `CPLX003` | a unit's decision nesting depth is above the threshold | `complexity.max_nesting_warn` (4) | `nesting/1`: wrappers add no depth |
+| `CPLX004` | a unit's NPath estimate is at or above the threshold, or saturated | `complexity.npath_warn` (200), `complexity.npath_cap` (10000) | `npath/1`: bounded, never enumerated, reported as `>= cap` when saturated |
+| `CPLX005` | modules import each other in a cycle (resolved edges only), or a unit's fan-out is above the threshold | `complexity.fan_out_warn` (20) | resolved and probable call edges only; unresolved calls are reported, never counted |
+
+**Units.** A module body, class body, function, method, lambda or arrow
+function. Nested units are measured separately and excluded from their parent.
+
+**Detection guarantees.** Exact on the control tree both adapters produce;
+Python and JavaScript give the same number for equivalent constructs (a parity
+table and a Hypothesis property enforce it). Every message names the measured
+value, the threshold and the convention version. `CPLX005` names the cycle and
+the import that closes it, or the fan-out split into analyzed and external
+targets and the number of unresolved calls it did not count.
+
+**Limitations.** The call graph is static: computed callees, method calls on
+values of unknown type, unbound names, and `self`/`this` attributes the class
+body does not define are `unresolved` and never guessed; inheritance,
+decorators that rebind, star imports and runtime rebinding are not followed;
+modules outside the analyzed files are `external` and cannot close a cycle.
+Files that fail to parse have no metrics. See `docs/limitations.md`.
+
+**Configuration.** `complexity.*` and `gates.complexity_regressions`; see
+`docs/configuration.md`.
+
+**Remediation.** Reduce repeated cognitive work rather than the number: hoist
+validation to one load step, name a repeated condition, separate effects from
+computation, and pin behavior with tests before and after. Do not split a
+function into helpers that share mutable state or hide a branch behind an
+early return, a catch or a default; the graph records the delegation and the
+numbers stay advisory either way. The `refactor-complexity` skill walks
+through it.
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are
@@ -299,11 +343,6 @@ listed in every report under `coverage.rules_not_implemented`.
 | ID | Name | Planned milestone |
 |---|---|---|
 | MAGIC002 | suspicious string literal (advisory) | post-B |
-| CPLX001 | cyclomatic complexity | E |
-| CPLX002 | cognitive complexity | E |
-| CPLX003 | nesting depth | E |
-| CPLX004 | NPath estimate | E |
-| CPLX005 | coupling / cycles | E |
 
 ## Rule metadata contract
 

@@ -36,7 +36,7 @@ def test_severities_are_valid() -> None:
         assert rule.default_severity in registry.SEVERITIES, rule.rule_id
 
 
-def test_implemented_rules_are_exactly_the_milestone_d_set() -> None:
+def test_implemented_rules_are_exactly_the_milestone_e_set() -> None:
     assert {r.rule_id for r in registry.implemented_rules()} == {
         "MAGIC001",
         "EXC001",
@@ -48,9 +48,23 @@ def test_implemented_rules_are_exactly_the_milestone_d_set() -> None:
         "DEF004",
         "DEF005",
         "DEF006",
+        "CPLX001",
+        "CPLX002",
+        "CPLX003",
+        "CPLX004",
+        "CPLX005",
         "SUPP001",
         "SUPP002",
     }
+    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
+
+
+def test_complexity_rules_are_warnings_with_the_complexity_section() -> None:
+    for rule in registry.RULES:
+        if rule.family == "complexity":
+            assert rule.default_severity == registry.SEVERITY_WARNING, rule.rule_id
+            assert rule.config_section == "complexity", rule.rule_id
+            assert "never fails" in rule.limitations.lower(), rule.rule_id
 
 
 def test_implemented_rules_have_full_metadata() -> None:

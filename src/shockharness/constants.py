@@ -71,3 +71,7 @@ COMMIT_SHORT_HEX: Final[int] = 12
 # Skills manifest (Milestone G): `.shockharness-skills.json` written by `skills install`.
 # Bumped on an incompatible change to its shape.
 SKILLS_MANIFEST_SCHEMA_VERSION: Final[str] = "1"
+
+# Human-readable output of hotspots (Milestone E): how many to list, and the score precision.
+HOTSPOTS_SHOWN: Final[int] = 5
+SCORE_DECIMALS: Final[int] = 3

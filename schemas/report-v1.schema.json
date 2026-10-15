@@ -4,72 +4,204 @@
   "title": "ShockHarness report, schema_version 1",
   "type": "object",
   "required": [
-    "schema_version", "tool_version", "analysis_status", "config_digest", "effective_profile",
-    "config", "coverage", "files", "findings", "metrics", "gate", "execution_summary"
+    "schema_version",
+    "tool_version",
+    "analysis_status",
+    "config_digest",
+    "effective_profile",
+    "config",
+    "coverage",
+    "files",
+    "findings",
+    "metrics",
+    "gate",
+    "execution_summary"
   ],
   "properties": {
-    "schema_version": {"type": "string", "enum": ["1"]},
-    "tool_version": {"type": "string"},
-    "analysis_status": {"type": "string", "enum": ["complete", "incomplete", "failed"]},
-    "config_digest": {"type": "string"},
-    "effective_profile": {"type": "string"},
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "analysis_status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete",
+        "failed"
+      ]
+    },
+    "config_digest": {
+      "type": "string"
+    },
+    "effective_profile": {
+      "type": "string"
+    },
     "config": {
       "type": "object",
-      "required": ["source", "notes", "deviations"],
+      "required": [
+        "source",
+        "notes",
+        "deviations"
+      ],
       "properties": {
         "source": {
           "type": "object",
-          "required": ["tier", "path"],
+          "required": [
+            "tier",
+            "path"
+          ],
           "properties": {
-            "tier": {"type": "string", "enum": ["cli", "dedicated", "pyproject", "bundled"]},
-            "path": {"type": "string"}
+            "tier": {
+              "type": "string",
+              "enum": [
+                "cli",
+                "dedicated",
+                "pyproject",
+                "bundled"
+              ]
+            },
+            "path": {
+              "type": "string"
+            }
           }
         },
-        "notes": {"type": "array", "items": {"type": "string"}},
-        "deviations": {"type": "array", "items": {"type": "string"}}
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deviations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "coverage": {
       "type": "object",
       "required": [
-        "host_python", "languages", "rules_implemented", "rules_not_implemented",
-        "rules_disabled_globally", "files_analyzed", "files_failed", "limitations"
+        "host_python",
+        "languages",
+        "rules_implemented",
+        "rules_not_implemented",
+        "rules_disabled_globally",
+        "files_analyzed",
+        "files_failed",
+        "limitations"
       ],
       "properties": {
-        "host_python": {"type": "string"},
-        "languages": {"type": "object"},
-        "rules_implemented": {"type": "array", "items": {"type": "string"}},
-        "rules_not_implemented": {"type": "array", "items": {"type": "string"}},
-        "rules_disabled_globally": {"type": "array", "items": {"type": "string"}},
-        "files_analyzed": {"type": "integer"},
-        "files_failed": {"type": "integer"},
-        "limitations": {"type": "array", "items": {"type": "string"}}
+        "host_python": {
+          "type": "string"
+        },
+        "languages": {
+          "type": "object"
+        },
+        "rules_implemented": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rules_not_implemented": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rules_disabled_globally": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_analyzed": {
+          "type": "integer"
+        },
+        "files_failed": {
+          "type": "integer"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "files": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "language", "status", "line_count", "rules_applied", "rules_disabled", "finding_count"],
+        "required": [
+          "path",
+          "language",
+          "status",
+          "line_count",
+          "rules_applied",
+          "rules_disabled",
+          "finding_count"
+        ],
         "properties": {
-          "path": {"type": "string"},
-          "language": {"type": "string", "enum": ["python", "javascript"]},
-          "status": {"type": "string", "enum": ["analyzed", "parse_error", "decode_error", "read_error"]},
-          "line_count": {"type": "integer"},
-          "rules_applied": {"type": "array", "items": {"type": "string"}},
+          "path": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "python",
+              "javascript"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "analyzed",
+              "parse_error",
+              "decode_error",
+              "read_error"
+            ]
+          },
+          "line_count": {
+            "type": "integer"
+          },
+          "rules_applied": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "rules_disabled": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["rule_id", "reason", "origin"],
+              "required": [
+                "rule_id",
+                "reason",
+                "origin"
+              ],
               "properties": {
-                "rule_id": {"type": "string"},
-                "reason": {"type": "string"},
-                "origin": {"type": "string"}
+                "rule_id": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "origin": {
+                  "type": "string"
+                }
               }
             }
           },
-          "finding_count": {"type": "integer"}
+          "finding_count": {
+            "type": "integer"
+          }
         }
       }
     },
@@ -78,101 +210,739 @@
       "items": {
         "type": "object",
         "required": [
-          "rule_id", "rule_version", "severity", "path", "span", "message", "evidence",
-          "confidence", "remediation", "safe_autofix", "scope", "suppression", "fingerprint", "baseline"
+          "rule_id",
+          "rule_version",
+          "severity",
+          "path",
+          "span",
+          "message",
+          "evidence",
+          "confidence",
+          "remediation",
+          "safe_autofix",
+          "scope",
+          "suppression",
+          "fingerprint",
+          "baseline"
         ],
         "properties": {
-          "rule_id": {"type": "string"},
-          "rule_version": {"type": "string"},
-          "severity": {"type": "string", "enum": ["error", "warning", "review", "note"]},
-          "path": {"type": "string"},
+          "rule_id": {
+            "type": "string"
+          },
+          "rule_version": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "review",
+              "note"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
           "span": {
             "type": "object",
-            "required": ["line", "column", "end_line", "end_column"],
+            "required": [
+              "line",
+              "column",
+              "end_line",
+              "end_column"
+            ],
             "properties": {
-              "line": {"type": "integer"},
-              "column": {"type": "integer"},
-              "end_line": {"type": "integer"},
-              "end_column": {"type": "integer"}
+              "line": {
+                "type": "integer"
+              },
+              "column": {
+                "type": "integer"
+              },
+              "end_line": {
+                "type": "integer"
+              },
+              "end_column": {
+                "type": "integer"
+              }
             }
           },
-          "message": {"type": "string"},
-          "evidence": {"type": "string"},
-          "confidence": {"type": "string", "enum": ["exact", "approximate", "unresolved"]},
-          "remediation": {"type": "string"},
-          "safe_autofix": {"type": "boolean"},
-          "fingerprint": {"type": "string"},
-          "baseline": {"enum": ["matched", "ignored", null]}
+          "message": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate",
+              "unresolved"
+            ]
+          },
+          "remediation": {
+            "type": "string"
+          },
+          "safe_autofix": {
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "baseline": {
+            "enum": [
+              "matched",
+              "ignored",
+              null
+            ]
+          }
         }
       }
     },
     "metrics": {
       "type": "object",
-      "required": ["history"],
+      "required": [
+        "complexity",
+        "graph",
+        "history"
+      ],
       "properties": {
         "history": {
           "type": "object",
-          "required": ["status", "reason", "granularity", "files", "cochange", "hotspots", "hotspots_reason"],
+          "required": [
+            "status",
+            "reason",
+            "granularity",
+            "files",
+            "cochange",
+            "hotspots",
+            "hotspots_reason",
+            "hotspots_formula"
+          ],
           "properties": {
-            "status": {"type": "string", "enum": ["available", "unavailable", "disabled", "not_collected"]},
-            "granularity": {"type": "string", "enum": ["file"]},
-            "files": {"type": "object"},
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "unavailable",
+                "disabled",
+                "not_collected"
+              ]
+            },
+            "granularity": {
+              "type": "string",
+              "enum": [
+                "file"
+              ]
+            },
+            "files": {
+              "type": "object"
+            },
             "cochange": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["paths", "support", "confidence"],
+                "required": [
+                  "paths",
+                  "support",
+                  "confidence"
+                ],
                 "properties": {
-                  "paths": {"type": "array", "items": {"type": "string"}},
-                  "support": {"type": "integer"},
-                  "confidence": {"type": "object", "required": ["first_to_second", "second_to_first"]}
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "support": {
+                    "type": "integer"
+                  },
+                  "confidence": {
+                    "type": "object",
+                    "required": [
+                      "first_to_second",
+                      "second_to_first"
+                    ]
+                  }
                 }
               }
             },
-            "hotspots": {"enum": [null]},
-            "hotspots_reason": {"type": "string"}
+            "hotspots": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "path",
+                      "churn",
+                      "cognitive_total",
+                      "normalized_complexity",
+                      "score"
+                    ]
+                  }
+                }
+              ]
+            },
+            "hotspots_reason": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "hotspots_formula": {
+              "type": "string"
+            }
+          }
+        },
+        "complexity": {
+          "type": "object",
+          "required": [
+            "status",
+            "reason",
+            "conventions",
+            "thresholds",
+            "functions",
+            "files"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled"
+              ]
+            },
+            "conventions": {
+              "type": "object",
+              "required": [
+                "cyclomatic",
+                "cognitive",
+                "nesting",
+                "npath",
+                "size",
+                "cyclomatic_counts_boolean_operators",
+                "optional_chaining_counted",
+                "nested_units",
+                "cognitive_note"
+              ]
+            },
+            "thresholds": {
+              "type": "object",
+              "required": [
+                "cyclomatic_warn",
+                "cognitive_warn",
+                "max_nesting_warn",
+                "npath_warn",
+                "fan_out_warn"
+              ]
+            },
+            "functions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "path",
+                  "name",
+                  "kind",
+                  "async",
+                  "generator",
+                  "span",
+                  "size",
+                  "cyclomatic",
+                  "cognitive",
+                  "nesting",
+                  "npath"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "module",
+                      "class",
+                      "function",
+                      "method",
+                      "lambda",
+                      "arrow"
+                    ]
+                  },
+                  "span": {
+                    "type": "object",
+                    "required": [
+                      "line",
+                      "column",
+                      "end_line",
+                      "end_column"
+                    ]
+                  },
+                  "size": {
+                    "type": "object",
+                    "required": [
+                      "logical_lines",
+                      "parameters",
+                      "statements"
+                    ]
+                  },
+                  "cyclomatic": {
+                    "type": "integer"
+                  },
+                  "cognitive": {
+                    "type": "integer"
+                  },
+                  "nesting": {
+                    "type": "integer"
+                  },
+                  "npath": {
+                    "type": "object",
+                    "required": [
+                      "value",
+                      "saturated",
+                      "cap",
+                      "text"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "integer"
+                      },
+                      "saturated": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "files": {
+              "type": "object"
+            },
+            "regressions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "rule_id",
+                  "key",
+                  "path",
+                  "name",
+                  "span",
+                  "metric",
+                  "base",
+                  "head",
+                  "threshold",
+                  "convention",
+                  "new_unit"
+                ]
+              }
+            },
+            "regression_policy": {
+              "type": "string",
+              "enum": [
+                "warn",
+                "fail",
+                "ignore"
+              ]
+            }
+          }
+        },
+        "graph": {
+          "type": "object",
+          "required": [
+            "status",
+            "reason",
+            "confidence",
+            "summary",
+            "modules",
+            "module_edges",
+            "units",
+            "edges",
+            "cycles",
+            "shared_mutable_state",
+            "abstraction_displacement"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled"
+              ]
+            },
+            "confidence": {
+              "type": "object",
+              "required": [
+                "resolved",
+                "probable",
+                "unresolved"
+              ]
+            },
+            "summary": {
+              "type": "object",
+              "required": [
+                "modules",
+                "units",
+                "call_edges",
+                "call_sites",
+                "module_edges",
+                "cycles",
+                "shared_mutable_state"
+              ],
+              "properties": {
+                "call_edges": {
+                  "type": "object",
+                  "required": [
+                    "resolved",
+                    "probable",
+                    "unresolved"
+                  ]
+                },
+                "call_sites": {
+                  "type": "object",
+                  "required": [
+                    "resolved",
+                    "probable",
+                    "unresolved"
+                  ]
+                },
+                "module_edges": {
+                  "type": "object",
+                  "required": [
+                    "resolved",
+                    "external",
+                    "unresolved"
+                  ]
+                }
+              }
+            },
+            "modules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "fan_in",
+                  "fan_out",
+                  "cycle"
+                ]
+              }
+            },
+            "module_edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "specifier",
+                  "level",
+                  "kind",
+                  "imported",
+                  "to",
+                  "confidence",
+                  "span",
+                  "reason"
+                ],
+                "properties": {
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "resolved",
+                      "external",
+                      "unresolved"
+                    ]
+                  }
+                }
+              }
+            },
+            "units": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "key",
+                  "path",
+                  "name",
+                  "fan_in",
+                  "fan_out",
+                  "fan_out_external",
+                  "fan_out_total",
+                  "calls"
+                ]
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "to",
+                  "confidence",
+                  "kind",
+                  "calls",
+                  "span",
+                  "reason"
+                ],
+                "properties": {
+                  "to": {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "unit",
+                          "external",
+                          "builtin",
+                          "unresolved"
+                        ]
+                      }
+                    }
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": [
+                      "resolved",
+                      "probable",
+                      "unresolved"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "call",
+                      "argument",
+                      "new"
+                    ]
+                  },
+                  "span": {
+                    "type": "object",
+                    "required": [
+                      "line",
+                      "column",
+                      "end_line",
+                      "end_column"
+                    ]
+                  }
+                }
+              }
+            },
+            "cycles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "modules",
+                  "confidence",
+                  "edges"
+                ]
+              }
+            },
+            "shared_mutable_state": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "name",
+                  "span",
+                  "writers",
+                  "confidence",
+                  "note"
+                ]
+              }
+            },
+            "abstraction_displacement": {
+              "type": "object",
+              "required": [
+                "enabled",
+                "experimental",
+                "status",
+                "reason",
+                "findings"
+              ],
+              "properties": {
+                "experimental": {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "not_applicable",
+                    "disabled",
+                    "unavailable",
+                    "available"
+                  ]
+                },
+                "findings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "path",
+                      "name",
+                      "span",
+                      "local",
+                      "reachable_burden",
+                      "confidence",
+                      "experimental"
+                    ]
+                  }
+                }
+              }
+            }
           }
         }
       }
     },
     "gate": {
       "type": "object",
-      "required": ["status", "exit_code", "hard_violations", "suppressed", "warnings", "review", "analysis_failures", "baselined", "new_hard_violations", "baseline", "reasons", "advisory"],
+      "required": [
+        "status",
+        "exit_code",
+        "hard_violations",
+        "suppressed",
+        "warnings",
+        "review",
+        "analysis_failures",
+        "baselined",
+        "new_hard_violations",
+        "baseline",
+        "reasons",
+        "advisory",
+        "complexity_regressions"
+      ],
       "properties": {
-        "status": {"type": "string", "enum": ["pass", "fail", "error"]},
-        "advisory": {"type": "boolean"},
-        "exit_code": {"type": "integer", "enum": [0, 1, 3]},
-        "hard_violations": {"type": "integer"},
-        "suppressed": {"type": "integer"},
-        "warnings": {"type": "integer"},
-        "review": {"type": "integer"},
-        "analysis_failures": {"type": "integer"},
-        "baselined": {"type": "integer"},
-        "new_hard_violations": {"type": "integer"},
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "error"
+          ]
+        },
+        "advisory": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            3
+          ]
+        },
+        "hard_violations": {
+          "type": "integer"
+        },
+        "suppressed": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "integer"
+        },
+        "review": {
+          "type": "integer"
+        },
+        "analysis_failures": {
+          "type": "integer"
+        },
+        "baselined": {
+          "type": "integer"
+        },
+        "new_hard_violations": {
+          "type": "integer"
+        },
         "baseline": {
           "anyOf": [
-            {"type": "null"},
+            {
+              "type": "null"
+            },
             {
               "type": "object",
-              "required": ["source", "origin", "mode", "applied", "matched", "stale", "tool_version", "config_digest_matches", "notes"],
+              "required": [
+                "source",
+                "origin",
+                "mode",
+                "applied",
+                "matched",
+                "stale",
+                "tool_version",
+                "config_digest_matches",
+                "notes"
+              ],
               "properties": {
-                "source": {"type": "string", "enum": ["file", "base_revision"]},
-                "origin": {"type": "string"},
-                "mode": {"type": "string", "enum": ["baseline", "fail", "ignore"]},
-                "applied": {"type": "boolean"},
-                "matched": {"type": "integer"},
-                "stale": {"type": "array"},
-                "notes": {"type": "array", "items": {"type": "string"}}
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "file",
+                    "base_revision"
+                  ]
+                },
+                "origin": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "baseline",
+                    "fail",
+                    "ignore"
+                  ]
+                },
+                "applied": {
+                  "type": "boolean"
+                },
+                "matched": {
+                  "type": "integer"
+                },
+                "stale": {
+                  "type": "array"
+                },
+                "notes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
               }
             }
           ]
         },
-        "reasons": {"type": "array", "items": {"type": "string"}}
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "complexity_regressions": {
+          "type": "integer"
+        }
       }
     },
     "execution_summary": {
       "type": "object",
-      "required": ["files", "findings", "findings_by_severity", "suppressed", "baselined"]
+      "required": [
+        "files",
+        "findings",
+        "findings_by_severity",
+        "suppressed",
+        "baselined"
+      ]
     }
   }
 }

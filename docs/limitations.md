@@ -4,12 +4,13 @@ Stated so that a clean report is never read as more than it is.
 
 ## Coverage
 
-* Only `MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`, `SUPP001`, and
-  `SUPP002` produce findings. Every other registered rule is listed in
+* Only `MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`, `CPLX001`-`CPLX005`,
+  `SUPP001`, and `SUPP002` produce findings; `MAGIC002` is listed in
   `coverage.rules_not_implemented` in each report. A passing gate today means
   "no magic numbers, no unapproved or suppressing catches, no over-wide
   approved try blocks, no recognized default or fallback shapes, and no bad
-  suppressions", nothing more.
+  suppressions", nothing more: the complexity family is advisory and a
+  passing gate says nothing about it.
 * Python syntax coverage is exactly the host interpreter's `ast`. Running on
   3.11 cannot parse 3.12-only syntax; such files are parse failures, not clean.
   The report records `coverage.host_python`.
@@ -150,8 +151,56 @@ Stated so that a clean report is never read as more than it is.
 * `commits_considered` is bounded by `git log --since`, which git evaluates on
   committer dates and which can stop a traversal early in histories with
   out-of-order dates; the result is deterministic for a given head commit.
-* No hotspot score: it needs the complexity metrics of Milestone E and is
-  reported as `null` with the reason until then.
+* The hotspot score needs both history and complexity. Outside a repository,
+  without git, or with `complexity.enabled = false` it is `null` with
+  `hotspots_reason` naming the missing input; a file that failed to parse has
+  churn but no score. It is file-level: a file with one hot function and ten
+  cold ones scores as one file.
+
+## Complexity metrics and the call graph
+
+* The conventions are the tool's own (`docs/complexity.md`), versioned and
+  stated in every message. `cognitive/1` follows the published description of
+  cognitive complexity but is not a SonarSource score: nested units are
+  measured separately, comprehension `for` clauses do not count, and operator
+  runs are counted per parenthesized group. Numbers are not comparable with
+  other tools, only with earlier runs of this one.
+* A unit's numbers exclude nested units. Extracting code that sits two or more
+  decision levels deep lowers the file's summed cognitive score by the nesting
+  increments it no longer pays; the graph records the new edge but no score
+  says whether the extraction helped a reader.
+* NPath is an estimate: infeasible paths are counted, loops count as one
+  branch, early returns prune nothing, and the value is clamped at
+  `npath_cap` (reported as `>= cap`).
+* The call graph is static and best effort. `unresolved` edges are honest
+  gaps, not errors: computed callees (`o[k]()`, `getattr(o, n)()`, `f()()`),
+  method calls on parameters, locals and other values of unknown type,
+  unbound names (JavaScript globals outside the fixed builtin list included),
+  and `self`/`this` attributes the class body does not define (inherited,
+  assigned, decorated, dynamic) are never guessed. Inheritance, decorators
+  that rebind, `__getattr__`, star imports, `exec`/`eval`, runtime rebinding,
+  event handlers and callbacks registered elsewhere are not followed. A
+  `probable` edge says the binding was not proven (a module alias may be
+  rebound; `self.m()` may be overridden).
+* Module edges resolve only among the analyzed files. A Python module's name
+  starts at the first package (`__init__.py`) on its path; files outside any
+  package answer to their basename. Namespace packages, `sys.path` tricks,
+  `importlib`, and JavaScript path aliases, bundler resolution, `package.json`
+  `exports`, TypeScript sources and JSON imports are not understood: those
+  edges are `external` or `unresolved`, and a cycle through them is not
+  detected.
+* Fan-out counts distinct targets of resolved and probable edges; builtins
+  are excluded, unresolved calls are reported but never counted, so a unit
+  built on dynamic dispatch has a low fan-out and a high unresolved count.
+* Shared mutable state is a module-local heuristic: writes through aliases,
+  through other modules, through `nonlocal`, or by functions that received
+  the container as an argument are not seen; shadowing is tracked only by
+  name within one unit.
+* Abstraction displacement is experimental and off by default; it follows
+  resolved edges only and marks every entry approximate.
+* Regressions in a revision diff match units by `path::name` key: a renamed
+  or moved unit is a new unit (its base value is taken as nothing), so a
+  rename of an already-complex function shows up as a regression once.
 
 ## SARIF
 
@@ -188,8 +237,9 @@ Stated so that a clean report is never read as more than it is.
 
 ## Not yet built (see the specification)
 
-Complexity metrics and the hotspot score, call graphs and `.gitignore`
-awareness. Unknown CLI commands are argparse errors (exit 2). Profiles exist but are limited to the three built-in
+`MAGIC002`, per-function churn and rename following, change-impact radius,
+data flow, and `.gitignore` awareness. Unknown CLI commands are argparse
+errors (exit 2). Profiles exist but are limited to the three built-in
 ones (no user-defined or remote profiles), and the only command-line overrides
 are `--profile` and `--parse-errors`. The publish workflow and the reusable
 consumer workflow have not yet run on GitHub: the first `v*` tag exercises

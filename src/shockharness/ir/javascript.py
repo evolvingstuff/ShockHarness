@@ -25,12 +25,18 @@ from shockharness.ir.javascript_catches import (
     scope_for,
 )
 from shockharness.ir.javascript_defaults import collect_javascript_defaults
+from shockharness.ir.javascript_functions import (
+    collect_javascript_bindings,
+    collect_javascript_functions,
+    collect_javascript_imports,
+)
 from shockharness.ir.model import (
     MODULE_SCOPE,
     Comment,
     ModuleFacts,
     NumericLiteral,
     ParseFailure,
+    failed_facts,
 )
 from shockharness.source import SourceText
 
@@ -109,14 +115,10 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         first_line = node_text(error).split("\n")[0]
         if len(first_line) > EVIDENCE_MAX_CHARS:
             first_line = first_line[:EVIDENCE_MAX_CHARS] + "..."
-        return ModuleFacts(
-            language="javascript",
-            parser=PARSER_NAME,
-            numeric_literals=(),
-            comments=(),
-            catches=(),
-            defaults=(),
-            parse_failure=ParseFailure(
+        return failed_facts(
+            "javascript",
+            PARSER_NAME,
+            ParseFailure(
                 span=node_span(source, error),
                 message=f"{kind} near {first_line!r} in {filename}",
             ),
@@ -172,5 +174,8 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         comments=tuple(comments),
         catches=collect_javascript_catches(source, root),
         defaults=collect_javascript_defaults(source, root),
+        functions=collect_javascript_functions(source, root, tuple(comments)),
+        imports=collect_javascript_imports(source, root),
+        bindings=collect_javascript_bindings(source, root),
         parse_failure=None,
     )

@@ -19,8 +19,10 @@ Three default-on hard policies:
 3. **No magic numbers.** Every numeric literal in executable code must be
    exactly `0` or `1`. `range(2)` is a violation. The tool invents no exemptions.
 
-Plus a separate, advisory complexity family (cyclomatic, cognitive, nesting,
-NPath, call graph, churn). Hard violations are never averaged into a score.
+Plus a separate, advisory complexity family (`CPLX001`-`CPLX005`: cyclomatic,
+cognitive, nesting, NPath, a confidence-classified call graph with cycles and
+fan-out, git churn and hotspots). Hard violations are never averaged into a
+score; complexity never fails a plain `check`.
 
 ShockHarness complements Ruff and ESLint; it is not a formatter or a general
 linter. It runs offline, needs no LLM, and never uploads source.
@@ -33,8 +35,11 @@ rules `DEF001`-`DEF006`), F (baselines, revision diff and gate, SARIF
 output, git churn and co-change metrics, built-in profiles, the `check`
 command, tag-triggered PyPI publishing, a reusable GitHub Actions workflow and
 two consumer examples) and G (four bundled agent skills, `skills install` /
-`skills update` with a manifest, and a skill evaluation corpus) are
-implemented. `MAGIC002`, complexity metrics and the hotspot score are **not
+`skills update` with a manifest, and a skill evaluation corpus) and E
+(per-unit complexity metrics with versioned conventions, a call graph whose
+edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
+shared-mutable-state notes, hotspots from churn and cognitive complexity, and
+per-unit regressions in revision diffs) are implemented. `MAGIC002` is **not
 yet implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
@@ -54,6 +59,8 @@ Implemented rules:
 | `DEF005` | handler that returns a default (literal, module constant, one-return helper) | error |
 | `DEF006` | `os.getenv("X", v)`, `process.env.X || v`, `const { X = v } = process.env` | error |
 | `SUPP001` / `SUPP002` | malformed / unused suppression comment | error / warning |
+| `CPLX001`-`CPLX004` | a unit's cyclomatic, cognitive, nesting or NPath number above its threshold (`docs/complexity.md`) | warning |
+| `CPLX005` | module import cycle, or fan-out above `fan_out_warn` | warning |
 
 ## Install
 
@@ -125,8 +132,10 @@ src/client.py:24:5: EXC001 error: except handler of 'OSError' is forbidden: catc
 
 shockharness 0.1.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
   by severity: error=5
-  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, SUPP001, SUPP002
-  rules not implemented (not analyzed): MAGIC002, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, SUPP001, SUPP002
+  rules not implemented (not analyzed): MAGIC002
+  complexity: 3 unit(s) in 1 file(s); conventions cyclomatic/1, cognitive/1, nesting/1, npath/1; 0 NPath saturated; advisory (CPLX001-CPLX004 are warnings)
+  graph: call edges 2 resolved, 1 probable, 1 unresolved; module edges 0 resolved, 2 external, 0 unresolved; 0 cycle(s); 0 shared mutable binding(s)
 gate: FAIL (exit 1)
   5 hard violation(s) and gates.new_hard_violations = "fail"
 ```
@@ -354,8 +363,12 @@ Dependabot can open upgrade PRs; `docs/integration.md` has the full recipe and
 a Dependabot snippet, and `examples/python` and `examples/js` are complete
 consumers exercised by CI.
 
-See `docs/` for configuration, rules, architecture, integration, skills,
-releasing, and limitations; `evals/` holds the skill evaluation corpus.
+See `docs/` for configuration, rules, complexity conventions, architecture,
+integration, skills, releasing, and limitations; `evals/` holds the skill
+evaluation corpus. Every JSON report carries `metrics.complexity` (per-unit
+numbers, conventions, thresholds, per-file totals), `metrics.graph` (edges
+with confidence, module edges, cycles, fan-in/out, shared mutable state) and
+`metrics.history` (churn, co-change, hotspots); none of them gates.
 
 ## Library
 

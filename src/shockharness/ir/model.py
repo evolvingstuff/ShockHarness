@@ -225,6 +225,162 @@ class DefaultFact:
     detail: str
 
 
+# Control-tree node kinds (Milestone E). Both adapters reduce a unit's body to this
+# language-neutral tree; the complexity metrics read only the tree, so two units with
+# the same tree get the same numbers whatever language they were written in.
+CK_BLOCK = "block"  # a statement list; children are the control-relevant statements
+CK_IF = "if"  # children: condition EXPR, then BLOCK, optional else (BLOCK or an elif IF)
+CK_ELIF = "elif"  # an IF that continues a chain (``elif`` / ``else if``); same children as IF
+CK_LOOP = "loop"  # children: condition EXPR, body BLOCK, optional else BLOCK (Python)
+CK_TRY = "try"  # children: body BLOCK, HANDLER..., optional TRY_ELSE, optional FINALLY
+CK_HANDLER = "handler"  # one except/catch clause; children are its statements
+CK_TRY_ELSE = "try_else"  # Python ``try/else`` body
+CK_FINALLY = "finally"
+CK_SWITCH = "switch"  # children: subject EXPR, CASE...
+CK_CASE = "case"  # children: guard EXPR, body BLOCK; label "default" for default/wildcard arms
+CK_CONDITIONAL = "conditional"  # ternary: children: condition EXPR, then EXPR, else EXPR
+CK_EXPR = "expr"  # an expression summary: boolean operators/sequences plus nested nodes
+CK_RECURSION = "recursion"  # a direct call of the unit's own name
+CK_JUMP = "jump"  # a labeled break/continue (JavaScript); Python never emits one
+
+LOOP_FOR = "for"
+LOOP_WHILE = "while"
+LOOP_DO = "do"
+LOOP_COMPREHENSION = "comprehension"
+CASE_DEFAULT = "default"
+
+# Unit kinds.
+UNIT_MODULE = "module"
+UNIT_CLASS = "class"
+UNIT_FUNCTION = "function"
+UNIT_METHOD = "method"
+UNIT_LAMBDA = "lambda"
+UNIT_ARROW = "arrow"
+
+# Call-site shapes.
+CALL_NAME = "name"  # f(x): a bare name is called
+CALL_ATTRIBUTE = "attribute"  # a.b.c(x): a dotted chain rooted in a name (or self/this)
+CALL_DYNAMIC = "dynamic"  # o[k](), f()(), getattr(o, n)(), (cond ? f : g)(): the callee is computed
+CALL_ARGUMENT = "argument"  # a bare name passed as an argument (higher-order use)
+CALL_NEW = "new"  # JavaScript ``new C()``
+
+# Import kinds.
+IMPORT_MODULE = "module"  # import a.b / import * as ns / const m = require("m")
+IMPORT_NAMES = "names"  # from a import b as c / import {b as c} from "a" / const {b} = require("a")
+IMPORT_REEXPORT = "reexport"  # export {x} from "a" / export * from "a"
+IMPORT_DYNAMIC = "dynamic"  # import(expr) / require(expr): the target is computed
+
+# Module-level binding kinds.
+BINDING_FUNCTION = "function"
+BINDING_CLASS = "class"
+BINDING_VARIABLE = "variable"
+BINDING_IMPORT = "import"
+
+# Kinds of write to a module-level binding from inside a unit.
+WRITE_ASSIGN = "assign"  # rebinding (Python needs a ``global`` declaration; JavaScript ``x = v``)
+WRITE_MUTATE = "mutate"  # in-place mutation: x.append(v), x[k] = v, x.k = v, x += v
+
+
+@dataclass(frozen=True)
+class ControlNode:
+    """One node of a unit's control tree.
+
+    ``operators`` and ``sequences`` are meaningful on EXPR nodes: the number of binary
+    short-circuit operators in the expression (``and``/``or``, ``&&``/``||``/``??``,
+    logical assignment) and the number of maximal runs of one operator in
+    source order. ``label`` carries the loop form, ``elif``, or ``default``;
+    ``labeled`` marks a JavaScript labeled jump.
+    """
+
+    kind: str
+    children: tuple["ControlNode", ...]
+    operators: int
+    sequences: int
+    label: str
+    labeled: bool
+
+
+EMPTY_EXPR = ControlNode(CK_EXPR, (), 0, 0, "", False)
+
+
+def control_node(kind: str, children: tuple[ControlNode, ...], label: str) -> ControlNode:
+    return ControlNode(kind, children, 0, 0, label, False)
+
+
+def expr_node(operators: int, sequences: int, children: tuple[ControlNode, ...]) -> ControlNode:
+    return ControlNode(CK_EXPR, children, operators, sequences, "", False)
+
+
+@dataclass(frozen=True)
+class CallSite:
+    """A call performed inside a unit, as written, before any resolution.
+
+    ``callee`` is the dotted text of the callee for ``name``/``attribute`` shapes
+    (``"self.helper"``, ``"os.path.join"``), the argument name for ``argument``,
+    and a short excerpt for ``dynamic``. ``receiver_self`` is true when the
+    chain is rooted in the method's receiver (``self``/``cls``/``this``).
+    """
+
+    span: Span
+    callee: str
+    shape: str
+    receiver_self: bool
+
+
+@dataclass(frozen=True)
+class FunctionFact:
+    """One unit of measurement: a module body, class body, function, method, lambda or arrow.
+
+    Nested units are separate facts; a unit's tree, statements, lines and calls
+    exclude the bodies of units nested inside it. ``name`` is the qualified name
+    within the module (``"Outer.inner"``, ``"<module>"``, ``"f.<lambda>"``);
+    ``class_name`` is the enclosing class for methods. ``locals`` are the names
+    the unit binds itself (parameters included); ``globals_declared`` the names
+    a Python ``global`` statement names; ``writes`` the module-level-looking
+    names the unit assigns or mutates.
+    """
+
+    name: str
+    kind: str
+    is_async: bool
+    is_generator: bool
+    span: Span
+    parameters: int
+    statements: int
+    logical_lines: int
+    control: ControlNode
+    calls: tuple[CallSite, ...]
+    class_name: str | None
+    locals: frozenset[str]
+    globals_declared: frozenset[str]
+    writes: tuple[tuple[str, str], ...]  # (name, WRITE_ASSIGN | WRITE_MUTATE)
+
+
+@dataclass(frozen=True)
+class ImportFact:
+    """One import or re-export. ``module`` is the specifier as written (``"pkg.mod"``,
+    ``".errors"``, ``"./utils.js"``, ``"lodash"``); ``names`` pairs each imported name
+    with the local name it binds (``("*", "*")`` for a star import, ``("", alias)``
+    for a whole-module import); ``level`` is the Python relative-import level."""
+
+    span: Span
+    kind: str
+    module: str
+    level: int
+    names: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ModuleBinding:
+    """A name bound at module level. ``mutable`` marks variables bound to a mutable
+    container (or declared ``let``/``var``, or named by a ``global`` statement)."""
+
+    name: str
+    kind: str
+    mutable: bool
+    span: Span
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -233,4 +389,23 @@ class ModuleFacts:
     comments: tuple[Comment, ...]
     catches: tuple[CatchFact, ...]
     defaults: tuple[DefaultFact, ...]
+    functions: tuple[FunctionFact, ...]
+    imports: tuple[ImportFact, ...]
+    bindings: tuple[ModuleBinding, ...]
     parse_failure: ParseFailure | None
+
+
+def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFacts:
+    """Facts for a file that did not parse: every tuple empty, the failure recorded."""
+    return ModuleFacts(
+        language=language,
+        parser=parser,
+        numeric_literals=(),
+        comments=(),
+        catches=(),
+        defaults=(),
+        functions=(),
+        imports=(),
+        bindings=(),
+        parse_failure=failure,
+    )

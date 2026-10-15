@@ -3,7 +3,13 @@
 import textwrap
 from typing import Any
 
-from shockharness.constants import COMMIT_SHORT_HEX, CONFIG_DIGEST_SHORT_HEX, TEXT_WRAP_WIDTH
+from shockharness.constants import (
+    COMMIT_SHORT_HEX,
+    CONFIG_DIGEST_SHORT_HEX,
+    HOTSPOTS_SHOWN,
+    SCORE_DECIMALS,
+    TEXT_WRAP_WIDTH,
+)
 from shockharness.findings import Finding
 from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
@@ -39,12 +45,62 @@ def _history_lines(metrics: dict[str, Any]) -> list[str]:
     if history["status"] != "available":
         return [f"  history: {history['status']} ({history['reason']})"]
     horizon = history["horizon"]
-    return [
+    lines = [
         f"  history: {history['commits_considered']} commit(s) in {horizon['days']} day(s) "
         f"before {horizon['until']} (file granularity); {len(history['cochange'])} "
-        f"co-change pair(s) with support >= {history['cochange_min_support']}; "
-        f"hotspots: {history['hotspots_reason']}"
+        f"co-change pair(s) with support >= {history['cochange_min_support']}"
     ]
+    hotspots = history["hotspots"]
+    if hotspots is None:
+        lines.append(f"  hotspots: {history['hotspots_reason']}")
+        return lines
+    top = [h for h in hotspots if h["score"] > 0][:HOTSPOTS_SHOWN]
+    if len(top) == 0:
+        lines.append("  hotspots: none (no analyzed file has both churn and cognitive complexity)")
+        return lines
+    listed = ", ".join(f"{h['path']} ({h['score']:.{SCORE_DECIMALS}f})" for h in top)
+    lines.append(f"  hotspots (log1p(churn) * normalized cognitive, file granularity): {listed}")
+    return lines
+
+
+def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
+    if "complexity" not in metrics:
+        return []
+    complexity = metrics["complexity"]
+    if complexity["status"] != "available":
+        return [f"  complexity: {complexity['status']} ({complexity['reason']})"]
+    functions = complexity["functions"]
+    saturated = sum(1 for f in functions if f["npath"]["saturated"])
+    conventions = complexity["conventions"]
+    lines = [
+        f"  complexity: {len(functions)} unit(s) in {len(complexity['files'])} file(s); "
+        f"conventions {conventions['cyclomatic']}, {conventions['cognitive']}, "
+        f"{conventions['nesting']}, {conventions['npath']}; {saturated} NPath saturated; "
+        "advisory (CPLX001-CPLX004 are warnings)"
+    ]
+    if "regressions" in complexity:
+        lines.append(
+            f"  complexity regressions against base: {len(complexity['regressions'])} "
+            f'(gates.complexity_regressions = "{complexity["regression_policy"]}")'
+        )
+    graph = metrics["graph"]
+    if graph["status"] == "available":
+        edges = graph["summary"]["call_edges"]
+        modules = graph["summary"]["module_edges"]
+        lines.append(
+            f"  graph: call edges {edges['resolved']} resolved, {edges['probable']} probable, "
+            f"{edges['unresolved']} unresolved; module edges {modules['resolved']} resolved, "
+            f"{modules['external']} external, {modules['unresolved']} unresolved; "
+            f"{graph['summary']['cycles']} cycle(s); "
+            f"{graph['summary']['shared_mutable_state']} shared mutable binding(s)"
+        )
+        displacement = graph["abstraction_displacement"]
+        if displacement["status"] == "available":
+            lines.append(
+                f"  abstraction displacement (experimental, approximate): "
+                f"{len(displacement['findings'])} unit(s)"
+            )
+    return lines
 
 
 def render(report: Report) -> str:
@@ -90,6 +146,7 @@ def render(report: Report) -> str:
         f"(profile {report.config.values['profile']}, "
         f"digest {report.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
     )
+    lines.extend(_complexity_lines(dict(report.metrics)))
     lines.extend(_history_lines(dict(report.metrics)))
     lines.append(f"  analysis status: {report.analysis_status}")
     lines.extend(_gate_lines(report.gate))
@@ -139,6 +196,7 @@ def render_diff(diff: DiffReport) -> str:
         f"(profile {diff.config.values['profile']}, "
         f"digest {diff.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
     )
+    lines.extend(_complexity_lines(diff.metrics))
     lines.extend(_history_lines(diff.metrics))
     lines.append(f"  analysis status: {head.report.analysis_status}")
     lines.extend(_gate_lines(diff.gate))

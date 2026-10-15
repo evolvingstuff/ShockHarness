@@ -68,11 +68,22 @@ nullish_fallbacks = "forbid"        # DEF004: x ?? v, x if x is not None else v
 configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X || v
 # DEF005 (a handler that returns a default) has no mode: it is always an error.
 
+# Complexity metrics and the call graph (CPLX001-CPLX005): advisory warnings, reported
+# under metrics.complexity and metrics.graph, never failing a plain `check`. Each
+# threshold is compared per unit (function, method, lambda, class body, module body).
 [tool.shockharness.complexity]
 enabled = true
-cognitive_warn = 15
-cyclomatic_warn = 15
-max_nesting_warn = 4
+cognitive_warn = 15        # CPLX002: cognitive/1 above this value
+cyclomatic_warn = 15       # CPLX001: cyclomatic/1 above this value
+max_nesting_warn = 4       # CPLX003: nesting/1 above this value
+cyclomatic_counts_boolean_operators = true   # cyclomatic/1 counts and/or, &&/||/??, ||= etc.
+npath_cap = 10000          # npath/1 saturates here; a saturated value is reported as ">= cap"
+npath_warn = 200           # CPLX004: npath/1 at or above this value, or saturated
+fan_out_warn = 20          # CPLX005: distinct call targets of one unit above this value
+# Experimental, diff mode only: flag units whose own cognitive score fell while the
+# decision burden reachable through resolved calls grew. Every result is marked
+# approximate and experimental; there is no rule ID for it.
+abstraction_displacement = false
 
 # Local git history (file-level granularity, never gating). Read with `git log` on the
 # analyzed root; no remote is contacted. When git is missing or the root is not inside a
@@ -85,4 +96,7 @@ min_support = 3       # co-change pairs need at least this many shared commits t
 [tool.shockharness.gates]
 new_hard_violations = "fail"
 legacy = "baseline"
+# What a per-unit complexity regression against the base revision means in `diff` and
+# `gate --base/--head`: "warn" lists it in the gate reasons, "fail" fails the gate,
+# "ignore" says nothing. A plain `check` never fails on complexity.
 complexity_regressions = "warn"

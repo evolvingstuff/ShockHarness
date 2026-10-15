@@ -441,6 +441,11 @@ def test_single_exception_rule_can_be_disabled_by_override(
     result = _run(config, "legacy/a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert [f.rule_id for f in result.findings] == ["EXC001"]
     assert result.rules_applied == (
+        "CPLX001",
+        "CPLX002",
+        "CPLX003",
+        "CPLX004",
+        "CPLX005",
         "DEF001",
         "DEF002",
         "DEF003",

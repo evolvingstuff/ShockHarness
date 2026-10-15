@@ -126,14 +126,36 @@ def test_skill_has_examples_commands_workflow_checklist_and_adoption(name: str) 
         assert not re.search(r"\]\((?!https?://)[^)]*\)", line), f"{name}: {line}"
 
 
-def test_refactor_complexity_does_not_claim_complexity_rules_exist() -> None:
+def test_refactor_complexity_quotes_the_real_rules_fields_and_commands() -> None:
     text = skill_text("refactor-complexity")
-    assert "not implemented" in text
-    assert "Milestone E" in text
+    body = text.split("## Adopting ShockHarness")[0]
+    assert "not implemented" not in body
+    assert "not a SonarSource score" in " ".join(text.split())
     for rule in registry.RULES:
         if rule.family == "complexity":
-            assert not rule.implemented
+            assert rule.implemented
             assert rule.rule_id in text
+    for field in (
+        "metrics.complexity.functions",
+        "metrics.complexity.conventions",
+        "metrics.graph.units",
+        "metrics.graph.edges",
+        "metrics.graph.cycles",
+        "metrics.history.hotspots",
+        "gates.complexity_regressions",
+        "complexity regressions against base",
+    ):
+        assert field in text, field
+    assert "shockharness check . --format json --output before.json" in text
+    assert "shockharness gate --base origin/main --head HEAD" in text
+    for key in (
+        "cyclomatic_warn",
+        "cognitive_warn",
+        "max_nesting_warn",
+        "npath_warn",
+        "fan_out_warn",
+    ):
+        assert key in text, key
 
 
 def test_adoption_section_is_identical_in_readme_and_every_skill() -> None:

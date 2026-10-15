@@ -348,6 +348,11 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
             )
     if values["complexity"]["enabled"] is False:
         found.append("complexity is disabled")
+    elif values["complexity"]["cyclomatic_counts_boolean_operators"] is False:
+        found.append(
+            "complexity.cyclomatic_counts_boolean_operators is false; cyclomatic/1 counts "
+            "fewer decisions than its documented convention"
+        )
     allowed = rules["magic_numbers"]["allowed_values"]
     extra = sorted({str(v) for v in allowed if v != 0 and v != 1})
     if len(extra) > 0:

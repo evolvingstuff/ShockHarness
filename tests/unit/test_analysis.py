@@ -112,6 +112,11 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     assert data["status"] == "analyzed"
     assert data["finding_count"] == 1
     assert data["rules_applied"] == [
+        "CPLX001",
+        "CPLX002",
+        "CPLX003",
+        "CPLX004",
+        "CPLX005",
         "DEF001",
         "DEF002",
         "DEF003",

@@ -16,6 +16,7 @@ from shockharness.constants import REPORT_SCHEMA_VERSION
 from shockharness.discovery import DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gate import GateResult
+from shockharness.history.hotspots import HOTSPOTS_FORMULA
 from shockharness.rules import registry
 from shockharness.version import __version__
 
@@ -31,6 +32,7 @@ HISTORY_NOT_COLLECTED = {
     "cochange": [],
     "hotspots": None,
     "hotspots_reason": "not computed: history was not collected",
+    "hotspots_formula": HOTSPOTS_FORMULA,
 }
 STATUS_INCOMPLETE = "incomplete"
 STATUS_FAILED = "failed"
@@ -121,6 +123,9 @@ def _coverage(
         "limitations": [
             "Only rules listed in rules_implemented produced findings; every other registered "
             "rule is not analyzed.",
+            "Complexity metrics (CPLX001-CPLX005) are advisory and never fail a plain check; "
+            "call-graph edges carry a confidence and unresolved calls are never counted as "
+            "resolved.",
             "Python syntax coverage equals the host interpreter's ast module.",
             "JavaScript regular-expression internals and string contents are not analyzed for "
             "numeric policy.",
@@ -133,7 +138,10 @@ def build_report(
     discovery: DiscoveryResult | None,
     config: EffectiveConfig,
     gate: GateResult,
+    metrics: Mapping[str, Any],
 ) -> Report:
+    """``metrics`` carries the ``complexity`` and ``graph`` sections from the analysis;
+    ``history`` is added here as ``not_collected`` until the CLI or ``with_history`` runs git."""
     ordered_files = tuple(sorted(files, key=lambda f: f.path))
     findings = tuple(
         sorted((f for file in ordered_files for f in file.findings), key=lambda f: f.sort_key())
@@ -151,7 +159,7 @@ def build_report(
         coverage=_coverage(ordered_files, discovery, config),
         files=ordered_files,
         findings=findings,
-        metrics={"history": dict(HISTORY_NOT_COLLECTED)},
+        metrics={**dict(metrics), "history": dict(HISTORY_NOT_COLLECTED)},
         gate=gate,
         execution_summary={
             "files": len(ordered_files),

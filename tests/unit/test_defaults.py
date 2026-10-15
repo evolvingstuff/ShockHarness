@@ -289,7 +289,7 @@ def test_def003_contexts_and_boolean_logic(strict_config: EffectiveConfig) -> No
         (10, "review", "exact"),
         (12, "review", "approximate"),
     ]
-    approximate = result.findings[0]
+    approximate = next(f for f in result.findings if f.rule_id == "DEF003")
     assert "may be a fallback or a legitimate alternative" in approximate.message
     chain = next(f for f in result.findings if f.span.line == 9)
     assert chain.message.startswith("a or b falls back to 'z' when falsy")
@@ -380,7 +380,8 @@ def test_def004_javascript_forms(strict_config: EffectiveConfig) -> None:
         (8, "error", "exact"),
         (11, "error", "exact"),
     ]
-    assert result.findings[0].message.startswith("count falls back to 0 when null or undefined")
+    first = next(f for f in result.findings if f.rule_id == "DEF004")
+    assert first.message.startswith("count falls back to 0 when null or undefined")
 
 
 # --- DEF005: exception-to-default ---------------------------------------------------------------
@@ -530,7 +531,8 @@ def test_def006_javascript_forms(strict_config: EffectiveConfig) -> None:
         (10, "error", "exact"),  # process.env.FALLBACK is constant-shaped (UPPER_CASE)
     ]
     assert {"DEF002", "DEF003", "DEF004"}.isdisjoint(_ids(result))
-    assert result.findings[0].message.startswith("environment variable PORT falls back to '3000'")
+    first = next(f for f in result.findings if f.rule_id == "DEF006")
+    assert first.message.startswith("environment variable PORT falls back to '3000'")
 
 
 # --- shared behaviour -------------------------------------------------------------------------

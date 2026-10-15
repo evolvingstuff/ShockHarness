@@ -52,7 +52,8 @@ def test_rules_list_and_explain(capsys: pytest.CaptureFixture[str]) -> None:
     assert "EXC001    error    implemented" in out
     assert "DEF001    error    implemented" in out
     assert "DEF003    review   implemented" in out
-    assert "CPLX001   warning  planned" in out
+    assert "CPLX001   warning  implemented" in out
+    assert "MAGIC002  review   planned" in out
     code, out, _ = run(["rules", "explain", "MAGIC001"], capsys)
     assert code == 0
     assert "Detection guarantees" in out
@@ -475,6 +476,7 @@ def test_gate_between_two_commits(empty_root: Path, capsys: pytest.CaptureFixtur
         "new_hard_violations": 1,
         "fixed_hard_violations": 2,
         "unchanged_hard_violations": 1,
+        "complexity_regressions": 0,
     }
     assert data["gate"]["status"] == "fail"
     assert data["gate"]["new_hard_violations"] == 1
@@ -908,3 +910,53 @@ def test_exit_zero_on_a_revision_gate(empty_root: Path, capsys: pytest.CaptureFi
     with pytest.raises(SystemExit) as info:
         main(["diff", "--base", c1, "--head", "HEAD", "--exit-zero", *root])
     assert info.value.code == 2  # diff already exits 0; the flag does not exist there
+
+
+def test_check_reports_complexity_as_warnings_in_every_format(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (empty_root / ".shockharness.toml").write_text(
+        "[tool.shockharness]\n[tool.shockharness.complexity]\ncognitive_warn = 1\n"
+        "cyclomatic_counts_boolean_operators = false\n",
+        encoding="utf-8",
+    )
+    write(
+        empty_root,
+        "src/a.py",
+        "def f(a):\n    if a:\n        if a:\n            return 1\n    return 0\n",
+    )
+    write(
+        empty_root, "src/b.js", "import { f } from './a.js';\nexport const g = (x) => x && f(x);\n"
+    )
+    root = ["--root", str(empty_root)]
+    code, out, _ = run(["check", str(empty_root / "src"), *root], capsys)
+    assert code == 0
+    assert "src/a.py:1:1: CPLX002 warning: cognitive complexity of function f is 3" in out
+    assert "cognitive_warn = 1 (convention cognitive/1; not a Sonar score)" in out
+    assert "  complexity: 4 unit(s) in 2 file(s); conventions cyclomatic/1, cognitive/1" in out
+    # './a.js' names a file that is not analyzed (a.py is): unresolved, never guessed
+    assert (
+        "  graph: call edges 0 resolved, 0 probable, 1 unresolved; module edges 0 resolved, "
+        "0 external, 1 unresolved" in out
+    )
+    assert "policy deviation: complexity.cyclomatic_counts_boolean_operators is false" in out
+    assert "gate: PASS (exit 0)" in out
+    code, out, _ = run(["check", str(empty_root / "src"), "--format", "json", *root], capsys)
+    data = json.loads(out)
+    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002"]
+    assert "CPLX005" in data["coverage"]["rules_implemented"]
+    assert data["metrics"]["complexity"]["status"] == "available"
+    assert data["metrics"]["graph"]["summary"]["units"] == 4
+    assert data["gate"]["warnings"] == 1 and data["gate"]["status"] == "pass"
+    code, out, _ = run(["check", str(empty_root / "src"), "--format", "sarif", *root], capsys)
+    sarif = json.loads(out)
+    (result,) = sarif["runs"][0]["results"]
+    assert result["ruleId"] == "CPLX002" and result["level"] == "warning"
+    assert result["locations"][0]["logicalLocations"] == [{"name": "f"}]
+    rules = {r["id"]: r for r in sarif["runs"][0]["tool"]["driver"]["rules"]}
+    assert rules["CPLX002"]["properties"]["implemented"] is True
+    assert rules["CPLX002"]["defaultConfiguration"]["level"] == "warning"
+    code, out, _ = run(["rules", "explain", "CPLX002"], capsys)
+    assert code == 0
+    assert "not a SonarSource score" in " ".join(out.split())
+    assert "status: implemented" in out

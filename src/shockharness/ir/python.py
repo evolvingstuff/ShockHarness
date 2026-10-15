@@ -17,6 +17,7 @@ from shockharness.ir.model import (
     NumericLiteral,
     ParseFailure,
     Span,
+    failed_facts,
 )
 from shockharness.ir.python_catches import (
     SCOPE_NODES,
@@ -25,6 +26,11 @@ from shockharness.ir.python_catches import (
     scope_name,
 )
 from shockharness.ir.python_defaults import collect_python_defaults
+from shockharness.ir.python_functions import (
+    collect_python_bindings,
+    collect_python_functions,
+    collect_python_imports,
+)
 from shockharness.source import SourceText
 
 PARSER_NAME = "python-ast"
@@ -161,26 +167,10 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
 def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
     parsed = _parse(source, filename)
     if isinstance(parsed, ParseFailure):
-        return ModuleFacts(
-            language="python",
-            parser=PARSER_NAME,
-            numeric_literals=(),
-            comments=(),
-            catches=(),
-            defaults=(),
-            parse_failure=parsed,
-        )
+        return failed_facts("python", PARSER_NAME, parsed)
     comments = _comments(source)
     if isinstance(comments, ParseFailure):
-        return ModuleFacts(
-            language="python",
-            parser=PARSER_NAME,
-            numeric_literals=(),
-            comments=(),
-            catches=(),
-            defaults=(),
-            parse_failure=comments,
-        )
+        return failed_facts("python", PARSER_NAME, comments)
     return ModuleFacts(
         language="python",
         parser=PARSER_NAME,
@@ -188,5 +178,8 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         comments=comments,
         catches=collect_python_catches(source, parsed, filename),
         defaults=collect_python_defaults(source, parsed),
+        functions=collect_python_functions(source, parsed, comments),
+        imports=collect_python_imports(source, parsed),
+        bindings=collect_python_bindings(source, parsed),
         parse_failure=None,
     )

@@ -1,11 +1,20 @@
-"""Per-file churn from local git history, and the (not yet computed) hotspot score.
+"""Per-file churn from local git history, and the hotspot score.
 
 Everything here is file-level and advisory: ``metrics.history`` never feeds the
 gate. When git is absent, the root is not inside a repository, or history is
 disabled, the status says so with a reason; the section is never silently empty.
+
+The hotspot score of a file is ``log1p(churn) * normalized_complexity`` where
+``churn`` is the file's commit count inside the horizon and
+``normalized_complexity`` is the file's summed cognitive complexity
+(``metrics.complexity.files[path].cognitive_total``) divided by the largest
+such total among the analyzed files. It needs both history and complexity;
+when either is unavailable ``hotspots`` is ``null`` and ``hotspots_reason``
+says which.
 """
 
-from collections.abc import Sequence
+import math
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,10 +33,12 @@ STATUS_AVAILABLE = "available"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_DISABLED = "disabled"
 GRANULARITY_FILE = "file"
-HOTSPOTS_REASON = (
-    "not computed: the hotspot score (log1p(churn) * normalized complexity) needs the "
-    "complexity metrics of Milestone E, which are not implemented"
+HOTSPOTS_FORMULA = (
+    "log1p(churn) * normalized_complexity; churn = commits touching the file inside the "
+    "horizon, normalized_complexity = the file's cognitive_total divided by the largest "
+    "cognitive_total among the analyzed files (file granularity, never gating)"
 )
+COGNITIVE_TOTAL = "cognitive_total"
 
 
 def _empty(status: str, reason: str, horizon_days: int, min_support: int) -> dict[str, Any]:
@@ -43,7 +54,8 @@ def _empty(status: str, reason: str, horizon_days: int, min_support: int) -> dic
         "cochange_min_support": min_support,
         "commits_excluded_from_cochange": 0,
         "hotspots": None,
-        "hotspots_reason": HOTSPOTS_REASON,
+        "hotspots_reason": f"not computed: history is {status} ({reason})",
+        "hotspots_formula": HOTSPOTS_FORMULA,
     }
 
 
@@ -68,10 +80,46 @@ def _file_churn(commits: Sequence[Commit], paths: Sequence[str]) -> dict[str, di
     return churn
 
 
+def hotspot_scores(
+    churn: Mapping[str, Mapping[str, Any]], complexity: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """``(hotspots, reason)``: exactly one is set."""
+    if complexity["status"] != "available":
+        return None, f"not computed: complexity metrics are {complexity['status']}"
+    files: Mapping[str, Mapping[str, Any]] = complexity["files"]
+    totals = {path: int(files[path][COGNITIVE_TOTAL]) for path in churn if path in files}
+    largest = max(totals.values(), default=0)
+    scores: list[dict[str, Any]] = []
+    for path in sorted(churn):
+        if path not in totals:
+            continue  # the file failed to parse: no complexity, no score
+        commits = int(churn[path]["commits"])
+        normalized = 0.0 if largest == 0 else totals[path] / largest
+        scores.append(
+            {
+                "path": path,
+                "churn": commits,
+                COGNITIVE_TOTAL: totals[path],
+                "normalized_complexity": normalized,
+                "score": math.log1p(commits) * normalized,
+            }
+        )
+    scores.sort(key=lambda s: (-s["score"], s["path"]))
+    return scores, None
+
+
 def collect_history(
-    root: Path, revision: str, paths: Sequence[str], config: EffectiveConfig
+    root: Path,
+    revision: str,
+    paths: Sequence[str],
+    config: EffectiveConfig,
+    complexity: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """``metrics.history`` for ``paths`` (root-relative) at ``revision``."""
+    """``metrics.history`` for ``paths`` (root-relative) at ``revision``.
+
+    ``complexity`` is the report's ``metrics.complexity`` section; hotspots combine it
+    with the churn.
+    """
     section = config.values["history"]
     horizon_days = int(section["horizon_days"])
     min_support = int(section["min_support"])
@@ -96,6 +144,8 @@ def collect_history(
         return _empty(STATUS_UNAVAILABLE, error, horizon_days, min_support)
     analyzed = frozenset(paths)
     pairs, excluded = cochange_pairs(commits, analyzed, min_support)
+    churn = _file_churn(commits, paths)
+    hotspots, reason = hotspot_scores(churn, complexity)
     return {
         "status": STATUS_AVAILABLE,
         "reason": None,
@@ -103,10 +153,11 @@ def collect_history(
         "revision": {"ref": revision, "commit": commit},
         "horizon": {"days": horizon_days, "since": since.isoformat(), "until": until},
         "commits_considered": len(commits),
-        "files": _file_churn(commits, paths),
+        "files": churn,
         "cochange": [p.to_json_dict() for p in pairs],
         "cochange_min_support": min_support,
         "commits_excluded_from_cochange": excluded,
-        "hotspots": None,
-        "hotspots_reason": HOTSPOTS_REASON,
+        "hotspots": hotspots,
+        "hotspots_reason": reason,
+        "hotspots_formula": HOTSPOTS_FORMULA,
     }

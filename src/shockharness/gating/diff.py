@@ -14,13 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from shockharness import gate as gate_module
-from shockharness.analysis import AnalysisOptions, analyze_file
+from shockharness.analysis import AnalysisOptions, analyze_files
+from shockharness.complexity.regressions import abstraction_displacement, complexity_regressions
 from shockharness.config import EffectiveConfig
 from shockharness.constants import REPORT_SCHEMA_VERSION
 from shockharness.discovery import discover
 from shockharness.errors import UsageError
 from shockharness.findings import Finding
-from shockharness.gate import GateResult
+from shockharness.gate import NO_REGRESSIONS, GateResult
 from shockharness.gating.baseline import SOURCE_BASE_REVISION, apply_fingerprints
 from shockharness.history.git import RepositoryLocation, export_tree, locate_repository
 from shockharness.history.git import resolve_commit as git_resolve_commit
@@ -28,6 +29,8 @@ from shockharness.report import Report, build_report, rebuild_with_findings
 from shockharness.rules.registry import SEVERITY_ERROR
 from shockharness.version import __version__
 
+COMPLEXITY_SECTION = "complexity"
+GRAPH_SECTION = "graph"
 STATUS_NEW = "new"
 STATUS_FIXED = "fixed"
 STATUS_UNCHANGED = "unchanged"
@@ -92,6 +95,7 @@ class DiffReport:
             "new_hard_violations": hard[STATUS_NEW],
             "fixed_hard_violations": hard[STATUS_FIXED],
             "unchanged_hard_violations": hard[STATUS_UNCHANGED],
+            "complexity_regressions": self.gate.complexity_regressions,
         }
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -149,10 +153,10 @@ def analyze_revision(
             where = "." if location.prefix == "" else location.prefix
             raise UsageError(f"the analysis root ({where}) does not exist at {ref}", ref)
         discovery = discover(export_root, [export_root], config)
-        results = [analyze_file(file, config, options) for file in discovery.files]
-    findings = [f for result in results for f in result.findings]
-    verdict = gate_module.evaluate(findings, results, config, None)
-    report = build_report(results, discovery, config, verdict)
+        outcome = analyze_files(discovery.files, config, options)
+    findings = [f for result in outcome.files for f in result.findings]
+    verdict = gate_module.evaluate(findings, outcome.files, config, None, NO_REGRESSIONS)
+    report = build_report(outcome.files, discovery, config, verdict, outcome.metrics)
     return Revision(ref=ref, commit=commit, report=report)
 
 
@@ -167,6 +171,10 @@ def diff_revisions(
 
     The gate is evaluated on the head findings with unchanged ones treated as
     legacy under ``gates.legacy``; head analysis failures follow ``parse_errors``.
+    Per-unit complexity regressions against the base revision are listed under
+    ``metrics.complexity.regressions`` and follow ``gates.complexity_regressions``;
+    the experimental abstraction-displacement heuristic, when enabled, is under
+    ``metrics.graph.abstraction_displacement``.
     """
     location = _require_repository(root)
     base = analyze_revision(root, location, base_ref, config, options)
@@ -195,7 +203,13 @@ def diff_revisions(
         None,
         (),
     )
-    verdict = gate_module.evaluate(marked, head.report.files, config, application)
+    complexity_settings = config.section(COMPLEXITY_SECTION)
+    regressions = complexity_regressions(
+        base.report.metrics[COMPLEXITY_SECTION],
+        head.report.metrics[COMPLEXITY_SECTION],
+        complexity_settings,
+    )
+    verdict = gate_module.evaluate(marked, head.report.files, config, application, len(regressions))
     head_marked = Revision(
         head.ref, head.commit, rebuild_with_findings(head.report, marked, verdict)
     )
@@ -207,6 +221,16 @@ def diff_revisions(
             continue
         assert entry.finding.fingerprint in by_fp
         relabelled.append(DiffFinding(entry.status, by_fp[entry.finding.fingerprint]))
+    metrics = dict(head_marked.report.metrics)
+    complexity = dict(metrics[COMPLEXITY_SECTION])
+    complexity["regressions"] = regressions
+    complexity["regression_policy"] = config.values["gates"]["complexity_regressions"]
+    metrics[COMPLEXITY_SECTION] = complexity
+    graph = dict(metrics[GRAPH_SECTION])
+    graph["abstraction_displacement"] = abstraction_displacement(
+        base.report.metrics, head.report.metrics, complexity_settings
+    )
+    metrics[GRAPH_SECTION] = graph
     return DiffReport(
         schema_version=REPORT_SCHEMA_VERSION,
         tool_version=__version__,
@@ -214,7 +238,7 @@ def diff_revisions(
         base=base,
         head=head_marked,
         findings=tuple(relabelled),
-        metrics=dict(head_marked.report.metrics),
+        metrics=metrics,
         gate=verdict,
     )
 
