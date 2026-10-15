@@ -100,7 +100,7 @@ jobs:
         # The report is written even when the gate fails (exit 1); it is absent only when
         # the run could not start (exit 2: invalid configuration or invocation).
         if: ${{ !cancelled() && hashFiles('shockharness.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: shockharness.sarif
           category: shockharness
