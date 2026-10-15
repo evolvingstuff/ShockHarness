@@ -7,7 +7,7 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [0.3.0] - 2026-10-15
 
-Planned 0.3.0: the third feedback round, from `docs/shockharness-suggestions-3.md`
+The third feedback round, from `docs/shockharness-suggestions-3.md`
 (the same 906-file codebase run with 0.2.0). All five items are below; the
 content-hash cache (item 3, deferred from the first brief's item 6) is the
 largest.

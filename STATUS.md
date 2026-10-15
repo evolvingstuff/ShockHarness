@@ -1114,6 +1114,31 @@ only; `check --summary --profile recommended` and `rules list` (18 rules,
 all implemented except MAGIC002) work from the installed package. PyPI lists
 `0.2.0` (latest), `0.1.0` and `0.1.0a1`.
 
+## Release 0.3.0 (2026-10-15)
+
+Tag `v0.3.0` at 75e0c03. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/38704879047,
+all jobs green) after the maintainer's approval at the `pypi` environment.
+Contents: the third feedback round (b243a03: bound capture managers, literal
+arithmetic in named constants, root-anchored patterns, EXC002 guard-only
+message; c35b3aa: the content-hash cache), the release commit 3eb3e6f, and a
+test fix 75e0c03.
+
+The release commit's first CI run failed on the four Windows jobs only: one
+test wrote an absolute Windows path into a TOML basic string, where a
+backslash is an escape (`\U` in `\Users` is an invalid unicode escape). The
+test now writes the path with forward slashes, valid on Windows and in TOML.
+Nothing had been tagged. This is the third Windows-only lesson in a row
+(git date spelling, CRLF checkouts, backslashes in TOML); each is now covered
+by a test or a repository setting.
+
+Verified after publication: `pip install shockharness==0.3.0` into a fresh
+venv from PyPI; `shockharness version` prints `shockharness 0.3.0`; the cache
+reports 60 misses on a cold run and 60 hits on the warm run over the same
+tree; `check --profile recommended` accepts arithmetic constant definitions;
+runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
+0.25.0 only. PyPI lists `0.3.0` (latest), `0.2.0`, `0.1.0` and `0.1.0a1`.
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
