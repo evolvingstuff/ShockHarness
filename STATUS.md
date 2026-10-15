@@ -824,6 +824,30 @@ src/io/fs.py:15:5: EXC001 error: context manager of 'ProcessLookupError' is forb
   `counts = defaultdict(int)`; the new `DEF002` row was reviewed and added to
   `expected.json`.
 
+## Release 0.2.0 (2026-10-14)
+
+Tag `v0.2.0` at c05a035. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/38690998487,
+17 of 17 jobs green) after the maintainer's approval at the `pypi`
+environment. Contents: the two feedback-round commits (38bb8f2, a1818d9)
+driven by `docs/shockharness-suggestions.md` and
+`docs/shockharness-suggestions-2.md`, the release commit 795707f, and
+c05a035.
+
+The release commit's first CI run failed on five of twelve matrix jobs with no
+platform pattern: `summary.elapsed_seconds` had been added to the JSON report,
+so two runs differed by a millisecond and the byte-identical determinism tests
+failed whenever a runner's timings rounded differently. Elapsed time now lives
+on the `Report` object and is printed by the text summary only; the JSON
+report is byte-identical again (spec section 10). Nothing had been tagged.
+
+Verified after publication: `pip install shockharness==0.2.0` into a fresh
+venv from PyPI; `shockharness version` prints `shockharness 0.2.0`; runtime
+dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript` 0.25.0
+only; `check --summary --profile recommended` and `rules list` (18 rules,
+all implemented except MAGIC002) work from the installed package. PyPI lists
+`0.2.0` (latest), `0.1.0` and `0.1.0a1`.
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
