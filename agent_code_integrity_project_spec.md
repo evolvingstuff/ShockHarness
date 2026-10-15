@@ -1,6 +1,6 @@
 # Agent-Ready Specification: Explicit-Code Integrity and Complexity Analyzer
 
-**Status:** Implementation blueprint, v1.3 (kickoff decisions in §19; distribution decisions in §20)  
+**Status:** Implementation blueprint, v1.4 (kickoff decisions in §19; distribution decisions in §20; advanced guardrails plan in §21)  
 **Date:** 2026-10-14  
 **Name:** **ShockHarness**. Python distribution and import package `shockharness`, CLI command `shockharness`, config table `[tool.shockharness]`, dedicated config file `.shockharness.toml`, inline suppression prefix `# shockharness:` / `// shockharness:`. Registry and trademark clearance is still the maintainer's responsibility before publishing (see §17).  
 **Initial languages:** Python and JavaScript (including ESM/CommonJS); TypeScript is a future target.  
@@ -468,6 +468,7 @@ Recorded so that the implementation agent does not re-ask them. Each is binding 
 | 11 | CI matrix | GitHub Actions on ubuntu, macos, windows × Python 3.11–3.14 | §14 Milestone A |
 | 12 | Meaningful `0`/`1` | Skills prefer a named constant when a `0` or `1` carries meaning (exit codes, sentinels); the rule itself never flags them | §5, §12 |
 | 13 | Distribution | See §20 for the decisions taken on reviewing `docs/shockharness_distribution_integration.md` | §20 |
+| 14 | Advanced guardrails | See §21 for the decisions taken on reviewing `docs/shockharness_advanced_guardrails_spec.md` | §21 |
 
 ## 20. Distribution decisions (2026-10-14 review of `docs/shockharness_distribution_integration.md`)
 
@@ -488,6 +489,40 @@ The distribution brief in `docs/shockharness_distribution_integration.md` is a d
 | 11 | Consumer examples | `examples/python` and `examples/js` inside this repository, exercised by a script that creates throwaway git repositories and performs a pinned install plus an upgrade. Real external consumer repositories only if this proves insufficient | Milestone F |
 | 12 | Submodules | Not supported as an integration mechanism, per the brief | — |
 | 13 | Output fields | `effective_profile` is added to the JSON report next to `tool_version` and `schema_version`; `policy_profile` is renamed to it before schema v1 is published | §10, Milestone F |
+
+## 21. Advanced guardrails: decisions and milestone plan (2026-10-14 review of `docs/shockharness_advanced_guardrails_spec.md`)
+
+The guardrails brief is a design input, as the distribution brief was. Where it and this specification differ, this section is binding and the brief is annotated to say so. Milestones A-G are complete at the time of this review (v0.1.0a1 on PyPI); the work below starts after the 0.1.0 release.
+
+### 21.1 Decisions
+
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Names in the brief | `[shockharness]`, `rules.exception_handling`, `rules.implicit_defaults`, `DEFAULT001`, `strict-agent` are the same drafting as the distribution brief and are superseded by §4 and §20: the implemented schema, `DEF001`-`DEF006`, and the `strict` profile stand |
+| 2 | Exit codes | Unchanged: `0` pass, `1` violations, `2` invalid configuration or invocation, `3` internal error or strict parse failure. The brief's reassignment of `3` to "policy integrity failure" is not adopted. Policy-integrity findings (VERIFY*) are hard violations with their own finding category `policy_integrity` and exit `1`; CI consumers distinguish them by category in JSON and SARIF, not by exit code |
+| 3 | Finding states | Add an explicit `unknown` state alongside the existing `exact`/`approximate`/`unresolved` confidence: a rule that could not establish the property emits an `unknown` finding (never silence), and `fail_on_unknown` is configurable **per rule family** (`rules.<family>.fail_on_unknown`, default false except where a family already fails closed, e.g. EXC001). `pass`/`not_applicable` are per-file statuses, already reported as `analyzed` with `rules_applied`/`rules_disabled` |
+| 4 | File roles | Add file-role classification (`production`, `test`, `config`, `generated`, `vendor`, `docs`) derived from configurable globs with documented defaults; roles become the scoping mechanism for STUB, ASSERT, VERIFY and for the existing `configuration_files` exemption |
+| 5 | CLI overrides vs agent-proofing | `--profile`, `--parse-errors` and `--exit-zero` stay (per-invocation, visible in the report). The reusable workflow `check.yml` never passes them, and VERIFY003 treats any edit to a consumer's workflow files, `.shockharness.toml`/`shockharness.toml`, baseline files and the analyzer version pin as protected-path changes. The trust model is the brief's: a local CLI cannot stop a privileged actor; enforcement needs branch protection and required checks, and the docs say so |
+| 6 | Org-level profile tier | Accepted as a precedence tier between the built-in profile and repository config: `--policy FILE` names a TOML policy file supplied by the protected CI workflow (checked out from a separate protected repository or shipped as a pinned package resource), never read from the analyzed repository. Keys set by the policy file cannot be loosened by repository config; attempts are reported as VERIFY003. Implemented with H2 |
+| 7 | Skills | Keep the four shipped names (`write-compliant-code`, `fix-violations`, `refactor-complexity`, `pre-commit-review`). Add `verification-integrity` with H2 and `async-lifecycle` with H4. The brief's `complexity-refactoring` and `pre-commit-check` are not adopted |
+| 8 | TypeScript | A separate adapter milestone (H-TS) using `tree-sitter-typescript` (same pinning discipline as JavaScript; a new dependency requires the maintainer's explicit agreement). It is a prerequisite for TYPE001's TypeScript half; TYPE001's Python half (`Any`, `cast`, `# type: ignore`) does not wait for it |
+| 9 | Precision bar | The brief's >= 99 % precision target for hard gates is adopted as a release criterion for promoting any new rule from `warning` to `error` by default; until measured on a reviewed corpus, new rules ship at `warning` or `review` |
+| 10 | Mascot example | `rm -rf /` appears only in documentation and parse-only fixtures; nothing in tests, evals, demos or remediation text executes or suggests it |
+
+### 21.2 Milestones (in order; one session each, after 0.1.0)
+
+| Milestone | Scope | Brief's phase |
+|---|---|---|
+| H1 | Finding state `unknown` + per-family `fail_on_unknown`; file-role classification; schema_version bump if the report shape changes | A1, A4 |
+| H2 | Verification integrity: diff-based VERIFY001 (added skips/only/focus), VERIFY002 (new blanket suppressions and ignore-list edits, including `# shockharness:` suppressions), VERIFY003 (semantic diff of protected paths against the trusted base: thresholds, disabled rules, allowlists, baselines, workflow pins, removed jobs), VERIFY004 (neutralized assertions, known patterns only); `--policy FILE` tier; `verification-integrity` skill; adversarial PR fixtures | B |
+| H3 | Syntax-level rules: STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001; all role-scoped; conservative severities per decision 9 | D1, D4, part of E5 |
+| H4 | Async lifecycle: coroutine/task and Promise ownership facts; ASYNC001-ASYNC003 with `unknown` for unresolved producers; supervisor adapters (`TaskGroup`, `Promise.all`/`allSettled`, configured frameworks); `async-lifecycle` skill | C |
+| H5 | API-catalog rules: PROCESS001, RETRY001, SLEEP001, BATCH001, RESULT001 (`must_use` registry), TYPE001 Python half, STUB003 advisory | D2, D3, E4, E5 |
+| H-TS | TypeScript adapter; TYPE001 TypeScript half | — |
+| H6 | INPUT001-INPUT002 bounded taint tracking with source/sink/validator catalogs; advisory until precision is measured | E1-E3 |
+| H7 | Research (the former Milestone H): calibrated historical risk, abstraction quality, agent regression benchmarks, optional private LLM review | G |
+
+Each milestone follows §15: a session brief, STATUS.md evidence, one commit, no threshold changes to get green, and the self-gate must pass with every new rule enabled on the tool's own code.
 
 ---
 
