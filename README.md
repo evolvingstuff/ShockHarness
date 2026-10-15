@@ -23,13 +23,15 @@ linter. It runs offline, needs no LLM, and never uploads source.
 
 Pre-release. Milestones A (skeleton and contracts), B (parsers and
 `MAGIC001`), C (exception rules `EXC001`-`EXC003`), D (default and fallback
-rules `DEF001`-`DEF006`) and F (baselines, revision diff and gate, SARIF
+rules `DEF001`-`DEF006`), F (baselines, revision diff and gate, SARIF
 output, git churn and co-change metrics, built-in profiles, the `check`
 command, tag-triggered PyPI publishing, a reusable GitHub Actions workflow and
-two consumer examples) are implemented. `MAGIC002`, complexity metrics, the
-hotspot score and agent skills are **not yet implemented**; every report lists
-unimplemented rules under `rules_not_implemented` so a clean run never implies
-coverage the tool does not have. See `STATUS.md` for exact evidence.
+two consumer examples) and G (four bundled agent skills, `skills install` /
+`skills update` with a manifest, and a skill evaluation corpus) are
+implemented. `MAGIC002`, complexity metrics and the hotspot score are **not
+yet implemented**; every report lists unimplemented rules under
+`rules_not_implemented` so a clean run never implies coverage the tool does
+not have. See `STATUS.md` for exact evidence.
 
 Implemented rules:
 
@@ -85,6 +87,9 @@ shockharness diff --base main --head HEAD                      # new / fixed / u
 shockharness gate --base main --head HEAD                      # exit 1 only on new hard violations
 shockharness rules list
 shockharness rules explain MAGIC001
+shockharness skills list                                       # the four bundled agent skills
+shockharness skills install --agent claude                     # .claude/skills/<name>/SKILL.md + manifest
+shockharness skills update --agent claude --check              # exit 1 when a skill is stale or edited
 ```
 
 `check` is the canonical analysis command; `scan`, the name used before
@@ -132,17 +137,156 @@ is bundled defaults < profile < repository configuration < `--profile` /
 `--parse-errors`. Any profile below `strict` is printed as a policy deviation
 in every report, and the report's `effective_profile` names it.
 
-## Adopting ShockHarness on an existing codebase
+## Adopting ShockHarness
 
-Four onboarding paths, all visible in the report (details in
-`docs/configuration.md`):
+This section is written for a coding agent (or a person) that was told to set
+up ShockHarness in a repository and is reading it over HTTP. It is complete on
+its own: nothing here depends on another page, and the detailed documents are
+linked with absolute URLs at the end. Run every command from the repository
+root.
 
-| Path | Use it when |
-|---|---|
-| **Baseline**: `baseline create`, then `--baseline FILE` | You want a real gate from the first PR: legacy findings are listed but do not gate, new ones fail. The usual choice. |
-| **`gates.new_hard_violations = "warn"`** in the config | The repository has agreed the policy is advisory for now; the decision is reviewed and diffed like any config change and reported as a deviation. |
-| **`profile = "minimal"`** (or `--profile minimal`) | First contact: every rule runs and reports at `review`; only malformed suppressions fail. |
-| **`--exit-zero`** on `check`/`gate` | One invocation must not block (a dry run, a first SARIF upload, a scheduled strict run) and the repository's policy should not change for it. Only the process exit code changes (1 becomes 0); exit 2 and 3 are never masked; the report says `advisory`. Deliberately not a config key: the config form is `gates.new_hard_violations = "warn"`. |
+### Step 1: install a pinned version
+
+The version is always an exact pin; nothing updates to `latest`. Pick one:
+
+```bash
+uv tool install 'shockharness==0.1.0a1'                    # isolated tool environment; any repository, JavaScript included
+uvx --from 'shockharness==0.1.0a1' shockharness version     # one-off run, nothing installed
+pip install 'shockharness==0.1.0a1'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
+```
+
+The analyzer needs Python 3.11 or newer to run; the analyzed code may be
+Python or JavaScript. Its only runtime dependencies are `tree-sitter` and
+`tree-sitter-javascript`. The pin that CI installs must live where an updater
+can read it (`pyproject.toml`, a requirements file, or the workflow input in
+step 4), never only inside a shell command.
+
+### Step 2: write the policy file
+
+```bash
+shockharness init                 # writes .shockharness.toml: strict profile, every default spelled out
+shockharness config validate      # exit 0; prints the profile and every policy deviation
+```
+
+Commit `.shockharness.toml`. Adjust `include` and `exclude` so only source is
+analyzed. Tests may stay included; exempt them from `MAGIC001` and `DEF001`
+with an `[[tool.shockharness.overrides]]` entry that carries a `reason`, as
+the tool's own configuration does.
+
+### Step 3: first run, and the four onboarding paths for an existing codebase
+
+```bash
+shockharness check .              # exit 0 pass, 1 violations, 2 invalid configuration, 3 tool failure or unparseable file
+```
+
+A codebase that predates the policy will have findings. Choose one of four
+paths. All four are visible in every report, so none of them hides anything.
+
+| Path | Command or configuration | Use it when |
+|---|---|---|
+| Baseline | `shockharness baseline create . --output .shockharness-baseline.json`, review and commit the file, then run `shockharness check . --baseline .shockharness-baseline.json` | You want a real gate from the first pull request: legacy findings stay listed but do not gate, new ones fail. The usual choice. |
+| `profile = "minimal"` | `profile = "minimal"` in `.shockharness.toml`, or `shockharness check . --profile minimal` for one run | First contact: every rule runs and reports at `review`; only malformed suppressions fail. |
+| `gates.new_hard_violations = "warn"` | `[tool.shockharness.gates]` with `new_hard_violations = "warn"` in `.shockharness.toml` | The repository has agreed that the policy is advisory for now, and that decision should be reviewed and diffed like any configuration change. It is reported as a deviation. |
+| `--exit-zero` | `shockharness check . --exit-zero` | One invocation must not block (a dry run, a first SARIF upload, a scheduled strict run) and the repository's policy must not change for it. Exit 1 becomes 0; exit 2 and 3 are never masked; the report says `advisory`. |
+
+On pull requests prefer `shockharness gate --base origin/main --head HEAD`
+(use the repository's default branch; both revisions must be committed): it
+exits 1 only on hard violations that are new relative to the base.
+
+### Step 4: CI
+
+Direct invocation works on any CI system. Install the pin from the manifest,
+then run the analyzer; a report is written even when the gate fails:
+
+```yaml
+- run: pip install -e ".[dev]"      # the pin lives in pyproject.toml; a JavaScript repository uses the reusable workflow below instead
+- run: shockharness check . --format sarif --output shockharness.sarif
+```
+
+On GitHub, call the reusable workflow. Pin its ref to a release tag or a full
+commit SHA. The analyzer version is the `shockharness-version` input, not the
+ref; the two are separate pins:
+
+```yaml
+name: ShockHarness
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  shockharness:
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.1.0
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      shockharness-version: "0.1.0a1"
+      base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+```
+
+Add `.github/dependabot.yml` so both pins get upgrade pull requests. Dependabot
+bumps the `uses:` ref and any `pyproject.toml` or requirements pin; it does not
+rewrite the `shockharness-version` input, so bump that by hand in the same
+pull request:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+```
+
+### Step 5: install the agent skills
+
+Four skills ship inside the package: `write-compliant-code`,
+`fix-violations`, `refactor-complexity` and `pre-commit-review`.
+
+```bash
+shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
+shockharness skills install --agent codex                               # .agents/skills/<name>/SKILL.md in this repository
+shockharness skills install --agent generic --project docs/agent-skills # any agent; prints the line to add to AGENTS.md
+shockharness skills update --agent claude --check                       # exit 1 when an installed skill is stale or edited
+```
+
+Add `--user` to install into the per-user directory (`~/.claude/skills` or
+`~/.agents/skills`) instead of the repository. `install` never overwrites an
+existing file unless `--force` is given. A manifest,
+`.shockharness-skills.json`, is written next to the skills and records the
+package version and a SHA-256 per file; `skills update` rewrites unedited
+files, leaves edited files alone and reports each as a conflict with the
+remediation. Put `skills update --check` in CI to detect drift after an
+upgrade.
+
+### Step 6: verify
+
+Each command's output confirms one step.
+
+| Step | Command | Output that confirms it |
+|---|---|---|
+| Install | `shockharness version` | `shockharness 0.1.0a1` |
+| Policy | `shockharness config validate` | a line starting `shockharness: configuration is valid` naming `profile strict`, exit 0 |
+| Analysis | `shockharness check .` | a report whose last lines start with `gate: PASS (exit 0)` or `gate: FAIL (exit 1)`; exit 2 or 3 means the setup is wrong, not the code |
+| Baseline, if used | `shockharness check . --baseline .shockharness-baseline.json` | `gate: PASS (exit 0)` followed by `N legacy finding(s) matched the baseline` |
+| Pull-request gate | `shockharness gate --base origin/main --head HEAD` | `gate: PASS (exit 0)` with new, fixed and unchanged counts |
+| Skills | `shockharness skills update --agent claude --check` | a line ending `up to date`, exit 0 |
+| CI | the workflow run | the `shockharness` job green; findings under the repository's Security tab when SARIF is uploaded |
+
+Detailed documents: configuration
+https://github.com/evolvingstuff/ShockHarness/blob/main/docs/configuration.md,
+rules https://github.com/evolvingstuff/ShockHarness/blob/main/docs/rules.md,
+CI and Dependabot
+https://github.com/evolvingstuff/ShockHarness/blob/main/docs/integration.md,
+skills https://github.com/evolvingstuff/ShockHarness/blob/main/docs/skills.md,
+limitations
+https://github.com/evolvingstuff/ShockHarness/blob/main/docs/limitations.md.
 
 ## Configuration
 
@@ -204,8 +348,8 @@ Dependabot can open upgrade PRs; `docs/integration.md` has the full recipe and
 a Dependabot snippet, and `examples/python` and `examples/js` are complete
 consumers exercised by CI.
 
-See `docs/` for configuration, rules, architecture, integration, releasing,
-and limitations.
+See `docs/` for configuration, rules, architecture, integration, skills,
+releasing, and limitations; `evals/` holds the skill evaluation corpus.
 
 ## Library
 
@@ -232,9 +376,10 @@ report = with_history(report, Path("."), "HEAD", config)
 ```bash
 uv pip install -e ".[dev]"
 pytest -q
-ruff check src tests scripts && ruff format --check src tests scripts
-shockharness check src tests scripts   # the tool gates its own source
+ruff check src tests scripts evals && ruff format --check src tests scripts evals
+shockharness check src tests scripts evals   # the tool gates its own source
 python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+python evals/run_evals.py --reference   # the skill eval corpus: every reference solution scores clean
 ```
 
 ShockHarness runs on itself as a hard CI gate. Its one `MAGIC001` exemption is

@@ -41,6 +41,10 @@ publishing**. No API token is stored in the repository or in GitHub secrets.
    pre-releases use PEP 440 forms such as `0.1.0a2`, `0.1.0rc1`.
 2. Edit `src/shockharness/version.py` (`__version__ = "X.Y.Z"`); it is the only
    place the version lives (hatchling reads it at build time).
+   Also update the pinned version in the README's "Adopting ShockHarness"
+   section and, because every bundled skill embeds that section verbatim, in
+   `src/shockharness/skills/*/SKILL.md`; `tests/unit/test_skills.py` fails until
+   the five copies agree with `version.py`.
 3. Move the `[Unreleased]` section of `CHANGELOG.md` under `## [X.Y.Z] - YYYY-MM-DD`.
    Call out rule or default-policy changes first: tightening a default gate is a
    breaking change for consumers.

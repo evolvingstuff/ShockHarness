@@ -1,0 +1,10 @@
+# Policy for this eval task: strict profile, source only. Tests are the task's own.
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/app/store.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Store text is external input; malformed JSON becomes a typed StoreError"

@@ -1077,3 +1077,233 @@ shockharness: error: .../.shockharness.toml: configuration is invalid:
    one-line `config` parser call) and the three new CLI tests failed with
    "unrecognized arguments: --exit-zero"; the patch was re-applied with the
    correct anchor. Nothing else changed.
+
+## Milestone G: agent skills, skills install/update, eval corpus — DONE (2026-10-14)
+
+Delivered (spec sections 5, 12, 14 "Milestone G", 20 decision 5):
+
+* **Four skills as package data**, `src/shockharness/skills/<name>/SKILL.md`
+  (`write-compliant-code`, `fix-violations`, `refactor-complexity`,
+  `pre-commit-review`), open Agent Skills format (frontmatter `name` +
+  `description`, Markdown body), vendor-neutral. Each has a rule table quoted
+  from the registry, compliant and non-compliant Python and JavaScript
+  examples (the worked examples are `examples/python` and `examples/js`),
+  exact CLI invocations with finding lines copied from real runs, a
+  corrective workflow, a checklist, and an "Adopting ShockHarness" section
+  that is byte-identical to the README's (`test_adoption_section_is_identical_in_readme_and_every_skill`).
+  `refactor-complexity` says in its first paragraph that `CPLX001`-`CPLX005`
+  are registered but not implemented (Milestone E) and tells the agent how to
+  record call structure by hand. 250-400 lines each (spec recommends < 500).
+* **`shockharness skills list | show NAME | install | update`**
+  (`src/shockharness/skills/{__init__,adapters,install}.py`, CLI in
+  `cli.py`). `install --agent claude|codex|generic [--project PATH] [--user]
+  [--force]`; `update --agent ... [--project PATH] [--user] [--check]`.
+  `--project`/`--user` are mutually exclusive (argparse, exit 2).
+* **Manifest** `<destination>/.shockharness-skills.json`: `schema_version
+  "1"` (`SKILLS_MANIFEST_SCHEMA_VERSION` in `constants.py`), `tool_version`,
+  `agent`, `skills.<name>.{path, sha256}`; sorted keys, indent 2. Files are
+  written and hashed as bytes (no newline translation), so hashes agree on
+  every platform.
+* **Eval corpus** `evals/`: 8 tasks (`py-01-http-settings`,
+  `py-02-mapping-fallbacks`, `py-03-json-boundary`,
+  `py-04-pagination-numbers`, `js-01-config-env`, `js-02-catch-fallback`,
+  `js-03-pagination-defaults`, `js-04-status-codes`), each with `task.md`,
+  `start/`, `tests/` (unittest / `node --test`), `expected.json`,
+  `reference/`. `evals/run_evals.py` (stdlib only) scores candidates:
+  unsuppressed findings by rule, test exit code, suppressions added; JSON
+  scorecard; exit 0 only when every task passes. `evals/README.md` documents
+  the with/without-skills comparison protocol.
+* **README "Adopting ShockHarness"** (replaces the shorter "on an existing
+  codebase" section): pinned `uv tool install` / `uvx --from` / `pip` forms,
+  `init`, the four onboarding paths, direct and reusable CI with the
+  Dependabot snippet, `skills install`, a verify table; absolute links only.
+* Docs: `docs/skills.md` (new), `docs/integration.md` section 7,
+  `docs/limitations.md` "Skills", `docs/releasing.md` (the pin now lives in
+  five places), `CHANGELOG.md`. CI: Ruff and the self-gate cover `evals/`;
+  the `package` job runs `skills list` from the installed wheel and counts
+  the four `SKILL.md` members; new `skill-evals` job (ubuntu, node 22) scores
+  the references and round-trips install + `update --check` for all three
+  agents. sdist now includes `evals/`.
+
+### Decisions (mine; review these)
+
+1. **Codex paths verified 2026-10-14.** `https://developers.openai.com/codex/skills`
+   redirects (308) to `https://learn.chatgpt.com/docs/build-skills`, whose
+   discovery table lists `$CWD/.agents/skills` and every parent up to
+   `$REPO_ROOT/.agents/skills`, then `$HOME/.agents/skills`, `/etc/codex/skills`
+   and a bundled SYSTEM set. The page does not mention `.codex/skills` or
+   `$CODEX_HOME/skills` (only `~/.codex/config.toml` for `[[skills.config]]`).
+   Third-party guides still say `~/.codex/skills`; the adapter follows the
+   official page: **project `.agents/skills`, user `~/.agents/skills`**. Claude:
+   `.claude/skills` project, `~/.claude/skills` user (`https://code.claude.com/docs/en/skills`).
+   Each is one `Adapter(...)` entry in `skills/adapters.py` with the URL and
+   date in its `documentation` field (asserted by `test_adapter_table`).
+2. `install` refuses (exit 2, writes nothing) when **any** target file or the
+   manifest exists, listing them; `--force` replaces all. Consistent with
+   `init` and `baseline create`.
+3. `update` statuses: `up-to-date`, `stale` (rewritten), `edited` (conflict,
+   left alone, old generated hash kept so it stays a conflict), `missing`
+   (restored), `new` (added), `removed` (reported, file not deleted, manifest
+   entry dropped). A shipped skill whose file exists but has no manifest entry
+   is treated as `edited` (never overwrite a file we did not write). `update`
+   exits 1 while a conflict remains; `--check` writes nothing (not even the
+   manifest) and exits 1 on any of the five drift statuses, which is wider than
+   the brief's "stale or edited" so consumer CI also notices a new or removed
+   skill. The remediation printed for a conflict: save edits, delete the file,
+   rerun `update` (restored), re-apply; `skills show NAME` prints the shipped
+   version.
+4. Frontmatter parsing is a deliberate YAML subset (single-line `key: value`
+   between two `---` lines), applied only to the shipped files; the test suite
+   validates them against the Agent Skills constraints (name regex, 64 chars,
+   description 1-1024 chars, name == directory).
+5. `generic` requires `--project DIR` and rejects `--user` (both exit 2); it
+   prints the `AGENTS.md` pointer line with the path as the user typed it.
+   No command edits an agent's configuration or instruction file.
+6. The eval runner is stdlib-only and therefore holds its own `JSON_INDENT =
+   2`; `.shockharness.toml` gains `include = [..., "evals/*.py"]`, `exclude`
+   of `evals/tasks/**` (deliberately dirty starts) and a declared `MAGIC001`
+   override for `evals/run_evals.py` with that reason. Python tasks use
+   `unittest` (no pytest dependency in the workspace); JavaScript tasks pass
+   the explicit `tests/*.test.js` list to `node --test` (Node 24 rejects a bare
+   directory argument). A missing `node` is recorded as a test failure.
+7. Two tasks require config edits in the solution (`py-03`, `js-02`: one
+   declared boundary each; `js-02` demonstrates the `instanceof` guard and the
+   `{ cause: err }` form EXC002 requires). Two allow bounded cited suppressions
+   (`py-01`: 1 for the RFC 793 port ceiling; `js-04`: 3 for RFC 9110 status
+   codes); the runner fails a candidate that exceeds the allowance.
+8. Ruff's formatter reformats fenced Python inside `.md` files, which would
+   mangle the aligned, partly non-compliant snippets, so
+   `src/shockharness/skills` joined `extend-exclude` (Ruff never lints the
+   Markdown; the Python modules in the same package are still checked and
+   formatted).
+9. The adoption section pins `0.1.0a1` in the README and in all four skills;
+   `test_adoption_section_is_identical_in_readme_and_every_skill` asserts the
+   pin equals `version.py`, so a version bump must touch the five copies
+   (`docs/releasing.md` step 2 says so). Not bumped here.
+10. Analyzer message texts quoted in the skills were taken from real runs
+    (`env.X ?? v` on a parameter is DEF002, not DEF006; the JavaScript EXC001
+    and DEF005 wordings; the diff gate's `N new, N fixed, N unchanged
+    finding(s)` line; the baseline gate's `N legacy finding(s) matched the
+    baseline` line).
+
+### Dogfooding: what the gate found in the new code
+
+The first `install.py` wrote `mkdir` + `write_bytes` inside one `try`
+(EXC003 would flag two operations under the new `OSError` boundary); the two
+calls moved into `_create_parent_and_write` so the `try` wraps one call. The
+first `adapters.py` imported `SKILL_NAMES` inside `pointer_line` (an
+approximate-confidence import); moved to module level. No numeric literal
+other than 0/1 appears outside `constants.py` and the declared eval override.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+77 files already formatted
+
+$ pytest -q        # CPython 3.12.8 / 3.11.11 / 3.13.1 / 3.14.7
+483 passed in 13.96s / 20.12s / 19.16s / 19.04s      (447 before; 36 new)
+
+$ shockharness check src tests scripts evals    # self-compliance, all four interpreters
+gate: PASS (exit 0)
+
+$ shockharness config validate | head -1
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+  (22 boundaries, 3 overrides; the three new boundaries are skills/install.py OSError,
+   UnicodeDecodeError, json.JSONDecodeError)
+
+$ python evals/run_evals.py --reference --output scorecard.json   # all four interpreters
+js-01-config-env: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+js-02-catch-fallback: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+js-03-pagination-defaults: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+js-04-status-codes: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 3
+py-01-http-settings: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 1
+py-02-mapping-fallbacks: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+py-03-json-boundary: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+py-04-pagination-numbers: PASS; analyzer exit 0, unsuppressed findings 0; tests exit 0; suppressions added 0
+evals: 8 task(s), 8 passed, 0 failed, 0 unsuppressed finding(s), 4 suppression(s) added
+(exit 0)
+
+$ python evals/run_evals.py --candidates <copies of every start/>
+evals: 8 task(s), 0 passed, 8 failed, 38 unsuppressed finding(s), 0 suppression(s) added
+(exit 1; every start fails both the analyzer and its tests)
+
+$ python -m build && unzip -l dist/*.whl | grep SKILL.md
+shockharness/skills/fix-violations/SKILL.md
+shockharness/skills/pre-commit-review/SKILL.md
+shockharness/skills/refactor-complexity/SKILL.md
+shockharness/skills/write-compliant-code/SKILL.md
+$ tar tzf dist/*.tar.gz | grep -c evals/
+74
+
+$ # fresh directory, clean venv with the built wheel
+$ shockharness skills install --agent claude
+shockharness: installed 4 skill(s) for claude into .../.claude/skills
+  written    write-compliant-code/SKILL.md
+  written    fix-violations/SKILL.md
+  written    refactor-complexity/SKILL.md
+  written    pre-commit-review/SKILL.md
+  manifest   .shockharness-skills.json (shockharness 0.1.0a1)
+Claude Code loads .claude/skills/<name>/SKILL.md from the project and ~/.claude/skills/<name>/SKILL.md from the home directory automatically.
+$ shockharness skills install --agent claude ; echo $?
+shockharness: error: .../.claude/skills: skill files already exist and would be overwritten; pass --force to replace them, or run `skills update` to refresh unedited files and keep edited ones: ...
+2
+$ shockharness skills install --agent codex | head -1
+shockharness: installed 4 skill(s) for codex into .../.agents/skills
+$ shockharness skills update --agent claude --check ; echo $?
+  up-to-date write-compliant-code/SKILL.md
+  ...
+shockharness: 4 skill(s) up to date
+0
+$ echo "# mine" >> .claude/skills/fix-violations/SKILL.md; rm .claude/skills/pre-commit-review/SKILL.md
+$ shockharness skills update --agent claude --check ; echo $?
+  edited     fix-violations/SKILL.md: left unchanged: conflict (content differs from the manifest hash; the file is yours, so it is left unchanged. To take the shipped version: save your edits, delete the file, run `shockharness skills update --agent claude` (the file is restored), then re-apply your edits. To read the shipped version: `shockharness skills show fix-violations`.)
+  missing    pre-commit-review/SKILL.md: would be restored from the package (in the manifest but absent on disk)
+shockharness: 2 of 4 skill(s) drifted from the installed package (exit 1)
+1
+$ shockharness skills update --agent claude ; echo $?
+  missing    pre-commit-review/SKILL.md: restored from the package (in the manifest but absent on disk)
+shockharness: 1 conflict(s) left unchanged (exit 1)
+1
+$ shockharness skills install --agent generic ; echo $?
+shockharness: error: --agent generic needs --project DIR (the directory that receives <name>/SKILL.md); there is no conventional location for a generic agent
+2
+$ shockharness skills install --agent generic --project docs/agent-skills | tail -2
+Add this line to the agent's instruction file (for example AGENTS.md):
+  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review).
+```
+
+### Failures observed during development (and what was done)
+
+1. The first eval run failed every task: `unittest discover -t .` needs
+   `tests/` to be a package (dropped `-t .`); `node --test tests` is a module
+   path on Node 24, not a directory (the runner now passes the
+   `tests/*.test.js` files); the `js-02` reference threw
+   `new ParseError(msg, err)`, which EXC002 reports as "cause is not
+   preserved" (changed to `{ cause: err }`).
+2. `ruff format --check` failed on the three SKILL.md files (it formats
+   fenced Python in Markdown); excluded the skills directory from Ruff.
+3. A naive "no `[[` wiki links" assertion in `test_skills.py` matched nested
+   list literals in a code sample; removed.
+4. The first draft of `fix-violations` quoted a DEF006 finding for
+   `env.REQUEST_TIMEOUT_MS ?? 2500` and invented JavaScript EXC001/DEF005
+   wordings; both corrected from real analyzer output before commit.
+
+### Not run here
+
+GitHub Actions (`skill-evals` job, the `package` job's `skills list` and
+`SKILL.md` count) have not run on GitHub; they are exercised by the next push.
+`docs/assets/` (hero and logo images, untracked, created today by someone
+else) is not part of this commit.
+
+### Limitations and next tasks
+
+* See `docs/limitations.md` "Skills": no YAML parser, hash-based conflicts
+  without merging, no agent is run and review accuracy is not scored, `node`
+  required for the JavaScript tasks, adapter paths need a release when a
+  vendor moves.
+* Milestone E (complexity) is next; `refactor-complexity` must then drop its
+  "not implemented" paragraph and quote the real thresholds.
+* The eval corpus has one reference per task; collecting agent runs with and
+  without the skills (the protocol in `evals/README.md`) is maintainer work.

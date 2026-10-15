@@ -40,6 +40,23 @@ from shockharness.output import text as text_output
 from shockharness.report import Report
 from shockharness.rules import registry
 from shockharness.schema import PROFILE_STRICT, PROFILES
+from shockharness.skills import SKILL_NAMES, shipped_frontmatter, skill_text
+from shockharness.skills.adapters import (
+    AGENT_GENERIC,
+    AGENTS,
+    get_adapter,
+    pointer_line,
+    resolve_destination,
+)
+from shockharness.skills.install import (
+    ACTION_NONE,
+    MANIFEST_FILENAME,
+    STATUS_EDITED,
+    STATUS_UP_TO_DATE,
+    SkillsResult,
+    install_skills,
+    update_skills,
+)
 from shockharness.version import __version__
 
 PROGRAM = "shockharness"
@@ -52,6 +69,7 @@ PARSE_ERROR_POLICIES = ("fail", "warn")
 COMMAND_CHECK = "check"
 COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
 COMMAND_VERSION = "version"
+COMMAND_SKILLS = "skills"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -144,6 +162,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--path", type=Path, default=Path(DEDICATED_FILENAME), help="where to write the file"
     )
     init.add_argument("--force", action="store_true", help="overwrite an existing file")
+
+    skills = commands.add_parser(
+        COMMAND_SKILLS, help="install, update or inspect the bundled agent skills"
+    )
+    skills_commands = skills.add_subparsers(
+        dest="skills_command", required=True, metavar="SUBCOMMAND"
+    )
+    skills_commands.add_parser("list", help="list the shipped skills with their descriptions")
+    show = skills_commands.add_parser("show", help="print one shipped SKILL.md")
+    show.add_argument("name", choices=SKILL_NAMES)
+    skills_install = skills_commands.add_parser(
+        "install",
+        help=f"write every skill and a {MANIFEST_FILENAME} manifest into the agent's directory",
+    )
+    _add_skills_destination_arguments(skills_install)
+    skills_install.add_argument(
+        "--force", action="store_true", help="replace skill files that already exist"
+    )
+    skills_update = skills_commands.add_parser(
+        "update",
+        help="rewrite unedited skill files from the installed package, keep edited ones",
+    )
+    _add_skills_destination_arguments(skills_update)
+    skills_update.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 when any installed skill is stale, edited, missing, new "
+        "or removed relative to the installed package",
+    )
     return parser
 
 
@@ -158,6 +205,28 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     _add_output_arguments(parser)
     _add_baseline_argument(parser)
     _add_exit_zero_argument(parser)
+
+
+def _add_skills_destination_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--agent",
+        choices=AGENTS,
+        required=True,
+        help="claude: .claude/skills; codex: .agents/skills; generic: --project DIR itself",
+    )
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument(
+        "--project",
+        type=Path,
+        default=None,
+        help="project root holding the agent's skills directory (default: current directory); "
+        "for --agent generic, the directory that receives <name>/SKILL.md (required)",
+    )
+    where.add_argument(
+        "--user",
+        action="store_true",
+        help="use the per-user skills directory under the home directory instead",
+    )
 
 
 def _add_exit_zero_argument(parser: argparse.ArgumentParser) -> None:
@@ -395,6 +464,84 @@ def _run_init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _skills_destination(args: argparse.Namespace) -> tuple[Path, Path]:
+    """(destination directory, the --project path as the user typed it or the cwd)."""
+    adapter = get_adapter(args.agent)
+    if adapter.agent == AGENT_GENERIC and args.project is None and not args.user:
+        raise UsageError(
+            "--agent generic needs --project DIR (the directory that receives "
+            "<name>/SKILL.md); there is no conventional location for a generic agent",
+            None,
+        )
+    project_root = Path.cwd()
+    if args.project is not None:
+        project_root = args.project
+    destination = resolve_destination(adapter, project_root, args.user, Path.home())
+    return destination, project_root
+
+
+def _print_skill_files(result: SkillsResult) -> None:
+    for file in result.files:
+        relative = file.path.relative_to(result.destination).as_posix()
+        line = f"  {file.status:<10} {relative}"
+        if file.action not in (file.status, ACTION_NONE):
+            line += f": {file.action}"
+        if file.detail != "":
+            line += f" ({file.detail})"
+        sys.stdout.write(line + "\n")
+
+
+def _run_skills(args: argparse.Namespace) -> int:
+    if args.skills_command == "list":
+        for name in SKILL_NAMES:
+            sys.stdout.write(f"{name}\n  {shipped_frontmatter(name).description}\n")
+        return EXIT_OK
+    if args.skills_command == "show":
+        sys.stdout.write(skill_text(args.name))
+        return EXIT_OK
+    destination, project_root = _skills_destination(args)
+    adapter = get_adapter(args.agent)
+    if args.skills_command == "install":
+        result = install_skills(destination, args.agent, args.force)
+        sys.stdout.write(
+            f"{PROGRAM}: installed {len(result.files)} skill(s) for {args.agent} into "
+            f"{destination}\n"
+        )
+        _print_skill_files(result)
+        sys.stdout.write(f"  manifest   {MANIFEST_FILENAME} ({version_string()})\n")
+        sys.stdout.write(f"{adapter.discovery}\n")
+        if adapter.agent == AGENT_GENERIC:
+            sys.stdout.write(
+                "Add this line to the agent's instruction file (for example AGENTS.md):\n"
+                f"  {pointer_line(project_root)}\n"
+            )
+        return result.exit_code
+    result = update_skills(destination, args.agent, args.check)
+    mode = "checked" if args.check else "updated"
+    sys.stdout.write(
+        f"{PROGRAM}: {mode} skills for {args.agent} in {destination} ({version_string()})\n"
+    )
+    _print_skill_files(result)
+    up_to_date = result.count(STATUS_UP_TO_DATE)
+    if up_to_date == len(result.files):
+        sys.stdout.write(f"{PROGRAM}: {up_to_date} skill(s) up to date\n")
+    elif args.check:
+        drifted = len(result.files) - up_to_date
+        sys.stdout.write(
+            f"{PROGRAM}: {drifted} of {len(result.files)} skill(s) drifted from the installed "
+            f"package (exit {result.exit_code})\n"
+        )
+    else:
+        conflicts = result.count(STATUS_EDITED)
+        if conflicts == 0:
+            sys.stdout.write(f"{PROGRAM}: {len(result.files)} skill(s) up to date\n")
+        else:
+            sys.stdout.write(
+                f"{PROGRAM}: {conflicts} conflict(s) left unchanged (exit {result.exit_code})\n"
+            )
+    return result.exit_code
+
+
 def _run_version() -> int:
     sys.stdout.write(version_string() + "\n")
     return EXIT_OK
@@ -417,6 +564,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _run_rules(args)
     if args.command == "init":
         return _run_init(args)
+    if args.command == COMMAND_SKILLS:
+        return _run_skills(args)
     raise UsageError(f"unknown command {args.command!r}", None)
 
 

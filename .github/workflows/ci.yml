@@ -30,12 +30,12 @@ jobs:
           python -m pip install -e ".[dev]"
       - name: Ruff
         run: |
-          ruff check src tests scripts
-          ruff format --check src tests scripts
+          ruff check src tests scripts evals
+          ruff format --check src tests scripts evals
       - name: Tests
         run: pytest -q
       - name: Self-compliance gate
-        run: shockharness check src tests scripts --format text
+        run: shockharness check src tests scripts evals --format text
       - name: Config validates
         run: shockharness config validate
       - name: Version subcommand
@@ -60,6 +60,8 @@ jobs:
           /tmp/clean/bin/shockharness --version
           /tmp/clean/bin/shockharness version
           /tmp/clean/bin/shockharness rules list
+          /tmp/clean/bin/shockharness skills list
+          unzip -l dist/*.whl | grep -c 'shockharness/skills/.*/SKILL.md' | grep -qx 4
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -86,3 +88,34 @@ jobs:
         run: >
           python scripts/consumer_upgrade_check.py
           --dist dist --examples examples --wheelhouse wheelhouse
+
+  skill-evals:
+    name: skill eval corpus (reference solutions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Score the reference solutions (every task must pass)
+        run: python evals/run_evals.py --reference --output scorecard.json
+      - name: Skills install round trip (claude, codex, generic) and drift check
+        run: |
+          mkdir /tmp/fresh && cd /tmp/fresh
+          shockharness skills install --agent claude
+          shockharness skills install --agent codex
+          shockharness skills install --agent generic --project agent-skills
+          shockharness skills update --agent claude --check
+          shockharness skills update --agent codex --check
+          shockharness skills update --agent generic --project agent-skills --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-evals-scorecard
+          path: scorecard.json

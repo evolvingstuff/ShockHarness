@@ -28,6 +28,15 @@ def test_ci_workflow_uses_check_and_is_callable() -> None:
     assert "shockharness check src tests scripts" in text
     assert "shockharness scan" not in text
     assert "scripts/consumer_upgrade_check.py" in text
+    assert "ruff check src tests scripts evals" in text
+    assert "shockharness check src tests scripts evals" in text
+    assert "python evals/run_evals.py --reference --output scorecard.json" in text
+    assert "shockharness skills install --agent claude" in text
+    assert "shockharness skills install --agent codex" in text
+    assert "shockharness skills install --agent generic --project agent-skills" in text
+    assert "shockharness skills update --agent claude --check" in text
+    assert "/tmp/clean/bin/shockharness skills list" in text
+    assert text.count("skill-evals:") == 1 and "actions/setup-node@v4" in text
     assert "--wheelhouse wheelhouse" in text
     assert "pip download --dest wheelhouse dist/shockharness-*.whl" in text
     for python in ('"3.11"', '"3.12"', '"3.13"', '"3.14"'):

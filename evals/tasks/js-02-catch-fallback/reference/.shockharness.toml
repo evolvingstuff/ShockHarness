@@ -1,0 +1,10 @@
+# Policy for this eval task: strict profile, source only. Tests are the task's own.
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.js"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/body.js"
+language = "javascript"
+exception = "SyntaxError"
+reason = "Response bodies are external input; malformed JSON becomes a typed ParseError"

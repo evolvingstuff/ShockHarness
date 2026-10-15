@@ -1,0 +1,6 @@
+{
+  "language": "javascript",
+  "max_findings": 0,
+  "max_suppressions_added": 0,
+  "tests_must_pass": true
+}

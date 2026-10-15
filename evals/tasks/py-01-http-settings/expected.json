@@ -1,0 +1,6 @@
+{
+  "language": "python",
+  "max_findings": 0,
+  "max_suppressions_added": 1,
+  "tests_must_pass": true
+}

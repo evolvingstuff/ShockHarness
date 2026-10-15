@@ -162,11 +162,34 @@ Stated so that a clean report is never read as more than it is.
 * URIs are root-relative with `uriBaseId = "%SRCROOT%"`; the absolute root is
   not written so the document is byte-identical across machines.
 
+## Skills
+
+* `skills install` knows three destinations (`claude`, `codex`, `generic`);
+  the Claude and Codex paths were verified against each vendor's documentation
+  on 2026-10-14 and are a one-line table entry each in
+  `src/shockharness/skills/adapters.py`. A vendor that moves its skills
+  directory needs a new release of this package (or `--agent generic
+  --project <dir>` in the meantime).
+* The frontmatter parser reads the subset of YAML the shipped skills use
+  (single-line `key: value` fields between two `---` lines); it is not a YAML
+  parser and is applied only to the shipped files.
+* `skills update` detects edits by hash; it does not merge. An edited file is
+  left alone and reported, and the shipped version is available with
+  `skills show`. `skills install --force` is the only command that overwrites
+  an edited skill.
+* The eval runner scores analyzer findings, the task's tests and added
+  suppressions. It does not run agents, does not score review accuracy
+  (`pre-commit-review` verdicts are compared by hand), and needs `node` on
+  `PATH` for the JavaScript tasks (a missing `node` is reported as a test
+  failure, never as a pass).
+* The "Adopting ShockHarness" section embedded in every skill pins the
+  package version of the skill's own release, so an installed skill may name
+  an older version than the latest on PyPI until `skills update` is run.
+
 ## Not yet built (see the specification)
 
-Complexity metrics and the hotspot score, call graphs, `.gitignore`
-awareness, agent skills and `skills install`. Unknown CLI commands are
-argparse errors (exit 2). Profiles exist but are limited to the three built-in
+Complexity metrics and the hotspot score, call graphs and `.gitignore`
+awareness. Unknown CLI commands are argparse errors (exit 2). Profiles exist but are limited to the three built-in
 ones (no user-defined or remote profiles), and the only command-line overrides
 are `--profile` and `--parse-errors`. The publish workflow and the reusable
 consumer workflow have not yet run on GitHub: the first `v*` tag exercises

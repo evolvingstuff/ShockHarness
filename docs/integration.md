@@ -176,7 +176,31 @@ The four onboarding paths (baseline, `gates.new_hard_violations = "warn"`,
 4. Move to `strict` when the baseline is paid down; every deviation from strict
    is printed in every report until then.
 
-## 7. Acceptance checks this repository runs
+## 7. Agent skills
+
+If coding agents work in the repository, install the four bundled skills
+next to the code so they are versioned with it, and let CI detect drift
+after an analyzer upgrade:
+
+```bash
+shockharness skills install --agent claude     # .claude/skills/<name>/SKILL.md + .shockharness-skills.json
+shockharness skills install --agent codex      # .agents/skills/<name>/SKILL.md + manifest
+shockharness skills install --agent generic --project docs/agent-skills   # prints the AGENTS.md pointer line
+```
+
+```yaml
+- run: shockharness skills update --agent claude --check   # exit 1 when a skill is stale or edited
+```
+
+After a Dependabot upgrade of the analyzer, run `shockharness skills update
+--agent <agent>` in the same pull request: unedited skill files are rewritten,
+edited ones are kept and reported as conflicts. Details, the adapter table
+with the verified destination paths, and the manifest format are in
+[`skills.md`](skills.md). The README's "Adopting ShockHarness" section is the
+short, self-contained form of this document, written for an agent reading it
+over HTTP; every skill carries the same section.
+
+## 8. Acceptance checks this repository runs
 
 * The wheel builds, installs into a fresh venv, and exposes `shockharness` on `PATH` (`package` job).
 * The Python example and the JavaScript example pass `check .` with the local
@@ -188,3 +212,7 @@ The four onboarding paths (baseline, `gates.new_hard_violations = "warn"`,
 * The example workflows call the reusable workflow pinned to a tag, with a
   pinned analyzer version, and the two pins of the Python example agree
   (`tests/unit/test_consumer_script.py`, `tests/unit/test_workflows.py`).
+* The four skills install for `claude`, `codex` and `generic` in a fresh
+  directory, `skills update --check` then exits 0, and every reference
+  solution of the eval corpus scores clean (`skill-evals` job,
+  `evals/run_evals.py --reference`).

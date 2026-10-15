@@ -6,6 +6,41 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Milestone G: four vendor-neutral agent skills shipped as package data
+  (`shockharness/skills/<name>/SKILL.md`, open Agent Skills format with
+  `name`/`description` frontmatter): `write-compliant-code`,
+  `fix-violations`, `refactor-complexity`, `pre-commit-review`. Each has
+  compliant and non-compliant Python and JavaScript examples, exact CLI
+  invocations, a corrective workflow, a checklist, and an "Adopting
+  ShockHarness" section identical to the README's (enforced by a test).
+  `refactor-complexity` states that `CPLX001`-`CPLX005` are not implemented.
+- `shockharness skills list|show|install|update`. `install --agent
+  claude|codex|generic [--project PATH] [--user] [--force]` writes the skills
+  (claude: `.claude/skills`, codex: `.agents/skills`, generic: `--project DIR`
+  itself plus a printed `AGENTS.md` pointer line) and a manifest
+  `.shockharness-skills.json` (schema version 1: agent, package version,
+  SHA-256 per file); it refuses to overwrite without `--force` (exit 2) and
+  touches nothing outside the destination. `update` rewrites files whose hash
+  still equals the manifest, restores missing ones, adds new skills, reports
+  removed ones, leaves edited files alone and reports each as a conflict with
+  the remediation (exit 1 while a conflict remains); `update --check` writes
+  nothing and exits 1 on any drift. Three new declared exception boundaries in
+  `skills/install.py` (`OSError`, `UnicodeDecodeError`,
+  `json.JSONDecodeError`).
+- Skill evaluation corpus under `evals/`: eight paired tasks (four Python,
+  four JavaScript) with prompt, starting files, behavioral tests, expected
+  outcome and a clean reference solution; `evals/run_evals.py` (standard
+  library only, one declared `MAGIC001` override) scores candidate directories
+  by unsuppressed findings per rule, test exit code and suppressions added,
+  and writes a JSON scorecard. CI scores the reference solutions and
+  round-trips `skills install` / `update --check` for all three agents on
+  ubuntu. The sdist carries `evals/`.
+- README "Adopting ShockHarness": a self-contained guide for an agent reading
+  the README over HTTP (pinned `uv tool install` / `uvx` / `pip` forms,
+  `init`, the four onboarding paths, direct and reusable CI steps with the
+  Dependabot snippet, `skills install`, and a verification table), with
+  absolute links only. `docs/skills.md` is new; `docs/integration.md` gains a
+  skills section.
 - `--exit-zero` on `check` (and the `scan` alias) and `gate`: an advisory
   run. The report, severities, gate verdict text and every count are
   unchanged; only the process exit code is 0 where the verdict would have

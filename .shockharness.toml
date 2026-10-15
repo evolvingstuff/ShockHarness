@@ -3,8 +3,8 @@
 
 [tool.shockharness]
 profile = "strict"
-include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
-exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**"]
+include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "evals/*.py"]
+exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**"]
 parse_errors = "fail"
 
 [tool.shockharness.rules.magic_numbers]
@@ -110,6 +110,24 @@ exception = "UnicodeDecodeError"
 reason = "git output is external bytes; undecodable output becomes a GitResult error"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/skills/install.py"
+language = "python"
+exception = "OSError"
+reason = "Reading and writing skill files and the manifest in the user's chosen destination is I/O; failure becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/skills/install.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Skills manifest bytes are external input; non-UTF-8 becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/skills/install.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Skills manifest content is external input; malformed JSON becomes a UsageError (exit 2)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/cli.py"
 language = "python"
 exception = "shockharness.errors.ShockHarnessError"
@@ -154,3 +172,8 @@ reason = "Single designated module holding every numeric constant the tool needs
 paths = ["tests/**"]
 disable = ["MAGIC001", "DEF001"]
 reason = "Test code encodes literal expected outputs and pytest fixture signatures"
+
+[[tool.shockharness.overrides]]
+paths = ["evals/run_evals.py"]
+disable = ["MAGIC001"]
+reason = "The eval runner is stdlib-only by design (it scores the analyzer from outside), so it cannot import shockharness.constants and holds its one JSON indent constant itself"

@@ -59,7 +59,7 @@ path = "src/shockharness/version.py"
 packages = ["src/shockharness"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/shockharness", "tests", "docs", "schemas", "README.md", "LICENSE", "CHANGELOG.md", "STATUS.md", ".shockharness.toml"]
+include = ["src/shockharness", "tests", "docs", "schemas", "evals", "README.md", "LICENSE", "CHANGELOG.md", "STATUS.md", ".shockharness.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,7 +70,7 @@ markers = ["slow: tests that run subprocesses or large inputs"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["tests/fixtures"]  # intentionally invalid and non-compliant inputs
+extend-exclude = ["tests/fixtures", "evals/tasks", "src/shockharness/skills"]  # non-compliant inputs; Markdown skill snippets
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

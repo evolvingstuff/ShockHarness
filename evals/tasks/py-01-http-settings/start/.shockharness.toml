@@ -1,0 +1,4 @@
+# Policy for this eval task: strict profile, source only. Tests are the task's own.
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py"]
