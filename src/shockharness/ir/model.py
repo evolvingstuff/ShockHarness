@@ -173,27 +173,88 @@ class CatchFact:
 
 
 @dataclass(frozen=True)
-class ManagerFact:
-    """A ``with`` item whose context expression is a call: a candidate exception capture.
+class ManagerCall:
+    """A call expression that may construct an exception-capturing context manager.
 
-    The adapter records every such item (``with open(p) as f:`` included) because it
-    does not know which managers catch; ``rules.exceptions`` turns the ones that do
-    (``contextlib.suppress`` and the configured ``capture_managers``) into
-    :class:`CatchFact` entries of kind ``context manager``. ``qualified`` and
-    ``confidence`` are the callee resolved through the module's symbol table;
-    ``identities`` are the positional arguments that resolve as exception types;
-    ``unreadable_arguments`` counts positional arguments that are not names (a
-    string, a call); keyword arguments are ignored. ``body_statements`` are the
-    ``with`` body, attributed like a ``try`` body.
+    ``qualified`` and ``confidence`` are the callee resolved through the module's
+    symbol table; ``identities`` are the positional arguments that resolve as
+    exception types; ``unreadable_arguments`` counts positional arguments that are
+    not names (a string, a call); keyword arguments are ignored.
     """
 
-    span: Span
-    scope: str
     callee: str
     qualified: str | None
     confidence: str
     identities: tuple[ExceptionIdentity, ...]
     unreadable_arguments: int
+
+
+# How a plain name used as a ``with`` context expression was bound (0.3.0, item 1).
+BOUND_ASSIGNMENT = "assignment"  # ``name = <value>`` / ``name: T = <value>``
+BOUND_WITH_AS = "with_as"  # ``with <expr> as name:`` (binds what __enter__ returns)
+BOUND_IMPORT = "import"  # ``import name`` / ``from m import name``
+BOUND_LOOP_TARGET = "loop_target"  # ``for name in ...:``
+BOUND_DEFINITION = "definition"  # ``def name`` / ``class name``
+BOUND_OTHER = "other"  # augmented assignment, tuple unpacking, walrus, except-as, global
+
+
+@dataclass(frozen=True)
+class NameBinding:
+    """One statement of the enclosing scope that binds the ``with``'s name.
+
+    ``call`` is the bound value when it is a call (``name = M(T)``), or the context
+    expression for a ``with M(T) as name``; ``value`` is the bound value as written.
+    ``dominating`` is true when the binding's block encloses the ``with`` (the same
+    block, or an outer one); false when it sits in a branch or loop body the
+    ``with`` is not inside, so the binding may not have run.
+    """
+
+    kind: str
+    line: int
+    call: ManagerCall | None
+    value: str
+    dominating: bool
+
+
+@dataclass(frozen=True)
+class NameResolution:
+    """How a ``with name:`` resolves within its scope (0.3.0, item 1).
+
+    ``preceding`` lists every binding of ``name`` in the enclosing scope (function or
+    module body) before the ``with``, in source order; ``parameter`` says whether the
+    name is a parameter of the enclosing function and ``comprehension_target``
+    whether a comprehension in the scope binds it; ``elsewhere`` holds the calls
+    the name is bound to anywhere else in the module (another scope, or after the
+    ``with``). Which calls count as capture managers is the rule's decision.
+    """
+
+    name: str
+    preceding: tuple[NameBinding, ...]
+    parameter: bool
+    comprehension_target: bool
+    elsewhere: tuple[ManagerCall, ...]
+
+
+@dataclass(frozen=True)
+class ManagerFact:
+    """A ``with`` item whose context expression is a call or a plain name: a candidate
+    exception capture.
+
+    The adapter records every such item (``with open(p) as f:`` and ``with lock:``
+    included) because it does not know which managers catch; ``rules.exceptions``
+    turns the ones that do (``contextlib.suppress`` and the configured
+    ``capture_managers``) into :class:`CatchFact` entries of kind ``context
+    manager``. ``call`` is the inline call (``with M(T):``); ``resolution`` is set
+    instead when the context expression is a plain name (``with capture:``), and
+    ``callee`` is then that name. ``body_statements`` are the ``with`` body,
+    attributed like a ``try`` body.
+    """
+
+    span: Span
+    scope: str
+    callee: str
+    call: ManagerCall | None
+    resolution: NameResolution | None
     bound_name: str | None
     body_statements: tuple[TryStatement, ...]
 

@@ -5,6 +5,47 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Planned 0.3.0: the third feedback round, from `docs/shockharness-suggestions-3.md`
+(the same 906-file codebase run with 0.2.0). Items 1, 2, 4 and 5 are below;
+item 3 (the content-hash cache) follows in its own entry.
+
+### Added
+- `EXC001`/`EXC002` resolve a capture manager bound to a name: `capture =
+  CapturedExceptionContext(T); with capture:` (81 of the 82 captures in that
+  codebase) and `s = suppress(T); with s:` are the same catch as the inline
+  form, resolved to the most recent binding of the name in the same function
+  or module body. The confidence is `exact` when nothing stands between the
+  assignment and the `with`, `approximate` when the assignment sits in a
+  branch or loop the `with` is not inside (or the name is also a parameter or
+  a comprehension target), and `unresolved` (an untyped catch, never the older
+  binding) when the name was rebound in between, is bound by `with ... as`, or
+  is bound to a listed manager only in another scope. A name never bound to a
+  listed manager is an ordinary `with`. IR: `ManagerFact` now carries a
+  `ManagerCall` (inline form) or a `NameResolution` (bound form).
+- `rules.magic_numbers.named_constant_definitions = "allow"` accepts literal
+  arithmetic as the value of a module-level constant: `CHUNK_BYTES = 64 *
+  1024`, `const MAX_MS = 30 * 60 * 1000;` (numeric literals, unary `+`/`-`,
+  parentheses, `+ - * / // % **`; JavaScript the same set). Any name, call,
+  attribute, subscript or non-numeric literal in the expression keeps every
+  literal reported; `"report"` is unchanged. Specification section 5 and
+  section 19 (decision 16) record it.
+- `EXC002`'s message for a handler that consists only of a transparent guard
+  call (`catch (error) { rethrowUnexpectedError(error); }`) ends with the
+  three remedies: handle the expected error after the guard, log it and
+  continue with a stated reason, or suppress the finding with a reason. No
+  behaviour change.
+
+### Changed
+- Glob patterns: a leading `/` or `./` anchors the pattern to the analysis
+  root. `/main.py` and `./main.py` match only the root-level `main.py`;
+  `/src/*.py` matches `src/a.py` but not `src/sub/a.py` or `other/src/a.py`.
+  Patterns without either prefix keep their semantics (no slash: basename
+  anywhere; with a slash: whole relative path). This changes `./pattern` from
+  "the same as `pattern`" to "root-anchored", and `config validate` now
+  accepts a leading `/` (it was an error). `include`, `exclude`,
+  `overrides[].paths`, `rules.magic_numbers.configuration_files` and boundary
+  paths all honour the anchor.
+
 ## [0.2.0] - 2026-10-14
 
 The feedback round after the first run of 0.1.0 on a 906-file codebase

@@ -126,7 +126,7 @@ PY_CONSTANTS = (
     "limit: t.Final[int] = 7\n"  # 7: qualified, subscripted Final
     "MAX_RETRIES: int = 5\n"  # 8: UPPER name with another annotation
     "LIMITS = {'retries': 3}\n"  # 9: container: reported
-    "TIMEOUT = 30 * 60\n"  # 10: expression: both reported
+    "TIMEOUT = 30 * 60\n"  # 10: literal arithmetic: a definition since 0.3.0
     "A = B = 9\n"  # 11: chained targets: reported
     "lower = 4\n"  # 12: not a constant name: reported
     "class K:\n    N = 6\n"  # 14: class body: reported
@@ -145,8 +145,8 @@ JS_CONSTANTS = (
     "{ const BLOCK = 8; }\n"  # 9: block scope: reported
     "export default 5;\n"  # 10: not a declaration: reported
 )
-PY_DEFINITION_LINES = [3, 4, 5, 6, 7, 8]
-PY_OTHER_LINES = [9, 10, 10, 11, 12, 14, 16, 19]
+PY_DEFINITION_LINES = [3, 4, 5, 6, 7, 8, 10, 10]
+PY_OTHER_LINES = [9, 11, 12, 14, 16, 19]
 JS_DEFINITION_LINES = [1, 2, 3]  # line 3 holds two definitions; one is the permitted 1
 JS_OTHER_LINES = [4, 5, 6, 7, 7, 8, 9, 10]
 
@@ -222,3 +222,60 @@ def test_recommended_and_minimal_allow_constant_definitions(
 def test_named_constant_mode_is_validated(make_config: Callable[[str], EffectiveConfig]) -> None:
     with pytest.raises(ConfigError, match=r"named_constant_definitions: must be one of"):
         make_config('[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "yes"\n')
+
+
+# --- literal arithmetic in named constants (0.3.0 brief, item 2) ---------------------------
+
+
+def test_literal_arithmetic_in_a_named_constant_is_a_definition(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    allowed = make_config(
+        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "allow"\n'
+    )
+    # the acceptance examples
+    assert _magic_lines(allowed, "CHUNK_BYTES = 64 * 1024\n", "python") == []
+    assert _magic_lines(allowed, "const MAX_MS = 30 * 60 * 1000;\n", "javascript") == []
+    assert _magic_lines(allowed, "TIMEOUT = BASE * 2\n", "python") == [1]
+    assert _magic_lines(allowed, "SIZE = int(x) * 2\n", "python") == [1]
+    assert _magic_lines(allowed, "LIMITS = [8, 16]\n", "python") == [1, 1]
+    assert _magic_lines(strict_config, "CHUNK_BYTES = 64 * 1024\n", "python") == [1, 1]
+    assert _magic_lines(allowed, "def f():\n    K = 64 * 1024\n    return K\n", "python") == [
+        2,
+        2,
+    ]
+    # the whole operator set, unary signs and parentheses, in both languages
+    full = "P = -(30 * 60) / 2 + (2 ** 10) // 3 % 7 - +4\n"
+    assert _magic_lines(allowed, full, "python") == []
+    assert len(_magic_lines(strict_config, full, "python")) == 8
+    js_full = "export const P = -(30 * 60) / 2 + (2 ** 10) % 7 - +4;\n"
+    assert _magic_lines(allowed, js_full, "javascript") == []
+    assert len(_magic_lines(strict_config, js_full, "javascript")) == 7
+    assert _magic_lines(allowed, "F: float = 2.5 * 4\nwait: Final = 3 * 5\n", "python") == []
+    # anything else in the expression keeps every literal reported
+    for text in (
+        "A = 2 * len(x)\n",
+        "B = 2 * x.y\n",
+        "C = 2 * xs[0]\n",
+        "D = '3' * 2\n",
+        "E = True * 2\n",
+        "F = 2 << 3\n",
+        "G = 2 if x else 3\n",
+    ):
+        assert len(_magic_lines(allowed, text, "python")) == len(
+            _magic_lines(strict_config, text, "python")
+        ), text
+        assert len(_magic_lines(allowed, text, "python")) > 0, text
+    for text in (
+        "const A = 2 * f(x);\n",
+        "const B = 2 * x.y;\n",
+        "const C = 2 << 3;\n",
+        "const D = '3' * 2;\n",
+        "const E = 2 * (x, 3);\n",
+    ):
+        assert len(_magic_lines(allowed, text, "javascript")) == len(
+            _magic_lines(strict_config, text, "javascript")
+        ), text
+        assert len(_magic_lines(allowed, text, "javascript")) > 0, text
+    # a comment inside the parentheses does not disqualify a JavaScript definition
+    assert _magic_lines(allowed, "const C = (2 /* two */ * 4);\n", "javascript") == []

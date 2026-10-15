@@ -33,8 +33,18 @@ of a module-level named constant definition is marked by the adapters:
 
 | Covered (marked) | Not covered (always reported) |
 |---|---|
-| Python: `MAX_PAGES = 8`, `_PORT_WAIT_SECONDS = 10.0`, `NEGATIVE = -8` (one UPPER_SNAKE_CASE target, leading underscores allowed), `wait: Final = 2.5`, `limit: t.Final[int] = 7` (any simple name annotated `Final`), `MAX_RETRIES: int = 5`; a statement of the module body itself | `LIMITS = {"retries": 3}` and `SIZES = [8, 16]` (containers), `TIMEOUT = 30 * 60` (an expression: both literals), `A = B = 9` (chained targets), `lower = 4`, class bodies, function bodies, `if ...: NESTED = 11` at module level |
-| JavaScript: `const MAX_PAGES = 8;`, `export const _SETTLE_MS = -400;`, each declarator of `const A = 1, TWO = 2;` | `let maxPages = 8;`, `var LIMIT = 8;`, `const camel = 8;`, `const SIZES = [8, 16];`, a `const` inside a function or block, `export default 5;` |
+| Python: `MAX_PAGES = 8`, `_PORT_WAIT_SECONDS = 10.0`, `NEGATIVE = -8` (one UPPER_SNAKE_CASE target, leading underscores allowed), `wait: Final = 2.5`, `limit: t.Final[int] = 7` (any simple name annotated `Final`), `MAX_RETRIES: int = 5`, `CHUNK_BYTES = 64 * 1024` (literal arithmetic, 0.3.0: every literal of the expression); a statement of the module body itself | `LIMITS = {"retries": 3}` and `SIZES = [8, 16]` (containers), `TIMEOUT = BASE * 2` and `SIZE = int(x) * 2` (a name or call in the expression: every literal), `A = B = 9` (chained targets), `lower = 4`, class bodies, function bodies, `if ...: NESTED = 11` at module level |
+| JavaScript: `const MAX_PAGES = 8;`, `export const _SETTLE_MS = -400;`, `const MAX_MS = 30 * 60 * 1000;` (literal arithmetic, 0.3.0), each declarator of `const A = 1, TWO = 2;` | `let maxPages = 8;`, `var LIMIT = 8;`, `const camel = 8;`, `const SIZES = [8, 16];`, `const T = BASE * 2;`, a `const` inside a function or block, `export default 5;` |
+
+**Literal arithmetic (0.3.0).** The value may also be an expression built only
+of numeric literals, unary `+`/`-`, parentheses and the binary operators `+ - * /
+// % **` (JavaScript: the same set, `**` included, no `//`): `CHUNK_BYTES = 64 *
+1024`, `MAX_MS = 30 * 60 * 1000`, `-(30 * 60) / 2`. The definition is still the
+remedy; the arithmetic only documents how the number is built, so every literal
+of such a value carries the mark. Any name, attribute, call, subscript or
+non-numeric literal anywhere in the expression (`BASE * 2`, `int(x) * 2`,
+`True * 2`, `"3" * 2`) keeps every literal in it reported, as do containers.
+Under `"report"` every literal is reported as before.
 
 `rules.magic_numbers.named_constant_definitions` decides what the mark means.
 `"report"` (the `strict` default) keeps the specification's reading: a named
@@ -173,6 +183,39 @@ inspection after the block and is not an EXC002 finding; what the code does
 with it is not inspected. EXC003 applies to an approved manager's body as to
 a `try` body. Every configured manager is a reported policy deviation.
 
+**Capture managers bound to a name (0.3.0).** The common form binds the manager
+first, because the capture is inspected afterwards:
+
+```python
+capture = CapturedExceptionContext(ProcessLookupError, boundary="main.py:_is_process_running")
+with capture:
+    os.kill(pid, 0)
+if capture.captured_exception is not None:
+    ...
+```
+
+When the context expression is a plain name, it is resolved to the most recent
+binding of that name in the same scope (the function body or the module body,
+walking backwards from the `with`; nested `if`/`for`/`while`/`try`/`with`
+bodies belong to the scope, nested functions and classes do not). If that
+binding is an assignment whose value is a call to a listed manager or to
+`contextlib.suppress`, the `with` is that catch, exactly as the inline form
+(same findings, same line, same approval by boundaries, same EXC002 treatment
+of `suppress`), with this confidence:
+
+| Binding | Confidence |
+|---|---|
+| Assignment at the same block level or in an enclosing block (`capture = M(T)` then `with capture:`, or both inside the same `if`), nothing rebinds the name in between | `exact` (or the callee's own confidence when its import does not resolve) |
+| Assignment inside a branch or loop body the `with` is not inside (`if flag: capture = M(T)` then `with capture:` after the `if`), or the name is also a parameter of the function or a comprehension target in the scope | `approximate`, still a catch; it still matches a boundary |
+| The name was bound to a listed manager earlier but the latest binding before the `with` is something else (`capture = M(T)`, then `capture = other()`, then `with capture:`), or that latest binding is a `with M(T) as capture:` (which binds what `__enter__` returns) | `unresolved`: an untyped catch, reported by EXC001 like a bare `except`, never silently the older binding |
+| No binding of the name in the scope before the `with` (a module-level `capture = M(T)` used inside a function), or the latest one is an import, a loop target, a `def`, or a tuple unpacking, while the name is bound to a listed manager elsewhere in the module | `unresolved`, as above; the message says where the name was last bound |
+
+A name that is never bound to a listed manager anywhere in the module is an
+ordinary `with` (`with lock:`, `with fh:`); an unlisted manager bound to a name
+is an ordinary `with` too. Resolution never crosses modules: an imported
+manager instance is `unresolved` only when the same name is also bound to a
+listed manager in the module, because nothing else says the `with` is a catch.
+
 **Limitations.** Class hierarchies are not known: a boundary for `OSError` does
 not approve `FileNotFoundError`, and a broad library base class other than
 `Exception`/`BaseException` is only flagged for not being approved. Shadowing by
@@ -196,7 +239,12 @@ not:
 Not flagged: bare `raise`, `raise err`, `raise X from err`, `throw err`,
 `throw new X(msg, { cause: err })`, and any handler with several non-logging
 statements or a non-literal return (`return default`, `return compute()`),
-which is reported as `other` and left to EXC001. For a guarded handler (a
+which is reported as `other` and left to EXC001. A handler that consists only
+of a transparent guard call (`catch (error) { rethrowUnexpectedError(error); }`)
+swallows the expected errors; since 0.3.0 its message ends with the three
+things that satisfy the policy: handle the expected error after the guard, log
+it and continue with a stated reason, or suppress the finding with a reason. A
+handler with statements after the guard keeps the plain message. For a guarded handler (a
 JavaScript `instanceof` guard, a Python `isinstance` guard, or a configured
 transparent guard call) the statements after the guard are classified, and the
 message names the guard; a fallback returned after a transparent guard call is

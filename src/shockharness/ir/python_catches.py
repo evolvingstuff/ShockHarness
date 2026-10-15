@@ -19,6 +19,7 @@ No analyzed module is ever imported or executed.
 import ast
 import builtins
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from shockharness.ir.model import (
@@ -30,6 +31,12 @@ from shockharness.ir.model import (
     BODY_RAISE_OTHER,
     BODY_RERAISE,
     BODY_RETURN_FALLBACK,
+    BOUND_ASSIGNMENT,
+    BOUND_DEFINITION,
+    BOUND_IMPORT,
+    BOUND_LOOP_TARGET,
+    BOUND_OTHER,
+    BOUND_WITH_AS,
     BROAD_IDENTITIES,
     CATCH_EXCEPT,
     CATCH_EXCEPT_STAR,
@@ -40,7 +47,10 @@ from shockharness.ir.model import (
     CatchFact,
     ExceptionIdentity,
     HandlerBody,
+    ManagerCall,
     ManagerFact,
+    NameBinding,
+    NameResolution,
     Span,
     TryStatement,
 )
@@ -529,27 +539,276 @@ def _resolve_callee(expr: ast.expr, table: SymbolTable) -> tuple[str | None, str
     return _normalize(".".join([root.qualified, *parts[1:]])), root.confidence
 
 
-def _manager_fact(
-    item: ast.withitem,
-    stmt: ast.With | ast.AsyncWith,
-    scope: str,
-    table: SymbolTable,
-    source: SourceText,
-) -> ManagerFact | None:
-    call = item.context_expr
-    if not isinstance(call, ast.Call):
+def _manager_call(expr: ast.expr, table: SymbolTable, source: SourceText) -> ManagerCall | None:
+    """``M(T, ...)`` with a dotted callee as a :class:`ManagerCall`; ``None`` otherwise."""
+    if not isinstance(expr, ast.Call):
         return None
-    callee = dotted_name(call.func)
+    callee = dotted_name(expr.func)
     if callee is None:
         return None
-    qualified, confidence = _resolve_callee(call.func, table)
+    qualified, confidence = _resolve_callee(expr.func, table)
     identities: list[ExceptionIdentity] = []
     unreadable = 0
-    for argument in call.args:
+    for argument in expr.args:
         if dotted_name(argument) is None:
             unreadable += 1
             continue
         identities.append(resolve_identity(argument, table, source))
+    return ManagerCall(
+        callee=callee,
+        qualified=qualified,
+        confidence=confidence,
+        identities=tuple(identities),
+        unreadable_arguments=unreadable,
+    )
+
+
+# Compound statements whose bodies belong to the enclosing scope (a nested def or class
+# is a scope of its own and is not entered).
+BLOCK_FIELDS: Mapping[type, tuple[str, ...]] = {
+    ast.If: ("body", "orelse"),
+    ast.For: ("body", "orelse"),
+    ast.AsyncFor: ("body", "orelse"),
+    ast.While: ("body", "orelse"),
+    ast.With: ("body",),
+    ast.AsyncWith: ("body",),
+    ast.Try: ("body", "orelse", "finalbody"),
+    ast.TryStar: ("body", "orelse", "finalbody"),
+}
+BlockPath = tuple[int, ...]
+
+
+def _flatten_scope(body: list[ast.stmt]) -> list[tuple[ast.stmt, BlockPath]]:
+    """Every statement of a scope body in source order with the path of blocks enclosing
+    it (``()`` for the body itself); nested scopes are listed but not entered."""
+    flat: list[tuple[ast.stmt, BlockPath]] = []
+    stack: list[tuple[ast.stmt, BlockPath]] = [(stmt, ()) for stmt in reversed(body)]
+    while len(stack) > 0:
+        stmt, path = stack.pop()
+        flat.append((stmt, path))
+        children: list[tuple[ast.stmt, BlockPath]] = []
+        if isinstance(stmt, ast.Try | ast.TryStar):
+            for index, handler in enumerate(stmt.handlers):
+                handler_path = (*path, id(stmt), index + 1)
+                children.extend((child, handler_path) for child in handler.body)
+        if isinstance(stmt, ast.Match):
+            for index, case in enumerate(stmt.cases):
+                children.extend((child, (*path, id(stmt), index)) for child in case.body)
+        if type(stmt) in BLOCK_FIELDS:
+            for field_index, field_name in enumerate(BLOCK_FIELDS[type(stmt)]):
+                block_path = (*path, id(stmt), -(field_index + 1))
+                children.extend((child, block_path) for child in getattr(stmt, field_name))
+        children.sort(key=lambda entry: (entry[0].lineno, entry[0].col_offset))
+        stack.extend(reversed(children))
+    return flat
+
+
+def _walk_pruned(node: ast.AST) -> list[ast.AST]:
+    """``ast.walk`` that does not enter nested scopes (defs, classes, lambdas)."""
+    found: list[ast.AST] = []
+    stack: list[ast.AST] = list(ast.iter_child_nodes(node))
+    while len(stack) > 0:
+        current = stack.pop()
+        if isinstance(current, SCOPE_NODES):
+            continue
+        found.append(current)
+        stack.extend(ast.iter_child_nodes(current))
+    return found
+
+
+def _target_names(target: ast.expr) -> list[str]:
+    return [node.id for node in ast.walk(target) if isinstance(node, ast.Name)]
+
+
+Binding = tuple[str, ManagerCall | None, str]
+
+
+def _binding_of(
+    stmt: ast.stmt, name: str, table: SymbolTable, source: SourceText
+) -> Binding | None:
+    """``(kind, call, value as written)`` when ``stmt`` itself binds ``name``."""
+    if isinstance(stmt, ast.Assign | ast.AnnAssign):
+        return _assignment_binding(stmt, name, table, source)
+    if isinstance(stmt, ast.Import | ast.ImportFrom):
+        if any(_import_binds(stmt, alias, name) for alias in stmt.names):
+            return BOUND_IMPORT, None, describe_statement(stmt, source)
+        return None
+    if isinstance(stmt, ast.With | ast.AsyncWith):
+        return _with_binding(stmt, name, table, source)
+    kind = _header_binding_kind(stmt, name)
+    if kind is None:
+        return None
+    return kind, None, describe_statement(stmt, source)
+
+
+def _assignment_binding(
+    stmt: ast.Assign | ast.AnnAssign, name: str, table: SymbolTable, source: SourceText
+) -> Binding | None:
+    targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+    if not any(name in _target_names(target) for target in targets):
+        return None
+    simple = len(targets) == 1 and isinstance(targets[0], ast.Name)
+    if stmt.value is None or not simple:
+        return BOUND_OTHER, None, describe_statement(stmt, source)
+    value = ast.get_source_segment(source.text, stmt.value)
+    if value is None:
+        value = ""
+    return BOUND_ASSIGNMENT, _manager_call(stmt.value, table, source), value.split("\n")[0]
+
+
+def _with_binding(
+    stmt: ast.With | ast.AsyncWith, name: str, table: SymbolTable, source: SourceText
+) -> Binding | None:
+    for item in stmt.items:
+        if item.optional_vars is not None and name in _target_names(item.optional_vars):
+            call = _manager_call(item.context_expr, table, source)
+            return BOUND_WITH_AS, call, describe_statement(stmt, source)
+    return None
+
+
+def _header_binding_kind(stmt: ast.stmt, name: str) -> str | None:
+    """The binding kind of a statement whose header (not its body) binds ``name``."""
+    if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return BOUND_DEFINITION if stmt.name == name else None
+    if isinstance(stmt, ast.For | ast.AsyncFor):
+        return BOUND_LOOP_TARGET if name in _target_names(stmt.target) else None
+    if isinstance(stmt, ast.AugAssign):
+        return BOUND_OTHER if name in _target_names(stmt.target) else None
+    if isinstance(stmt, ast.Global | ast.Nonlocal):
+        return BOUND_OTHER if name in stmt.names else None
+    if isinstance(stmt, ast.Try | ast.TryStar):
+        return BOUND_OTHER if any(h.name == name for h in stmt.handlers) else None
+    return None
+
+
+def _import_binds(stmt: ast.Import | ast.ImportFrom, alias: ast.alias, name: str) -> bool:
+    if alias.asname is not None:
+        return alias.asname == name
+    if isinstance(stmt, ast.Import):
+        return alias.name.split(".")[0] == name
+    return alias.name == name
+
+
+def _walrus_binds(stmt: ast.stmt, name: str) -> bool:
+    return any(
+        isinstance(node, ast.NamedExpr)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == name
+        for node in _walk_pruned(stmt)
+    )
+
+
+def _parameter_names(scope_node: ast.AST) -> frozenset[str]:
+    if not isinstance(scope_node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return frozenset()
+    arguments = scope_node.args
+    names = [a.arg for a in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]]
+    if arguments.vararg is not None:
+        names.append(arguments.vararg.arg)
+    if arguments.kwarg is not None:
+        names.append(arguments.kwarg.arg)
+    return frozenset(names)
+
+
+def _comprehension_targets(statements: list[ast.stmt]) -> frozenset[str]:
+    names: set[str] = set()
+    for stmt in statements:
+        for node in _walk_pruned(stmt):
+            if isinstance(node, ast.comprehension):
+                names.update(_target_names(node.target))
+    return frozenset(names)
+
+
+def _dominates(binding_path: BlockPath, with_path: BlockPath) -> bool:
+    return with_path[: len(binding_path)] == binding_path
+
+
+def _module_call_bindings(
+    module: ast.Module, table: SymbolTable, source: SourceText
+) -> dict[str, list[tuple[int, ManagerCall]]]:
+    """Every ``name = M(...)`` and ``with M(...) as name`` in the module, by name, keyed
+    by the binding statement's id so a scope's own bindings can be told apart."""
+    found: dict[str, list[tuple[int, ManagerCall]]] = {}
+    for node in ast.walk(module):
+        for name, expr in _call_binding_candidates(node):
+            call = _manager_call(expr, table, source)
+            if call is not None:
+                _append_binding(found, name, id(node), call)
+    return found
+
+
+def _call_binding_candidates(node: ast.AST) -> list[tuple[str, ast.expr]]:
+    """``(name, bound expression)`` for a simple assignment or a ``with ... as name``."""
+    if isinstance(node, ast.Assign | ast.AnnAssign):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if len(targets) == 1 and isinstance(targets[0], ast.Name) and node.value is not None:
+            return [(targets[0].id, node.value)]
+        return []
+    if isinstance(node, ast.With | ast.AsyncWith):
+        return [
+            (item.optional_vars.id, item.context_expr)
+            for item in node.items
+            if isinstance(item.optional_vars, ast.Name)
+        ]
+    return []
+
+
+def _append_binding(
+    found: dict[str, list[tuple[int, ManagerCall]]], name: str, stmt_id: int, call: ManagerCall
+) -> None:
+    if name not in found:
+        found[name] = []
+    found[name].append((stmt_id, call))
+
+
+def _resolve_name(
+    name: str,
+    with_index: int,
+    flat: list[tuple[ast.stmt, BlockPath]],
+    scope_node: ast.AST,
+    table: SymbolTable,
+    source: SourceText,
+    module_calls: Mapping[str, list[tuple[int, ManagerCall]]],
+) -> NameResolution:
+    with_path = flat[with_index][1]
+    preceding: list[NameBinding] = []
+    seen_ids: set[int] = set()
+    for stmt, path in flat[:with_index]:
+        bound = _binding_of(stmt, name, table, source)
+        if bound is None and _walrus_binds(stmt, name):
+            bound = (BOUND_OTHER, None, describe_statement(stmt, source))
+        if bound is None:
+            continue
+        kind, call, value = bound
+        seen_ids.add(id(stmt))
+        preceding.append(NameBinding(kind, stmt.lineno, call, value, _dominates(path, with_path)))
+    elsewhere: tuple[ManagerCall, ...] = ()
+    if name in module_calls:
+        elsewhere = tuple(call for stmt_id, call in module_calls[name] if stmt_id not in seen_ids)
+    return NameResolution(
+        name=name,
+        preceding=tuple(preceding),
+        parameter=name in _parameter_names(scope_node),
+        comprehension_target=name in _comprehension_targets([stmt for stmt, _ in flat]),
+        elsewhere=elsewhere,
+    )
+
+
+def _manager_fact(
+    item: ast.withitem,
+    stmt: ast.With | ast.AsyncWith,
+    scope: str,
+    resolution: NameResolution | None,
+    table: SymbolTable,
+    source: SourceText,
+) -> ManagerFact | None:
+    call = _manager_call(item.context_expr, table, source)
+    if resolution is not None:
+        callee = resolution.name
+    elif call is not None:
+        callee = call.callee
+    else:
+        return None
     bound: str | None = None
     if isinstance(item.optional_vars, ast.Name):
         bound = item.optional_vars.id
@@ -557,10 +816,8 @@ def _manager_fact(
         span=node_span(source, stmt),
         scope=scope,
         callee=callee,
-        qualified=qualified,
-        confidence=confidence,
-        identities=tuple(identities),
-        unreadable_arguments=unreadable,
+        call=call,
+        resolution=resolution,
         bound_name=bound,
         body_statements=tuple(try_statement(s, source) for s in stmt.body),
     )
@@ -569,23 +826,47 @@ def _manager_fact(
 def collect_python_managers(
     source: SourceText, module: ast.Module, relative_path: str
 ) -> tuple[ManagerFact, ...]:
-    """Every ``with`` item whose context expression is a call, with its callee and
-    positional arguments resolved; the rules decide which ones are catches."""
+    """Every ``with`` item whose context expression is a call (resolved with its
+    positional arguments) or a plain name (resolved to the bindings of that name in
+    the enclosing scope); the rules decide which ones are catches."""
     table = SymbolTable(module, module_dotted_name(relative_path))
+    module_calls = _module_call_bindings(module, table, source)
     managers: list[ManagerFact] = []
     stack: list[tuple[ast.AST, str]] = [(module, MODULE_SCOPE)]
     while len(stack) > 0:
         node, scope = stack.pop()
-        if isinstance(node, ast.With | ast.AsyncWith):
-            for item in node.items:
-                fact = _manager_fact(item, node, scope, table, source)
-                if fact is not None:
-                    managers.append(fact)
         child_scope = scope
         if isinstance(node, SCOPE_NODES):
             name = scope_name(node)
             child_scope = name if scope == MODULE_SCOPE else f"{scope}.{name}"
+        if isinstance(node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            managers.extend(_scope_managers(node, child_scope, table, source, module_calls))
         for child in ast.iter_child_nodes(node):
             stack.append((child, child_scope))
     managers.sort(key=lambda fact: fact.span)
     return tuple(managers)
+
+
+def _scope_managers(
+    node: ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    scope: str,
+    table: SymbolTable,
+    source: SourceText,
+    module_calls: Mapping[str, list[tuple[int, ManagerCall]]],
+) -> list[ManagerFact]:
+    """The manager facts of every ``with`` in one scope's body (nested scopes excluded)."""
+    found: list[ManagerFact] = []
+    flat = _flatten_scope(list(node.body))
+    for index, (stmt, _) in enumerate(flat):
+        if not isinstance(stmt, ast.With | ast.AsyncWith):
+            continue
+        for item in stmt.items:
+            resolution: NameResolution | None = None
+            if isinstance(item.context_expr, ast.Name):
+                resolution = _resolve_name(
+                    item.context_expr.id, index, flat, node, table, source, module_calls
+                )
+            fact = _manager_fact(item, stmt, scope, resolution, table, source)
+            if fact is not None:
+                found.append(fact)
+    return found

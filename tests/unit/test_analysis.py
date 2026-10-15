@@ -131,3 +131,28 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
         "SUPP001",
         "SUPP002",
     ]
+
+
+def test_override_and_configuration_file_patterns_honour_the_root_anchor(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    """0.3.0, item 4: ``/conftest.py`` and ``./tests/**`` apply at the root only."""
+    config = make_config(
+        "[tool.shockharness.rules.magic_numbers]\n"
+        'configuration_files = ["/conftest.py"]\n'
+        "[[tool.shockharness.overrides]]\n"
+        'paths = ["./tests/**"]\ndisable = ["MAGIC001"]\nreason = "fixtures"\n'
+    )
+
+    def disabled(path: str) -> list[tuple[str, str]]:
+        result = analyze_text(path, "python", "x = 2\n", config, AnalysisOptions(True))
+        return [(d.rule_id, d.origin) for d in result.rules_disabled]
+
+    assert disabled("conftest.py") == [("MAGIC001", "configuration_file")]
+    assert disabled("pkg/conftest.py") == []
+    assert disabled("tests/t.py") == [("MAGIC001", "overrides[0]")]
+    assert disabled("pkg/tests/t.py") == []
+    assert (
+        analyze_text("pkg/tests/t.py", "python", "x = 2\n", config, AnalysisOptions(True)).findings
+        != ()
+    )

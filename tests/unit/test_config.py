@@ -248,3 +248,24 @@ def test_undotted_dedicated_file_also_shadows_pyproject(empty_root: Path) -> Non
     assert config.source.tier == TIER_DEDICATED
     assert config.values["parse_errors"] == "fail"
     assert any("shadowed" in note for note in config.notes)
+
+
+def test_root_anchored_globs_are_accepted_everywhere(empty_root: Path) -> None:
+    """0.3.0, item 4: a leading ``/`` is no longer a configuration error."""
+    write(
+        empty_root,
+        ".shockharness.toml",
+        "[tool.shockharness]\n"
+        'include = ["/main.py", "./src/**/*.py"]\nexclude = ["/build/**"]\n'
+        "[tool.shockharness.rules.magic_numbers]\n"
+        'configuration_files = ["/conftest.py"]\n'
+        "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "/main.py"\nlanguage = "python"\nexception = "OSError"\nreason = "r"\n'
+        "[[tool.shockharness.overrides]]\n"
+        'paths = ["./tests/**"]\ndisable = ["MAGIC001"]\nreason = "r"\n',
+    )
+    config = load_config(empty_root, None)
+    assert config.values["include"] == ["/main.py", "./src/**/*.py"]
+    write(empty_root, ".shockharness.toml", '[tool.shockharness]\ninclude = ["/"]\n')
+    with pytest.raises(ConfigError, match=r"include\[0\]: a root-anchored glob pattern"):
+        load_config(empty_root, None)

@@ -72,22 +72,42 @@ def _is_final_annotation(annotation: ast.expr) -> bool:
     return isinstance(target, ast.Attribute) and target.attr == FINAL_ANNOTATION
 
 
+# Literal arithmetic accepted in a named constant definition (0.3.0): binary + - * / // % **
+# over numeric literals, unary +/- and parentheses (parentheses leave no AST node).
+CONSTANT_OPERATORS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
+CONSTANT_UNARY = (ast.UAdd, ast.USub)
+
+
 def _is_constant_value(value: ast.expr | None) -> bool:
-    """An int or float literal, optionally under one unary minus: the whole right-hand side."""
+    """The whole right-hand side is an int or float literal, or arithmetic over such
+    literals: unary ``+``/``-``, parentheses and the binary operators ``+ - * / // % **``
+    (``64 * 1024``, ``-(30 * 60) / 2``). Any name, attribute, call, subscript or
+    non-numeric literal in the expression disqualifies the whole definition."""
     if value is None:
         return False
-    inner = value
-    if isinstance(value, ast.UnaryOp) and isinstance(value.op, ast.USub):
-        inner = value.operand
-    return isinstance(inner, ast.Constant) and type(inner.value) in CONSTANT_VALUE_TYPES
+    stack: list[ast.expr] = [value]
+    while len(stack) > 0:
+        node = stack.pop()
+        if isinstance(node, ast.Constant):
+            if type(node.value) not in CONSTANT_VALUE_TYPES:
+                return False
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, CONSTANT_UNARY):
+            stack.append(node.operand)
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, CONSTANT_OPERATORS):
+            stack.append(node.left)
+            stack.append(node.right)
+        else:
+            return False
+    return True
 
 
 def _constant_definition_values(module: ast.Module) -> set[int]:
-    """``id()`` of every value node that is a module-level named constant definition.
+    """``id()`` of every literal node of a module-level named constant definition.
 
     A statement of the module body itself (not nested in an ``if``/``try``/loop):
-    ``NAME = <literal>`` with one simple UPPER_SNAKE_CASE target, or
-    ``name: Final = <literal>`` / ``NAME: <annotation> = <literal>``. Containers,
+    ``NAME = <value>`` with one simple UPPER_SNAKE_CASE target, or
+    ``name: Final = <value>`` / ``NAME: <annotation> = <value>``, where the value is a
+    literal or literal arithmetic (see :func:`_is_constant_value`). Containers, other
     expressions, chained targets, class bodies and function bodies are not covered.
     """
     values: set[int] = set()
@@ -98,14 +118,32 @@ def _constant_definition_values(module: ast.Module) -> set[int]:
             if CONSTANT_NAME.fullmatch(stmt.targets[0].id) is None:
                 continue
             if _is_constant_value(stmt.value):
-                values.add(id(stmt.value))
+                values.update(_literal_ids(stmt.value))
         elif isinstance(stmt, ast.AnnAssign):
             if not isinstance(stmt.target, ast.Name) or not _is_constant_value(stmt.value):
                 continue
             named = CONSTANT_NAME.fullmatch(stmt.target.id) is not None
             if named or _is_final_annotation(stmt.annotation):
-                values.add(id(stmt.value))
+                assert stmt.value is not None
+                values.update(_literal_ids(stmt.value))
     return values
+
+
+def _literal_ids(value: ast.expr) -> set[int]:
+    """``id()`` of every literal node of an accepted constant value, as the literal
+    collector sees them: a unary chain over a literal is folded into one node."""
+    ids: set[int] = set()
+    stack: list[ast.expr] = [value]
+    while len(stack) > 0:
+        node = stack.pop()
+        if isinstance(node, ast.BinOp):
+            stack.append(node.left)
+            stack.append(node.right)
+        elif isinstance(node, ast.UnaryOp) and _fold_unary(node) is None:
+            stack.append(node.operand)  # a sign over an expression, not over a literal
+        else:
+            ids.add(id(node))
+    return ids
 
 
 def _raw(source: SourceText, node: ast.expr) -> str:

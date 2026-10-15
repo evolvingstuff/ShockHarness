@@ -59,7 +59,6 @@ LEXICAL_DECLARATION = "lexical_declaration"
 EXPORT_STATEMENT = "export_statement"
 VARIABLE_DECLARATOR = "variable_declarator"
 CONST_KIND = "const"
-MINUS = "-"
 
 
 def parse_js_number(raw: str) -> int | float:
@@ -101,22 +100,70 @@ def _fold_unary(node: Node) -> tuple[Node, bool] | None:
     return current, negative
 
 
+# Literal arithmetic accepted in a named constant definition (0.3.0): binary + - * / % **
+# over numeric literals, unary +/- and parentheses.
+BINARY = "binary_expression"
+PARENTHESIZED = "parenthesized_expression"
+CONSTANT_OPERATORS = frozenset({"+", "-", "*", "/", "%", "**"})
+
+
 def _is_constant_value(value: Node | None) -> bool:
-    """A numeric literal, optionally under one unary minus: the whole right-hand side."""
+    """The whole right-hand side is a numeric literal, or arithmetic over numeric
+    literals: unary ``+``/``-``, parentheses and the binary operators ``+ - * / % **``
+    (``64 * 1024``, ``-(30 * 60) / 2``). Any identifier, member, call, subscript or
+    non-numeric literal in the expression disqualifies the whole definition."""
     if value is None:
         return False
-    if value.type == NUMBER:
-        return True
-    if value.type != UNARY:
-        return False
-    operator = value.child_by_field_name("operator")
-    argument = value.child_by_field_name("argument")
-    return (
-        operator is not None
-        and argument is not None
-        and node_text(operator) == MINUS
-        and argument.type == NUMBER
-    )
+    stack: list[Node] = [value]
+    while len(stack) > 0:
+        children = _constant_operands(stack.pop())
+        if children is None:
+            return False
+        stack.extend(children)
+    return True
+
+
+def _constant_operands(node: Node) -> list[Node] | None:
+    """The operands of a node accepted in a constant value (none for a number), or
+    ``None`` when the node disqualifies the definition."""
+    if node.type == NUMBER:
+        return []
+    if node.type == UNARY:
+        operator = node.child_by_field_name("operator")
+        argument = node.child_by_field_name("argument")
+        if operator is None or argument is None or node_text(operator) not in SIGN_OPERATORS:
+            return None
+        return [argument]
+    if node.type == PARENTHESIZED:
+        inner = [child for child in node.named_children if child.type != COMMENT]
+        return inner if len(inner) == 1 else None
+    if node.type == BINARY:
+        operator = node.child_by_field_name("operator")
+        left = node.child_by_field_name("left")
+        right = node.child_by_field_name("right")
+        if operator is None or left is None or right is None:
+            return None
+        return [left, right] if node_text(operator) in CONSTANT_OPERATORS else None
+    return None
+
+
+def _literal_ids(value: Node) -> set[int]:
+    """Ids of every literal node of an accepted constant value, as the literal
+    collector records them: a unary chain over a number is one node."""
+    ids: set[int] = set()
+    stack: list[Node] = [value]
+    while len(stack) > 0:
+        node = stack.pop()
+        if node.type == NUMBER or _fold_unary(node) is not None:
+            ids.add(node.id)
+            continue
+        if node.type == UNARY:
+            argument = node.child_by_field_name("argument")
+            assert argument is not None
+            stack.append(argument)
+            continue
+        stack.extend(child for child in node.named_children if child.type != COMMENT)
+    return ids
 
 
 def _const_declaration(statement: Node) -> Node | None:
@@ -136,11 +183,11 @@ def _const_declaration(statement: Node) -> Node | None:
 
 
 def _constant_definition_values(root: Node) -> set[int]:
-    """Node ids of every value that is a module-level named constant definition:
-    each declarator of a ``const``/``export const`` statement of the program itself
-    whose name is UPPER_SNAKE_CASE and whose value is a numeric literal (optionally
-    negated). ``let``/``var``, block-nested declarations, containers and expressions
-    are not covered."""
+    """Node ids of every literal of a module-level named constant definition: each
+    declarator of a ``const``/``export const`` statement of the program itself whose
+    name is UPPER_SNAKE_CASE and whose value is a numeric literal or literal arithmetic
+    (see :func:`_is_constant_value`). ``let``/``var``, block-nested declarations,
+    containers and other expressions are not covered."""
     values: set[int] = set()
     for statement in root.named_children:
         declaration = _const_declaration(statement)
@@ -157,7 +204,7 @@ def _constant_definition_values(root: Node) -> set[int]:
                 continue
             if _is_constant_value(value):
                 assert value is not None
-                values.add(value.id)
+                values.update(_literal_ids(value))
     return values
 
 

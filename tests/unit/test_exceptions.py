@@ -536,11 +536,15 @@ def test_exc002_classifies_the_statements_after_a_transparent_guard(
     guarded = make_config(GUARD_CONFIG)
     swallow = _run(guarded, "web/a.js", "javascript", JS_GUARD_ONLY)
     assert [f.rule_id for f in swallow.findings] == ["EXC002"]
+    # 0.3.0, item 5: a guard followed by nothing names the three remedies
     assert swallow.findings[0].message == (
         "catch clause after the transparent guard rethrowUnexpectedError(...) swallows the "
-        "exception: handler body is empty; the failure vanishes"
+        "exception: handler body is empty; the failure vanishes; after the guard, handle the "
+        "expected error, or log it and continue with a stated reason, or suppress this "
+        "finding with a reason"
     )
-    # a fallback returned after the guard is EXC002's (DEF005 reads the whole body)
+    # a fallback returned after the guard is EXC002's (DEF005 reads the whole body), and a
+    # handler with statements after the guard keeps the message without the remedies
     fallback = _run(guarded, "web/a.js", "javascript", JS_GUARD_THEN_FALLBACK)
     assert [(f.rule_id, f.message) for f in fallback.findings] == [
         (
@@ -549,6 +553,16 @@ def test_exc002_classifies_the_statements_after_a_transparent_guard(
             "exception into a fallback value: return null;",
         )
     ]
+    logging_after = JS_GUARD_ONLY.replace(
+        "rethrowUnexpectedError(error);", "rethrowUnexpectedError(error); console.log(error);"
+    )
+    logged = _run(guarded, "web/a.js", "javascript", logging_after)
+    assert [f.rule_id for f in logged.findings] == ["EXC002"]
+    assert "only logs the exception" in logged.findings[0].message
+    assert "after the guard, handle" not in logged.findings[0].message
+    # a plain swallow without a guard keeps its message too
+    plain = _run(guarded, "web/a.js", "javascript", "try { go(); } catch (error) {}\n")
+    assert all("after the guard, handle" not in f.message for f in plain.findings)
 
 
 def test_python_isinstance_guard_narrows_the_catch_for_exc001(
@@ -617,8 +631,11 @@ def test_python_transparent_guard_call(make_config: Callable[[str], EffectiveCon
     only = text.replace("        return recover(path)\n", "")
     result = _run(config, "src/a.py", "python", only)
     assert [f.rule_id for f in result.findings] == ["EXC002"]
-    assert result.findings[0].message.startswith(
-        "except handler after the transparent guard errors.rethrow_unexpected(...) swallows"
+    assert result.findings[0].message == (
+        "except handler after the transparent guard errors.rethrow_unexpected(...) swallows "
+        "the exception: handler body is pass/...; the failure vanishes; after the guard, "
+        "handle the expected error, or log it and continue with a stated reason, or suppress "
+        "this finding with a reason"
     )
 
 
@@ -816,6 +833,205 @@ def test_manager_catch_fingerprints_survive_unrelated_edits(
     after = _run(strict_config, "src/io/fs.py", "python", "import os\n\n\n" + SUPPRESS_PY)
     assert [f.fingerprint for f in before.findings] == [f.fingerprint for f in after.findings]
     assert [f.span.line for f in after.findings] == [6, 6]
+
+
+# --- 0.3.0 brief, item 1: capture managers bound to a name ---------------------------------
+
+BOUND_PY = (
+    "from app.errors import CapturedExceptionContext\n"
+    "import os\n"
+    "def alive(pid):\n"
+    "    capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n"
+    "    with capture:\n"
+    "        os.kill(pid, 0)\n"
+    "    return capture.captured_exception is None\n"
+)
+PROC_BOUNDARY = (
+    "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+    'path = "src/proc.py"\nlanguage = "python"\nexception = "ProcessLookupError"\n'
+    'reason = "the process may be gone"\n'
+)
+
+
+def test_bound_capture_manager_is_the_catch_with_exact_confidence(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(MANAGER_CONFIG)
+    result = _run(config, "src/proc.py", "python", BOUND_PY)
+    assert finding_tuples(result) == [("EXC001", 5, 5)]
+    assert result.findings[0].confidence == "exact"
+    assert result.findings[0].message == (
+        "context manager of 'ProcessLookupError' is forbidden: catch of 'ProcessLookupError' "
+        "is not approved by any boundary for this file"
+    )
+    assert result.findings[0].scope == "alive"
+    # a boundary approving the type approves the bound form exactly like the inline one
+    approved = make_config(MANAGER_CONFIG + PROC_BOUNDARY)
+    assert _run(approved, "src/proc.py", "python", BOUND_PY).findings == ()
+    # the same binding at module level, with the ``with`` at module level
+    module_level = (
+        "from app.errors import CapturedExceptionContext as M\n"
+        "capture = M(ProcessLookupError)\n"
+        "with capture:\n"
+        "    go()\n"
+    )
+    result = _run(config, "src/proc.py", "python", module_level)
+    assert [(f.rule_id, f.span.line, f.confidence) for f in result.findings] == [
+        ("EXC001", 3, "exact")
+    ]
+    # bound in the same branch as the with: still exact
+    same_block = BOUND_PY.replace(
+        "    capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n"
+        "    with capture:\n        os.kill(pid, 0)\n",
+        "    if pid:\n        capture = CapturedExceptionContext(ProcessLookupError)\n"
+        "        with capture:\n            os.kill(pid, 0)\n",
+    )
+    result = _run(config, "src/proc.py", "python", same_block)
+    assert [(f.span.line, f.confidence) for f in result.findings] == [(6, "exact")]
+
+
+def test_bound_capture_manager_in_a_branch_is_approximate(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(MANAGER_CONFIG)
+    branched = BOUND_PY.replace(
+        "    capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n",
+        "    if pid > 0:\n"
+        "        capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n",
+    )
+    result = _run(config, "src/proc.py", "python", branched)
+    assert [(f.rule_id, f.span.line, f.confidence) for f in result.findings] == [
+        ("EXC001", 6, "approximate")
+    ]
+    assert "catch of 'ProcessLookupError'" in result.findings[0].message
+    # the exact identity is downgraded with the binding: it still matches a boundary
+    approved = make_config(MANAGER_CONFIG + PROC_BOUNDARY)
+    assert _run(approved, "src/proc.py", "python", branched).findings == ()
+    # bound inside a loop body, used after the loop
+    looped = BOUND_PY.replace(
+        "    capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n",
+        "    for _ in attempts:\n"
+        "        capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n",
+    )
+    assert [f.confidence for f in _run(config, "src/proc.py", "python", looped).findings] == [
+        "approximate"
+    ]
+    # the name is also a parameter or a comprehension target of the scope
+    parameter = BOUND_PY.replace("def alive(pid):", "def alive(pid, capture):")
+    assert [f.confidence for f in _run(config, "src/proc.py", "python", parameter).findings] == [
+        "approximate"
+    ]
+    comprehension = BOUND_PY.replace(
+        "    return capture.captured_exception is None\n",
+        "    return [capture for capture in captures]\n",
+    )
+    result = _run(config, "src/proc.py", "python", comprehension)
+    assert [f.confidence for f in result.findings] == ["approximate"]
+
+
+def test_rebound_or_unassigned_capture_name_is_an_untyped_catch(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(MANAGER_CONFIG + PROC_BOUNDARY)
+    rebound = BOUND_PY.replace("    with capture:\n", "    capture = other()\n    with capture:\n")
+    result = _run(config, "src/proc.py", "python", rebound)
+    assert [(f.rule_id, f.span.line, f.confidence) for f in result.findings] == [
+        ("EXC001", 6, "unresolved")
+    ]
+    assert result.findings[0].message == (
+        "context manager is forbidden: 'capture' was bound to CapturedExceptionContext(...) on "
+        "line 4 and rebound on line 5 (other()) before this with; the manager this with enters "
+        "cannot be established, so it is an untyped catch that no boundary can approve"
+    )
+    # never the older binding: the boundary for ProcessLookupError does not approve it,
+    # and it is not an EXC002 swallow either (nothing is known about the handler)
+    assert [f.rule_id for f in result.findings] == ["EXC001"]
+    # bound by ``with ... as``: out of scope, unresolved
+    with_as = (
+        "from app.errors import CapturedExceptionContext as M\n"
+        "def f():\n"
+        "    with M(ProcessLookupError) as capture:\n"
+        "        go()\n"
+        "    with capture:\n"
+        "        go()\n"
+    )
+    result = _run(config, "src/proc.py", "python", with_as)
+    assert [(f.span.line, f.confidence) for f in result.findings] == [(5, "unresolved")]
+    assert "binds what the manager's __enter__ returns" in result.findings[0].message
+    # bound in another scope (module level, used in a function): unresolved
+    other_scope = (
+        "from app.errors import CapturedExceptionContext as M\n"
+        "capture = M(ProcessLookupError)\n"
+        "def f():\n"
+        "    with capture:\n"
+        "        go()\n"
+    )
+    result = _run(config, "src/proc.py", "python", other_scope)
+    assert [(f.span.line, f.confidence) for f in result.findings] == [(4, "unresolved")]
+    assert "is not assigned in this scope before the with" in result.findings[0].message
+    # an imported name later rebound to a manager elsewhere: unresolved at the with
+    imported = (
+        "from app.errors import CapturedExceptionContext as M\n"
+        "def f():\n"
+        "    from app.captures import capture\n"
+        "    with capture:\n"
+        "        go()\n"
+        "def g():\n"
+        "    capture = M(ValueError)\n"
+        "    return capture\n"
+    )
+    result = _run(config, "src/proc.py", "python", imported)
+    assert [(f.span.line, f.confidence) for f in result.findings] == [(4, "unresolved")]
+    assert "is last bound on line 3 (from app.captures import capture)" in (
+        result.findings[0].message
+    )
+    # a name never bound to a listed manager anywhere is an ordinary with
+    lock = "import threading\nlock = threading.Lock()\ndef f():\n    with lock:\n        go()\n"
+    assert _run(config, "src/proc.py", "python", lock).findings == ()
+    # an unlisted manager bound to a name is an ordinary with too
+    assert _run(make_config(PROC_BOUNDARY), "src/proc.py", "python", BOUND_PY).findings == ()
+
+
+def test_bound_suppress_behaves_like_the_inline_form(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    bound = (
+        "from contextlib import suppress\n"
+        "def remove(path):\n"
+        "    s = suppress(FileNotFoundError)\n"
+        "    with s:\n"
+        "        path.unlink()\n"
+    )
+    result = _run(strict_config, "src/io/fs.py", "python", bound)
+    assert finding_tuples(result) == [("EXC001", 4, 5), ("EXC002", 4, 5)]
+    assert result.findings[0].confidence == "exact"
+    assert result.findings[1].message.startswith(
+        "context manager swallows the exception: suppress(...) discards the exception"
+    )
+    assert _run(make_config(FNF_BOUNDARY), "src/io/fs.py", "python", bound).findings == ()
+    # the whole-module spelling
+    qualified = bound.replace("from contextlib import suppress", "import contextlib").replace(
+        "suppress(FileNotFoundError)", "contextlib.suppress(FileNotFoundError)"
+    )
+    assert [
+        f.rule_id for f in _run(strict_config, "src/io/fs.py", "python", qualified).findings
+    ] == [
+        "EXC001",
+        "EXC002",
+    ]
+
+
+def test_bound_manager_fingerprints_survive_unrelated_edits(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(MANAGER_CONFIG)
+    before = _run(config, "src/proc.py", "python", BOUND_PY)
+    after = _run(config, "src/proc.py", "python", "import sys\n\n\n" + BOUND_PY)
+    assert [f.fingerprint for f in before.findings] == [f.fingerprint for f in after.findings]
+    assert [f.span.line for f in after.findings] == [8]
+    # ``with open(p) as fh:`` is still an ordinary with, and so is ``with fh:``
+    ordinary = "def f(p):\n    with open(p) as fh:\n        fh.read()\n    with fh:\n        pass\n"
+    assert _run(config, "src/proc.py", "python", ordinary).findings == ()
 
 
 # --- 0.2.0 second brief, item 3: promise rejection handlers ---------------------------------

@@ -126,3 +126,38 @@ def test_unsupported_sources_are_listed_only_when_included(
     ]
     assert result.counts["unsupported_sources"] == 1
     assert result.counts["unsupported_extension"] == 3  # every unparseable file, as before
+
+
+# --- 0.3.0 brief, item 4: root-anchored patterns ------------------------------------------
+
+
+def test_root_anchored_include_patterns(
+    make_config: Callable[[str], EffectiveConfig], empty_root: Path
+) -> None:
+    for relative in (
+        "main.py",
+        "build/main.py",
+        ".venv-experiments/main.py",
+        "src/a.py",
+        "src/sub/a.py",
+        "other/src/a.py",
+    ):
+        touch(empty_root, relative, "")
+
+    def included(patterns: str) -> list[str]:
+        config = make_config(f"include = {patterns}\nexclude = []\n")
+        return [f.relative for f in discover(empty_root, [empty_root], config).files]
+
+    assert included('["/main.py"]') == ["main.py"]
+    assert included('["./main.py"]') == ["main.py"]
+    assert included('["main.py"]') == [".venv-experiments/main.py", "build/main.py", "main.py"]
+    assert included('["./src/*.py"]') == ["src/a.py"]
+    assert included('["/src/*.py"]') == ["src/a.py"]
+    assert included('["src/*.py"]') == ["src/a.py"]  # a slash already anchors to the root
+    assert included('["/src/**/*.py"]') == ["src/a.py", "src/sub/a.py"]
+    # an anchored exclude prunes the root-level directory only
+    config = make_config('include = ["main.py"]\nexclude = ["/build/**"]\n')
+    assert [f.relative for f in discover(empty_root, [empty_root], config).files] == [
+        ".venv-experiments/main.py",
+        "main.py",
+    ]

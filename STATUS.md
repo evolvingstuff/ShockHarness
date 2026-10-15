@@ -518,6 +518,120 @@ the installed package. PyPI lists `0.1.0` (latest) and `0.1.0a1`.
 From this release the CLI surface, exit codes, rule IDs and report
 `schema_version` 1 are stable (CHANGELOG 0.1.0).
 
+## Feedback round 0.3.0: bound captures, constant arithmetic, root anchors, EXC002 message — DONE (2026-10-15)
+
+Input: `docs/shockharness-suggestions-3.md`, written after the maintainer ran
+0.2.0 on the same 906-file codebase. Items 1, 2, 4 and 5 are implemented here
+in the order 1, 2, 4, 5 decided with the lead session; item 3 (the content-hash
+cache) is the next commit, "Content-hash cache". No version bump, no tag, no
+push; the maintainer releases. 28 tests were added (572 -> 600).
+
+### What changed, per item
+
+1. **Capture managers bound to a name** (`ir/python_catches.py`,
+   `rules/exceptions.py`, `ir/model.py`). A `with` whose context expression is
+   a plain name is resolved to the bindings of that name in the enclosing scope
+   (function or module body; `if`/`for`/`while`/`try`/`with` bodies belong to
+   the scope, nested defs and classes do not), walking backwards from the
+   `with`. The adapter records the facts (`NameResolution`: every preceding
+   binding with its kind, line, value, and whether its block encloses the
+   `with`; whether the name is a parameter or a comprehension target; the
+   calls the name is bound to elsewhere in the module) and the rule applies
+   `capture_managers`: the latest binding being an assignment to a listed
+   manager or `contextlib.suppress` is that catch, `exact` when its block
+   encloses the `with` (same block or an outer one), `approximate` when it
+   sits in a branch or loop the `with` is not inside or the name is also a
+   parameter or a comprehension target; an earlier listed binding followed by
+   a rebinding, or a `with M(T) as name` binding, is `unresolved` (an untyped
+   catch, like a bare `except`; the message names both lines); a name bound
+   to a listed manager only elsewhere in the module (another scope, after the
+   `with`) is `unresolved` too, with the message saying where it was last
+   bound. `ManagerFact` was restructured: `call: ManagerCall | None` for the
+   inline form, `resolution: NameResolution | None` for the bound form.
+2. **Literal arithmetic in named constants** (`ir/python.py`,
+   `ir/javascript.py`). The accepted value grammar is numeric literals, unary
+   `+`/`-`, parentheses and `+ - * / // % **` (JavaScript: `+ - * / % **`).
+   Every literal of an accepted value is marked `constant_definition`; a
+   unary sign over a sub-expression (`-(30 * 60)`) is walked through, because
+   the literal collector only folds a sign that sits directly on a literal.
+   Spec section 5 gained one sentence and section 19 row 16.
+4. **Root-anchored patterns** (`globs.py`). `split_anchor` separates a leading
+   `/` or `./`; an anchored pattern matches the whole relative path and is
+   never basename-only; `CompiledGlob` keeps the pattern as written for
+   reports and the anchor-free `body` for matching and directory pruning.
+   `validate_glob` accepts the anchor and rejects a bare `/` or `./` and a
+   `//` after the anchor. Every consumer compiles through `compile_glob`, so
+   `include`, `exclude`, overrides, `configuration_files` and boundary paths
+   honour the anchor without further change.
+5. **EXC002 guard-only message** (`rules/exceptions.py`). When the handler is
+   a transparent guard followed by nothing (`guard_body` classifies as empty)
+   the swallow message ends with the three remedies. Message only.
+
+### Decisions (mine; review these)
+
+* Item 1 trigger. The brief's `unresolved` outcomes ("no assignment is found
+  in the scope", "imported from another module", "bound by `with ... as`")
+  cannot apply to every `with name:` without turning `with lock:` and
+  `with fh:` into untyped-catch findings. They apply when the name is bound to
+  a listed manager (or `suppress`) somewhere in the module (any scope, by
+  assignment or by `with ... as`); a name with no such binding anywhere is an
+  ordinary `with`. So an imported manager instance is `unresolved` only when
+  the module also binds that name to a listed manager. Documented in
+  `docs/rules.md` (EXC001) and `docs/configuration.md`.
+* Item 1 "same block level": an assignment in an enclosing block counts as
+  exact (module-level `capture = M(T)` with the `with` inside an `if` at module
+  level; both inside the same `if`). "Approximate" is reserved for a binding
+  whose block does not enclose the `with`.
+* Item 1 parameter/comprehension: the brief lists "the name is a parameter or
+  a comprehension target" under `approximate`. Read as a downgrade of a found
+  assignment (the name is bound in more than one way in the scope), not as a
+  trigger: a parameter alone, without an assignment to a listed manager, is
+  an ordinary `with`.
+* Item 1 cross-scope binding: a module-level `capture = M(T)` used inside a
+  function is `unresolved`, as the brief says ("in the same scope"), with the
+  message "is not assigned in this scope before the with but is bound to
+  M(...) elsewhere in the module".
+* Item 1 unresolved findings carry the handler classification `opaque`
+  (EXC002 has nothing to classify), so a rebound name yields EXC001 only.
+* Item 2: a `bool` literal (`True * 2`) is not numeric here (as in 0.2.0);
+  a JavaScript comment inside the parentheses does not disqualify the value;
+  `(x, 3)` (a sequence expression) does.
+* Item 4 error wording: a bare `/` or `./` is "must name something after the
+  anchor"; `//a.py` is "must not start with '//' or './/'". The former
+  leading-slash error ("must be relative to the analysis root") is gone.
+* Self-scan: 164 -> 169 advisory findings (five new CPLX warnings in the new
+  code after one refactoring pass that split the five most complex new
+  functions: `_binding_of`, `collect_python_managers`,
+  `_module_call_bindings`, `_resolve_bound`, `_is_constant_value`); the
+  self-gate caught one hard finding during development (a nullish ternary in
+  `_manager_fact`), fixed by explicit branches. No threshold was tuned.
+
+### Evidence (all run 2026-10-15 on macOS arm64)
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+93 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+600 passed in 22.33s
+$ pytest -q                      # CPython 3.13.1
+600 passed in 19.14s
+$ pytest -q                      # CPython 3.12.8
+600 passed in 19.92s
+$ pytest -q                      # CPython 3.11.11
+600 passed in 23.80s
+
+$ shockharness check src tests scripts evals
+gate: PASS (exit 0)
+$ shockharness check src tests scripts evals --profile recommended
+gate: PASS (exit 0)
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+$ shockharness check src tests scripts evals --format json | jq .execution_summary.findings
+169                              # 164 before this round; all advisory (CPLX*, DEF003)
+```
+
 ## Feedback round 0.2.0: precision, noise, adoption — DONE (2026-10-14)
 
 Input: `docs/shockharness-suggestions.md`, written by the maintainer after

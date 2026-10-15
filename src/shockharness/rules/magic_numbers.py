@@ -8,7 +8,9 @@ makes ``-0`` and ``-0.0`` violations, as decided in the specification.
 module-level named constant definition (``MAX_PAGES = 8``) is reported under
 ``"report"`` (strict: a named constant is not automatically justified) and
 skipped under ``"allow"`` (recommended, minimal: the name is the remedy the rule
-asks for). The adapters mark such literals; the rule only reads the mark.
+asks for). Since 0.3.0 the value may also be arithmetic over literals
+(``CHUNK_BYTES = 64 * 1024``): every literal of such a definition carries the
+mark. The adapters mark the literals; the rule only reads the mark.
 """
 
 from collections.abc import Mapping

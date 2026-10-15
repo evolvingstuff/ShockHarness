@@ -89,6 +89,11 @@ def test_config_validate_and_effective(
     code, _, err = run(["config", "validate", "--root", str(empty_root)], capsys)
     assert code == 2
     assert "nonsense: unknown key" in err
+    # 0.3.0, item 4: a root-anchored pattern is valid
+    write(empty_root, ".shockharness.toml", '[tool.shockharness]\ninclude = ["/main.py"]\n')
+    code, out, _ = run(["config", "validate", "--root", str(empty_root)], capsys)
+    assert code == 0
+    assert "configuration is valid (dedicated" in out
     write(empty_root, ".shockharness.toml", '[tool.shockharness]\nparse_errors = "warn"\n')
     code, out, _ = run(["config", "effective", "--root", str(empty_root)], capsys)
     assert code == 0

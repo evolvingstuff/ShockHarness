@@ -8,6 +8,9 @@ Semantics (documented in docs/configuration.md):
 * ``[...]`` is a character class; a leading ``!`` negates it.
 * A pattern with no ``/`` matches against the file's basename anywhere in the tree.
   A pattern containing ``/`` matches against the whole relative path.
+* A leading ``/`` or ``./`` anchors the pattern to the root (0.3.0): ``/main.py`` and
+  ``./main.py`` match only the root-level ``main.py``; ``/src/*.py`` only files
+  directly under ``src/``. Before 0.3.0 ``./`` was stripped and ``/`` rejected.
 
 Validation is separate from compilation so that config errors are reported with
 their key path instead of surfacing as regex exceptions.
@@ -17,6 +20,18 @@ import re
 from dataclasses import dataclass
 
 DOUBLE_STAR = "**"
+ROOT_ANCHOR = "/"
+DOT_ANCHOR = "./"
+
+
+def split_anchor(pattern: str) -> tuple[bool, str]:
+    """``(anchored, body)``: whether the pattern starts with ``/`` or ``./``, and the
+    pattern without that prefix."""
+    if pattern.startswith(DOT_ANCHOR):
+        return True, pattern[len(DOT_ANCHOR) :]
+    if pattern.startswith(ROOT_ANCHOR):
+        return True, pattern[len(ROOT_ANCHOR) :]
+    return False, pattern
 
 
 def validate_glob(pattern: str) -> str | None:
@@ -27,8 +42,11 @@ def validate_glob(pattern: str) -> str | None:
         return "glob pattern must use forward slashes, not backslashes"
     if "\0" in pattern:
         return "glob pattern must not contain NUL"
-    if pattern.startswith("/"):
-        return "glob pattern must be relative to the analysis root (no leading '/')"
+    anchored, body = split_anchor(pattern)
+    if anchored and body == "":
+        return "a root-anchored glob pattern ('/' or './') must name something after the anchor"
+    if anchored and body.startswith("/"):
+        return "glob pattern must not start with '//' or './/'"
     depth = 0
     for ch in pattern:
         if ch == "[":
@@ -47,15 +65,9 @@ def validate_glob(pattern: str) -> str | None:
     return None
 
 
-def _normalize(pattern: str) -> str:
-    if pattern.startswith("./"):
-        return pattern[len("./") :]
-    return pattern
-
-
 def glob_to_regex(pattern: str) -> str:
-    """Compile a *validated* glob to an anchored regular expression source."""
-    pattern = _normalize(pattern)
+    """Compile a *validated* glob body (anchor already split off) to an anchored regular
+    expression source."""
     out: list[str] = []
     i = 0
     n = len(pattern)
@@ -90,7 +102,13 @@ def glob_to_regex(pattern: str) -> str:
 
 @dataclass(frozen=True)
 class CompiledGlob:
+    """``pattern`` is the pattern as written (reported back to the user); ``body`` is
+    the pattern without a root anchor. ``anchored`` and ``basename_only`` are
+    mutually exclusive: an anchored pattern always matches the whole relative path."""
+
     pattern: str
+    body: str
+    anchored: bool
     basename_only: bool
     regex: re.Pattern[str]
 
@@ -106,18 +124,20 @@ class CompiledGlob:
         if self.basename_only:
             return False
         suffix = "/" + DOUBLE_STAR
-        if not self.pattern.endswith(suffix):
+        if not self.body.endswith(suffix):
             return False
-        dir_pattern = self.pattern[: len(self.pattern) - len(suffix)]
+        dir_pattern = self.body[: len(self.body) - len(suffix)]
         return re.fullmatch(glob_to_regex(dir_pattern), relative_dir) is not None
 
 
 def compile_glob(pattern: str) -> CompiledGlob:
-    normalized = _normalize(pattern)
+    anchored, body = split_anchor(pattern)
     return CompiledGlob(
-        pattern=normalized,
-        basename_only="/" not in normalized,
-        regex=re.compile(glob_to_regex(normalized)),
+        pattern=pattern,
+        body=body,
+        anchored=anchored,
+        basename_only=not anchored and "/" not in body,
+        regex=re.compile(glob_to_regex(body)),
     )
 
 

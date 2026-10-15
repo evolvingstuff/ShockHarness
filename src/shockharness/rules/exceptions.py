@@ -33,6 +33,8 @@ from shockharness.ir.model import (
     BODY_RAISE_OTHER,
     BODY_RERAISE,
     BODY_RETURN_FALLBACK,
+    BOUND_ASSIGNMENT,
+    BOUND_WITH_AS,
     CATCH_CLAUSE,
     CATCH_EXCEPT,
     CATCH_EXCEPT_STAR,
@@ -45,8 +47,11 @@ from shockharness.ir.model import (
     CatchFact,
     ExceptionIdentity,
     HandlerBody,
+    ManagerCall,
     ManagerFact,
     ModuleFacts,
+    NameBinding,
+    NameResolution,
     Span,
 )
 from shockharness.rules.registry import EXC001, EXC002, EXC003, RuleSpec
@@ -218,20 +223,116 @@ def _last_component(name: str) -> str:
     return parts[len(parts) - 1]
 
 
-def _manager_match(manager: ManagerFact, capture_managers: frozenset[str]) -> str | None:
-    """The confidence with which ``manager`` is a catch, or ``None`` when it is an
-    ordinary ``with``. ``contextlib.suppress`` always counts; a configured manager
-    counts when its resolved qualified name is listed (exact), or, when the callee
-    could not be resolved, when its bare name equals a listed manager's bare name
-    (approximate: the call graph's "probable")."""
-    if manager.qualified is not None and manager.confidence != CONFIDENCE_UNRESOLVED:
-        if manager.qualified == SUPPRESS_MANAGER or manager.qualified in capture_managers:
-            return manager.confidence
+def _manager_match(call: ManagerCall, capture_managers: frozenset[str]) -> str | None:
+    """The confidence with which ``call`` constructs a catch, or ``None`` when it is an
+    ordinary context manager. ``contextlib.suppress`` always counts; a configured
+    manager counts when its resolved qualified name is listed (exact), or, when the
+    callee could not be resolved, when its bare name equals a listed manager's bare
+    name (approximate: the call graph's "probable")."""
+    if call.qualified is not None and call.confidence != CONFIDENCE_UNRESOLVED:
+        if call.qualified == SUPPRESS_MANAGER or call.qualified in capture_managers:
+            return call.confidence
         return None
-    bare = _last_component(manager.callee)
+    bare = _last_component(call.callee)
     if any(_last_component(listed) == bare for listed in capture_managers):
         return CONFIDENCE_APPROXIMATE
     return None
+
+
+@dataclass(frozen=True)
+class _Resolved:
+    """What a ``with`` item is once the rule has applied ``capture_managers``:
+    ``call`` is the manager construction (``None`` for an unresolved binding, which is
+    an untyped catch), ``confidence`` the worst of the callee's and the binding's,
+    ``problem`` the explanation of an unresolved binding."""
+
+    call: ManagerCall | None
+    confidence: str
+    problem: str | None
+
+
+def _bound_listed(binding: NameBinding, capture_managers: frozenset[str]) -> bool:
+    return binding.call is not None and _manager_match(binding.call, capture_managers) is not None
+
+
+def _resolve_bound(
+    resolution: NameResolution, capture_managers: frozenset[str]
+) -> _Resolved | None:
+    """``with name:`` against the bindings of ``name`` (0.3.0, item 1).
+
+    The most recent binding before the ``with`` decides. An assignment to a listed
+    manager (or ``contextlib.suppress``) is that catch: ``exact`` when nothing stands
+    between them, ``approximate`` when the assignment sits in a branch or loop body
+    the ``with`` is not inside, or the name is also a parameter or a comprehension
+    target. When an earlier binding was a listed manager but the latest is something
+    else, or the name is bound to a listed manager only elsewhere in the module
+    (another scope, a ``with ... as`` binding, after the ``with``), the binding that
+    reaches the ``with`` cannot be established: an untyped catch, never the older
+    binding. A name never bound to a listed manager anywhere is an ordinary ``with``.
+    """
+    preceding = resolution.preceding
+    latest: NameBinding | None = None
+    if len(preceding) > 0:
+        latest = preceding[len(preceding) - 1]
+    if (
+        latest is not None
+        and latest.kind == BOUND_ASSIGNMENT
+        and _bound_listed(latest, capture_managers)
+    ):
+        assert latest.call is not None
+        confidence = _manager_match(latest.call, capture_managers)
+        assert confidence is not None
+        if not latest.dominating or resolution.parameter or resolution.comprehension_target:
+            confidence = CONFIDENCE_APPROXIMATE
+        return _Resolved(latest.call, confidence, None)
+    earlier = [b for b in preceding if _bound_listed(b, capture_managers)]
+    if len(earlier) > 0:
+        assert latest is not None
+        return _unresolved(_rebound_reason(resolution.name, earlier[len(earlier) - 1], latest))
+    elsewhere = [c for c in resolution.elsewhere if _manager_match(c, capture_managers)]
+    if len(elsewhere) == 0:
+        return None
+    return _unresolved(_elsewhere_reason(resolution.name, latest, elsewhere[0]))
+
+
+def _unresolved(reason: str) -> _Resolved:
+    return _Resolved(
+        None,
+        CONFIDENCE_UNRESOLVED,
+        f"{reason}; the manager this with enters cannot be established, so it is an untyped "
+        "catch that no boundary can approve",
+    )
+
+
+def _rebound_reason(name: str, listed: NameBinding, latest: NameBinding) -> str:
+    assert listed.call is not None
+    if listed.kind == BOUND_WITH_AS:
+        return (
+            f"'{name}' is bound by `with {listed.call.callee}(...) as {name}` on line "
+            f"{listed.line}, which binds what the manager's __enter__ returns, not the manager"
+        )
+    return (
+        f"'{name}' was bound to {listed.call.callee}(...) on line {listed.line} and rebound "
+        f"on line {latest.line} ({latest.value}) before this with"
+    )
+
+
+def _elsewhere_reason(name: str, latest: NameBinding | None, listed: ManagerCall) -> str:
+    if latest is None:
+        where = f"'{name}' is not assigned in this scope before the with"
+    else:
+        where = f"'{name}' is last bound on line {latest.line} ({latest.value})"
+    return f"{where} but is bound to {listed.callee}(...) elsewhere in the module"
+
+
+def _resolve_manager(manager: ManagerFact, capture_managers: frozenset[str]) -> _Resolved | None:
+    if manager.resolution is not None:
+        return _resolve_bound(manager.resolution, capture_managers)
+    assert manager.call is not None
+    matched = _manager_match(manager.call, capture_managers)
+    if matched is None:
+        return None
+    return _Resolved(manager.call, matched, None)
 
 
 def manager_catches(
@@ -242,49 +343,66 @@ def manager_catches(
     ``contextlib.suppress`` swallows (its body classifies as empty, like ``except T:
     pass``); a configured capture manager keeps the exception for inspection after
     the block, which is ``other`` (EXC001 still judges the catch itself). An
-    unreadable or absent type list is an untyped catch, like a bare ``except``.
+    unreadable or absent type list, or a name whose binding cannot be established,
+    is an untyped catch, like a bare ``except``.
     """
     found: list[CatchFact] = []
     for manager in managers:
-        matched = _manager_match(manager, capture_managers)
-        if matched is None:
+        resolved = _resolve_manager(manager, capture_managers)
+        if resolved is None:
             continue
-        identities = manager.identities
-        if matched == CONFIDENCE_APPROXIMATE:
+        if resolved.call is None:
+            assert resolved.problem is not None
+            found.append(
+                _manager_catch(
+                    manager, (), HandlerBody(BODY_OPAQUE, resolved.problem), manager.callee
+                )
+            )
+            continue
+        call = resolved.call
+        identities = call.identities
+        if resolved.confidence == CONFIDENCE_APPROXIMATE:
             identities = tuple(
                 ExceptionIdentity(i.source, i.qualified, CONFIDENCE_APPROXIMATE, i.broad)
                 if i.confidence == CONFIDENCE_EXACT
                 else i
                 for i in identities
             )
-        if manager.qualified == SUPPRESS_MANAGER:
+        if call.qualified == SUPPRESS_MANAGER:
             body = HandlerBody(
                 BODY_EMPTY,
-                f"{manager.callee}(...) discards the exception; nothing after the block can "
+                f"{call.callee}(...) discards the exception; nothing after the block can "
                 "tell that the operation did not happen",
             )
         else:
             body = HandlerBody(
                 BODY_OTHER,
-                f"{manager.callee}(...) keeps the captured exception for inspection after "
+                f"{call.callee}(...) keeps the captured exception for inspection after "
                 "the block; what the code does with it is not inspected",
             )
-        found.append(
-            CatchFact(
-                span=manager.span,
-                kind=CATCH_MANAGER,
-                scope=manager.scope,
-                identities=identities,
-                bare=len(identities) == 0,
-                bound_name=manager.bound_name,
-                body=body,
-                try_statements=manager.body_statements,
-                narrowed_from=None,
-                guard_call=None,
-                guard_body=None,
-            )
-        )
+        found.append(_manager_catch(manager, identities, body, manager.callee))
     return found
+
+
+def _manager_catch(
+    manager: ManagerFact,
+    identities: tuple[ExceptionIdentity, ...],
+    body: HandlerBody,
+    written: str,
+) -> CatchFact:
+    return CatchFact(
+        span=manager.span,
+        kind=CATCH_MANAGER,
+        scope=manager.scope,
+        identities=identities,
+        bare=len(identities) == 0,
+        bound_name=manager.bound_name,
+        body=body,
+        try_statements=manager.body_statements,
+        narrowed_from=None,
+        guard_call=None,
+        guard_body=None,
+    )
 
 
 def _written(catch: CatchFact) -> str:
@@ -296,13 +414,24 @@ def _written(catch: CatchFact) -> str:
     return written
 
 
+GUARD_ONLY_REMEDIES = (
+    "; after the guard, handle the expected error, or log it and continue with a stated "
+    "reason, or suppress this finding with a reason"
+)
+
+
 def _exc002_message(catch: CatchFact, body: HandlerBody, guard: str | None) -> str:
     label = KIND_LABELS[catch.kind]
     if guard is not None:
         label += f" after the transparent guard {guard}(...)"
     classification = body.classification
     if classification == BODY_EMPTY:
-        return f"{label} swallows the exception: {body.detail}"
+        message = f"{label} swallows the exception: {body.detail}"
+        if guard is not None:
+            # The guard re-raised everything unexpected and nothing follows it: the expected
+            # errors vanish. Say what satisfies the policy (0.3.0, item 5).
+            message += GUARD_ONLY_REMEDIES
+        return message
     if classification == BODY_LOGGING_ONLY:
         return f"{label} only logs the exception; logging is not handling"
     if classification == BODY_RETURN_FALLBACK:

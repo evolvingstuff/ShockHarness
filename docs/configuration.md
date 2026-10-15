@@ -110,7 +110,7 @@ enabled = true
 severity = "error"                      # "review" caps MAGIC001 at review (reported, never gating; a deviation)
 allowed_values = [0, 1]                 # value-based; extra values are reported as deviations
 allow_unary_negative_one = false        # -1 fails unless true; -0 always fails (true in recommended)
-named_constant_definitions = "report"   # MAX_PAGES = 8 / const SETTLE_MS = 400 at module scope: "report" (strict) or "allow" (recommended, minimal)
+named_constant_definitions = "report"   # MAX_PAGES = 8 / CHUNK_BYTES = 64 * 1024 / const SETTLE_MS = 400 at module scope: "report" (strict) or "allow" (recommended, minimal)
 exclude_configuration_files = true      # files matching configuration_files skip MAGIC001 (reported per file)
 configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
                        "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",
@@ -220,7 +220,14 @@ an untyped catch. `contextlib.suppress(...)` is always such a catch and one
 that swallows (`EXC002`, unless a boundary approves it). A listed manager
 matches by qualified name when its import resolves (exact) and by bare name
 when it does not (approximate). Each entry is a reported deviation; an
-unlisted manager is an ordinary `with`. See `docs/rules.md`, EXC001.
+unlisted manager is an ordinary `with`. Since 0.3.0 a manager bound to a name
+first (`capture = Manager(T); with capture:`, or `s = suppress(T); with s:`) is
+resolved to that assignment within the same function or module body: `exact`
+when nothing stands between them, `approximate` when the assignment sits in a
+branch or loop the `with` is not inside (or the name is also a parameter or a
+comprehension target), and an `unresolved` untyped catch when the name was
+rebound in between, is bound by `with ... as`, or is bound to a listed manager
+only in another scope. See `docs/rules.md`, EXC001, for the table.
 
 **Transparent guards** (`rules.exceptions.transparent_guards`, 0.2.0). A list
 of guard callees as written (`["rethrowUnexpectedError"]`,
@@ -443,8 +450,17 @@ the profile default and is not a deviation.
 * Forward slashes only; patterns are relative to the root.
 * `**` matches zero or more whole path segments and must be a segment by itself (`**/`, `/**`).
 * `*` matches within one segment, `?` one character, `[abc]`/`[!abc]` a class.
-* A pattern with no `/` matches the file's **basename** anywhere in the tree (`*.py`).
-  A pattern containing `/` matches the whole relative path (`src/**/*.py`).
+* A pattern with no `/` matches the file's **basename** anywhere in the tree (`*.py`,
+  `main.py` matches `main.py` and `build/main.py`). A pattern containing `/` matches
+  the whole relative path (`src/**/*.py`).
+* A leading `/` or `./` **anchors the pattern to the root** (0.3.0): `/main.py` and
+  `./main.py` match only the root-level `main.py`; `/src/*.py` matches `src/a.py` but
+  not `src/sub/a.py` or `other/src/a.py`. The anchor applies wherever a glob is
+  accepted: `include`, `exclude`, `overrides[].paths`,
+  `rules.magic_numbers.configuration_files` and boundary `path`s. Before 0.3.0 a
+  leading `/` was a configuration error and `./` was stripped (`./main.py` meant
+  `main.py`); a configuration that relied on `./pattern` matching nested files
+  must drop the `./`.
 * Directories matching an exclude pattern of the form `<glob>/**` are pruned and not walked.
 
 ## Targets
