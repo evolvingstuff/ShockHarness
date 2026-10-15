@@ -215,7 +215,7 @@ def _summary_lines(report: Report) -> list[str]:
         f"shockharness {report.tool_version} summary: {summary['files']} file(s), "
         f"{summary['files_analyzed']} analyzed, {summary['parse_failures']} parse failure(s); "
         f"{summary['findings']} finding(s), {summary['suppressed']} suppressed; "
-        f"{summary['elapsed_seconds']} s"
+        f"{report.elapsed_seconds} s"
     ]
     by_severity = summary["by_severity"]
     if len(by_severity) > 0:

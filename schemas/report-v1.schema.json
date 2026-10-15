@@ -974,7 +974,7 @@
     },
     "summary": {
       "type": "object",
-      "description": "First-contact overview (0.2.0, additive): the counts behind `check --summary`. Totals equal execution_summary; elapsed_seconds is the one run-dependent field of the report.",
+      "description": "First-contact overview (0.2.0, additive): the counts behind `check --summary`. Totals equal execution_summary. Elapsed time appears only in text output, so the JSON report stays byte-identical across runs.",
       "required": [
         "files",
         "files_analyzed",
@@ -988,8 +988,7 @@
         "policy_families",
         "top_files_limit",
         "top_files",
-        "complexity",
-        "elapsed_seconds"
+        "complexity"
       ],
       "properties": {
         "files": {
@@ -1105,9 +1104,6 @@
               }
             }
           }
-        },
-        "elapsed_seconds": {
-          "type": "number"
         }
       }
     }

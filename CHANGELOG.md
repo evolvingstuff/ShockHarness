@@ -116,10 +116,11 @@ plugin API) is a design note for later:
   top-level `summary` object (`schemas/report-v1.schema.json` describes it:
   `files`, `files_analyzed`, `parse_failures`, `findings`, `suppressed`,
   `by_severity`, `by_rule`, `by_directory`, `by_rule_and_directory`,
-  `policy_families`, `top_files_limit`, `top_files`, `complexity`,
-  `elapsed_seconds`); its totals equal `execution_summary`.
-  `summary.elapsed_seconds` is the one run-dependent field of a report;
-  consumers comparing reports ignore it. `metrics.complexity.thresholds` gains
+  `policy_families`, `top_files_limit`, `top_files`, `complexity`); its
+  totals equal `execution_summary`. Elapsed time is printed by the text
+  summary only, never in JSON, so reports stay byte-identical across runs
+  (the pre-release 0.2.0 build briefly put it in JSON, which made the
+  determinism tests flaky on CI). `metrics.complexity.thresholds` gains
   `max_lines_warn`. `CPLX006` appears in `coverage.rules_implemented` and in
   every file's `rules_applied`/`rules_disabled`. Boundary entries in
   `config.values` may carry `exceptions` instead of `exception`. Second batch:

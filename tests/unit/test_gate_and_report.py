@@ -145,19 +145,12 @@ def test_json_output_is_byte_identical_across_runs_and_target_order(
             OPTIONS,
         )
     )
-    # summary.elapsed_seconds is the one run-dependent field; everything else is byte-stable
-    assert _without_elapsed(second) == _without_elapsed(third)
+    assert second == third
     first_data = json.loads(first)
     second_data = json.loads(second)
     assert first_data["findings"] == second_data["findings"]
     assert first_data["gate"] == second_data["gate"]
     assert first_data["summary"]["findings"] == first_data["execution_summary"]["findings"]
-
-
-def _without_elapsed(rendered: str) -> str:
-    data = json.loads(rendered)
-    data["summary"]["elapsed_seconds"] = 0
-    return json.dumps(data, sort_keys=True)
 
 
 def test_text_output_mentions_everything_that_matters(
@@ -305,7 +298,8 @@ def test_summary_counts_policy_files_complexity_and_cycles(
     assert summary["by_rule"] == {"CPLX002": 1, "CPLX003": 1, "CPLX005": 1, "MAGIC001": 1}
     assert summary["by_severity"] == report.execution_summary["findings_by_severity"]
     assert summary["findings"] == report.execution_summary["findings"] == 4
-    assert summary["elapsed_seconds"] >= 0
+    assert "elapsed_seconds" not in summary
+    assert report.elapsed_seconds >= 0
 
 
 def test_summary_with_complexity_disabled(

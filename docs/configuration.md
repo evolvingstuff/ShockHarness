@@ -285,8 +285,8 @@ import cycles, units over `fan_out_warn`), parse failures and the elapsed
 time, followed by the same totals, configuration lines and `gate:` line as
 the full report. The exit code is unchanged. The JSON report always carries
 the same overview as its `summary` object, whose totals equal
-`execution_summary`; `summary.elapsed_seconds` is the one field of a report
-that differs between two runs over the same input.
+`execution_summary`. The elapsed time is printed in text output only, so the
+JSON report stays byte-identical across runs over the same input.
 
 ## Adopting ShockHarness on an existing codebase
 

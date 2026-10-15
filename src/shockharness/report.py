@@ -3,7 +3,7 @@
 Sorting is fixed (files by path; findings by path, line, column, rule ID,
 message) so two runs over the same inputs produce byte-identical JSON. No
 timestamps are included for the same reason; the one run-dependent field is
-``summary.elapsed_seconds`` (0.2.0), which consumers comparing reports ignore.
+``summary`` (0.2.0). Elapsed time is printed by the text renderer only; it never enters the JSON.
 
 ``summary`` (0.2.0) is the first-contact overview behind ``check --summary``:
 findings by rule and top-level directory and by severity, the files with the
@@ -63,6 +63,10 @@ class Report:
     gate: GateResult
     execution_summary: Mapping[str, Any]
     summary: Mapping[str, Any]
+    # Wall-clock seconds of discovery, analysis and the gate. Deliberately NOT part of
+    # to_json_dict(): the JSON report is byte-identical across runs (spec section 10);
+    # the text renderer prints it.
+    elapsed_seconds: float
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -196,7 +200,6 @@ def build_summary(
     files: Sequence[FileResult],
     findings: Sequence[Finding],
     metrics: Mapping[str, Any],
-    elapsed_seconds: float,
 ) -> dict[str, Any]:
     """The first-contact overview: every count derives from the same findings and files
     as ``execution_summary``, so the totals agree by construction."""
@@ -245,7 +248,6 @@ def build_summary(
             {"path": path, "policy_findings": count} for path, count in ranked[:SUMMARY_TOP_FILES]
         ],
         "complexity": _complexity_summary(metrics),
-        "elapsed_seconds": round(elapsed_seconds, ELAPSED_DECIMALS),
     }
 
 
@@ -286,7 +288,8 @@ def build_report(
             "suppressed": sum(1 for f in findings if f.is_suppressed),
             "baselined": 0,
         },
-        summary=build_summary(ordered_files, findings, metrics, elapsed_seconds),
+        summary=build_summary(ordered_files, findings, metrics),
+        elapsed_seconds=round(elapsed_seconds, ELAPSED_DECIMALS),
     )
 
 

@@ -1029,7 +1029,7 @@ def test_check_summary_ends_with_the_same_gate_line(
     assert data["summary"]["parse_failures"] == data["coverage"]["files_failed"] == 1
     assert data["summary"]["top_files"][0] == {"path": "src/a.py", "policy_findings": 4}
     assert data["summary"]["complexity"]["units"] == 5
-    assert data["summary"]["elapsed_seconds"] >= 0
+    assert "elapsed_seconds" not in data["summary"]  # JSON stays byte-identical across runs
     assert data["schema_version"] == "1"
 
 
