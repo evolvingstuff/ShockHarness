@@ -303,7 +303,10 @@ def test_cache_directory_resolves_against_the_root_and_discovery_skips_it(
 ) -> None:
     config = make_config('[tool.shockharness.cache]\ndirectory = "build/cache"\n')
     assert cache_directory(empty_root, config) == empty_root / "build" / "cache"
-    absolute = make_config(f'[tool.shockharness.cache]\ndirectory = "{empty_root / "abs"}"\n')
+    # as_posix(): a backslash is an escape inside a TOML basic string, so a Windows
+    # path must be written with forward slashes (which Windows accepts).
+    absolute_dir = (empty_root / "abs").as_posix()
+    absolute = make_config(f'[tool.shockharness.cache]\ndirectory = "{absolute_dir}"\n')
     assert cache_directory(empty_root, absolute) == empty_root / "abs"
     write(empty_root, "src/a.py", "x = 2\n")
     write(empty_root, "build/cache/entries/ab/x.py", "y = 3\n")  # a .py inside the cache dir
