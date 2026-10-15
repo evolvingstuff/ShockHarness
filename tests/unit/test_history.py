@@ -267,7 +267,8 @@ def test_git_dates_are_canonical_across_git_versions(raw: str, expected: str) ->
 
 
 def test_parse_log_normalizes_z_dates() -> None:
-    record = f"{RECORD_SEPARATOR}abc{FIELD_SEPARATOR}2026-01-01T12:00:00Z{FIELD_SEPARATOR}2026-01-01T11:00:00Z{FIELD_SEPARATOR}a@example.invalid\nsrc/a.py\n"
+    fields = ["abc", "2026-01-01T12:00:00Z", "2026-01-01T11:00:00Z", "a@example.invalid"]
+    record = RECORD_SEPARATOR + FIELD_SEPARATOR.join(fields) + "\nsrc/a.py\n"
     (commit,) = parse_log(record, "")
     assert commit.committer_date == "2026-01-01T12:00:00+00:00"
     assert commit.author_date == "2026-01-01T11:00:00+00:00"
