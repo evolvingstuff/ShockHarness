@@ -553,7 +553,8 @@ def test_wheel_contains_every_skill(tmp_path: Path) -> None:
         for name in SKILL_NAMES:
             member = f"shockharness/skills/{name}/SKILL.md"
             assert member in names, member
-            assert wheel.read(member) == skill_bytes(name)
+            # A CRLF checkout builds a CRLF wheel; the reader normalizes, so compare normalized.
+            assert wheel.read(member).replace(b"\r\n", b"\n") == skill_bytes(name)
         assert "shockharness/skills/__init__.py" in names
         assert "shockharness/skills/adapters.py" in names
         assert "shockharness/skills/install.py" in names
