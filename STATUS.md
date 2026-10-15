@@ -499,6 +499,25 @@ Run https://github.com/evolvingstuff/ShockHarness/actions/runs/38677190178
 on ea0aa08: 15 of 15 jobs green (ubuntu/macos/windows x 3.11-3.14, wheel
 build, consumer upgrade check, skill eval corpus).
 
+## Release 0.1.0 (2026-10-14)
+
+Tag `v0.1.0` at 18cf64c. Published to PyPI by `publish.yml` through trusted
+publishing (run https://github.com/evolvingstuff/ShockHarness/actions/runs/38678824321):
+full matrix, build, tag-equals-version check, clean-venv smoke test, then the
+upload behind the `pypi` environment's required-reviewer approval. The first
+attempt (run 38678116671) failed at the upload with `invalid-publisher`
+because the PyPI publisher entry did not match the workflow's claims; the entry
+was corrected on PyPI and the same tag was re-pushed. Nothing was uploaded by
+the failed attempt.
+
+Verified after publication: `pip install shockharness==0.1.0` into a fresh
+venv from PyPI with no cache; `shockharness version` prints `shockharness
+0.1.0`; `check --profile minimal` and `skills install --agent claude` work from
+the installed package. PyPI lists `0.1.0` (latest) and `0.1.0a1`.
+
+From this release the CLI surface, exit codes, rule IDs and report
+`schema_version` 1 are stable (CHANGELOG 0.1.0).
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
