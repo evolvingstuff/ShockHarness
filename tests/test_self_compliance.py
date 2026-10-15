@@ -1,6 +1,6 @@
 """ShockHarness must pass its own gate with the repository configuration."""
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths
 from shockharness.config import load_config
 from tests.conftest import REPO_ROOT
@@ -10,7 +10,10 @@ def test_tool_source_passes_its_own_gate() -> None:
     config = load_config(REPO_ROOT, None)
     assert config.source.tier == "dedicated"
     report = analyze_paths(
-        [REPO_ROOT / "src", REPO_ROOT / "tests"], REPO_ROOT, config, AnalysisOptions(True)
+        [REPO_ROOT / "src", REPO_ROOT / "tests"],
+        REPO_ROOT,
+        config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     offenders = [
         (f.path, f.span.line, f.message)

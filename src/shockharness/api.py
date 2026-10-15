@@ -9,14 +9,26 @@ import time
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from shockharness import gate as gate_module
 from shockharness.analysis import (
+    CACHE_BYPASSED,
     AnalysisOptions,
     FileResult,
     analyze_files,
     analyze_text,
     with_unsupported_sources,
+)
+from shockharness.cache.store import (
+    REASON_DISABLED,
+    REASON_NO_CACHE_FLAG,
+    STATUS_BYPASSED,
+    STATUS_DISABLED,
+    FileCache,
+    cache_coverage_without_cache,
+    cache_settings,
+    open_cache,
 )
 from shockharness.config import EffectiveConfig, load_config
 from shockharness.discovery import discover
@@ -39,7 +51,11 @@ def analyze_source(source: str, language: str, config: EffectiveConfig) -> FileR
             None,
         )
     return analyze_text(
-        SOURCE_PSEUDO_PATH, language, source, config, AnalysisOptions(inline_suppressions=True)
+        SOURCE_PSEUDO_PATH,
+        language,
+        source,
+        config,
+        AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED),
     )
 
 
@@ -57,12 +73,29 @@ def analyze_paths(
     """
     started = time.perf_counter()
     discovery = discover(root, list(paths), config)
-    outcome = analyze_files(discovery.files, config, options)
+    cache, cache_coverage = _open_cache(root, config, options)
+    outcome = analyze_files(discovery.files, config, options, cache)
+    if cache is not None:
+        cache_coverage = cache.coverage()
     files = with_unsupported_sources(outcome.files, discovery, config)
     findings = [f for result in files for f in result.findings]
     verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
     elapsed = time.perf_counter() - started
-    return build_report(files, discovery, config, verdict, outcome.metrics, elapsed)
+    return build_report(files, discovery, config, verdict, outcome.metrics, elapsed, cache_coverage)
+
+
+def _open_cache(
+    root: Path, config: EffectiveConfig, options: AnalysisOptions
+) -> tuple[FileCache | None, dict[str, Any]]:
+    """The cache for this run (``None`` when disabled or bypassed) and the
+    ``coverage.cache`` block that applies when no cache is open."""
+    settings = cache_settings(config)
+    directory = str(settings["directory"])
+    if options.cache == CACHE_BYPASSED:
+        return None, cache_coverage_without_cache(STATUS_BYPASSED, directory, REASON_NO_CACHE_FLAG)
+    if settings["enabled"] is False:
+        return None, cache_coverage_without_cache(STATUS_DISABLED, directory, REASON_DISABLED)
+    return open_cache(root, config), {}
 
 
 def apply_baseline(report: Report, baseline: Baseline, config: EffectiveConfig) -> Report:

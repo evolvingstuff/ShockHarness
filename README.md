@@ -96,6 +96,7 @@ shockharness check src/ --format sarif --output report.sarif  # GitHub code scan
 shockharness check src/ --profile minimal                      # try a profile without editing config
 shockharness check src/ --parse-errors warn                    # the only other CLI override
 shockharness check src/ --exit-zero                            # advisory: full report, exit 0 on violations
+shockharness check src/ --no-cache                             # bypass the content-hash cache (.shockharness-cache/) for one run
 shockharness baseline create src/ --output .shockharness-baseline.json
 shockharness check src/ --baseline .shockharness-baseline.json # legacy findings do not gate
 shockharness diff --base main --head HEAD                      # new / fixed / unchanged, exit 0
@@ -314,7 +315,9 @@ https://github.com/evolvingstuff/ShockHarness/blob/main/docs/limitations.md.
 a `[tool.shockharness]` table in `pyproject.toml` (the dedicated file wins and
 the shadowed table is reported). Unknown keys, bad types, unknown rule IDs,
 and invalid globs are errors, never ignored. Every rule can be disabled; every
-disable is listed in the report.
+disable is listed in the report. Per-file results are cached under
+`.shockharness-cache/` (add it to `.gitignore`; `cache.enabled = false` or
+`--no-cache` turns it off; a warm run only redoes the cross-file work).
 
 ```toml
 [tool.shockharness]
@@ -366,7 +369,9 @@ It uploads SARIF to code scanning. Keep the version pin in `pyproject.toml`, a
 requirements file or that workflow input, never in a shell string, so
 Dependabot can open upgrade PRs; `docs/integration.md` has the full recipe and
 a Dependabot snippet, and `examples/python` and `examples/js` are complete
-consumers exercised by CI.
+consumers exercised by CI. Restoring `.shockharness-cache/` between jobs is
+optional and safe: an entry from another tool version, configuration or
+interpreter is invalidated, never used.
 
 See `docs/` for configuration, rules, complexity conventions, architecture,
 integration, skills, releasing, and limitations; `evals/` holds the skill
@@ -380,11 +385,12 @@ with confidence, module edges, cycles, fan-in/out, shared mutable state) and
 ```python
 from pathlib import Path
 from shockharness import analyze_paths
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.config import load_config
 
 config = load_config(Path("."), None)
-report = analyze_paths([Path("src")], Path("."), config, AnalysisOptions(inline_suppressions=True))
+options = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)  # or CACHE_BYPASSED
+report = analyze_paths([Path("src")], Path("."), config, options)
 print(report.gate.status, len(report.findings))
 
 # Optional: apply a reviewed baseline and attach git history metrics.

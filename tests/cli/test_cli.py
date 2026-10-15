@@ -12,7 +12,7 @@ import pytest
 
 from shockharness.cli import main
 from shockharness.version import __version__
-from tests.conftest import commit_all, init_repo
+from tests.conftest import commit_all, init_repo, without_cache_block, without_cache_line
 
 
 def write(root: Path, relative: str, body: str) -> Path:
@@ -262,7 +262,13 @@ def test_scan_output_is_deterministic(empty_root: Path, capsys: pytest.CaptureFi
     args = ["scan", str(empty_root / "src"), "--root", str(empty_root), "--format", "json"]
     _, first, _ = run(args, capsys)
     _, second, _ = run(args, capsys)
-    assert first == second
+    # the first run is cold and the second warm: only coverage.cache may differ
+    assert without_cache_block(first) == without_cache_block(second)
+    assert json.loads(first)["coverage"]["cache"]["hits"] == 0
+    assert json.loads(second)["coverage"]["cache"]["hits"] == 2
+    _, bypassed, _ = run([*args, "--no-cache"], capsys)
+    assert without_cache_block(bypassed) == without_cache_block(first)
+    assert json.loads(bypassed)["coverage"]["cache"]["status"] == "bypassed"
 
 
 def test_sarif_output_is_a_single_run(empty_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -539,7 +545,8 @@ def test_diff_output_is_byte_identical_across_runs(
     args = ["diff", "--base", c1, "--head", c2, "--format", "json", "--root", str(empty_root)]
     _, first, _ = run(args, capsys)
     _, second, _ = run(args, capsys)
-    assert first == second
+    assert first == second  # revision exports never touch the cache
+    assert not (empty_root / ".shockharness-cache").exists()
     args = ["diff", "--base", c1, "--head", c2, "--format", "sarif", "--root", str(empty_root)]
     _, first, _ = run(args, capsys)
     _, second, _ = run(args, capsys)
@@ -650,7 +657,7 @@ def test_check_is_canonical_and_scan_is_a_hidden_alias(
     check_code, check_out, _ = run(["check", *tail], capsys)
     scan_code, scan_out, _ = run(["scan", *tail], capsys)
     assert check_code == scan_code == 1
-    assert check_out == scan_out
+    assert without_cache_block(check_out) == without_cache_block(scan_out)  # scan ran warm
     assert json.loads(check_out)["effective_profile"] == "strict"
     assert "policy_profile" not in check_out
     for args in (["check", *tail, "--format", "sarif"], ["scan", *tail, "--format", "sarif"]):
@@ -810,12 +817,11 @@ def test_exit_zero_reports_violations_but_exits_zero(
     assert '1 new hard violation(s) and gates.new_hard_violations = "fail"' in out
     assert "shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0" in out
     assert "advisory run" not in strict_out
-    assert (
+    assert without_cache_line(
         out.replace(
             "shockharness: advisory run (--exit-zero): gate verdict FAIL reported as exit 0\n", ""
         )
-        == strict_out
-    )
+    ) == without_cache_line(strict_out)
 
     code, out, _ = run(
         ["check", str(empty_root / "src"), "--exit-zero", "--format", "json", *root], capsys
@@ -1010,7 +1016,9 @@ def test_check_summary_ends_with_the_same_gate_line(
     assert "  parse failures: 1" in summary
     assert "src/bad.js:1:1: parse_error:" in summary
     # the trailer is the full report's, verbatim: same totals, same gate line and reasons
-    assert full.split("\n\n", 1)[1] == summary.split("\n\n", 1)[1]
+    assert without_cache_line(full.split("\n\n", 1)[1]) == without_cache_line(
+        summary.split("\n\n", 1)[1]
+    )
     assert "gate: FAIL (exit 1)" in summary.splitlines()
     assert summary.rstrip("\n").endswith(
         '7 new hard violation(s) and gates.new_hard_violations = "fail"'

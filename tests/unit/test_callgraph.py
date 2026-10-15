@@ -5,12 +5,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths
 from shockharness.complexity.coupling import strongly_connected_components
 from shockharness.config import EffectiveConfig
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 
 def _report(root: Path, config: EffectiveConfig, files: dict[str, str]) -> Any:

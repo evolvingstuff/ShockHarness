@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths, analyze_source, apply_baseline, evaluate_gate
 from shockharness.config import EffectiveConfig
 from shockharness.errors import UsageError
@@ -20,7 +20,7 @@ from shockharness.gating.baseline import (
 )
 from tests.conftest import REPO_ROOT
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 
 def write(root: Path, relative: str, body: str) -> None:

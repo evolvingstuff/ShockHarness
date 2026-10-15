@@ -7,7 +7,7 @@ from pathlib import Path
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from shockharness.analysis import AnalysisOptions, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_text
 from shockharness.config import load_bundled_defaults, load_config
 from shockharness.ir.javascript import extract_javascript_facts, parse_js_number
 from shockharness.ir.python import extract_python_facts
@@ -15,7 +15,7 @@ from shockharness.source import SourceText
 
 _ROOT = Path(tempfile.mkdtemp(prefix="shockharness-prop-"))
 CONFIG = load_config(_ROOT, None)
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 JS_RESERVED = frozenset(
     [

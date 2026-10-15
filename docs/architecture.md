@@ -15,6 +15,9 @@ Per-file analysis                                                      (analysis
 Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py, rules/defaults.py)
 Per-unit metrics over the control tree -> CPLX001-CPLX004, CPLX006     (complexity/{cyclomatic,cognitive,nesting,npath,size,metrics}.py, rules/complexity.py)
     |
+Content-hash cache: per-file facts, findings and unit metrics, keyed by  (cache/store.py, cache/codec.py)
+  tool version + config digest + host + language + SHA-256 of the bytes
+    |
 Cross-file pass: call graph, module edges, cycles, fan-in/out -> CPLX005 (complexity/{callgraph,coupling,assemble}.py)
     |
 Suppressions -> attach / SUPP001 / SUPP002                            (suppressions.py)
@@ -68,7 +71,10 @@ scope, evidence, occurrence; diff entries by finding then status. JSON and
 SARIF output have sorted keys and no timestamps; the only dates are git commit
 dates inside `metrics.history`, which are data, and the history horizon is
 anchored on the head commit rather than the clock. Two runs over the same
-inputs are byte-identical.
+inputs are byte-identical, with one declared exception: `coverage.cache`
+(the cache's status and counters) differs between a cold and a warm run, and a
+cache hit must reproduce the file's findings and metrics byte for byte; the
+tests compare reports with that block removed.
 
 **Positions.** Both parsers report UTF-8 byte columns. `SourceText` maps them to
 1-based character columns; `end_column` is exclusive. Line breaks are CRLF, CR,

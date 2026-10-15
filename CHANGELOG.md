@@ -6,10 +6,34 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 Planned 0.3.0: the third feedback round, from `docs/shockharness-suggestions-3.md`
-(the same 906-file codebase run with 0.2.0). Items 1, 2, 4 and 5 are below;
-item 3 (the content-hash cache) follows in its own entry.
+(the same 906-file codebase run with 0.2.0). All five items are below; the
+content-hash cache (item 3, deferred from the first brief's item 6) is the
+largest.
 
 ### Added
+- The content-hash cache of per-file results. Parse facts, rule findings and
+  per-unit complexity metrics are stored under `cache.directory` (default
+  `.shockharness-cache/` under the analysis root; `cache.enabled` default
+  true; `--no-cache` on `check`/`scan`/`gate PATH...` bypasses reading and
+  writing for one run). The key is the tool version, the effective
+  configuration digest, the host (interpreter and JavaScript grammar), the
+  language and the SHA-256 of the file's bytes; any difference is a miss, a
+  header difference invalidates everything. Cross-file work (call graph,
+  cycles, suppressions, fingerprints, baseline matching, diffs, history) is
+  always recomputed; `baseline create` and revision diffs never read the
+  cache. Entries are JSON (never pickles), written atomically; a corrupt,
+  unreadable or schema-mismatched index or entry is counted and described
+  once under `coverage.cache` and ignored. `coverage.cache` (`status`,
+  `directory`, `reason`, `hits`, `misses`, `invalidated`, `errors`,
+  `problems`) is the one report block that differs between a cold and a warm
+  run; the text output prints a `cache:` line. On this repository a warm run
+  takes a fifth of a cold one. Library API: `AnalysisOptions` gains a
+  required `cache` field (`CACHE_CONFIGURED` | `CACHE_BYPASSED`),
+  `analyze_files` a `cache` argument and `build_report` the coverage block.
+  The `cache` table is excluded from the configuration digest, so toggling or
+  moving the cache keeps baselines valid. The directory is skipped by
+  discovery like `.git`, listed in the repository's and both examples'
+  `.gitignore`, and documented in `docs/configuration.md`, Cache.
 - `EXC001`/`EXC002` resolve a capture manager bound to a name: `capture =
   CapturedExceptionContext(T); with capture:` (81 of the 82 captures in that
   codebase) and `s = suppress(T); with s:` are the same catch as the inline
@@ -34,6 +58,11 @@ item 3 (the content-hash cache) follows in its own entry.
   three remedies: handle the expected error after the guard, log it and
   continue with a stated reason, or suppress the finding with a reason. No
   behaviour change.
+
+### Schema
+- Report schema 1 gains `coverage.cache` (required), the `cache` table joins
+  the configuration schema, and `config_digest` no longer covers the `cache`
+  table. No existing field changed.
 
 ### Changed
 - Glob patterns: a leading `/` or `./` anchors the pattern to the analysis

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, FileResult, analyze_text
 from shockharness.config import EffectiveConfig
 from tests.conftest import finding_tuples
 
@@ -74,7 +74,11 @@ def test_javascript_line_and_block_forms(analyze: Callable[[str, str], FileResul
 def test_no_inline_suppressions_mode(strict_config: EffectiveConfig) -> None:
     text = 'x = 30  # shockharness: ignore[MAGIC001] reason="valid but ignored"\n'
     result = analyze_text(
-        "t.py", "python", text, strict_config, AnalysisOptions(inline_suppressions=False)
+        "t.py",
+        "python",
+        text,
+        strict_config,
+        AnalysisOptions(inline_suppressions=False, cache=CACHE_CONFIGURED),
     )
     rules = [(f.rule_id, f.is_suppressed) for f in result.findings]
     assert rules == [("MAGIC001", False), ("SUPP001", False)]
@@ -93,7 +97,7 @@ def test_suppression_rules_can_be_disabled_by_override(
         "python",
         'x = 1  # shockharness: ignore[MAGIC001] reason="stale"\n',
         config,
-        AnalysisOptions(True),
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert result.findings == ()
     assert "SUPP002" not in result.rules_applied

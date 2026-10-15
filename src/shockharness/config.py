@@ -458,8 +458,15 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(found)
 
 
+CACHE_KEY = "cache"
+
+
 def config_digest(values: Mapping[str, Any]) -> str:
-    canonical = json.dumps(values, sort_keys=True, separators=(",", ":"))
+    """SHA-256 of the canonical JSON of every key that can change a result: the
+    ``cache`` table (where results are stored, and whether) is left out, so toggling
+    the cache neither changes the digest a baseline records nor the cache key."""
+    policy = {key: value for key, value in values.items() if key != CACHE_KEY}
+    canonical = json.dumps(policy, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

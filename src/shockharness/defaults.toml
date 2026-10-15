@@ -130,3 +130,14 @@ legacy = "baseline"
 # `gate --base/--head`: "warn" lists it in the gate reasons, "fail" fails the gate,
 # "ignore" says nothing. A plain `check` never fails on complexity.
 complexity_regressions = "warn"
+
+# The content-hash cache of per-file results (0.3.0). A file whose bytes, language,
+# effective configuration (digest), tool version and host interpreter are unchanged is
+# not re-parsed or re-checked; everything cross-file (call graph, cycles, diff, baseline
+# matching, history) is recomputed every run. The directory belongs in .gitignore; a
+# relative path resolves against the analysis root. `--no-cache` bypasses it for one run,
+# `baseline create` and revision diffs never read it. The `cache` table is not part of
+# the configuration digest, because it cannot change a result.
+[tool.shockharness.cache]
+enabled = true
+directory = ".shockharness-cache"

@@ -1,9 +1,10 @@
 """Human-readable rendering of a report."""
 
 import textwrap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
+from shockharness.cache.store import STATUS_ENABLED as CACHE_ENABLED
 from shockharness.config import SUPPORTED_EXTENSIONS
 from shockharness.constants import (
     COMMIT_SHORT_HEX,
@@ -130,6 +131,17 @@ def finding_lines(findings: Sequence[Finding]) -> list[str]:
     return lines
 
 
+def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
+    if cache["status"] != CACHE_ENABLED:
+        return [f"  cache: {cache['status']} ({cache['reason']})"]
+    lines = [
+        f"  cache: {cache['directory']}: {cache['hits']} hit(s), {cache['misses']} miss(es), "
+        f"{cache['invalidated']} invalidated, {cache['errors']} error(s)"
+    ]
+    lines.extend(f"  warning: cache: {problem}" for problem in cache["problems"])
+    return lines
+
+
 def _trailer_lines(report: Report) -> list[str]:
     """Everything after the findings: totals, rules, config, metrics, status, gate."""
     lines: list[str] = []
@@ -159,6 +171,7 @@ def _trailer_lines(report: Report) -> list[str]:
             f'extension no adapter parses and were not analyzed (unsupported_sources = "warn"): '
             f"{listed}"
         )
+    lines.extend(_cache_lines(coverage["cache"]))
     for note in report.config.notes:
         lines.append(f"  config note: {note}")
     for deviation in report.config.deviations:

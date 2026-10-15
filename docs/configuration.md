@@ -105,6 +105,10 @@ parse_errors = "fail"                   # "fail" -> exit 3 on any unparseable fi
 unsupported_sources = "warn"            # an included file no adapter parses (.ts, .pyx): "fail" -> exit 3, "warn" -> listed, "ignore" -> counted only ("ignore" in minimal)
 follow_symlinks = false                 # never leave the root through a link unless asked
 
+[tool.shockharness.cache]
+enabled = true                          # the content-hash cache of per-file results (0.3.0); see Cache below
+directory = ".shockharness-cache"       # relative to the root; belongs in .gitignore; not part of the config digest
+
 [tool.shockharness.rules.magic_numbers]
 enabled = true
 severity = "error"                      # "review" caps MAGIC001 at review (reported, never gating; a deviation)
@@ -444,6 +448,55 @@ pruned directory are never affected; `coverage.discovery.unsupported_extension`
 still counts every unparseable file the walk saw. An explicit target with an
 unsupported extension stays a usage error (exit 2). `fail` is stricter than
 the profile default and is not a deviation.
+
+## Cache
+
+Per-file results (parse facts, rule findings, per-unit complexity metrics) are
+cached under `cache.directory` (default `.shockharness-cache/`; a relative path
+resolves against the analysis root, an absolute path is used as is). Add the
+directory to `.gitignore`; it is safe to delete at any time and carries a
+`CACHEDIR.TAG` so backup tools skip it. `cache.enabled = false` turns the cache
+off; `--no-cache` on `check` (`scan`) and `gate PATH...` bypasses reading and
+writing for one run. `baseline create` and revision diffs (`diff`,
+`gate --base/--head`) never read it; `analyze_source` has no root and no cache.
+
+**Key.** An entry is used only when every part of its key is equal: the tool
+version, the effective configuration digest, the host (interpreter version and
+implementation, JavaScript grammar version: parse facts depend on both), the
+language, and the SHA-256 of the file's bytes. The `cache` table itself is not
+part of the configuration digest, so moving or disabling the cache changes
+neither the digest a baseline records nor the key. Everything cross-file (the
+call graph and its cycles, suppressions and fingerprints, baseline matching,
+diffs, history) is recomputed on every run; a hit yields byte-identical
+findings and metrics for that file.
+
+**Layout.** `index.json` holds the key header; `entries/<ab>/<sha256 of the
+path>.json` holds one JSON entry per file (never a pickle; nothing read from the
+cache is executed). Writes go through a temporary file in the same directory
+and an atomic rename. A header that differs (another tool version,
+configuration or host) invalidates every entry. An unreadable, corrupt or
+schema-mismatched index or entry never fails the run and never yields a
+partial result: it is counted, described once, ignored, and the file is
+analyzed afresh; a corrupt index rebuilds the cache.
+
+**Reporting.** `coverage.cache` carries `status` (`enabled`, `disabled`,
+`bypassed`), `directory`, `reason`, the counters `hits`, `misses`,
+`invalidated`, `errors`, and the distinct `problems`. It is the one block of
+the JSON report that legitimately differs between a cold and a warm run over
+the same tree; a determinism comparison (two runs byte-identical) must drop it,
+as the tool's own tests do. The text output prints one `cache:` line and a
+`warning: cache:` line per problem.
+
+```text
+$ shockharness check .                  # cold: every file analyzed and stored
+  cache: .shockharness-cache: 0 hit(s), 906 miss(es), 0 invalidated, 0 error(s)
+$ shockharness check .                  # warm: only cross-file work runs
+  cache: .shockharness-cache: 906 hit(s), 0 miss(es), 0 invalidated, 0 error(s)
+```
+
+On a CI runner, restoring `.shockharness-cache/` between jobs (keyed by the
+tool version and the configuration file) turns a full run into the cross-file
+phase; a cache from another interpreter or tool version is simply invalidated.
 
 ## Glob semantics
 

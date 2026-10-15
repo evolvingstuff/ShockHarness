@@ -94,7 +94,8 @@
         "rules_disabled_globally",
         "files_analyzed",
         "files_failed",
-        "limitations"
+        "limitations",
+        "cache"
       ],
       "properties": {
         "host_python": {
@@ -154,6 +155,54 @@
                 "type": "string"
               },
               "reason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "description": "The content-hash cache of per-file results (0.3.0). The one coverage block that differs between a cold and a warm run over the same tree; determinism comparisons drop it.",
+          "required": [
+            "status",
+            "directory",
+            "reason",
+            "hits",
+            "misses",
+            "invalidated",
+            "errors",
+            "problems"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "enabled",
+                "disabled",
+                "bypassed"
+              ]
+            },
+            "directory": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "hits": {
+              "type": "integer"
+            },
+            "misses": {
+              "type": "integer"
+            },
+            "invalidated": {
+              "type": "integer"
+            },
+            "errors": {
+              "type": "integer"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
                 "type": "string"
               }
             }

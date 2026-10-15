@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_text
 from shockharness.api import analyze_paths
 from shockharness.config import (
     NO_OVERRIDES,
@@ -23,7 +23,7 @@ from shockharness.config import (
 from shockharness.errors import ConfigError
 from shockharness.schema import PROFILES
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 PYTHON_SAMPLE = (
     "x = 2\n"
     "def f(a, b=None):\n"

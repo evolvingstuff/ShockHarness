@@ -84,3 +84,11 @@ CYCLE_MEMBERS_LISTED: Final[int] = 8
 # findings to list, and the precision of the elapsed time in seconds.
 SUMMARY_TOP_FILES: Final[int] = 10
 ELAPSED_DECIMALS: Final[int] = 3
+
+# The content-hash cache (0.3.0): the shape version of index.json and of each entry.
+# Bumped on an incompatible change; a cache written by another version is invalidated.
+CACHE_SCHEMA_VERSION: Final[str] = "1"
+# Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
+CACHE_SHARD_CHARS: Final[int] = 2
+# A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.
+CACHE_CONTROL_FIELDS: Final[int] = 6

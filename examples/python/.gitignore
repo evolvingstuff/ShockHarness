@@ -1,0 +1,6 @@
+# ShockHarness content-hash cache (per-file analysis results; safe to delete)
+.shockharness-cache/
+
+__pycache__/
+.venv/
+*.egg-info/

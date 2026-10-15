@@ -6,6 +6,9 @@ venv/
 .idea/
 .vscode/
 
+# ShockHarness content-hash cache (per-file analysis results; safe to delete)
+.shockharness-cache/
+
 # Python
 __pycache__/
 *.py[cod]

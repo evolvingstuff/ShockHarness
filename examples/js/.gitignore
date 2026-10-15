@@ -1,0 +1,4 @@
+# ShockHarness content-hash cache (per-file analysis results; safe to delete)
+.shockharness-cache/
+
+node_modules/

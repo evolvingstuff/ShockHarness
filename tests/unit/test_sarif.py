@@ -4,14 +4,14 @@ fingerprints, suppressions, and baseline states."""
 import json
 from pathlib import Path
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths, apply_baseline
 from shockharness.config import EffectiveConfig
 from shockharness.gating.baseline import FINGERPRINT_KEY, build_baseline
 from shockharness.output import sarif
 from shockharness.rules import registry
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 # The parts of the SARIF 2.1.0 schema a code-scanning consumer requires. Same tiny
 # checker style as the report schema test: type, enum, required, properties, items.
@@ -228,4 +228,8 @@ def test_sarif_output_is_deterministic(empty_root: Path, strict_config: Effectiv
     write(empty_root, "src/a.py", "x = 2\n")
     first = sarif.render(analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS))
     second = sarif.render(analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS))
-    assert first == second
+    # the run properties carry coverage, whose cache block differs between cold and warm
+    first_data, second_data = json.loads(first), json.loads(second)
+    for data in (first_data, second_data):
+        del data["runs"][0]["properties"]["coverage"]["cache"]
+    assert first_data == second_data

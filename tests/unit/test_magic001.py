@@ -2,12 +2,12 @@ from collections.abc import Callable
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, FileResult, analyze_text
 from shockharness.config import EffectiveConfig
 from shockharness.errors import ConfigError
 from tests.conftest import finding_tuples
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 
 def test_python_range_two_fails(analyze: Callable[[str, str], FileResult]) -> None:
@@ -51,11 +51,19 @@ def test_allow_unary_negative_one(make_config: Callable[[str], EffectiveConfig])
         "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = true\n"
     )
     result = analyze_text(
-        "t.py", "python", "a = -1\nb = -1.0\nc = -0\nd = -2\n", config, AnalysisOptions(True)
+        "t.py",
+        "python",
+        "a = -1\nb = -1.0\nc = -0\nd = -2\n",
+        config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert [f.span.line for f in result.findings] == [3, 4]
     js = analyze_text(
-        "t.js", "javascript", "const a = -1, b = -0, c = -1n;\n", config, AnalysisOptions(True)
+        "t.js",
+        "javascript",
+        "const a = -1, b = -0, c = -1n;\n",
+        config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert [f.message.split(" ")[2] for f in js.findings] == ["-0"]
 
@@ -67,7 +75,11 @@ def test_extra_allowed_values_are_honoured_and_reported(
         "[tool.shockharness.rules.magic_numbers]\nallowed_values = [0, 1, 2, 100]\n"
     )
     result = analyze_text(
-        "t.py", "python", "a = 2\nb = 100\nc = 100.0\nd = 3\n", config, AnalysisOptions(True)
+        "t.py",
+        "python",
+        "a = 2\nb = 100\nc = 100.0\nd = 3\n",
+        config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert [f.span.line for f in result.findings] == [4]
     assert any("allowed_values permits 100, 2" in d for d in config.deviations)
@@ -100,7 +112,9 @@ def test_disabled_rule_produces_nothing_and_is_recorded(
     make_config: Callable[[str], EffectiveConfig],
 ) -> None:
     config = make_config("[tool.shockharness.rules.magic_numbers]\nenabled = false\n")
-    result = analyze_text("t.py", "python", "x = 42\n", config, AnalysisOptions(True))
+    result = analyze_text(
+        "t.py", "python", "x = 42\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+    )
     assert result.findings == ()
     assert "MAGIC001" not in result.rules_applied
     assert [(d.rule_id, d.origin) for d in result.rules_disabled] == [("MAGIC001", "config")]

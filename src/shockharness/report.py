@@ -101,7 +101,10 @@ def _analysis_status(files: Sequence[FileResult], config: EffectiveConfig) -> st
 
 
 def _coverage(
-    files: Sequence[FileResult], discovery: DiscoveryResult | None, config: EffectiveConfig
+    files: Sequence[FileResult],
+    discovery: DiscoveryResult | None,
+    config: EffectiveConfig,
+    cache: Mapping[str, Any],
 ) -> dict[str, Any]:
     by_language: dict[str, dict[str, Any]] = {}
     for file in files:
@@ -145,6 +148,9 @@ def _coverage(
         "explicit_targets_excluded": explicit_excluded,
         "unsupported_sources_policy": policy,
         "unsupported_sources": unsupported,
+        # The one coverage block that legitimately differs between a cold and a warm run
+        # over the same tree; determinism comparisons drop it (docs/configuration.md, Cache).
+        "cache": dict(cache),
         "limitations": [
             "Only rules listed in rules_implemented produced findings; every other registered "
             "rule is not analyzed.",
@@ -258,10 +264,12 @@ def build_report(
     gate: GateResult,
     metrics: Mapping[str, Any],
     elapsed_seconds: float,
+    cache: Mapping[str, Any],
 ) -> Report:
     """``metrics`` carries the ``complexity`` and ``graph`` sections from the analysis;
     ``history`` is added here as ``not_collected`` until the CLI or ``with_history`` runs git.
-    ``elapsed_seconds`` is the wall-clock time of discovery, analysis and the gate."""
+    ``elapsed_seconds`` is the wall-clock time of discovery, analysis and the gate;
+    ``cache`` is the ``coverage.cache`` block (status and counters of the content-hash cache)."""
     ordered_files = tuple(sorted(files, key=lambda f: f.path))
     findings = tuple(
         sorted((f for file in ordered_files for f in file.findings), key=lambda f: f.sort_key())
@@ -276,7 +284,7 @@ def build_report(
         tool_version=__version__,
         analysis_status=_analysis_status(ordered_files, config),
         config=config,
-        coverage=_coverage(ordered_files, discovery, config),
+        coverage=_coverage(ordered_files, discovery, config, cache),
         files=ordered_files,
         findings=findings,
         metrics={**dict(metrics), "history": dict(HISTORY_NOT_COLLECTED)},

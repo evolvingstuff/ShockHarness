@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shockharness.cache.store import cache_directory
 from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
 from shockharness.errors import UsageError
 from shockharness.globs import GlobSet, compile_globset
@@ -71,6 +72,7 @@ def _walk_directory(
     include: GlobSet,
     exclude: GlobSet,
     follow_symlinks: bool,
+    cache_dir: Path,
     found: dict[str, DiscoveredFile],
     unsupported: dict[str, SkippedFile],
     counts: dict[str, int],
@@ -82,6 +84,8 @@ def _walk_directory(
             if name == GIT_DIR:
                 continue
             child = current_path / name
+            if child.resolve() == cache_dir:
+                continue  # never analyzed, whatever include says; not counted, like .git
             if not follow_symlinks and child.is_symlink():
                 counts["symlinks_skipped"] += 1
                 continue
@@ -118,6 +122,7 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
     include = compile_globset(list(config.values["include"]))
     exclude = compile_globset(list(config.values["exclude"]))
     follow_symlinks = bool(config.values["follow_symlinks"])
+    cache_dir = cache_directory(root, config).resolve()
     found: dict[str, DiscoveredFile] = {}
     unsupported: dict[str, SkippedFile] = {}
     explicit_excluded: list[SkippedFile] = []
@@ -136,7 +141,15 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
             raise UsageError("path does not exist", str(target))
         if target.is_dir():
             _walk_directory(
-                root, target, include, exclude, follow_symlinks, found, unsupported, counts
+                root,
+                target,
+                include,
+                exclude,
+                follow_symlinks,
+                cache_dir,
+                found,
+                unsupported,
+                counts,
             )
             continue
         relative = relative_posix(root, target)

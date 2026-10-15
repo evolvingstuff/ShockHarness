@@ -128,6 +128,30 @@ exception = "json.JSONDecodeError"
 reason = "Skills manifest content is external input; malformed JSON becomes a UsageError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/cache/store.py"
+language = "python"
+exception = "OSError"
+reason = "The cache directory is I/O (reading an index or entry, creating the directory, writing a temporary file, renaming it, removing a stale entry); every failure is counted under coverage.cache.errors, described once in coverage.cache.problems, and the file is analyzed afresh; the cache never fails a run or yields a partial result"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/cache/store.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Cache files are external bytes; a non-UTF-8 index or entry is counted and described under coverage.cache and ignored"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/cache/store.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Cache files are external content; a malformed index or entry is counted and described under coverage.cache and ignored (a corrupt index rebuilds the cache)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/cache/store.py"
+language = "python"
+exception = "shockharness.cache.codec.CacheEntryError"
+reason = "An entry whose shape does not match the current tool (schema drift, hand edits) is counted and described under coverage.cache and ignored; the file is analyzed afresh"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/cli.py"
 language = "python"
 exception = "shockharness.errors.ShockHarnessError"

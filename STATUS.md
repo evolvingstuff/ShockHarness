@@ -518,6 +518,158 @@ the installed package. PyPI lists `0.1.0` (latest) and `0.1.0a1`.
 From this release the CLI surface, exit codes, rule IDs and report
 `schema_version` 1 are stable (CHANGELOG 0.1.0).
 
+## Content-hash cache (0.3.0 brief, item 3) — DONE (2026-10-15)
+
+Item 3 of `docs/shockharness-suggestions-3.md` (item 6 of the first brief,
+deferred from 0.2.0), as its own commit after the feedback round. 19 tests were
+added (600 -> 619). No version bump, no tag, no push.
+
+### What was built
+
+* `src/shockharness/cache/codec.py`: a JSON codec for the frozen dataclasses of
+  the per-file phase. Encoding walks dataclass fields; decoding is driven by
+  the type hints and is strict (a missing or unknown field, a wrong type, a
+  `bool` where an `int` is expected, an inconsistent control tree all raise
+  `CacheEntryError`). Control trees, the one recursive structure, are
+  flattened to a pre-order list and rebuilt with an explicit stack, so a
+  300-deep unit (the existing tree-sitter regression input) round-trips
+  without touching the recursion limit. Complex literals (`1j`) are encoded as
+  `{"__complex__": [re, im]}`; `inf` from `1e400` survives through Python's
+  JSON. Entries are plain JSON, never pickles: nothing read from the cache is
+  executed.
+* `src/shockharness/cache/store.py`: the directory. `index.json` holds the key
+  header (schema version, tool version, config digest, host); `entries/<ab>/
+  <sha256 of the relative path>.json` holds one entry per file with the full
+  key (header + language + SHA-256 of the bytes) and the serialized
+  `PendingFile` minus its source text. Writes are `mkstemp` in the same
+  directory then `os.replace`. A header mismatch removes every entry
+  (`invalidated` = the number removed); a changed file's entry is counted as
+  invalidated and overwritten. Every cache problem is counted under `errors`,
+  described once under `problems`, and ignored; the store never raises.
+* `analysis.py`: `AnalysisOptions` gains the required field `cache`
+  (`CACHE_CONFIGURED` | `CACHE_BYPASSED`); `prepare_file(file, config, cache)`
+  reads the bytes once, hashes them, and either rebuilds the `PendingFile`
+  from the entry (re-attaching a fresh `SourceText`) or analyzes and stores;
+  `analyze_files(files, config, options, cache)`. Suppressions, fingerprints,
+  the call graph and everything after run as before on a hit.
+* `api.analyze_paths` opens the cache from `cache.enabled` / `cache.directory`
+  unless the options say bypassed; `build_report` takes the `coverage.cache`
+  block; `gating/diff.py` analyzes revision exports with no cache and records
+  `bypassed` with the reason; `analyze_source` is bypassed (no root).
+* `discovery.py` skips the configured cache directory like `.git`, without
+  counting it (a count would differ between a cold and a warm run over the
+  root and break byte-identity).
+* `config.py`: the `cache` table is excluded from the configuration digest.
+* CLI: `--no-cache` on `check`/`scan`/`gate PATH...`; `baseline create`
+  always bypasses; the text trailer prints one `cache:` line and one
+  `warning: cache:` line per problem.
+* `schemas/report-v1.schema.json`: `coverage.cache` (required). `.gitignore`
+  and both examples' new `.gitignore` list `.shockharness-cache/`.
+  `.shockharness.toml` declares four boundaries for `cache/store.py`
+  (`OSError`, `UnicodeDecodeError`, `json.JSONDecodeError`,
+  `shockharness.cache.codec.CacheEntryError`), each with its reason.
+
+### Decisions (mine; review these)
+
+* **The host is part of the key.** The brief lists tool version, config
+  digest, language and content hash. Parse facts also depend on the host
+  interpreter (`ast` of CPython 3.11 vs 3.14 accept different syntax) and on
+  the JavaScript grammar version, so the index header carries
+  `"CPython 3.14.7; tree-sitter-javascript 0.25.0"` and a different host
+  invalidates everything. Without it, switching interpreters would serve
+  stale facts.
+* **`cache` is not in the config digest.** A baseline records the digest;
+  turning the cache off or moving its directory cannot change a result, so it
+  must not invalidate baselines or the cache key. Documented in
+  `docs/configuration.md` (Cache) and the CHANGELOG schema note.
+* **Entries are keyed by path hash, not content hash.** One entry per file
+  path, overwritten when the file changes, so the directory never accumulates
+  stale entries and no pruning pass is needed; "changing one file" shows as
+  `misses = 1, invalidated = 1`. The content hash lives inside the entry's key.
+* **The whole `PendingFile` is stored**, not only what the warm path consumes
+  (comments, imports, bindings, units, findings): simpler, and any future
+  consumer of facts after the per-file phase keeps working. Cost on this
+  repository: 6.8 MB for 102 files; about 60 MB would be expected for the
+  906-file codebase. Compression is a follow-up if that matters.
+* **Library API change.** `AnalysisOptions(inline_suppressions=True)` no
+  longer constructs (the field has no default: the tool's own DEF001 policy);
+  consumers pass `cache=CACHE_CONFIGURED` or `CACHE_BYPASSED`. README and
+  CHANGELOG say so. Every call site in the repository was updated.
+* **Determinism tests** compare JSON with `coverage.cache` removed
+  (`tests.conftest.without_cache_block`) and text with the `  cache: ` line
+  removed; the SARIF test drops `runs[0].properties.coverage.cache`. The diff
+  outputs stay byte-identical as before (no cache is involved).
+* **Discovery over the root with a cache directory present** was the one
+  byte-identity trap found while building: the first design counted the
+  skipped directory under `coverage.discovery`, which differs between cold
+  and warm. The count was removed.
+* Self-scan: 169 -> 175 advisory findings (six CPLX warnings in `cache/`:
+  `store.py` is boundary-heavy by nature); no hard finding remains; the
+  self-gate caught the ten hard findings of the first draft (a literal `6`,
+  nine undeclared boundaries) and the second draft's digest exclusion was
+  driven by `test_cache.py`.
+
+### Evidence (all run 2026-10-15 on macOS arm64)
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+97 files already formatted
+
+$ pytest -q                      # CPython 3.14.7 (includes the slow timing bound)
+619 passed in 56.96s
+$ pytest -q                      # CPython 3.13.1
+619 passed in 32.19s
+$ pytest -q                      # CPython 3.12.8
+619 passed in 30.74s
+$ pytest -q                      # CPython 3.11.11
+619 passed in 44.69s
+
+$ rm -rf .shockharness-cache
+$ for i in 1 2 3 4 5; do time shockharness check src tests scripts evals --format json --output run$i.json; done
+run1: gate pass (exit 0)  real 3.30 s   coverage.cache: enabled, hits 0,   misses 102, invalidated 0, errors 0
+run2: gate pass (exit 0)  real 0.62 s   coverage.cache: enabled, hits 102, misses 0,   invalidated 0, errors 0
+run3..run5: identical to run2 (0.62-0.63 s)
+$ md5 of run1..run5 with coverage.cache removed (sorted keys)
+5 d262bd1113cf44cd2efe28d278333d6e      # five consecutive reports byte-identical
+$ du -sh .shockharness-cache; find .shockharness-cache -name "*.json" | wc -l
+6.8M    103                             # 102 entries + index.json
+
+$ shockharness check src tests scripts evals --no-cache
+  cache: bypassed (--no-cache)
+gate: PASS (exit 0)
+$ shockharness check src tests scripts evals
+  cache: .shockharness-cache: 102 hit(s), 0 miss(es), 0 invalidated, 0 error(s)
+gate: PASS (exit 0)
+$ shockharness check src tests scripts evals --profile recommended
+gate: PASS (exit 0)
+$ shockharness check src tests scripts evals --format json --no-cache | jq .execution_summary.findings
+175                                     # 169 before the cache; all advisory
+
+$ python -m build
+Successfully built shockharness-0.2.0.tar.gz and shockharness-0.2.0-py3-none-any.whl
+$ python3.12 scripts/consumer_upgrade_check.py --dist dist --examples examples --wheelhouse <wheelhouse>
+js: check . (clean): exit 0: ok
+js: check . (after violation in src/pages.js): exit 1; 1 new hard violation(s) ...: ok   # a warm run
+python: check . (clean): exit 0: ok
+python: check . (after violation in src/example_service/pages.py): exit 1; ...: ok    # a warm run
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+### Failures observed during development (and what was done)
+
+1. **Ten hard findings in the first draft** of `cache/`: a numeric literal
+   (`CONTROL_FIELDS = 6`, moved to `constants.py` as `CACHE_CONTROL_FIELDS`)
+   and nine `except` handlers with no boundary (declared, with reasons).
+2. **Recursion in the codec test, not the codec**: comparing two 300-deep
+   control trees with dataclass `==` exceeded CPython 3.11's recursion limit
+   (3.12+ use fewer frames per level). The test compares the flattened forms.
+3. **`coverage.discovery` differed cold vs warm** when the root was a target
+   (the skipped cache directory was counted). Not counted any more.
+4. **Three CLI tests compared text or JSON between a cold and a warm run**
+   (check vs scan alias, `--exit-zero` vs plain, `--summary` trailer); each
+   now drops the cache block or line, as the brief prescribes.
+
 ## Feedback round 0.3.0: bound captures, constant arithmetic, root anchors, EXC002 message — DONE (2026-10-15)
 
 Input: `docs/shockharness-suggestions-3.md`, written after the maintainer ran

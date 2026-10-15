@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_text
 from shockharness.api import analyze_paths
 from shockharness.complexity.metrics import measure_units
 from shockharness.config import EffectiveConfig
@@ -17,7 +17,7 @@ from shockharness.ir.javascript import extract_javascript_facts
 from shockharness.ir.python import extract_python_facts
 from shockharness.source import SourceText
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 SETTINGS: dict[str, Any] = {"cyclomatic_counts_boolean_operators": True, "npath_cap": 10000}
 PY = "python"
 JS = "javascript"

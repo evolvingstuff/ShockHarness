@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, FileResult, analyze_text
 from shockharness.config import EffectiveConfig, load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,7 +47,11 @@ def make_config(empty_root: Path) -> Callable[[str], EffectiveConfig]:
 def analyze(strict_config: EffectiveConfig) -> Callable[[str, str], FileResult]:
     def run(text: str, language: str) -> FileResult:
         return analyze_text(
-            "<test>", language, text, strict_config, AnalysisOptions(inline_suppressions=True)
+            "<test>",
+            language,
+            text,
+            strict_config,
+            AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED),
         )
 
     return run
@@ -88,6 +92,22 @@ def fixture_config(name: str, expected: dict[str, object], root: Path) -> Effect
         body = exceptions_config_toml(section)
     (root / ".shockharness.toml").write_text("[tool.shockharness]\n" + body, encoding="utf-8")
     return load_config(root, None)
+
+
+def without_cache_block(rendered_json: str) -> str:
+    """A JSON report with ``coverage.cache`` removed: the one block that legitimately
+    differs between a cold and a warm run over the same tree (docs/configuration.md,
+    Cache). Determinism comparisons use this; everything else must be byte-identical."""
+    data = json.loads(rendered_json)
+    del data["coverage"]["cache"]
+    return json.dumps(data, indent=2, sort_keys=True) + "\n"
+
+
+def without_cache_line(rendered_text: str) -> str:
+    """Text output without the ``  cache: ...`` trailer line (cold and warm runs differ there)."""
+    return "".join(
+        line for line in rendered_text.splitlines(keepends=True) if not line.startswith("  cache: ")
+    )
 
 
 def finding_tuples(result: FileResult) -> list[tuple[str, int, int]]:

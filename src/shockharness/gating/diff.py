@@ -16,6 +16,12 @@ from typing import Any
 
 from shockharness import gate as gate_module
 from shockharness.analysis import AnalysisOptions, analyze_files, with_unsupported_sources
+from shockharness.cache.store import (
+    REASON_REVISION,
+    STATUS_BYPASSED,
+    cache_coverage_without_cache,
+    cache_settings,
+)
 from shockharness.complexity.regressions import abstraction_displacement, complexity_regressions
 from shockharness.config import EffectiveConfig
 from shockharness.constants import REPORT_SCHEMA_VERSION
@@ -155,12 +161,15 @@ def analyze_revision(
             where = "." if location.prefix == "" else location.prefix
             raise UsageError(f"the analysis root ({where}) does not exist at {ref}", ref)
         discovery = discover(export_root, [export_root], config)
-        outcome = analyze_files(discovery.files, config, options)
+        outcome = analyze_files(discovery.files, config, options, None)
     files = with_unsupported_sources(outcome.files, discovery, config)
     findings = [f for result in files for f in result.findings]
     verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
     elapsed = time.perf_counter() - started
-    report = build_report(files, discovery, config, verdict, outcome.metrics, elapsed)
+    cache = cache_coverage_without_cache(
+        STATUS_BYPASSED, str(cache_settings(config)["directory"]), REASON_REVISION
+    )
+    report = build_report(files, discovery, config, verdict, outcome.metrics, elapsed, cache)
     return Revision(ref=ref, commit=commit, report=report)
 
 

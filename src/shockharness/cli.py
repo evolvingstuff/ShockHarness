@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_BYPASSED, CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths, apply_baseline, with_history
 from shockharness.config import (
     DEDICATED_FILENAME,
@@ -127,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_revision_arguments(gate, False)
     _add_config_arguments(gate)
     _add_analysis_arguments(gate)
+    _add_cache_argument(gate)
     _add_output_arguments(gate)
     _add_baseline_argument(gate)
     _add_exit_zero_argument(gate)
@@ -203,10 +204,20 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
     _add_config_arguments(parser)
     _add_analysis_arguments(parser)
+    _add_cache_argument(parser)
     _add_output_arguments(parser)
     _add_baseline_argument(parser)
     _add_exit_zero_argument(parser)
     _add_summary_argument(parser)
+
+
+def _add_cache_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="neither read nor write the content-hash cache (cache.directory) for this "
+        'run; the report records coverage.cache.status = "bypassed"',
+    )
 
 
 def _add_summary_argument(parser: argparse.ArgumentParser) -> None:
@@ -321,7 +332,12 @@ def _write_output(text: str, output: Path | None) -> None:
 
 
 def _options(args: argparse.Namespace) -> AnalysisOptions:
-    return AnalysisOptions(inline_suppressions=not args.no_inline_suppressions)
+    """``--no-cache`` exists on the working-tree commands only; the others (baseline
+    create, diff) never read the cache, so their options say bypassed."""
+    cache = CACHE_BYPASSED
+    if "no_cache" in args and not args.no_cache:
+        cache = CACHE_CONFIGURED
+    return AnalysisOptions(inline_suppressions=not args.no_inline_suppressions, cache=cache)
 
 
 def _load_config(args: argparse.Namespace) -> EffectiveConfig:
@@ -381,7 +397,8 @@ def _run_baseline(args: argparse.Namespace) -> int:
             str(target),
         )
     config = _load_config(args)
-    report = analyze_paths(list(args.paths), args.root, config, _options(args))
+    options = replace(_options(args), cache=CACHE_BYPASSED)  # a baseline never reads the cache
+    report = analyze_paths(list(args.paths), args.root, config, options)
     if report.gate.status == GATE_ERROR:
         sys.stderr.write(text_output.render(report))
         raise UsageError(

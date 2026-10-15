@@ -12,10 +12,12 @@ finding can be suppressed and baselined like any other.
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from shockharness.cache.codec import from_plain, to_plain
+from shockharness.cache.store import FileCache
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
 from shockharness.complexity.callgraph import ModuleInput
 from shockharness.complexity.metrics import UnitMetrics, measure_units
@@ -59,9 +61,16 @@ UNIT_RULES = (
 )
 
 
+# How a run treats the content-hash cache (0.3.0): honour ``cache.enabled`` and
+# ``cache.directory``, or bypass reading and writing for this run (``--no-cache``).
+CACHE_CONFIGURED = "configured"
+CACHE_BYPASSED = "bypassed"
+
+
 @dataclass(frozen=True)
 class AnalysisOptions:
     inline_suppressions: bool
+    cache: str  # CACHE_CONFIGURED | CACHE_BYPASSED
 
 
 @dataclass(frozen=True)
@@ -311,22 +320,38 @@ def prepare_text(
     )
 
 
-def _read_source(path: Path) -> tuple[str | None, str | None, str | None]:
-    """Return (text, status, error). Exactly one of text / error is set."""
+def _read_source(path: Path) -> tuple[bytes | None, str | None, str | None, str | None]:
+    """Return (bytes, text, status, error). Either text or error is set; bytes are set
+    whenever the file could be read (a decode failure still has them)."""
     # Boundary (declared in .shockharness.toml): reading and decoding analyzed files.
     try:
         raw = path.read_bytes()
     except OSError as exc:
-        return None, STATUS_READ_ERROR, f"cannot read file: {exc}"
+        return None, None, STATUS_READ_ERROR, f"cannot read file: {exc}"
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        return None, STATUS_DECODE_ERROR, f"file is not valid UTF-8: {exc}"
-    return text, None, None
+        return raw, None, STATUS_DECODE_ERROR, f"file is not valid UTF-8: {exc}"
+    return raw, text, None, None
 
 
-def prepare_file(file: DiscoveredFile, config: EffectiveConfig) -> PendingFile:
-    text, status, error = _read_source(file.path)
+def pending_to_plain(pending: PendingFile) -> Any:
+    """The cache entry of a prepared file: everything but the source text, which the
+    warm run reads again (it has to hash the bytes anyway)."""
+    return to_plain(replace(pending, source=None))
+
+
+def pending_from_plain(data: Any) -> PendingFile:
+    pending = from_plain(PendingFile, data, "pending")
+    assert isinstance(pending, PendingFile)
+    return pending
+
+
+def prepare_file(
+    file: DiscoveredFile, config: EffectiveConfig, cache: FileCache | None
+) -> PendingFile:
+    """Phase one for a file on disk, served from ``cache`` when its key matches."""
+    raw, text, status, error = _read_source(file.path)
     if text is None:
         assert status is not None
         return _failed(
@@ -339,7 +364,18 @@ def prepare_file(file: DiscoveredFile, config: EffectiveConfig) -> PendingFile:
             None,
             error,
         )
-    return prepare_text(file.relative, file.language, text, config)
+    assert raw is not None
+    if cache is None:
+        return prepare_text(file.relative, file.language, text, config)
+    cached = cache.lookup(file.relative, file.language, raw, pending_from_plain)
+    if cached is not None:
+        assert isinstance(cached, PendingFile)
+        if cached.failed:
+            return cached
+        return replace(cached, source=SourceText.from_text(text))
+    pending = prepare_text(file.relative, file.language, text, config)
+    cache.store(file.relative, file.language, raw, pending_to_plain(pending))
+    return pending
 
 
 def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOptions) -> FileResult:
@@ -460,10 +496,14 @@ def with_unsupported_sources(
 
 
 def analyze_files(
-    files: Sequence[DiscoveredFile], config: EffectiveConfig, options: AnalysisOptions
+    files: Sequence[DiscoveredFile],
+    config: EffectiveConfig,
+    options: AnalysisOptions,
+    cache: FileCache | None,
 ) -> AnalysisOutcome:
-    """The whole pipeline for a set of discovered files."""
-    pendings = [prepare_file(file, config) for file in files]
+    """The whole pipeline for a set of discovered files; per-file results come from
+    ``cache`` when it is open and the key matches, cross-file work is always recomputed."""
+    pendings = [prepare_file(file, config, cache) for file in files]
     return complete(pendings, config, options)
 
 
@@ -482,5 +522,5 @@ def analyze_text(
 def analyze_file(
     file: DiscoveredFile, config: EffectiveConfig, options: AnalysisOptions
 ) -> FileResult:
-    outcome = complete([prepare_file(file, config)], config, options)
+    outcome = complete([prepare_file(file, config, None)], config, options)
     return outcome.files[0]

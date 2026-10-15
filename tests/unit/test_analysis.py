@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from shockharness.analysis import AnalysisOptions, analyze_file, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_file, analyze_text
 from shockharness.config import EffectiveConfig
 from shockharness.discovery import DiscoveredFile
 
@@ -11,8 +11,12 @@ def test_override_disables_rule_with_origin(make_config: Callable[[str], Effecti
         "[[tool.shockharness.overrides]]\n"
         'paths = ["tests/**"]\ndisable = ["MAGIC001"]\nreason = "fixtures encode literals"\n'
     )
-    inside = analyze_text("tests/t.py", "python", "x = 42\n", config, AnalysisOptions(True))
-    outside = analyze_text("src/t.py", "python", "x = 42\n", config, AnalysisOptions(True))
+    inside = analyze_text(
+        "tests/t.py", "python", "x = 42\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+    )
+    outside = analyze_text(
+        "src/t.py", "python", "x = 42\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+    )
     assert inside.findings == ()
     assert [(d.rule_id, d.reason, d.origin) for d in inside.rules_disabled] == [
         ("MAGIC001", "fixtures encode literals", "overrides[0]")
@@ -27,7 +31,7 @@ def test_configuration_files_are_exempt_and_recorded(strict_config: EffectiveCon
         "javascript",
         "export default { port: 3000 };\n",
         strict_config,
-        AnalysisOptions(True),
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert result.findings == ()
     (disable,) = result.rules_disabled
@@ -35,7 +39,11 @@ def test_configuration_files_are_exempt_and_recorded(strict_config: EffectiveCon
     assert disable.origin == "configuration_file"
     assert "*.config.js" in disable.reason
     plain = analyze_text(
-        "web/server.js", "javascript", "const port = 3000;\n", strict_config, AnalysisOptions(True)
+        "web/server.js",
+        "javascript",
+        "const port = 3000;\n",
+        strict_config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert len(plain.findings) == 1
 
@@ -51,7 +59,7 @@ def test_configuration_file_exemption_can_be_turned_off(
         "javascript",
         "export default { port: 3000 };\n",
         config,
-        AnalysisOptions(True),
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert len(result.findings) == 1
 
@@ -60,7 +68,7 @@ def test_parse_error_file_has_no_findings_and_explicit_status(
     strict_config: EffectiveConfig,
 ) -> None:
     result = analyze_text(
-        "bad.py", "python", "def broken(:\n", strict_config, AnalysisOptions(True)
+        "bad.py", "python", "def broken(:\n", strict_config, AnalysisOptions(True, CACHE_CONFIGURED)
     )
     assert result.status == "parse_error"
     assert result.failed
@@ -73,7 +81,9 @@ def test_undecodable_file(tmp_path: Path, strict_config: EffectiveConfig) -> Non
     bad = tmp_path / "latin1.py"
     bad.write_bytes(b"x = 'caf\xe9'\n")
     result = analyze_file(
-        DiscoveredFile(bad, "latin1.py", "python"), strict_config, AnalysisOptions(True)
+        DiscoveredFile(bad, "latin1.py", "python"),
+        strict_config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert result.status == "decode_error"
     assert result.failed
@@ -83,7 +93,9 @@ def test_undecodable_file(tmp_path: Path, strict_config: EffectiveConfig) -> Non
 def test_unreadable_file(tmp_path: Path, strict_config: EffectiveConfig) -> None:
     missing = tmp_path / "gone.py"
     result = analyze_file(
-        DiscoveredFile(missing, "gone.py", "python"), strict_config, AnalysisOptions(True)
+        DiscoveredFile(missing, "gone.py", "python"),
+        strict_config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert result.status == "read_error"
     assert result.failed
@@ -93,20 +105,24 @@ def test_bom_is_tolerated(tmp_path: Path, strict_config: EffectiveConfig) -> Non
     path = tmp_path / "bom.py"
     path.write_bytes(b"\xef\xbb\xbfx = 7\n")
     result = analyze_file(
-        DiscoveredFile(path, "bom.py", "python"), strict_config, AnalysisOptions(True)
+        DiscoveredFile(path, "bom.py", "python"),
+        strict_config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     assert result.status == "analyzed"
     assert [(f.span.line, f.span.column) for f in result.findings] == [(1, 5)]
 
 
 def test_line_count_is_recorded(strict_config: EffectiveConfig) -> None:
-    result = analyze_text("t.py", "python", "a = 1\nb = 1\n", strict_config, AnalysisOptions(True))
+    result = analyze_text(
+        "t.py", "python", "a = 1\nb = 1\n", strict_config, AnalysisOptions(True, CACHE_CONFIGURED)
+    )
     assert result.line_count == 2
 
 
 def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     data = analyze_text(
-        "t.py", "python", "x = 2\n", strict_config, AnalysisOptions(True)
+        "t.py", "python", "x = 2\n", strict_config, AnalysisOptions(True, CACHE_CONFIGURED)
     ).to_json_dict()
     assert data["path"] == "t.py"
     assert data["status"] == "analyzed"
@@ -145,7 +161,9 @@ def test_override_and_configuration_file_patterns_honour_the_root_anchor(
     )
 
     def disabled(path: str) -> list[tuple[str, str]]:
-        result = analyze_text(path, "python", "x = 2\n", config, AnalysisOptions(True))
+        result = analyze_text(
+            path, "python", "x = 2\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+        )
         return [(d.rule_id, d.origin) for d in result.rules_disabled]
 
     assert disabled("conftest.py") == [("MAGIC001", "configuration_file")]
@@ -153,6 +171,8 @@ def test_override_and_configuration_file_patterns_honour_the_root_anchor(
     assert disabled("tests/t.py") == [("MAGIC001", "overrides[0]")]
     assert disabled("pkg/tests/t.py") == []
     assert (
-        analyze_text("pkg/tests/t.py", "python", "x = 2\n", config, AnalysisOptions(True)).findings
+        analyze_text(
+            "pkg/tests/t.py", "python", "x = 2\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+        ).findings
         != ()
     )

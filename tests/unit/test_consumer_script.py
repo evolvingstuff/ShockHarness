@@ -7,7 +7,7 @@ from types import ModuleType
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths
 from shockharness.config import load_config
 from tests.conftest import REPO_ROOT
@@ -49,7 +49,9 @@ def test_examples_pass_clean_and_fail_after_the_injected_violation(
     config = load_config(repo, None)
     assert config.source.tier == "dedicated"
     assert config.values["profile"] == "strict"
-    report = analyze_paths([repo], repo, config, AnalysisOptions(inline_suppressions=True))
+    report = analyze_paths(
+        [repo], repo, config, AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
+    )
     assert report.gate.status == "pass", report.gate.reasons
     assert report.analysis_status == "complete"
     suppressed = [f for f in report.findings if f.is_suppressed]
@@ -59,7 +61,9 @@ def test_examples_pass_clean_and_fail_after_the_injected_violation(
     assert all(f.is_suppressed for f in report.findings)
 
     changed = script.introduce_violation(repo, example)
-    report = analyze_paths([repo], repo, config, AnalysisOptions(inline_suppressions=True))
+    report = analyze_paths(
+        [repo], repo, config, AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
+    )
     assert report.gate.status == "fail"
     new = [f for f in report.findings if not f.is_suppressed]
     assert [(f.rule_id, f.path) for f in new] == [

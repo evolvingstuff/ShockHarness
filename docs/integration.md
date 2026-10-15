@@ -63,6 +63,13 @@ Works on GitHub Actions, GitLab CI, local hooks (`.pre-commit-hooks.yaml`
 exposes `shockharness check`), anywhere. The pin must be in a manifest, not in
 the shell line (see section 5).
 
+The content-hash cache (`.shockharness-cache/`, 0.3.0) makes a second run
+over an unchanged tree take only the cross-file phase. On a CI runner it is
+optional: restore the directory with your platform's cache action, keyed by the
+analyzer version and the configuration file, or leave it out and run cold.
+A restored cache from another analyzer version, configuration or interpreter
+is invalidated on open, never used, so a stale key cannot change a verdict.
+
 ### B. The reusable GitHub Actions workflow
 
 `.github/workflows/check.yml` in this repository is a `workflow_call` workflow.

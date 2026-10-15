@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, FileResult, analyze_text
 from shockharness.config import EffectiveConfig
 from shockharness.errors import ConfigError
 from shockharness.ir.javascript import extract_javascript_facts
@@ -24,7 +24,7 @@ from shockharness.ir.python import extract_python_facts
 from shockharness.source import SourceText
 from tests.conftest import FIXTURES, fixture_config, language_for_fixture
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 PY = "python"
 JS = "javascript"
 

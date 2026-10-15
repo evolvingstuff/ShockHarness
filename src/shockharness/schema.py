@@ -280,6 +280,10 @@ CONFIG_SCHEMA = TableField(
             required=(),
         ),
         "overrides": ListField(OVERRIDE_SCHEMA),
+        "cache": TableField(
+            fields={"enabled": BoolField(), "directory": StrField(allow_empty=False)},
+            required=(),
+        ),
     },
     required=(),
 )

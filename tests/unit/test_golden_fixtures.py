@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_text
 from tests.conftest import FIXTURES, fixture_config, language_for_fixture
 
 EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
@@ -31,7 +31,9 @@ def test_golden(name: str, empty_root: Path) -> None:
     text = (FIXTURES / name).read_text(encoding="utf-8")
     expected = EXPECTED[name]
     config = fixture_config(name, expected, empty_root)
-    result = analyze_text(name, language_for_fixture(name), text, config, AnalysisOptions(True))
+    result = analyze_text(
+        name, language_for_fixture(name), text, config, AnalysisOptions(True, CACHE_CONFIGURED)
+    )
     assert result.status == expected["status"]
     actual = [
         [f.rule_id, f.span.line, f.span.column, f.message, f.is_suppressed] for f in result.findings

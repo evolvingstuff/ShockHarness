@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths, with_history
 from shockharness.config import EffectiveConfig
 from shockharness.history import git as git_module
@@ -22,7 +22,7 @@ from shockharness.history.git import (
 from shockharness.history.hotspots import collect_history
 from tests.conftest import commit_all, init_repo
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 # A metrics.complexity section of a run that had complexity switched off.
 NO_COMPLEXITY = {"status": "disabled", "reason": "complexity.enabled = false", "files": {}}
 DAY_1 = "2026-01-01T12:00:00+00:00"

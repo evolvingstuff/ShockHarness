@@ -5,13 +5,13 @@ from dataclasses import replace
 
 import pytest
 
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_text
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, FileResult, analyze_text
 from shockharness.config import EffectiveConfig
 from shockharness.errors import ConfigError
 from shockharness.rules import registry
 from tests.conftest import finding_tuples
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 TIMEOUT_BOUNDARY = (
     "[[tool.shockharness.rules.exceptions.boundaries]]\n"

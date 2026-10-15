@@ -2,15 +2,15 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from shockharness.analysis import AnalysisOptions
+from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions
 from shockharness.api import analyze_paths, analyze_source, evaluate_gate
 from shockharness.config import EffectiveConfig
 from shockharness.errors import UsageError
 from shockharness.output import json as json_output
 from shockharness.output import text as text_output
-from tests.conftest import REPO_ROOT
+from tests.conftest import REPO_ROOT, without_cache_block
 
-OPTIONS = AnalysisOptions(inline_suppressions=True)
+OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_CONFIGURED)
 
 
 def write(root: Path, relative: str, body: str) -> None:
@@ -145,7 +145,7 @@ def test_json_output_is_byte_identical_across_runs_and_target_order(
             OPTIONS,
         )
     )
-    assert second == third
+    assert without_cache_block(second) == without_cache_block(third)
     first_data = json.loads(first)
     second_data = json.loads(second)
     assert first_data["findings"] == second_data["findings"]
