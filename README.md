@@ -1,5 +1,11 @@
 # ShockHarness
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/evolvingstuff/ShockHarness/main/docs/assets/hero.webp"
+       alt="ShockHarness: a robot agent jolted an instant before pressing Enter on rm -rf /. Constrained agents. Safer code."
+       width="480">
+</p>
+
 A strict, deterministic static-analysis quality gate for Python and JavaScript.
 Its one idea: unexpected failures, missing information, and unexplained
 decisions must not silently become apparently valid program behavior.
