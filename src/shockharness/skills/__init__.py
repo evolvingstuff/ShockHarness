@@ -44,7 +44,11 @@ def skill_bytes(name: str) -> bytes:
     """The exact bytes of a shipped ``SKILL.md`` (what ``skills install`` writes)."""
     if name not in SKILL_NAMES:
         raise KeyError(f"unknown skill {name!r}")
-    return resources.files(__name__).joinpath(name).joinpath(SKILL_FILENAME).read_bytes()
+    raw = resources.files(__name__).joinpath(name).joinpath(SKILL_FILENAME).read_bytes()
+    # Checkouts with core.autocrlf (Windows runners, some editors) turn LF into CRLF.
+    # Skills are compared, hashed and installed byte-for-byte, so normalize once here
+    # and the manifest hashes are identical on every platform.
+    return raw.replace(b"\r\n", b"\n")
 
 
 def skill_text(name: str) -> str:

@@ -85,7 +85,8 @@ def test_four_skills_ship_with_valid_frontmatter() -> None:
         assert len(frontmatter.name) <= 64
         assert 1 <= len(frontmatter.description) <= 1024
         assert "\n" not in frontmatter.description
-        assert (SKILLS_SOURCE / name / "SKILL.md").read_bytes() == skill_bytes(name)
+        source = (SKILLS_SOURCE / name / "SKILL.md").read_bytes().replace(b"\r\n", b"\n")
+        assert source == skill_bytes(name)
         assert text.count("\n") < 500, f"{name}: keep SKILL.md under 500 lines"
 
 

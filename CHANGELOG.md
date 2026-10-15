@@ -6,6 +6,10 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Fixed
+- Skills: `SKILL.md` content is normalized to LF when read from the package, so
+  frontmatter checks, installs and manifest hashes are identical on checkouts
+  that use CRLF (Windows runners with `core.autocrlf`). A `.gitattributes` now
+  pins LF on checkout for every text file in the repository.
 - History metrics: commit dates are now normalized to one ISO 8601 spelling
   (`+00:00`) regardless of the host's git version. Git 2.45+ prints UTC as `Z`,
   which made `metrics.history` differ between machines and broke two tests on

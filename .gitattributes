@@ -1,0 +1,7 @@
+# Text files are LF in the repository and on every checkout, including Windows.
+# Golden fixtures, skills and expected outputs are compared byte-for-byte, so the
+# checkout must not vary by platform.
+* text=auto eol=lf
+*.png binary
+*.webp binary
+*.whl binary
