@@ -25,6 +25,7 @@ from shockharness.rules.complexity import (
     SETTING_COGNITIVE_WARN,
     SETTING_CYCLOMATIC_WARN,
     SETTING_FAN_OUT_WARN,
+    SETTING_MAX_LINES_WARN,
     SETTING_NESTING_WARN,
     SETTING_NPATH_WARN,
     run_graph_rules,
@@ -52,6 +53,7 @@ def thresholds_json(settings: Mapping[str, Any]) -> dict[str, int]:
         SETTING_NESTING_WARN: int(settings[SETTING_NESTING_WARN]),
         SETTING_NPATH_WARN: int(settings[SETTING_NPATH_WARN]),
         SETTING_FAN_OUT_WARN: int(settings[SETTING_FAN_OUT_WARN]),
+        SETTING_MAX_LINES_WARN: int(settings[SETTING_MAX_LINES_WARN]),
     }
 
 
@@ -115,5 +117,7 @@ def assemble(
             "files": {m.path: file_aggregate(m.units) for m in ordered},
         },
         graph=graph_json,
-        graph_findings=run_graph_rules(metrics, sources, settings, cplx005_paths),
+        graph_findings=run_graph_rules(
+            metrics, sources, {m.path: m.language for m in ordered}, settings, cplx005_paths
+        ),
     )

@@ -3,7 +3,85 @@
 All notable changes to ShockHarness. Format follows Keep a Changelog; versions
 follow Semantic Versioning. The report `schema_version` is tracked separately.
 
-## [Unreleased]
+## [Unreleased] (planned 0.2.0)
+
+The feedback round after the first run of 0.1.0 on a 906-file codebase
+(`docs/shockharness-suggestions.md`): precision, noise and adoption cost.
+Items 1-5 and 7-9 of that document are implemented here; item 6 (a
+content-hash cache) is deferred to a later release.
+
+### Added
+- `rules.magic_numbers.named_constant_definitions` (`"report"` | `"allow"`):
+  a numeric literal that is the whole value of a module-level named constant
+  definition (`MAX_PAGES = 8`, `_WAIT: Final = 10.0`, `const SETTLE_MS = 400;`,
+  `export const N = -3;`) is marked by both adapters
+  (`NumericLiteral.constant_definition`). `strict` keeps `"report"`, so the
+  specification's reading (a named constant is not automatically justified)
+  is unchanged there; `recommended` and `minimal` use `"allow"`. `"allow"` is
+  a reported policy deviation. Containers, expressions, chained targets, class
+  and function bodies and definitions nested in module-level blocks are
+  reported either way. Specification sections 5 and 19 record the decision.
+- `CPLX006` unit size: a warning when a unit's `size/1` logical line count is
+  above `complexity.max_lines_warn` (default 50 in every profile); module
+  bodies are exempt. Registered with full metadata, part of
+  `rules_applied`/`rules_disabled`, revision diffs and the summary.
+- `complexity.npath_only_without_cognitive` (default `true`): a unit above
+  both `cognitive_warn` and `npath_warn` is one `CPLX002` finding whose
+  message carries the NPath number; `false` restores the separate `CPLX004`.
+  A unit above the NPath threshold alone is still `CPLX004`.
+- `rules.exceptions.transparent_guards`: guard callees
+  (`["rethrowUnexpectedError"]`) that re-raise anything unexpected. A handler
+  whose first statement calls a listed guard with the caught exception as its
+  only argument is narrowed by it: `EXC001` does not report the catch and
+  `EXC002` classifies the statements after the guard (nothing after it still
+  swallows; a literal return after it is `EXC002`'s, not `DEF005`'s). Each
+  guard is a reported deviation. `CatchFact` gains `guard_call`, `guard_body`
+  and `narrowed_from`.
+- Python `isinstance` guards: `except Exception as exc:` whose first statement
+  is `if not isinstance(exc, T): raise` (or a tuple) is checked by `EXC001` as
+  a catch of `T`; the message says what it was narrowed from.
+- Boundaries may list several classes for one path with one reason:
+  `exceptions = ["OSError", "ProcessLookupError"]` alongside the single
+  `exception = "..."` form; exactly one of the two per entry is validated, and
+  the entry is one deviation line naming every class. `EXC003` is unchanged.
+- `check --summary` (also on `scan` and `gate PATH...`): a first-contact
+  overview (findings by rule and top-level directory and by severity, the ten
+  files with the most policy findings, complexity counts, parse failures,
+  elapsed time) followed by the unchanged totals and `gate:` line.
+- `complexity.fan_out_severity` (`"warning"` | `"review"`): the severity of
+  `CPLX005` fan-out findings; both are advisory, so neither is a deviation.
+
+### Changed
+- `CPLX005` reports one finding per import cycle instead of one per member,
+  anchored on the lexically first member at its import into the cycle (stable
+  fingerprint when unrelated modules are added), naming the language and the
+  size, listing up to eight members and noting that Python cycles fail at
+  import time while ES-module cycles are usually resolved at call time.
+  `metrics.graph.cycles` is unchanged. The text report lists import cycles as
+  a group after the per-file findings, Python cycles first.
+- `recommended` profile: `magic_numbers.allow_unary_negative_one = true`,
+  `magic_numbers.named_constant_definitions = "allow"`,
+  `complexity.fan_out_warn = 30`, `complexity.fan_out_severity = "review"`
+  (plus the existing `DEF004` at review). `strict` is unchanged. `minimal`
+  adds `named_constant_definitions = "allow"`.
+- `DEF001`: new tests pin that annotated class attributes of undecorated and
+  ORM-style classes are not dataclass fields and that `dataclasses.dataclass`
+  (with or without arguments) is recognized; no behaviour change.
+- The text report's complexity line reads `CPLX001-CPLX004 and CPLX006 are
+  warnings`; documentation and skills name `CPLX001`-`CPLX006`.
+
+### Schema
+- `schema_version` stays `"1"`: every change is additive. The report gains a
+  top-level `summary` object (`schemas/report-v1.schema.json` describes it:
+  `files`, `files_analyzed`, `parse_failures`, `findings`, `suppressed`,
+  `by_severity`, `by_rule`, `by_directory`, `by_rule_and_directory`,
+  `policy_families`, `top_files_limit`, `top_files`, `complexity`,
+  `elapsed_seconds`); its totals equal `execution_summary`.
+  `summary.elapsed_seconds` is the one run-dependent field of a report;
+  consumers comparing reports ignore it. `metrics.complexity.thresholds` gains
+  `max_lines_warn`. `CPLX006` appears in `coverage.rules_implemented` and in
+  every file's `rules_applied`/`rules_disabled`. Boundary entries in
+  `config.values` may carry `exceptions` instead of `exception`.
 
 ## [0.1.0] - 2026-10-14
 

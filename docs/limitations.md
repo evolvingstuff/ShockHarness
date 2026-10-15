@@ -4,7 +4,7 @@ Stated so that a clean report is never read as more than it is.
 
 ## Coverage
 
-* Only `MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`, `CPLX001`-`CPLX005`,
+* Only `MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`, `CPLX001`-`CPLX006`,
   `SUPP001`, and `SUPP002` produce findings; `MAGIC002` is listed in
   `coverage.rules_not_implemented` in each report. A passing gate today means
   "no magic numbers, no unapproved or suppressing catches, no over-wide

@@ -224,7 +224,7 @@ def test_javascript_resolution_classes(empty_root: Path, strict_config: Effectiv
     assert module_edges[("require(n)", "dynamic")] == (None, "unresolved")
 
 
-def test_module_cycles_produce_cplx005_per_member_in_both_languages(
+def test_module_cycles_produce_one_cplx005_per_cycle_in_both_languages(
     empty_root: Path, strict_config: EffectiveConfig
 ) -> None:
     report = _report(
@@ -246,26 +246,135 @@ def test_module_cycles_produce_cplx005_per_member_in_both_languages(
         ["py/a.py", "py/b.py", "py/c.py"],
     ]
     assert all(c["confidence"] == "resolved" for c in cycles)
+    # metrics.graph.cycles keeps every member and every closing edge
+    assert [[e["from"] for e in c["edges"]] for c in cycles] == [
+        ["js/x.js", "js/y.js"],
+        ["py/a.py", "py/b.py", "py/c.py"],
+    ]
     findings = [
         (f.path, f.span.line, f.rule_id, f.severity)
         for f in report.findings
         if f.rule_id == "CPLX005"
     ]
+    # one finding per cycle, anchored on the lexically first member
     assert findings == [
         ("js/x.js", 1, "CPLX005", "warning"),
-        ("js/y.js", 1, "CPLX005", "warning"),
         ("py/a.py", 1, "CPLX005", "warning"),
-        ("py/b.py", 1, "CPLX005", "warning"),
-        ("py/c.py", 1, "CPLX005", "warning"),
     ]
     (first,) = [f for f in report.findings if f.path == "py/a.py"]
+    assert first.message.startswith("module import cycle of 3 Python module(s): ")
     assert "py/a.py -> py/b.py -> py/c.py -> py/a.py" in first.message
+    assert "anchored on py/a.py, whose import of py/b.py enters it" in first.message
+    assert "fails at import time" in first.message
     assert "resolved edges only" in first.message
     assert first.scope == "<module>"
+    (js,) = [f for f in report.findings if f.path == "js/x.js"]
+    assert js.message.startswith("module import cycle of 2 JavaScript module(s): ")
+    assert "js/x.js -> js/y.js -> js/x.js" in js.message
+    assert "resolved at call time" in js.message
     assert report.gate.status == "pass"  # cycles are warnings
     modules = {m["path"]: m for m in report.metrics["graph"]["modules"]}
     assert modules["js/z.js"]["cycle"] is None and modules["js/x.js"]["cycle"] == 0
     assert modules["js/x.js"]["fan_in"] == 2 and modules["js/x.js"]["fan_out"] == 1
+    # text output lists the Python cycle before the JavaScript one, after per-file findings
+    from shockharness.output import text as text_output
+
+    rendered = text_output.render(report)
+    assert rendered.index("py/a.py:1:1: CPLX005") < rendered.index("js/x.js:1:1: CPLX005")
+
+
+def _js_cycle(names: list[str], prefix: str) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for index, name in enumerate(names):
+        following = names[(index + 1) % len(names)]
+        files[f"{prefix}/{name}.js"] = (
+            f'import {{ {following} }} from "./{following}.js";\n'
+            f"export function {name}() {{ return {following}(); }}\n"
+        )
+    return files
+
+
+def _py_cycle(names: list[str], package: str) -> dict[str, str]:
+    files: dict[str, str] = {f"{package}/__init__.py": ""}
+    for index, name in enumerate(names):
+        following = names[(index + 1) % len(names)]
+        files[f"{package}/{name}.py"] = (
+            f"from {package} import {following}\n\n\n"
+            f"def {name}():\n    return {following}.{following}()\n"
+        )
+    return files
+
+
+def test_cycle_findings_are_one_per_cycle_with_stable_fingerprints(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.complexity]\nfan_out_warn = 1\n")
+    js_names = ["j1", "j2", "j3", "j4", "j5", "j6"]
+    py_names = ["pa", "pb", "pc"]
+    files = {
+        **_js_cycle(js_names, "web"),
+        **_py_cycle(py_names, "app"),
+        # a unit above fan_out_warn, unrelated to any cycle
+        "app/busy.py": (
+            "def a():\n    return 1\n\n\ndef c():\n    return 1\n\n\n"
+            "def b():\n    return a() + c() + len([])\n"
+        ),
+    }
+    report = _report(empty_root, config, files)
+    cycles = [f for f in report.findings if "module import cycle" in f.message]
+    assert [(f.path, f.span.line) for f in cycles] == [("app/pa.py", 1), ("web/j1.js", 1)]
+    assert "module import cycle of 6 JavaScript module(s): " in cycles[1].message
+    assert (
+        "web/j1.js -> web/j2.js -> web/j3.js -> web/j4.js -> web/j5.js -> web/j6.js -> web/j1.js"
+        in cycles[1].message
+    )
+    fan_out = [f for f in report.findings if f.rule_id == "CPLX005" and f not in cycles]
+    assert [(f.path, f.scope) for f in fan_out] == [("app/busy.py", "b")]
+    assert len(report.metrics["graph"]["cycles"]) == 2
+    assert report.metrics["graph"]["cycles"][0]["modules"] == [
+        "app/pa.py",
+        "app/pb.py",
+        "app/pc.py",
+    ]
+    assert len(report.metrics["graph"]["cycles"][1]["modules"]) == 6
+    assert report.metrics["graph"]["summary"]["cycles"] == 2
+    fingerprints = {f.path: f.fingerprint for f in cycles}
+
+    # adding an unrelated module (lexically before every member) changes nothing
+    bigger = _report(
+        empty_root,
+        config,
+        {**files, "aaa/__init__.py": "", "aaa/alone.py": "def alone():\n    return 1\n"},
+    )
+    again = [f for f in bigger.findings if "module import cycle" in f.message]
+    assert {f.path: f.fingerprint for f in again} == fingerprints
+    assert bigger.metrics["graph"]["summary"]["cycles"] == 2
+
+
+def test_long_cycle_lists_eight_members_then_a_count(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    names = [f"m{index:02d}" for index in range(11)]
+    report = _report(empty_root, strict_config, _js_cycle(names, "web"))
+    (finding,) = [f for f in report.findings if f.rule_id == "CPLX005"]
+    assert finding.path == "web/m00.js"
+    assert "module import cycle of 11 JavaScript module(s): " in finding.message
+    assert "web/m07.js -> ... and 3 more" in finding.message
+    assert "web/m08.js" not in finding.message
+    assert len(report.metrics["graph"]["cycles"][0]["modules"]) == 11
+
+
+def test_cycle_finding_moves_to_the_first_member_where_cplx005_is_active(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config(
+        '[[tool.shockharness.overrides]]\npaths = ["app/pa.py"]\ndisable = ["CPLX005"]\n'
+        'reason = "test"\n'
+    )
+    report = _report(empty_root, config, _py_cycle(["pa", "pb", "pc"], "app"))
+    (finding,) = [f for f in report.findings if f.rule_id == "CPLX005"]
+    assert finding.path == "app/pb.py"
+    assert "anchored on app/pb.py" in finding.message
 
 
 def test_fan_out_above_threshold(

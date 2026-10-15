@@ -943,6 +943,145 @@
         "suppressed",
         "baselined"
       ]
+    },
+    "summary": {
+      "type": "object",
+      "description": "First-contact overview (0.2.0, additive): the counts behind `check --summary`. Totals equal execution_summary; elapsed_seconds is the one run-dependent field of the report.",
+      "required": [
+        "files",
+        "files_analyzed",
+        "parse_failures",
+        "findings",
+        "suppressed",
+        "by_severity",
+        "by_rule",
+        "by_directory",
+        "by_rule_and_directory",
+        "policy_families",
+        "top_files_limit",
+        "top_files",
+        "complexity",
+        "elapsed_seconds"
+      ],
+      "properties": {
+        "files": {
+          "type": "integer"
+        },
+        "files_analyzed": {
+          "type": "integer"
+        },
+        "parse_failures": {
+          "type": "integer"
+        },
+        "findings": {
+          "type": "integer"
+        },
+        "suppressed": {
+          "type": "integer"
+        },
+        "by_severity": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_rule": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_directory": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_rule_and_directory": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          }
+        },
+        "policy_families": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "top_files_limit": {
+          "type": "integer"
+        },
+        "top_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "policy_findings"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "policy_findings": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "complexity": {
+          "type": "object",
+          "required": [
+            "status",
+            "units",
+            "units_over",
+            "npath_saturated_units",
+            "cycles",
+            "units_over_fan_out_warn",
+            "thresholds"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "disabled"
+              ]
+            },
+            "units": {
+              "type": "integer"
+            },
+            "units_over": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "npath_saturated_units": {
+              "type": "integer"
+            },
+            "cycles": {
+              "type": "integer"
+            },
+            "units_over_fan_out_warn": {
+              "type": "integer"
+            },
+            "thresholds": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "elapsed_seconds": {
+          "type": "number"
+        }
+      }
     }
   }
 }

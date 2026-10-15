@@ -35,7 +35,11 @@ class NumericLiteral:
 
     ``value`` is the folded value; ``negated`` is true when the folded sign is
     negative (so ``-0`` is negated with value ``0``). ``raw`` is the exact source
-    text including the sign operators.
+    text including the sign operators. ``constant_definition`` is true when the
+    literal is the whole value of a module-level named constant definition
+    (``MAX_PAGES = 8``, ``_WAIT: Final = 10.0``, ``const SETTLE_MS = 400``,
+    ``export const N = -3``); ``rules.magic_numbers.named_constant_definitions``
+    decides whether MAGIC001 reports it.
     """
 
     span: Span
@@ -44,6 +48,7 @@ class NumericLiteral:
     negated: bool
     in_annotation: bool
     scope: str
+    constant_definition: bool
 
 
 @dataclass(frozen=True)
@@ -140,6 +145,17 @@ class CatchFact:
     ``try_statements`` are the statements the handler protects; for a promise
     rejection handler it is the receiver expression of ``.catch``/``.then`` as a
     single pseudo-statement.
+
+    Guards (0.2.0). ``narrowed_from`` is the type written on the handler when a
+    leading ``if not isinstance(<caught>, T): raise`` (Python) narrowed
+    ``identities`` to ``T``; ``body`` then classifies the statements after the
+    guard, as it already does after a JavaScript ``instanceof`` guard (for which
+    ``narrowed_from`` is ``None``: an untyped catch has nothing to narrow from).
+    ``guard_call`` is the callee, as written, when the handler's first statement
+    is a call with the caught exception as its only argument
+    (``rethrowUnexpectedError(error)``); ``guard_body`` classifies the statements
+    after that call. Whether the call counts as a guard is the rule's decision
+    (``rules.exceptions.transparent_guards``), not the adapter's.
     """
 
     span: Span
@@ -150,6 +166,9 @@ class CatchFact:
     bound_name: str | None
     body: HandlerBody
     try_statements: tuple[TryStatement, ...]
+    narrowed_from: str | None
+    guard_call: str | None
+    guard_body: HandlerBody | None
 
 
 # Default/fallback fact families (one rule each; see rules/defaults.py).

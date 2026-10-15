@@ -7,8 +7,8 @@ description: Reduce real complexity in Python or JavaScript code that ShockHarne
 
 ShockHarness treats complexity as a separate, advisory family, never averaged
 into the hard gate. The rules `CPLX001` (cyclomatic), `CPLX002` (cognitive),
-`CPLX003` (nesting depth), `CPLX004` (NPath) and `CPLX005` (coupling and
-cycles) are **warnings**: a plain `shockharness check` never fails because of
+`CPLX003` (nesting depth), `CPLX004` (NPath), `CPLX005` (coupling and
+cycles) and `CPLX006` (unit size) are **warnings**: a plain `shockharness check` never fails because of
 them. The only place a number can reach a verdict is a revision gate with
 `gates.complexity_regressions = "fail"`, and then only for a unit that is
 above a threshold *and* grew since the base revision. This skill tells you
@@ -29,7 +29,8 @@ the work vanish, and the call graph records where it went.
 | `CPLX002` | cognitive complexity of a unit above `complexity.cognitive_warn` | 15 |
 | `CPLX003` | decision nesting depth above `complexity.max_nesting_warn` | 4 |
 | `CPLX004` | NPath estimate at or above `complexity.npath_warn`, or saturated at `complexity.npath_cap` | 200 / 10000 |
-| `CPLX005` | a module import cycle (resolved edges only), or fan-out above `complexity.fan_out_warn` | 20 |
+| `CPLX005` | a module import cycle (resolved edges only; one finding per cycle), or fan-out above `complexity.fan_out_warn` | 20 |
+| `CPLX006` | logical lines of a unit (`size/1`) above `complexity.max_lines_warn`; module bodies exempt | 50 |
 
 ## What complexity means here
 

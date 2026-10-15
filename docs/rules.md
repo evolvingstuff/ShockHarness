@@ -28,6 +28,28 @@ and template substitutions are executable code and are scanned.
 are not detected. `NaN` and `Infinity` are identifiers. Files that do not parse
 are reported as parse failures, never as clean.
 
+**Named constant definitions (0.2.0).** A literal that is the *whole* value
+of a module-level named constant definition is marked by the adapters:
+
+| Covered (marked) | Not covered (always reported) |
+|---|---|
+| Python: `MAX_PAGES = 8`, `_PORT_WAIT_SECONDS = 10.0`, `NEGATIVE = -8` (one UPPER_SNAKE_CASE target, leading underscores allowed), `wait: Final = 2.5`, `limit: t.Final[int] = 7` (any simple name annotated `Final`), `MAX_RETRIES: int = 5`; a statement of the module body itself | `LIMITS = {"retries": 3}` and `SIZES = [8, 16]` (containers), `TIMEOUT = 30 * 60` (an expression: both literals), `A = B = 9` (chained targets), `lower = 4`, class bodies, function bodies, `if ...: NESTED = 11` at module level |
+| JavaScript: `const MAX_PAGES = 8;`, `export const _SETTLE_MS = -400;`, each declarator of `const A = 1, TWO = 2;` | `let maxPages = 8;`, `var LIMIT = 8;`, `const camel = 8;`, `const SIZES = [8, 16];`, a `const` inside a function or block, `export default 5;` |
+
+`rules.magic_numbers.named_constant_definitions` decides what the mark means.
+`"report"` (the `strict` default) keeps the specification's reading: a named
+constant is not automatically justified, and `ITERATIONS = 2` is a finding like
+any other. `"allow"` (the `recommended` and `minimal` default) does not report
+the definition. The reasoning, from the first run on a real codebase: 143 of
+the 2,074 application-code MAGIC001 findings there were definitions such as
+`MAX_WEB_PAGES_PER_CALL = 8` or `const SETTLE_MS = 400;`, and that definition
+is exactly the remedy the rule asks for; reporting it forces every adopter to
+keep one exempt constants file, as ShockHarness itself does with
+`constants.py`. The strict profile keeps reporting them because the
+specification's semantics (section 5) are unchanged there; `"allow"` under
+`strict` is a reported policy deviation, and under the other profiles it is one
+of the lines that follow the profile's own deviation line.
+
 **Configuration.** `rules.magic_numbers.*`; see `docs/configuration.md`.
 Files matching `configuration_files` skip this rule and say so in the report.
 
@@ -99,6 +121,29 @@ non-logging statement re-raises the caught exception (`raise`, `raise err`,
 raise`. `raise Other from err` is a conversion, not a re-raise, and is not
 transparent.
 
+**`transparent_guards` (0.2.0).** A list of guard functions, named as the
+callee is written (`"rethrowUnexpectedError"`, `"errors.rethrow_unexpected"`),
+that re-raise anything unexpected and return for expected failures. A handler
+whose **first** statement calls a listed guard with the caught exception as its
+only argument is treated as narrowed by that guard: EXC001 does not report the
+catch, and EXC002 classifies the statements after the guard (so
+`catch (error) { rethrowUnexpectedError(error); }` with nothing after it is
+still reported as swallowing, and `rethrowUnexpectedError(error); return null;`
+as a fallback). The call must be the first statement, have exactly that one
+argument, and not be awaited. Default empty; every configured guard is a
+reported policy deviation, like a boundary. EXC003 never runs on a guarded
+catch: it is not a boundary.
+
+**Python `isinstance` guard (0.2.0).** A handler whose first statement is
+`if not isinstance(<caught>, T): raise` (or a tuple `(T1, T2)`), with a bare
+`raise` as the guard's only statement and no `else`, is checked by EXC001 as a
+catch of `T` (each tuple member must be approved) instead of the type written
+on the `except` line; the finding says `narrowed from 'Exception' by its
+isinstance guard` when it still fails. EXC002 classifies the statements after
+the guard, as it already does after a JavaScript `instanceof` guard. Any other
+shape (an inverted test, a guard that returns, an `else` branch, another
+subject) leaves the broad catch as written.
+
 **Limitations.** Class hierarchies are not known: a boundary for `OSError` does
 not approve `FileNotFoundError`, and a broad library base class other than
 `Exception`/`BaseException` is only flagged for not being approved. Shadowing by
@@ -121,8 +166,11 @@ not:
 Not flagged: bare `raise`, `raise err`, `raise X from err`, `throw err`,
 `throw new X(msg, { cause: err })`, and any handler with several non-logging
 statements or a non-literal return (`return default`, `return compute()`),
-which is reported as `other` and left to EXC001. For a guarded JavaScript
-handler the statements after the guard are classified.
+which is reported as `other` and left to EXC001. For a guarded handler (a
+JavaScript `instanceof` guard, a Python `isinstance` guard, or a configured
+transparent guard call) the statements after the guard are classified, and the
+message names the guard; a fallback returned after a transparent guard call is
+reported here rather than by DEF005, which reads the whole body.
 
 **Shared handler with DEF005.** While DEF005 is active (the default), the
 `return_fallback` classification is reported once, as DEF005, with the EXC002
@@ -291,7 +339,7 @@ through wrappers or configuration libraries. The rule does not know where the
 configuration boundary is: a fallback in the one module that validates
 configuration is still reported there.
 
-### CPLX001-CPLX005: complexity and coupling (warning, Python and JavaScript)
+### CPLX001-CPLX006: complexity and coupling (warning, Python and JavaScript)
 
 The advisory family of Milestone E. Every finding is a `warning`; none fails a
 plain `check`. In a revision diff a per-unit regression against the base
@@ -305,7 +353,8 @@ summary of each rule:
 | `CPLX002` | a unit's cognitive complexity is above the threshold | `complexity.cognitive_warn` (15) | `cognitive/1`: structural +1 plus nesting, else/elif +1, operator runs, recursion, labeled jumps; not a SonarSource score |
 | `CPLX003` | a unit's decision nesting depth is above the threshold | `complexity.max_nesting_warn` (4) | `nesting/1`: wrappers add no depth |
 | `CPLX004` | a unit's NPath estimate is at or above the threshold, or saturated | `complexity.npath_warn` (200), `complexity.npath_cap` (10000) | `npath/1`: bounded, never enumerated, reported as `>= cap` when saturated |
-| `CPLX005` | modules import each other in a cycle (resolved edges only), or a unit's fan-out is above the threshold | `complexity.fan_out_warn` (20) | resolved and probable call edges only; unresolved calls are reported, never counted |
+| `CPLX005` | modules import each other in a cycle (resolved edges only; **one finding per cycle**, anchored on the lexically first member), or a unit's fan-out is above the threshold | `complexity.fan_out_warn` (20; 30 in `recommended`, where fan-out findings are `review`) | resolved and probable call edges only; unresolved calls are reported, never counted |
+| `CPLX006` | a unit's logical line count is above the threshold; module bodies are exempt | `complexity.max_lines_warn` (50) | `size/1`: code lines of the unit's own span, nested units excluded |
 
 **Units.** A module body, class body, function, method, lambda or arrow
 function. Nested units are measured separately and excluded from their parent.
@@ -313,9 +362,27 @@ function. Nested units are measured separately and excluded from their parent.
 **Detection guarantees.** Exact on the control tree both adapters produce;
 Python and JavaScript give the same number for equivalent constructs (a parity
 table and a Hypothesis property enforce it). Every message names the measured
-value, the threshold and the convention version. `CPLX005` names the cycle and
-the import that closes it, or the fan-out split into analyzed and external
-targets and the number of unresolved calls it did not count.
+value, the threshold and the convention version. `CPLX005` reports each import
+cycle once: the finding sits on the lexically first member, at its import into
+the cycle (so its fingerprint does not move when unrelated modules are added),
+names the language and the size, lists up to eight members and says that a
+Python cycle fails at import time while an ES-module cycle is usually resolved
+at call time; the full membership stays in `metrics.graph.cycles`, and the text
+report lists Python cycles before JavaScript cycles, after the per-file
+findings. Fan-out findings give the split into analyzed and external targets
+and the number of unresolved calls not counted. `CPLX006` names the line count
+and the threshold; module bodies are never reported.
+
+**NPath and cognitive on one unit (0.2.0).** NPath is the coarsest of the four
+unit measures and explodes on long runs of independent `if`s, so it mostly
+repeats what cognitive complexity says with less resolution. With
+`complexity.npath_only_without_cognitive = true` (the default) a unit above both
+`cognitive_warn` and `npath_warn` is reported once, as `CPLX002`, with the NPath
+number in the same message (`...; its NPath estimate is >= 10000 (saturated at
+the cap) ..., reported here instead of as CPLX004`); a unit above the NPath
+threshold alone is still `CPLX004`. With the option `false` both findings
+appear, as in 0.1.0. The per-unit numbers in `metrics.complexity.functions`
+are the same either way.
 
 **Limitations.** The call graph is static: computed callees, method calls on
 values of unknown type, unbound names, and `self`/`this` attributes the class

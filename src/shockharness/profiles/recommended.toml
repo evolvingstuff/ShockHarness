@@ -1,7 +1,21 @@
-# Profile "recommended": strict, except that DEF003 (truthiness fallbacks) and
-# DEF004 (nullish fallbacks) are reported at review instead of failing the gate.
-# DEF003 is already "review" in the strict profile; DEF004 is loosened here.
-# Everything else is inherited from the bundled defaults.
+# Profile "recommended": strict, except that
+#   * DEF003 (truthiness fallbacks, already "review" in strict) and DEF004 (nullish
+#     fallbacks) are reported at review instead of failing the gate;
+#   * MAGIC001 permits the unary literal -1 (indexOf(...) === -1, [-1], .at(-1));
+#   * MAGIC001 does not report the definition of a module-level named constant
+#     (MAX_PAGES = 8, const SETTLE_MS = 400): the name is the remedy the rule asks for;
+#   * CPLX005 fan-out fires above 30 distinct call targets instead of 20, and as a
+#     review finding instead of a warning (orchestrators legitimately call many things).
+# Everything else is inherited from the bundled defaults, and every line below is
+# reported as a policy deviation.
+
+[tool.shockharness.rules.magic_numbers]
+allow_unary_negative_one = true
+named_constant_definitions = "allow"
 
 [tool.shockharness.rules.defaults]
 nullish_fallbacks = "review"
+
+[tool.shockharness.complexity]
+fan_out_warn = 30
+fan_out_severity = "review"

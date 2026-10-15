@@ -42,11 +42,13 @@ from shockharness.ir.model import (
     CONFIDENCE_UNRESOLVED,
     CatchFact,
     ExceptionIdentity,
+    HandlerBody,
     ModuleFacts,
     Span,
 )
 from shockharness.rules.registry import EXC001, EXC002, EXC003, RuleSpec
 from shockharness.rules.severity import section_severity
+from shockharness.schema import boundary_exceptions
 from shockharness.source import SourceText
 
 KIND_LABELS: Mapping[str, str] = {
@@ -66,12 +68,12 @@ class Boundary:
     index: int
     path: str
     language: str
-    exception: str
+    exceptions: tuple[str, ...]  # one name (`exception = ...`) or several (`exceptions = [...]`)
     reason: str
     paths: GlobSet
 
     def label(self) -> str:
-        return f"boundaries[{self.index}] ({self.exception}: {self.reason})"
+        return f"boundaries[{self.index}] ({', '.join(self.exceptions)}: {self.reason})"
 
 
 @dataclass(frozen=True)
@@ -90,7 +92,7 @@ def load_boundaries(settings: Mapping[str, Any]) -> tuple[Boundary, ...]:
                 index=index,
                 path=str(raw["path"]),
                 language=str(raw["language"]),
-                exception=str(raw["exception"]),
+                exceptions=boundary_exceptions(raw),
                 reason=str(raw["reason"]),
                 paths=compile_globset([str(raw["path"])]),
             )
@@ -103,16 +105,16 @@ def _dotted_tail(qualified: str) -> str:
 
 
 def identity_matches(identity: ExceptionIdentity, boundary: Boundary) -> bool:
+    return any(_name_matches(identity, name) for name in boundary.exceptions)
+
+
+def _name_matches(identity: ExceptionIdentity, exception: str) -> bool:
     if identity.qualified is None or identity.confidence == CONFIDENCE_UNRESOLVED:
         return False
     if identity.confidence == CONFIDENCE_EXACT:
-        return identity.qualified == boundary.exception
+        return identity.qualified == exception
     tail = _dotted_tail(identity.qualified)
-    return (
-        tail == boundary.exception
-        or boundary.exception.endswith("." + tail)
-        or tail.endswith("." + boundary.exception)
-    )
+    return tail == exception or exception.endswith("." + tail) or tail.endswith("." + exception)
 
 
 CONFIDENCE_ORDER = (CONFIDENCE_EXACT, CONFIDENCE_APPROXIMATE, CONFIDENCE_UNRESOLVED)
@@ -204,19 +206,24 @@ def _finding(
 def _written(catch: CatchFact) -> str:
     if catch.bare:
         return ""
-    return " of " + ", ".join(repr(i.source) for i in catch.identities)
+    written = " of " + ", ".join(repr(i.source) for i in catch.identities)
+    if catch.narrowed_from is not None:
+        written += f" (narrowed from {catch.narrowed_from!r} by its isinstance guard)"
+    return written
 
 
-def _exc002_message(catch: CatchFact) -> str:
+def _exc002_message(catch: CatchFact, body: HandlerBody, guard: str | None) -> str:
     label = KIND_LABELS[catch.kind]
-    classification = catch.body.classification
+    if guard is not None:
+        label += f" after the transparent guard {guard}(...)"
+    classification = body.classification
     if classification == BODY_EMPTY:
-        return f"{label} swallows the exception: {catch.body.detail}"
+        return f"{label} swallows the exception: {body.detail}"
     if classification == BODY_LOGGING_ONLY:
         return f"{label} only logs the exception; logging is not handling"
     if classification == BODY_RETURN_FALLBACK:
-        return f"{label} converts the exception into a fallback value: {catch.body.detail}"
-    return f"{label} replaces the exception without preserving its cause: {catch.body.detail}"
+        return f"{label} converts the exception into a fallback value: {body.detail}"
+    return f"{label} replaces the exception without preserving its cause: {body.detail}"
 
 
 def _exc003(
@@ -276,10 +283,21 @@ def run_exception_rules(
     boundaries = load_boundaries(settings)
     applicable = tuple(b for b in boundaries if b.language == language and b.paths.matches(path))
     transparent_rethrow = bool(settings["transparent_rethrow"])
+    transparent_guards = frozenset(str(name) for name in settings["transparent_guards"])
     findings: list[Finding] = []
     for catch in facts.catches:
         approval = evaluate_approval(catch, applicable)
-        transparent = transparent_rethrow and catch.body.classification == BODY_RERAISE
+        guard: str | None = None
+        body = catch.body
+        if catch.guard_call is not None and catch.guard_call in transparent_guards:
+            # The configured guard re-raises anything unexpected: the catch itself is not
+            # reported, and what the handler does is judged by the statements after it.
+            guard = catch.guard_call
+            assert catch.guard_body is not None
+            body = catch.guard_body
+        transparent = guard is not None or (
+            transparent_rethrow and catch.body.classification == BODY_RERAISE
+        )
         label = KIND_LABELS[catch.kind]
         if EXC001.rule_id in active_rule_ids and not approval.approved and not transparent:
             findings.append(
@@ -294,9 +312,12 @@ def run_exception_rules(
                     catch.scope,
                 )
             )
-        classification = catch.body.classification
+        classification = body.classification
+        # DEF005 reads the whole-body classification, so a fallback returned after a
+        # transparent guard is EXC002's to report.
+        deferred = defer_return_fallback and guard is None
         suppressed = classification in EXC002_CLASSIFICATIONS and not (
-            defer_return_fallback and classification == BODY_RETURN_FALLBACK
+            deferred and classification == BODY_RETURN_FALLBACK
         )
         if EXC002.rule_id in active_rule_ids and suppressed:
             findings.append(
@@ -305,7 +326,7 @@ def run_exception_rules(
                     settings,
                     path,
                     catch.span,
-                    _exc002_message(catch),
+                    _exc002_message(catch, body, guard),
                     source,
                     CONFIDENCE_EXACT,
                     catch.scope,

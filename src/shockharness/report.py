@@ -2,7 +2,13 @@
 
 Sorting is fixed (files by path; findings by path, line, column, rule ID,
 message) so two runs over the same inputs produce byte-identical JSON. No
-timestamps are included for the same reason.
+timestamps are included for the same reason; the one run-dependent field is
+``summary.elapsed_seconds`` (0.2.0), which consumers comparing reports ignore.
+
+``summary`` (0.2.0) is the first-contact overview behind ``check --summary``:
+findings by rule and top-level directory and by severity, the files with the
+most policy findings, complexity counts, parse failures and the elapsed time.
+Its totals equal ``execution_summary``.
 """
 
 import platform
@@ -11,13 +17,16 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from shockharness.analysis import FileResult
+from shockharness.complexity.coupling import STATUS_AVAILABLE
+from shockharness.complexity.regressions import exceeds_threshold
 from shockharness.config import EffectiveConfig
-from shockharness.constants import REPORT_SCHEMA_VERSION
+from shockharness.constants import ELAPSED_DECIMALS, REPORT_SCHEMA_VERSION, SUMMARY_TOP_FILES
 from shockharness.discovery import DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gate import GateResult
 from shockharness.history.hotspots import HOTSPOTS_FORMULA
 from shockharness.rules import registry
+from shockharness.rules.complexity import SETTING_FAN_OUT_WARN, THRESHOLD_OF_RULE
 from shockharness.version import __version__
 
 STATUS_COMPLETE = "complete"
@@ -36,6 +45,9 @@ HISTORY_NOT_COLLECTED = {
 }
 STATUS_INCOMPLETE = "incomplete"
 STATUS_FAILED = "failed"
+# Rule families whose findings are policy (gating or review) rather than advisory metrics.
+POLICY_FAMILIES = ("MAGIC", "EXC", "DEF", "SUPP")
+ROOT_DIRECTORY = "."
 
 
 @dataclass(frozen=True)
@@ -50,6 +62,7 @@ class Report:
     metrics: Mapping[str, Any]
     gate: GateResult
     execution_summary: Mapping[str, Any]
+    summary: Mapping[str, Any]
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +82,7 @@ class Report:
             "metrics": dict(self.metrics),
             "gate": self.gate.to_json_dict(),
             "execution_summary": dict(self.execution_summary),
+            "summary": dict(self.summary),
         }
 
 
@@ -123,7 +137,7 @@ def _coverage(
         "limitations": [
             "Only rules listed in rules_implemented produced findings; every other registered "
             "rule is not analyzed.",
-            "Complexity metrics (CPLX001-CPLX005) are advisory and never fail a plain check; "
+            "Complexity metrics (CPLX001-CPLX006) are advisory and never fail a plain check; "
             "call-graph edges carry a confidence and unresolved calls are never counted as "
             "resolved.",
             "Python syntax coverage equals the host interpreter's ast module.",
@@ -133,15 +147,112 @@ def _coverage(
     }
 
 
+def top_level_directory(path: str) -> str:
+    """``src/pkg/a.py`` -> ``src/``; a file at the root -> ``.``."""
+    if "/" not in path:
+        return ROOT_DIRECTORY
+    return path.split("/", 1)[0] + "/"
+
+
+def is_policy_rule(rule_id: str) -> bool:
+    return any(rule_id.startswith(family) for family in POLICY_FAMILIES)
+
+
+def _complexity_summary(metrics: Mapping[str, Any]) -> dict[str, Any]:
+    complexity = metrics["complexity"]
+    graph = metrics["graph"]
+    thresholds: Mapping[str, Any] = complexity["thresholds"]
+    units_over = {THRESHOLD_OF_RULE[rule_id]: 0 for rule_id in THRESHOLD_OF_RULE}
+    saturated = 0
+    for entry in complexity["functions"]:
+        if entry["npath"]["saturated"]:
+            saturated += 1
+        for rule_id, key in THRESHOLD_OF_RULE.items():
+            if exceeds_threshold(entry, rule_id, thresholds):
+                units_over[key] += 1
+    fan_out_warn = int(thresholds[SETTING_FAN_OUT_WARN])
+    over_fan_out = 0
+    if graph["status"] == STATUS_AVAILABLE:
+        over_fan_out = sum(1 for u in graph["units"] if u["fan_out_total"] > fan_out_warn)
+    return {
+        "status": complexity["status"],
+        "units": len(complexity["functions"]),
+        "units_over": units_over,
+        "npath_saturated_units": saturated,
+        "cycles": graph["summary"]["cycles"],
+        "units_over_fan_out_warn": over_fan_out,
+        "thresholds": dict(thresholds),
+    }
+
+
+def build_summary(
+    files: Sequence[FileResult],
+    findings: Sequence[Finding],
+    metrics: Mapping[str, Any],
+    elapsed_seconds: float,
+) -> dict[str, Any]:
+    """The first-contact overview: every count derives from the same findings and files
+    as ``execution_summary``, so the totals agree by construction."""
+    by_severity: dict[str, int] = {}
+    by_rule: dict[str, int] = {}
+    by_directory: dict[str, int] = {}
+    by_rule_and_directory: dict[str, dict[str, int]] = {}
+    policy_per_file: dict[str, int] = {}
+    for finding in findings:
+        directory = top_level_directory(finding.path)
+        if finding.severity not in by_severity:
+            by_severity[finding.severity] = 0
+        by_severity[finding.severity] += 1
+        if finding.rule_id not in by_rule:
+            by_rule[finding.rule_id] = 0
+            by_rule_and_directory[finding.rule_id] = {}
+        by_rule[finding.rule_id] += 1
+        if directory not in by_directory:
+            by_directory[directory] = 0
+        by_directory[directory] += 1
+        row = by_rule_and_directory[finding.rule_id]
+        if directory not in row:
+            row[directory] = 0
+        row[directory] += 1
+        if is_policy_rule(finding.rule_id):
+            if finding.path not in policy_per_file:
+                policy_per_file[finding.path] = 0
+            policy_per_file[finding.path] += 1
+    ranked = sorted(policy_per_file.items(), key=lambda item: (-item[1], item[0]))
+    return {
+        "files": len(files),
+        "files_analyzed": sum(1 for f in files if not f.failed),
+        "parse_failures": sum(1 for f in files if f.failed),
+        "findings": len(findings),
+        "suppressed": sum(1 for f in findings if f.is_suppressed),
+        "by_severity": dict(sorted(by_severity.items())),
+        "by_rule": dict(sorted(by_rule.items())),
+        "by_directory": dict(sorted(by_directory.items())),
+        "by_rule_and_directory": {
+            rule_id: dict(sorted(row.items()))
+            for rule_id, row in sorted(by_rule_and_directory.items())
+        },
+        "policy_families": list(POLICY_FAMILIES),
+        "top_files_limit": SUMMARY_TOP_FILES,
+        "top_files": [
+            {"path": path, "policy_findings": count} for path, count in ranked[:SUMMARY_TOP_FILES]
+        ],
+        "complexity": _complexity_summary(metrics),
+        "elapsed_seconds": round(elapsed_seconds, ELAPSED_DECIMALS),
+    }
+
+
 def build_report(
     files: Sequence[FileResult],
     discovery: DiscoveryResult | None,
     config: EffectiveConfig,
     gate: GateResult,
     metrics: Mapping[str, Any],
+    elapsed_seconds: float,
 ) -> Report:
     """``metrics`` carries the ``complexity`` and ``graph`` sections from the analysis;
-    ``history`` is added here as ``not_collected`` until the CLI or ``with_history`` runs git."""
+    ``history`` is added here as ``not_collected`` until the CLI or ``with_history`` runs git.
+    ``elapsed_seconds`` is the wall-clock time of discovery, analysis and the gate."""
     ordered_files = tuple(sorted(files, key=lambda f: f.path))
     findings = tuple(
         sorted((f for file in ordered_files for f in file.findings), key=lambda f: f.sort_key())
@@ -168,6 +279,7 @@ def build_report(
             "suppressed": sum(1 for f in findings if f.is_suppressed),
             "baselined": 0,
         },
+        summary=build_summary(ordered_files, findings, metrics, elapsed_seconds),
     )
 
 

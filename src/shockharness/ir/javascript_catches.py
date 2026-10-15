@@ -421,6 +421,34 @@ def classify_statements(statements: list[Node], name: str | None) -> HandlerBody
     return HandlerBody(BODY_OTHER, "handler body is not classified")
 
 
+def guard_call(statements: list[Node], name: str | None) -> str | None:
+    """The callee, as written, when the first statement is ``callee(<caught>)``."""
+    if name is None or len(statements) == 0:
+        return None
+    first = statements[0]
+    if first.type != "expression_statement":
+        return None
+    call = first_expression(first)
+    if call is None or call.type != "call_expression":
+        return None
+    function = call.child_by_field_name("function")
+    arguments = call.child_by_field_name("arguments")
+    if function is None or arguments is None:
+        return None
+    if function.type not in ("identifier", "member_expression"):
+        return None
+    actual = [a for a in arguments.named_children if a.type != "comment"]
+    if len(actual) != 1 or actual[0].type != "identifier" or node_text(actual[0]) != name:
+        return None
+    return node_text(function)
+
+
+def _guard_body(statements: list[Node], name: str | None) -> HandlerBody | None:
+    if guard_call(statements, name) is None:
+        return None
+    return classify_statements(statements[1:], name)
+
+
 def _parameter_name(parameter: Node | None) -> str | None:
     if parameter is None:
         return None
@@ -456,6 +484,9 @@ def _catch_clause(source: SourceText, scope: str, try_node: Node, clause: Node) 
         bound_name=name,
         body=classify_statements(remaining, name),
         try_statements=tuple(try_statement(source, s) for s in protected),
+        narrowed_from=None,
+        guard_call=guard_call(remaining, name),
+        guard_body=_guard_body(remaining, name),
     )
 
 
@@ -498,6 +529,9 @@ def _rejection_handler(
                 "its behaviour cannot be inspected",
             ),
             try_statements=protected,
+            narrowed_from=None,
+            guard_call=None,
+            guard_body=None,
         )
     parameter = handler.child_by_field_name("parameter")
     if parameter is None:
@@ -513,6 +547,7 @@ def _rejection_handler(
         classified = classify_statements(statements, name)
     else:
         klass = None
+        statements = []  # an expression body has no statements and cannot open with a guard
         if is_literal_like(body):
             classified = HandlerBody(BODY_RETURN_FALLBACK, "=> " + node_text(body).strip())
         else:
@@ -526,6 +561,9 @@ def _rejection_handler(
         bound_name=name,
         body=classified,
         try_statements=protected,
+        narrowed_from=None,
+        guard_call=guard_call(statements, name),
+        guard_body=_guard_body(statements, name),
     )
 
 

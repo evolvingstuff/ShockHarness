@@ -53,6 +53,7 @@ def test_implemented_rules_are_exactly_the_milestone_e_set() -> None:
         "CPLX003",
         "CPLX004",
         "CPLX005",
+        "CPLX006",
         "SUPP001",
         "SUPP002",
     }

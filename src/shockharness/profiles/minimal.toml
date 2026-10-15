@@ -9,6 +9,7 @@ parse_errors = "warn"
 
 [tool.shockharness.rules.magic_numbers]
 severity = "review"
+named_constant_definitions = "allow"
 
 [tool.shockharness.rules.exceptions]
 severity = "review"
@@ -17,4 +18,4 @@ severity = "review"
 severity = "review"
 
 [tool.shockharness.complexity]
-enabled = false        # CPLX001-CPLX005 off; metrics.complexity and metrics.graph say "disabled"
+enabled = false        # CPLX001-CPLX006 off; metrics.complexity and metrics.graph say "disabled"

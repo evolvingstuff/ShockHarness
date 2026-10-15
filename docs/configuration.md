@@ -48,8 +48,8 @@ versioned with the tool; no profile is ever fetched remotely). Select one with
 | Profile | What it is | Gate behaviour |
 |---|---|---|
 | `strict` (default) | The bundled defaults: every rule at its documented severity, `parse_errors = "fail"`, complexity enabled | Hard violations and unparseable files fail |
-| `recommended` | `strict`, except `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review` | As strict minus `DEF004` |
-| `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
+| `recommended` | `strict`, except: `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review`; `MAGIC001` permits the unary literal `-1` (`allow_unary_negative_one = true`: `indexOf(...) === -1`, `[-1]`, `.at(-1)`) and does not report module-level named constant definitions (`named_constant_definitions = "allow"`); `CPLX005` fan-out fires above 30 distinct call targets instead of 20 (`fan_out_warn = 30`) and as a `review` finding instead of a warning (`fan_out_severity = "review"`), because the units over 20 on real codebases are orchestrators (login, streaming, restore) | As strict minus `DEF004` |
+| `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `named_constant_definitions = "allow"`, `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
 
 Any profile below `strict` prints a `policy deviation` line in every report
 (text, JSON `config.deviations`, SARIF run `properties.config_deviations`)
@@ -108,7 +108,8 @@ follow_symlinks = false                 # never leave the root through a link un
 enabled = true
 severity = "error"                      # "review" caps MAGIC001 at review (reported, never gating; a deviation)
 allowed_values = [0, 1]                 # value-based; extra values are reported as deviations
-allow_unary_negative_one = false        # -1 fails unless true; -0 always fails
+allow_unary_negative_one = false        # -1 fails unless true; -0 always fails (true in recommended)
+named_constant_definitions = "report"   # MAX_PAGES = 8 / const SETTLE_MS = 400 at module scope: "report" (strict) or "allow" (recommended, minimal)
 exclude_configuration_files = true      # files matching configuration_files skip MAGIC001 (reported per file)
 configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
                        "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",
@@ -123,6 +124,7 @@ enabled = true
 severity = "error"                        # "review" caps EXC001-EXC003 at review
 mode = "boundary_whitelist"               # the only mode
 transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
+transparent_guards = []                   # guard callees ("rethrowUnexpectedError"): a handler opening with guard(<caught>) is narrowed by it (each a deviation)
 boundaries = []                           # see below
 
 [tool.shockharness.rules.defaults]        # DEF001-DEF006; each mode: "forbid" -> error, "review" -> review, "allow" -> off
@@ -144,7 +146,10 @@ max_nesting_warn = 4                      # CPLX003: nesting/1 above this value
 cyclomatic_counts_boolean_operators = true   # cyclomatic/1 counts and/or, &&/||/??, ||= (false: a deviation)
 npath_cap = 10000                         # npath/1 saturates here; reported as ">= cap"
 npath_warn = 200                          # CPLX004: npath/1 at or above this value, or saturated
-fan_out_warn = 20                         # CPLX005: distinct call targets of one unit above this value
+fan_out_warn = 20                         # CPLX005: distinct call targets of one unit above this value (30 in recommended)
+fan_out_severity = "warning"              # CPLX005 fan-out findings: "warning" or "review" (both advisory; "review" in recommended)
+max_lines_warn = 50                       # CPLX006: size/1 logical lines of one unit above this value; module bodies exempt
+npath_only_without_cognitive = true       # a unit above cognitive_warn and npath_warn is one CPLX002 finding naming both; false: CPLX002 and CPLX004
 abstraction_displacement = false          # experimental, diff mode only; see docs/complexity.md
 
 [tool.shockharness.history]               # local `git log`, file granularity, never gating
@@ -167,18 +172,27 @@ path = "src/integrations/**"                        # glob, same semantics as in
 language = "python"
 exception = "requests.exceptions.Timeout"           # qualified class name; wildcards are rejected
 reason = "External network timeout"
+
+[[tool.shockharness.rules.exceptions.boundaries]]   # several classes for one path, one reason
+path = "src/proc/**"
+language = "python"
+exceptions = ["OSError", "ProcessLookupError"]      # exactly one of `exception` / `exceptions` per entry
+reason = "The child process may already be gone"
 ```
 
 ## Exception boundaries
 
-A boundary approves catching **one** exception class in files matching one glob
-for one language. It is the only way a catch passes `EXC001`, and every boundary
-is listed in `config.deviations` so the approval is never silent.
+A boundary approves catching one exception class (`exception = "..."`) or
+several (`exceptions = ["...", "..."]`, 0.2.0) in files matching one glob for
+one language, with one reason. It is the only way a catch passes `EXC001`
+(apart from a configured transparent guard, below), and every boundary is
+listed once in `config.deviations` so the approval is never silent.
 
-* `exception` must be a dotted class name (`OSError`,
-  `requests.exceptions.Timeout`, `pkg.errors.Upstream`, JavaScript
-  `TimeoutError`). `*`, `|`, and empty strings are configuration errors. A bare
-  `except` cannot be approved at all.
+* Each entry has exactly one of `exception` and `exceptions`; both, neither,
+  or an empty list is a configuration error naming the entry. Every name must
+  be a dotted class name (`OSError`, `requests.exceptions.Timeout`,
+  `pkg.errors.Upstream`, JavaScript `TimeoutError`). `*`, `|`, and empty
+  strings are configuration errors. A bare `except` cannot be approved at all.
 * The name is compared with the identity the analyzer resolved for the handler
   (see `docs/rules.md`): exact identities must match exactly; approximate ones
   (relative imports, classes defined in the analyzed module, JavaScript guards)
@@ -190,6 +204,21 @@ is listed in `config.deviations` so the approval is never silent.
   `instanceof` guard for that class that re-throws everything else.
 * Approving a catch does not exempt it from `EXC002` (what the handler does) or
   `EXC003` (what the `try` body wraps).
+* Python: a handler that opens with `if not isinstance(exc, T): raise` is
+  matched against the boundaries as a catch of `T` (or of each member of a
+  tuple), not of the broad type on the `except` line.
+
+**Transparent guards** (`rules.exceptions.transparent_guards`, 0.2.0). A list
+of guard callees as written (`["rethrowUnexpectedError"]`,
+`["errors.rethrow_unexpected"]`): functions that re-raise anything not on
+their allowlist and return for expected failures. A handler whose first
+statement calls a listed guard with the caught exception as its only argument
+is treated as narrowed by the guard: `EXC001` does not report the catch, and
+`EXC002` classifies the statements after the guard (a handler with nothing
+after it still swallows). Default empty; each guard is a reported policy
+deviation. This replaces one `boundaries` entry per exception type per path
+for codebases with a house guard; it is not a boundary, so `EXC003` does not
+run on guarded catches.
 
 ## Default and fallback modes
 
@@ -213,17 +242,37 @@ lands. They have no effect on findings yet; the report's
 
 ## Complexity
 
-`[tool.shockharness.complexity]` drives the advisory family `CPLX001`-`CPLX005`
+`[tool.shockharness.complexity]` drives the advisory family `CPLX001`-`CPLX006`
 and the sections `metrics.complexity` (per-unit cyclomatic, cognitive, nesting,
 NPath and size numbers, with their versioned conventions and the thresholds
 in force) and `metrics.graph` (call graph with `resolved` / `probable` /
 `unresolved` edges, module import edges, cycles, fan-in/out, shared mutable
-state). Every finding is a `warning`; a plain `check` never fails because of
+state). Every finding is a `warning` (fan-out findings are `review` under
+`fan_out_severity = "review"`); a plain `check` never fails because of
 them, and `complexity.enabled = false` (the `minimal` profile) switches the
 whole family off and says so in `config.deviations`. Thresholds above the
-defaults are not deviations; `cyclomatic_counts_boolean_operators = false` is,
-because the number then counts fewer decisions than its convention states.
-`docs/complexity.md` defines every convention.
+defaults and `fan_out_severity` are not deviations;
+`cyclomatic_counts_boolean_operators = false` is, because the number then
+counts fewer decisions than its convention states. `max_lines_warn` (0.2.0)
+is `CPLX006`'s threshold on `size/1` logical lines; module bodies are exempt.
+`npath_only_without_cognitive` (0.2.0, default `true`) folds `CPLX004` into
+`CPLX002` when one unit is above both thresholds, so the text report shows one
+line naming both numbers and the JSON report keeps only `CPLX002` for that
+unit; `false` reports both. `docs/complexity.md` defines every convention.
+
+## First contact: `check --summary`
+
+`shockharness check PATH... --summary` prints, instead of every finding, the
+shape of the problem: findings by rule and top-level directory (`src/`,
+`tests/`, `.` for files at the root) and by severity, the ten files with the
+most policy findings (`MAGIC`/`EXC`/`DEF`/`SUPP`, not `CPLX`), complexity
+counts (units analyzed, units over each threshold, NPath-saturated units,
+import cycles, units over `fan_out_warn`), parse failures and the elapsed
+time, followed by the same totals, configuration lines and `gate:` line as
+the full report. The exit code is unchanged. The JSON report always carries
+the same overview as its `summary` object, whose totals equal
+`execution_summary`; `summary.elapsed_seconds` is the one field of a report
+that differs between two runs over the same input.
 
 ## Adopting ShockHarness on an existing codebase
 
@@ -400,9 +449,10 @@ Everything that loosens the strict profile is surfaced, never silent:
   rules (complexity included), `cyclomatic_counts_boolean_operators = false`,
   every `rules.<section>.severity = "review"`
   cap, extra `allowed_values`, `allow_unary_negative_one`,
-  `parse_errors = "warn"`, `transparent_rethrow`, every exception boundary,
-  every `rules.defaults` mode looser than the strict profile, and every
-  override, each with its reason. The same list is in the text report, SARIF
+  `named_constant_definitions = "allow"`, `parse_errors = "warn"`,
+  `transparent_rethrow`, every transparent guard, every exception boundary
+  (once, listing every class it approves), every `rules.defaults` mode looser
+  than the strict profile, and every override, each with its reason. The same list is in the text report, SARIF
   run properties, and `config validate`.
 * `effective_profile` (top level, next to `tool_version` and `schema_version`)
   names the profile in force, including one selected with `--profile`.

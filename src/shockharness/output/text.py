@@ -1,8 +1,10 @@
 """Human-readable rendering of a report."""
 
 import textwrap
+from collections.abc import Sequence
 from typing import Any
 
+from shockharness.config import SUPPORTED_EXTENSIONS
 from shockharness.constants import (
     COMMIT_SHORT_HEX,
     CONFIG_DIGEST_SHORT_HEX,
@@ -14,7 +16,8 @@ from shockharness.findings import Finding
 from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
 from shockharness.report import Report
-from shockharness.rules.registry import RuleSpec
+from shockharness.rules.complexity import is_cycle_finding
+from shockharness.rules.registry import PYTHON, RuleSpec
 
 
 def _finding_line(finding: Finding) -> str:
@@ -76,7 +79,7 @@ def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
         f"  complexity: {len(functions)} unit(s) in {len(complexity['files'])} file(s); "
         f"conventions {conventions['cyclomatic']}, {conventions['cognitive']}, "
         f"{conventions['nesting']}, {conventions['npath']}; {saturated} NPath saturated; "
-        "advisory (CPLX001-CPLX004 are warnings)"
+        "advisory (CPLX001-CPLX004 and CPLX006 are warnings)"
     ]
     if "regressions" in complexity:
         lines.append(
@@ -103,22 +106,33 @@ def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
     return lines
 
 
-def render(report: Report) -> str:
+def _cycle_order(finding: Finding) -> tuple[int, str, int, int]:
+    """Python cycles before JavaScript cycles (an import cycle fails at import time in
+    Python and is usually resolved at call time in an ES module), then report order."""
+    suffix = "." + finding.path.rsplit(".", 1)[len(finding.path.rsplit(".", 1)) - 1]
+    first = 0 if suffix in SUPPORTED_EXTENSIONS and SUPPORTED_EXTENSIONS[suffix] == PYTHON else 1
+    return (first, finding.path, finding.span.line, finding.span.column)
+
+
+def finding_lines(findings: Sequence[Finding]) -> list[str]:
+    """One line per finding in report order, except that import-cycle findings (one per
+    cycle, cross-file by nature) are listed together after the per-file findings, Python
+    cycles first."""
     lines: list[str] = []
-    for finding in report.findings:
-        lines.append(_finding_line(finding))
-
-    for file in report.files:
-        if not file.failed:
+    cycles: list[Finding] = []
+    for finding in findings:
+        if is_cycle_finding(finding):
+            cycles.append(finding)
             continue
-        where = file.path
-        if file.parse_failure is not None and file.parse_failure.span is not None:
-            where = f"{file.path}:{file.parse_failure.span.line}:{file.parse_failure.span.column}"
-        lines.append(f"{where}: {file.status}: {file.error}")
+        lines.append(_finding_line(finding))
+    for finding in sorted(cycles, key=_cycle_order):
+        lines.append(_finding_line(finding))
+    return lines
 
-    if len(lines) > 0:
-        lines.append("")
 
+def _trailer_lines(report: Report) -> list[str]:
+    """Everything after the findings: totals, rules, config, metrics, status, gate."""
+    lines: list[str] = []
     summary = report.execution_summary
     coverage = report.coverage
     lines.append(
@@ -150,6 +164,103 @@ def render(report: Report) -> str:
     lines.extend(_history_lines(dict(report.metrics)))
     lines.append(f"  analysis status: {report.analysis_status}")
     lines.extend(_gate_lines(report.gate))
+    return lines
+
+
+def _failure_lines(report: Report) -> list[str]:
+    lines: list[str] = []
+    for file in report.files:
+        if not file.failed:
+            continue
+        where = file.path
+        if file.parse_failure is not None and file.parse_failure.span is not None:
+            where = f"{file.path}:{file.parse_failure.span.line}:{file.parse_failure.span.column}"
+        lines.append(f"{where}: {file.status}: {file.error}")
+    return lines
+
+
+def render(report: Report) -> str:
+    lines = finding_lines(report.findings)
+    lines.extend(_failure_lines(report))
+    if len(lines) > 0:
+        lines.append("")
+    lines.extend(_trailer_lines(report))
+    return "\n".join(lines) + "\n"
+
+
+def _table(header: list[str], rows: list[list[str]]) -> list[str]:
+    widths = [len(cell) for cell in header]
+    for row in rows:
+        for index, cell in enumerate(row):
+            widths[index] = max(widths[index], len(cell))
+    rendered: list[str] = []
+    for row in [header, *rows]:
+        cells = [row[0].ljust(widths[0])]
+        cells.extend(cell.rjust(widths[index]) for index, cell in enumerate(row) if index > 0)
+        rendered.append("    " + "  ".join(cells).rstrip())
+    return rendered
+
+
+def _summary_lines(report: Report) -> list[str]:
+    summary = report.summary
+    lines = [
+        f"shockharness {report.tool_version} summary: {summary['files']} file(s), "
+        f"{summary['files_analyzed']} analyzed, {summary['parse_failures']} parse failure(s); "
+        f"{summary['findings']} finding(s), {summary['suppressed']} suppressed; "
+        f"{summary['elapsed_seconds']} s"
+    ]
+    by_severity = summary["by_severity"]
+    if len(by_severity) > 0:
+        lines.append("  by severity: " + ", ".join(f"{k}={v}" for k, v in by_severity.items()))
+    directories = list(summary["by_directory"])
+    if len(summary["by_rule"]) > 0:
+        lines.append("  findings by rule and top-level directory:")
+        rows: list[list[str]] = []
+        for rule_id, row in summary["by_rule_and_directory"].items():
+            cells = [rule_id]
+            for directory in directories:
+                cells.append(str(row[directory]) if directory in row else "")
+            cells.append(str(summary["by_rule"][rule_id]))
+            rows.append(cells)
+        totals = ["total", *[str(summary["by_directory"][d]) for d in directories]]
+        totals.append(str(summary["findings"]))
+        rows.append(totals)
+        lines.extend(_table(["rule", *directories, "total"], rows))
+    families = "/".join(summary["policy_families"])
+    if len(summary["top_files"]) > 0:
+        lines.append(
+            f"  files with the most policy findings ({families}; not CPLX; "
+            f"top {summary['top_files_limit']}):"
+        )
+        for entry in summary["top_files"]:
+            lines.append(f"    {entry['policy_findings']:>6}  {entry['path']}")
+    else:
+        lines.append(f"  files with the most policy findings ({families}; not CPLX): none")
+    complexity = summary["complexity"]
+    if complexity["status"] == "available":
+        over = ", ".join(
+            f"{key} = {complexity['thresholds'][key]}: {count}"
+            for key, count in complexity["units_over"].items()
+        )
+        fan_out_warn = complexity["thresholds"]["fan_out_warn"]
+        lines.append(
+            f"  complexity: {complexity['units']} unit(s) analyzed; over {over}; "
+            f"{complexity['npath_saturated_units']} NPath saturated; "
+            f"{complexity['cycles']} import cycle(s); "
+            f"{complexity['units_over_fan_out_warn']} unit(s) over fan_out_warn = {fan_out_warn}"
+        )
+    else:
+        lines.append(f"  complexity: {complexity['status']}")
+    lines.append(f"  parse failures: {summary['parse_failures']}")
+    return lines
+
+
+def render_summary(report: Report) -> str:
+    """``check --summary``: the overview, then the same trailer and gate line as ``render``."""
+    lines = _summary_lines(report)
+    lines.extend(_failure_lines(report))
+    lines.append("")
+    lines.extend(_trailer_lines(report))
     return "\n".join(lines) + "\n"
 
 

@@ -472,6 +472,7 @@ def test_report_shapes_and_ordering(empty_root: Path, strict_config: EffectiveCo
         "max_nesting_warn": 4,
         "npath_warn": 200,
         "fan_out_warn": 20,
+        "max_lines_warn": 50,
     }
     assert [(f["path"], f["name"]) for f in complexity["functions"]] == [
         ("src/a.js", "<module>"),
@@ -525,7 +526,7 @@ def test_unit_rules_name_value_threshold_and_convention(
 ) -> None:
     config = make_config(
         "[tool.shockharness.complexity]\ncyclomatic_warn = 2\ncognitive_warn = 2\n"
-        "max_nesting_warn = 1\nnpath_warn = 4\n"
+        "max_nesting_warn = 1\nnpath_warn = 4\nnpath_only_without_cognitive = false\n"
     )
     text = "def f(a, b):\n    if a:\n        if b:\n            return 1\n    return 0\n"
     result = analyze_text("src/a.py", PY, text, config, OPTIONS)
@@ -587,3 +588,117 @@ def test_complexity_rules_can_be_disabled_per_path_and_suppressed_inline(
     (finding,) = suppressed.findings
     assert finding.rule_id == "CPLX002" and finding.is_suppressed
     assert finding.fingerprint is not None
+
+
+# --- CPLX006: unit size ------------------------------------------------------------------
+
+
+def _long_function(name: str, body_lines: int) -> str:
+    return f"def {name}():\n" + "".join(f"    x{i} = 1\n" for i in range(body_lines))
+
+
+def test_cplx006_reports_units_above_max_lines_warn_and_exempts_module_bodies(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # the def line counts: 50 body lines make a 51-line unit; 49 make a 50-line one
+    text = _long_function("long", 50) + "\n\n" + _long_function("fits", 49) + "\n"
+    report = _file_report(empty_root, strict_config, {"src/a.py": text})
+    units = {f["name"]: f for f in report.metrics["complexity"]["functions"]}
+    assert units["long"]["size"]["logical_lines"] == 51
+    assert units["fits"]["size"]["logical_lines"] == 50
+    findings = [f for f in report.findings if f.rule_id == "CPLX006"]
+    assert [(f.scope, f.span.line, f.severity) for f in findings] == [("long", 1, "warning")]
+    assert findings[0].message == (
+        "size of function long is 51 logical line(s), above max_lines_warn = 50 "
+        "(convention size/1; module bodies are exempt)"
+    )
+    assert report.gate.status == "pass"
+    # the module body alone, of any length, is never reported
+    module_only = "".join(f"x{i} = 1\n" for i in range(120))
+    (empty_root / "src" / "a.py").unlink()
+    report = _file_report(empty_root, strict_config, {"src/m.py": module_only})
+    assert [f.rule_id for f in report.findings] == []
+    assert report.metrics["complexity"]["functions"][0]["size"]["logical_lines"] == 120
+
+
+def test_cplx006_javascript_and_threshold_key(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.complexity]\nmax_lines_warn = 3\n")
+    text = "function f() {\n  a();\n  b();\n  c();\n}\nfunction g() {\n  a();\n}\n"
+    report = _file_report(empty_root, config, {"src/a.js": text})
+    (finding,) = [f for f in report.findings if f.rule_id == "CPLX006"]
+    assert finding.scope == "f"
+    assert "is 5 logical line(s), above max_lines_warn = 3" in finding.message
+    assert report.metrics["complexity"]["thresholds"]["max_lines_warn"] == 3
+
+
+def test_cplx006_is_disabled_with_the_family(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.complexity]\nenabled = false\n")
+    report = _file_report(empty_root, config, {"src/a.py": _long_function("long", 80)})
+    assert report.findings == ()
+    assert "CPLX006" in [d.rule_id for d in report.files[0].rules_disabled]
+    assert "CPLX006" not in report.files[0].rules_applied
+
+
+# --- CPLX004 folded into CPLX002 (npath_only_without_cognitive) --------------------------
+
+# Eight independent ifs with nested bodies: cognitive 24 (above 15), NPath 3**8 = 6561 >= 200.
+BOTH_OVER = "def f(a):\n" + "".join(
+    f"    if a{i}:\n        if b{i}:\n            pass\n" for i in range(8)
+)
+# Eight flat ifs: cognitive 8 (not above 15), NPath 256 (at or above 200).
+NPATH_ONLY = "def g(a):\n" + "".join(f"    if a{i}:\n        pass\n" for i in range(8))
+
+
+def _rules_for(report: Any, name: str) -> list[str]:
+    return [f.rule_id for f in report.findings if f.scope == name]
+
+
+def test_npath_is_folded_into_cognitive_by_default(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    report = _file_report(empty_root, strict_config, {"src/a.py": BOTH_OVER + "\n\n" + NPATH_ONLY})
+    units = {u["name"]: u for u in report.metrics["complexity"]["functions"]}
+    assert units["f"]["cognitive"] == 24 and units["f"]["npath"]["value"] == 6561
+    assert units["g"]["cognitive"] == 8 and units["g"]["npath"]["value"] == 256
+    assert _rules_for(report, "f") == ["CPLX001", "CPLX002"]  # no separate CPLX004
+    assert _rules_for(report, "g") == ["CPLX004"]  # NPath alone is still CPLX004
+    (cognitive,) = [f for f in report.findings if f.scope == "f" and f.rule_id == "CPLX002"]
+    assert f"cognitive complexity of function f is {units['f']['cognitive']}" in cognitive.message
+    assert (
+        "its NPath estimate is 6561, at or above npath_warn = 200 (convention npath/1), "
+        "reported here instead of as CPLX004 (npath_only_without_cognitive = true)"
+        in cognitive.message
+    )
+    from shockharness.output import text as text_output
+
+    lines = [line for line in text_output.render(report).splitlines() if "src/a.py:1:" in line]
+    assert len(lines) == 2  # CPLX001 and the one CPLX002 line naming both numbers
+    assert sum(1 for line in lines if "NPath" in line) == 1
+    # the per-unit numbers are unchanged in metrics
+    assert units["f"]["npath"] == {"value": 6561, "saturated": False, "cap": 10000, "text": "6561"}
+
+
+def test_npath_option_off_reports_both_rule_ids(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.complexity]\nnpath_only_without_cognitive = false\n")
+    report = _file_report(empty_root, config, {"src/a.py": BOTH_OVER})
+    assert _rules_for(report, "f") == ["CPLX001", "CPLX002", "CPLX004"]
+    (cognitive,) = [f for f in report.findings if f.rule_id == "CPLX002"]
+    assert "NPath" not in cognitive.message
+    assert config.deviations == ()  # reporting both is not a loosening
+
+
+def test_npath_folding_needs_cplx002_active(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config(
+        '[[tool.shockharness.overrides]]\npaths = ["src/**"]\ndisable = ["CPLX002"]\n'
+        'reason = "test"\n'
+    )
+    report = _file_report(empty_root, config, {"src/a.py": BOTH_OVER})
+    assert _rules_for(report, "f") == ["CPLX001", "CPLX004"]

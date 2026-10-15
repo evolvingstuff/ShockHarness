@@ -626,3 +626,41 @@ def test_javascript_facts_record_kind_and_context() -> None:
         ("coalesce", CONTEXT_RETURN),
     ]
     assert all(f.kind != KIND_MAPPING_GET_IMPLICIT for f in facts.defaults)
+
+
+def test_def001_dataclass_fields_only_on_decorated_classes(strict_config: EffectiveConfig) -> None:
+    """Item 7 of the 0.2.0 feedback round: annotated class attributes of an undecorated
+    class or an ORM-style model are not dataclass fields and are not reported."""
+    text = (
+        "import dataclasses\n"
+        "from dataclasses import dataclass, field\n"
+        "from typing import Optional\n\n\n"
+        "class Plain:\n"
+        "    id: int = 1\n"
+        "    encryption_nonce: Optional[bytes] = None\n"
+        "    tags: list = []\n\n\n"
+        "class User(Base):\n"
+        "    __tablename__ = 'users'\n"
+        "    id: Mapped[int] = mapped_column(primary_key=True)\n"
+        "    name: Mapped[str] = mapped_column(String(50), default='anon')\n"
+        "    created: datetime = Column(DateTime, default=datetime.utcnow)\n\n\n"
+        "@dataclasses.dataclass\n"
+        "class Qualified:\n"
+        "    id: int = 1\n\n\n"
+        "@dataclasses.dataclass(frozen=True)\n"
+        "class QualifiedWithArguments:\n"
+        "    nonce: Optional[bytes] = None\n\n\n"
+        "@dataclass\n"
+        "class Bare:\n"
+        "    tags: list = field(default_factory=list)\n"
+    )
+    result = _run(strict_config, PY, text)
+    def001 = [(f.span.line, f.message) for f in result.findings if f.rule_id == "DEF001"]
+    assert def001 == [
+        (21, "dataclass field 'id' of Qualified has a default value: 1"),
+        (26, "dataclass field 'nonce' of QualifiedWithArguments has a default value: None"),
+        (31, "dataclass field 'tags' of Bare has a default_factory: list"),
+    ]
+    # the ORM model's keyword defaults are DEF001 territory only through a decorator;
+    # nothing else in the module is a parameter default either
+    assert not any(f.rule_id == "DEF001" and f.span.line < 19 for f in result.findings)

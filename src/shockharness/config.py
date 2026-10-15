@@ -30,10 +30,12 @@ from shockharness.globs import validate_glob
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
 from shockharness.schema import (
+    NAMED_CONSTANT_MODES,
     PROFILE_STRICT,
     PROFILES,
     SECTION_SEVERITIES,
     ConfigIssue,
+    boundary_exceptions,
     validate_shape,
 )
 
@@ -53,6 +55,8 @@ SEVERITY_SECTIONS: Mapping[str, str] = {
 
 # A boundary names one exception class: a dotted identifier path, never a wildcard.
 EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
+
+NAMED_CONSTANT_ALLOW = NAMED_CONSTANT_MODES[1]
 
 TIER_CLI = "cli"
 TIER_DEDICATED = "dedicated"
@@ -293,16 +297,20 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                         f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
                     )
                 )
-    for index, boundary in enumerate(values["rules"]["exceptions"]["boundaries"]):
+    exceptions = values["rules"]["exceptions"]
+    for index, boundary in enumerate(exceptions["boundaries"]):
+        key = f"rules.exceptions.boundaries[{index}]"
         problem = validate_glob(boundary["path"])
         if problem is not None:
-            issues.append(ConfigIssue(f"rules.exceptions.boundaries[{index}].path", problem))
-        if EXCEPTION_NAME.fullmatch(boundary["exception"]) is None:
+            issues.append(ConfigIssue(f"{key}.path", problem))
+        issues.extend(_boundary_exception_issues(boundary, key))
+    for index, guard in enumerate(exceptions["transparent_guards"]):
+        if EXCEPTION_NAME.fullmatch(guard) is None:
             issues.append(
                 ConfigIssue(
-                    f"rules.exceptions.boundaries[{index}].exception",
-                    "must be a dotted exception class name such as 'OSError' or "
-                    "'requests.exceptions.Timeout'; wildcards and bare except cannot be approved",
+                    f"rules.exceptions.transparent_guards[{index}]",
+                    "must be the guard's callee as written, a dotted name such as "
+                    "'rethrowUnexpectedError' or 'errors.rethrow_unexpected'",
                 )
             )
     magic = values["rules"]["magic_numbers"]
@@ -310,6 +318,37 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
         problem = validate_glob(pattern)
         if problem is not None:
             issues.append(ConfigIssue(f"rules.magic_numbers.configuration_files[{index}]", problem))
+    return issues
+
+
+def _boundary_exception_issues(boundary: Mapping[str, Any], key: str) -> list[ConfigIssue]:
+    """Exactly one of ``exception`` / ``exceptions``, each a dotted class name."""
+    has_single = "exception" in boundary
+    has_list = "exceptions" in boundary
+    if has_single == has_list:
+        return [
+            ConfigIssue(
+                key,
+                "needs exactly one of 'exception' (one class name) or 'exceptions' (a list of "
+                "class names approved for the same path with one reason)",
+            )
+        ]
+    if has_list and len(boundary["exceptions"]) == 0:
+        return [ConfigIssue(f"{key}.exceptions", "must list at least one exception class name")]
+    issues: list[ConfigIssue] = []
+    if has_single:
+        names = [(f"{key}.exception", str(boundary["exception"]))]
+    else:
+        names = [(f"{key}.exceptions[{i}]", str(n)) for i, n in enumerate(boundary["exceptions"])]
+    for name_key, name in names:
+        if EXCEPTION_NAME.fullmatch(name) is None:
+            issues.append(
+                ConfigIssue(
+                    name_key,
+                    "must be a dotted exception class name such as 'OSError' or "
+                    "'requests.exceptions.Timeout'; wildcards and bare except cannot be approved",
+                )
+            )
     return issues
 
 
@@ -359,6 +398,12 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
         found.append("rules.magic_numbers.allowed_values permits " + ", ".join(extra))
     if rules["magic_numbers"]["allow_unary_negative_one"] is True:
         found.append("rules.magic_numbers.allow_unary_negative_one is enabled")
+    if rules["magic_numbers"]["named_constant_definitions"] == NAMED_CONSTANT_ALLOW:
+        found.append(
+            f"rules.magic_numbers.named_constant_definitions is {NAMED_CONSTANT_ALLOW!r}; a "
+            "numeric literal that is the whole value of a module-level named constant "
+            "definition is not reported"
+        )
     if values["parse_errors"] != "fail":
         found.append(
             f"parse_errors is {values['parse_errors']!r}; syntax failures do not fail the gate"
@@ -369,9 +414,16 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
             "rules.exceptions.transparent_rethrow is enabled; handlers that only re-raise "
             "pass EXC001 outside any boundary"
         )
-    for index, boundary in enumerate(exceptions["boundaries"]):
+    for index, guard in enumerate(exceptions["transparent_guards"]):
         found.append(
-            f"rules.exceptions.boundaries[{index}] approves catching {boundary['exception']} "
+            f"rules.exceptions.transparent_guards[{index}] treats a handler whose first "
+            f"statement is {guard}(<caught exception>) as narrowed by that guard; EXC001 does "
+            "not report the catch and EXC002 classifies the statements after the guard"
+        )
+    for index, boundary in enumerate(exceptions["boundaries"]):
+        approved = ", ".join(boundary_exceptions(boundary))
+        found.append(
+            f"rules.exceptions.boundaries[{index}] approves catching {approved} "
             f"in {boundary['path']} ({boundary['language']}): {boundary['reason']}"
         )
     found.extend(loosened_modes(rules["defaults"]))

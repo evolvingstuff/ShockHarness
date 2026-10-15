@@ -117,6 +117,7 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
         "CPLX003",
         "CPLX004",
         "CPLX005",
+        "CPLX006",
         "DEF001",
         "DEF002",
         "DEF003",

@@ -37,7 +37,7 @@ an invalid configuration or invocation, `3` a tool failure or, under
 `parse_errors = "fail"`, a file that could not be parsed. Every report also
 lists `rules not implemented (not analyzed)`: `MAGIC002` is registered but
 produces no findings yet, so a clean run never implies it was checked. The
-complexity family (`CPLX001`-`CPLX005`) is advisory: warnings that never fail
+complexity family (`CPLX001`-`CPLX006`) is advisory: warnings that never fail
 a plain `check`; see the `refactor-complexity` skill.
 
 ## Principles

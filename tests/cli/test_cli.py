@@ -960,3 +960,74 @@ def test_check_reports_complexity_as_warnings_in_every_format(
     assert code == 0
     assert "not a SonarSource score" in " ".join(out.split())
     assert "status: implemented" in out
+
+
+def test_check_summary_ends_with_the_same_gate_line(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """0.2.0 item 4: --summary prints the overview and the unchanged trailer and gate."""
+    write(empty_root, "src/a.py", "x = 2\ny = 3\n\n\ndef f(a, b=1):\n    return a or 1\n")
+    write(empty_root, "src/pkg/b.py", "z = 4\n")
+    write(empty_root, "tests/test_a.py", "assert 5 == 5\n")
+    write(empty_root, "root.py", "r = 6\n")
+    write(empty_root, "src/bad.js", "function (\n")
+    root = ["--root", str(empty_root)]
+    targets = [str(empty_root / "src"), str(empty_root / "tests"), str(empty_root / "root.py")]
+    code, full, _ = run(["check", *targets, "--parse-errors", "warn", *root], capsys)
+    code_summary, summary, _ = run(
+        ["check", *targets, "--parse-errors", "warn", "--summary", *root], capsys
+    )
+    assert code == code_summary == 1
+    assert "src/a.py:1:5: MAGIC001" in full and "src/a.py:1:5: MAGIC001" not in summary
+    assert summary.startswith(
+        "shockharness 0.1.0 summary: 5 file(s), 4 analyzed, 1 parse failure(s); "
+    )
+    assert "finding(s), 0 suppressed; " in summary.splitlines()[0]
+    assert "  by severity: error=7, review=1" in summary
+    assert "  findings by rule and top-level directory:" in summary
+    table = summary.split("findings by rule and top-level directory:\n")[1].split("\n  files")[0]
+    assert table.splitlines() == [
+        "    rule      .  src/  tests/  total",
+        "    DEF001          1              1",
+        "    DEF003          1              1",
+        "    MAGIC001  1     3       2      6",
+        "    total     1     5       2      8",
+    ]
+    assert "  files with the most policy findings (MAGIC/EXC/DEF/SUPP; not CPLX; top 10):" in (
+        summary
+    )
+    assert (
+        "         4  src/a.py\n         2  tests/test_a.py\n         1  root.py\n"
+        "         1  src/pkg/b.py\n"
+    ) in summary
+    assert "  complexity: 5 unit(s) analyzed; over cyclomatic_warn = 15: 0, " in summary
+    assert "0 import cycle(s); 0 unit(s) over fan_out_warn = 20" in summary
+    assert "  parse failures: 1" in summary
+    assert "src/bad.js:1:1: parse_error:" in summary
+    # the trailer is the full report's, verbatim: same totals, same gate line and reasons
+    assert full.split("\n\n", 1)[1] == summary.split("\n\n", 1)[1]
+    assert "gate: FAIL (exit 1)" in summary.splitlines()
+    assert summary.rstrip("\n").endswith(
+        '7 new hard violation(s) and gates.new_hard_violations = "fail"'
+    )
+    # JSON carries the same overview whether or not --summary is passed
+    code, out, _ = run(
+        ["check", *targets, "--parse-errors", "warn", "--format", "json", "--summary", *root],
+        capsys,
+    )
+    data = json.loads(out)
+    assert data["summary"]["by_rule_and_directory"] == {
+        "DEF001": {"src/": 1},
+        "DEF003": {"src/": 1},
+        "MAGIC001": {".": 1, "src/": 3, "tests/": 2},
+    }
+    assert data["summary"]["by_directory"] == {".": 1, "src/": 5, "tests/": 2}
+    assert data["summary"]["findings"] == data["execution_summary"]["findings"] == 8
+    assert data["summary"]["by_severity"] == data["execution_summary"]["findings_by_severity"]
+    assert data["summary"]["suppressed"] == data["execution_summary"]["suppressed"]
+    assert data["summary"]["files"] == data["execution_summary"]["files"] == 5
+    assert data["summary"]["parse_failures"] == data["coverage"]["files_failed"] == 1
+    assert data["summary"]["top_files"][0] == {"path": "src/a.py", "policy_findings": 4}
+    assert data["summary"]["complexity"]["units"] == 5
+    assert data["summary"]["elapsed_seconds"] >= 0
+    assert data["schema_version"] == "1"

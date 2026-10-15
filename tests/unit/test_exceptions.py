@@ -446,6 +446,7 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "CPLX003",
         "CPLX004",
         "CPLX005",
+        "CPLX006",
         "DEF001",
         "DEF002",
         "DEF003",
@@ -476,3 +477,207 @@ def test_registry_metadata_for_exception_rules() -> None:
         assert rule.version == "1"
         assert rule.config_section == "rules.exceptions"
         assert rule.languages == ("python", "javascript")
+
+
+# --- 0.2.0 feedback round, item 3: transparent guards and multi-type boundaries ------------
+
+GUARD_CONFIG = (
+    '[tool.shockharness.rules.exceptions]\ntransparent_guards = ["rethrowUnexpectedError"]\n'
+)
+JS_GUARDED = (
+    "async function load(url) {\n"
+    "  try {\n    await fetch(url);\n  } catch (error) {\n"
+    "    rethrowUnexpectedError(error);\n    showBanner(error.message);\n  }\n}\n"
+)
+JS_GUARD_ONLY = (
+    "async function load(url) {\n"
+    "  try {\n    await fetch(url);\n  } catch (error) {\n"
+    "    rethrowUnexpectedError(error);\n  }\n}\n"
+)
+JS_GUARD_THEN_FALLBACK = (
+    "async function load(url) {\n"
+    "  try {\n    return await fetch(url);\n  } catch (error) {\n"
+    "    rethrowUnexpectedError(error);\n    return null;\n  }\n}\n"
+)
+
+
+def test_transparent_guard_call_narrows_javascript_catch(
+    strict_config: EffectiveConfig,
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    guarded = make_config(GUARD_CONFIG)
+    assert _run(guarded, "web/a.js", "javascript", JS_GUARDED).findings == ()
+    # the same handler without the guard configured is still a forbidden untyped catch
+    without = _run(strict_config, "web/a.js", "javascript", JS_GUARDED)
+    assert [f.rule_id for f in without.findings] == ["EXC001"]
+    # a guard call with a different argument, or extra arguments, is not the guard
+    other = JS_GUARDED.replace("rethrowUnexpectedError(error)", "rethrowUnexpectedError(error, 1)")
+    assert [f.rule_id for f in _run(guarded, "web/a.js", "javascript", other).findings] == [
+        "EXC001"
+    ]
+    # the guard is recognized when it is the first statement only
+    later = JS_GUARDED.replace(
+        "    rethrowUnexpectedError(error);\n    showBanner(error.message);\n",
+        "    showBanner(error.message);\n    rethrowUnexpectedError(error);\n",
+    )
+    assert [f.rule_id for f in _run(guarded, "web/a.js", "javascript", later).findings] == [
+        "EXC001"
+    ]
+    assert guarded.deviations == (
+        "rules.exceptions.transparent_guards[0] treats a handler whose first statement is "
+        "rethrowUnexpectedError(<caught exception>) as narrowed by that guard; EXC001 does "
+        "not report the catch and EXC002 classifies the statements after the guard",
+    )
+
+
+def test_exc002_classifies_the_statements_after_a_transparent_guard(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    guarded = make_config(GUARD_CONFIG)
+    swallow = _run(guarded, "web/a.js", "javascript", JS_GUARD_ONLY)
+    assert [f.rule_id for f in swallow.findings] == ["EXC002"]
+    assert swallow.findings[0].message == (
+        "catch clause after the transparent guard rethrowUnexpectedError(...) swallows the "
+        "exception: handler body is empty; the failure vanishes"
+    )
+    # a fallback returned after the guard is EXC002's (DEF005 reads the whole body)
+    fallback = _run(guarded, "web/a.js", "javascript", JS_GUARD_THEN_FALLBACK)
+    assert [(f.rule_id, f.message) for f in fallback.findings] == [
+        (
+            "EXC002",
+            "catch clause after the transparent guard rethrowUnexpectedError(...) converts the "
+            "exception into a fallback value: return null;",
+        )
+    ]
+
+
+def test_python_isinstance_guard_narrows_the_catch_for_exc001(
+    make_config: Callable[[str], EffectiveConfig], strict_config: EffectiveConfig
+) -> None:
+    os_boundary = (
+        "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "src/io/**"\nlanguage = "python"\nexception = "OSError"\nreason = "disk"\n'
+    )
+    config = make_config(os_boundary)
+    narrowed = (
+        "def read(path):\n"
+        "    try:\n        return open(path)\n"
+        "    except Exception as exc:\n"
+        "        if not isinstance(exc, OSError):\n            raise\n"
+        "        raise Unreadable(path) from exc\n"
+    )
+    assert _run(config, "src/io/reader.py", "python", narrowed).findings == ()
+    outside = _run(config, "src/core/reader.py", "python", narrowed)
+    assert finding_tuples(outside) == [("EXC001", 4, 5)]
+    assert outside.findings[0].message == (
+        "except handler of 'OSError' (narrowed from 'Exception' by its isinstance guard) is "
+        "forbidden: catch of 'OSError' is not approved by any boundary for this file"
+    )
+    # a tuple guard needs every member approved
+    pair = narrowed.replace("isinstance(exc, OSError)", "isinstance(exc, (OSError, ValueError))")
+    pair_result = _run(config, "src/io/reader.py", "python", pair)
+    assert [f.rule_id for f in pair_result.findings] == ["EXC001"]
+    assert "'ValueError' is not approved" in pair_result.findings[0].message
+    # EXC002 judges what follows the guard: pass after the guard swallows OSError
+    swallow = narrowed.replace("        raise Unreadable(path) from exc\n", "        pass\n")
+    swallow_result = _run(config, "src/io/reader.py", "python", swallow)
+    assert [f.rule_id for f in swallow_result.findings] == ["EXC002"]
+    assert "swallows the exception" in swallow_result.findings[0].message
+    # shapes that are not the guard leave the broad catch as written
+    for variant in (
+        "        if isinstance(exc, OSError):\n            raise\n",  # inverted
+        "        if not isinstance(exc, OSError):\n            return None\n",  # not a re-raise
+        "        if not isinstance(exc, OSError):\n            raise\n"
+        "        else:\n            pass\n",
+        "        if not isinstance(other, OSError):\n            raise\n",  # other subject
+    ):
+        text = narrowed.replace(
+            "        if not isinstance(exc, OSError):\n            raise\n", variant
+        )
+        result = _run(strict_config, "src/io/reader.py", "python", text)
+        assert any(
+            f.rule_id == "EXC001" and "broad catch of 'Exception'" in f.message
+            for f in result.findings
+        ), variant
+
+
+def test_python_transparent_guard_call(make_config: Callable[[str], EffectiveConfig]) -> None:
+    config = make_config(
+        '[tool.shockharness.rules.exceptions]\ntransparent_guards = ["errors.rethrow_unexpected"]\n'
+    )
+    text = (
+        "from app import errors\n\n"
+        "def load(path):\n"
+        "    try:\n        return read(path)\n"
+        "    except Exception as exc:\n"
+        "        errors.rethrow_unexpected(exc)\n"
+        "        return recover(path)\n"
+    )
+    assert _run(config, "src/a.py", "python", text).findings == ()
+    only = text.replace("        return recover(path)\n", "")
+    result = _run(config, "src/a.py", "python", only)
+    assert [f.rule_id for f in result.findings] == ["EXC002"]
+    assert result.findings[0].message.startswith(
+        "except handler after the transparent guard errors.rethrow_unexpected(...) swallows"
+    )
+
+
+def test_multi_type_boundary_approves_each_listed_type_once(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config(
+        "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "src/proc/**"\nlanguage = "python"\n'
+        'exceptions = ["OSError", "ProcessLookupError"]\nreason = "the child may be gone"\n'
+    )
+    assert config.deviations == (
+        "rules.exceptions.boundaries[0] approves catching OSError, ProcessLookupError in "
+        "src/proc/** (python): the child may be gone",
+    )
+    text = (
+        "def stop(process):\n"
+        "    try:\n        process.kill()\n"
+        "    except (OSError, ProcessLookupError) as exc:\n"
+        "        raise Gone(process) from exc\n"
+        "    try:\n        process.wait()\n"
+        "    except ProcessLookupError as exc:\n"
+        "        raise Gone(process) from exc\n"
+        "    try:\n        process.poll()\n"
+        "    except ValueError as exc:\n"
+        "        raise Gone(process) from exc\n"
+    )
+    result = _run(config, "src/proc/stop.py", "python", text)
+    assert finding_tuples(result) == [("EXC001", 12, 5)]
+    assert "'ValueError' is not approved" in result.findings[0].message
+    # EXC003 is unchanged: an approved multi-type catch still protects one operation only
+    wide = text.replace(
+        "    try:\n        process.kill()\n",
+        "    try:\n        prepare()\n        process.kill()\n",
+    )
+    wide_result = _run(config, "src/proc/stop.py", "python", wide)
+    assert [(f.rule_id, f.span.line) for f in wide_result.findings] == [
+        ("EXC003", 4),
+        ("EXC001", 13),
+    ]
+    assert "(approved by boundaries[0] (OSError, ProcessLookupError: the child may be gone))" in (
+        wide_result.findings[0].message
+    )
+
+
+def test_boundary_needs_exactly_one_of_exception_and_exceptions(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    head = (
+        "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "src/**"\nlanguage = "python"\nreason = "r"\n'
+    )
+    with pytest.raises(ConfigError, match=r"boundaries\[0\]: needs exactly one of"):
+        make_config(head)
+    with pytest.raises(ConfigError, match=r"boundaries\[0\]: needs exactly one of"):
+        make_config(head + 'exception = "OSError"\nexceptions = ["ValueError"]\n')
+    with pytest.raises(ConfigError, match=r"boundaries\[0\]\.exceptions: must list at least one"):
+        make_config(head + "exceptions = []\n")
+    with pytest.raises(ConfigError, match=r"boundaries\[0\]\.exceptions\[1\]: must be a dotted"):
+        make_config(head + 'exceptions = ["OSError", "*"]\n')
+    with pytest.raises(ConfigError, match=r"transparent_guards\[0\]: must be the guard"):
+        make_config('[tool.shockharness.rules.exceptions]\ntransparent_guards = ["not a name"]\n')

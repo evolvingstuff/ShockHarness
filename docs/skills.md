@@ -13,7 +13,7 @@ outside the chosen destination.
 |---|---|---|
 | `write-compliant-code` | Writing new Python or JavaScript | Clear contracts: required, validated inputs; no catch outside a declared boundary; no parameter defaults or fallback values; no numeric literal other than `0`/`1`; a named constant for a `0` or `1` that carries meaning (exit code, sentinel); data, configuration and specification kept out of executable source |
 | `fix-violations` | `shockharness check` or `gate` exits 1 | Run the analyzer, identify the intended contract behind each finding, add a characterization test, change the code, rerun tests and analyzer. Never delete a `try`/`except`, replace `.get` with indexing or add a suppression without a contract review; a suppression needs an exact rule ID and a cited reason |
-| `refactor-complexity` | Simplifying or untangling code | Address repeated cognitive work and coupling rather than a metric; record call structure and behavior tests before and after. States plainly that `CPLX001`-`CPLX005` are registered but not implemented (Milestone E) and must not be claimed |
+| `refactor-complexity` | Simplifying or untangling code | Address repeated cognitive work and coupling rather than a metric; record call structure and behavior tests before and after. Quotes the real rules `CPLX001`-`CPLX006`, their thresholds, the report fields and the commands |
 | `pre-commit-review` | Before a commit or pull request | Run `shockharness gate --base <default branch> --head HEAD` (or `check .`), report unsupported analysis, policy deviations, suppressions and remaining warnings, run the tests; never claim a pass without the quoted output |
 
 Every skill contains compliant and non-compliant Python and JavaScript

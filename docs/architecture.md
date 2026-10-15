@@ -13,7 +13,7 @@ Per-file analysis                                                      (analysis
     JavaScript: tree-sitter + tree-sitter-javascript                   (ir/javascript.py, ir/javascript_catches.py, ir/javascript_defaults.py)
     |
 Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py, rules/defaults.py)
-Per-unit metrics over the control tree -> CPLX001-CPLX004              (complexity/{cyclomatic,cognitive,nesting,npath,size,metrics}.py, rules/complexity.py)
+Per-unit metrics over the control tree -> CPLX001-CPLX004, CPLX006     (complexity/{cyclomatic,cognitive,nesting,npath,size,metrics}.py, rules/complexity.py)
     |
 Cross-file pass: call graph, module edges, cycles, fan-in/out -> CPLX005 (complexity/{callgraph,coupling,assemble}.py)
     |
@@ -149,7 +149,7 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/magic_numbers.py` | MAGIC001 |
 | `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
-| `rules/complexity.py` | CPLX001-CPLX004 per unit, CPLX005 from the graph; messages carry value, threshold and convention |
+| `rules/complexity.py` | CPLX001-CPLX004 and CPLX006 per unit, CPLX005 from the graph (one finding per cycle); messages carry value, threshold and convention |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
 | `findings.py` | `Finding` (with `fingerprint` and `baseline` marker), `SuppressionRecord` |
 | `gating/baseline.py` | Fingerprints, baseline file model and validation, legacy marking under `gates.legacy` |

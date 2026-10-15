@@ -8,6 +8,7 @@ tree's, applied to both sides, so the diff compares code under one policy.
 """
 
 import tempfile
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +145,7 @@ def analyze_revision(
 ) -> Revision:
     """Export the tree at ``ref`` and analyze the part that corresponds to ``root``."""
     commit = resolve_commit(root, ref)
+    started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="shockharness-") as exported:
         error = export_tree(location.toplevel, commit, Path(exported))
         if error is not None:
@@ -156,7 +158,8 @@ def analyze_revision(
         outcome = analyze_files(discovery.files, config, options)
     findings = [f for result in outcome.files for f in result.findings]
     verdict = gate_module.evaluate(findings, outcome.files, config, None, NO_REGRESSIONS)
-    report = build_report(outcome.files, discovery, config, verdict, outcome.metrics)
+    elapsed = time.perf_counter() - started
+    report = build_report(outcome.files, discovery, config, verdict, outcome.metrics, elapsed)
     return Revision(ref=ref, commit=commit, report=report)
 
 

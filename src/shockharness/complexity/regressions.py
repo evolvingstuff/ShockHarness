@@ -8,9 +8,9 @@ from typing import Any
 from shockharness.complexity.assemble import SETTING_DISPLACEMENT
 from shockharness.complexity.callgraph import CONFIDENCE_RESOLVED, TARGET_UNIT
 from shockharness.complexity.coupling import STATUS_AVAILABLE
-from shockharness.ir.model import CONFIDENCE_APPROXIMATE
-from shockharness.rules.complexity import METRIC_OF_RULE, THRESHOLD_OF_RULE
-from shockharness.rules.registry import CPLX004
+from shockharness.ir.model import CONFIDENCE_APPROXIMATE, UNIT_MODULE
+from shockharness.rules.complexity import METRIC_OF_RULE, METRIC_SIZE, THRESHOLD_OF_RULE
+from shockharness.rules.registry import CPLX004, CPLX006
 
 METRIC_NPATH = "npath"
 
@@ -22,14 +22,20 @@ def _functions_by_key(complexity: Mapping[str, Any]) -> dict[str, Mapping[str, A
 def _value(entry: Mapping[str, Any], metric: str) -> int:
     if metric == METRIC_NPATH:
         return int(entry[METRIC_NPATH]["value"])
+    if metric == METRIC_SIZE:
+        return int(entry[METRIC_SIZE]["logical_lines"])
     return int(entry[metric])
 
 
-def _exceeds(entry: Mapping[str, Any], rule_id: str, settings: Mapping[str, Any]) -> bool:
+def exceeds_threshold(entry: Mapping[str, Any], rule_id: str, settings: Mapping[str, Any]) -> bool:
+    """Whether a ``metrics.complexity.functions`` entry is above the rule's threshold
+    (``settings`` needs only the threshold keys, so ``metrics.complexity.thresholds`` works)."""
     metric = METRIC_OF_RULE[rule_id]
     threshold = int(settings[THRESHOLD_OF_RULE[rule_id]])
     if rule_id == CPLX004.rule_id:
         return bool(entry[METRIC_NPATH]["saturated"]) or _value(entry, metric) >= threshold
+    if rule_id == CPLX006.rule_id and entry["kind"] == UNIT_MODULE:
+        return False  # module bodies are exempt from CPLX006, in diffs as in checks
     return _value(entry, metric) > threshold
 
 
@@ -48,7 +54,7 @@ def complexity_regressions(
     for entry in head["functions"]:
         new_unit = entry["key"] not in base_units
         for rule_id, metric in METRIC_OF_RULE.items():
-            if not _exceeds(entry, rule_id, settings):
+            if not exceeds_threshold(entry, rule_id, settings):
                 continue
             head_value = _value(entry, metric)
             base_value = 0

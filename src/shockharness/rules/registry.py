@@ -837,7 +837,12 @@ CPLX005 = RuleSpec(
         "Module cycles: strongly connected components of two or more modules over resolved "
         "import edges only (Python absolute and relative imports, JavaScript import/export/"
         "re-export and require with a literal specifier, each resolved to an analyzed file); "
-        "one finding per member module at the import that closes the cycle. Fan-out: distinct "
+        "one finding per cycle, anchored on the lexically first member at its import into the "
+        "cycle (so the fingerprint is stable when unrelated modules are added), naming the "
+        "language, the size and up to eight members; the full membership is in "
+        "metrics.graph.cycles. In text output Python cycles are listed before JavaScript "
+        "cycles: a Python cycle fails at import time, an ES-module cycle is usually resolved "
+        "at call time. Fan-out: distinct "
         "targets of resolved and probable call edges (analyzed units plus external symbols; "
         "builtins excluded) above fan_out_warn; unresolved calls are reported in the message "
         "and in metrics.graph but never counted as targets. Shared mutable state (a "
@@ -867,6 +872,49 @@ CPLX005 = RuleSpec(
     ),
 )
 
+CPLX006 = RuleSpec(
+    rule_id="CPLX006",
+    version="1",
+    name="unit size",
+    family="complexity",
+    config_section="complexity",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A unit's logical line count (convention size/1) is above max_lines_warn; module "
+        "bodies are exempt."
+    ),
+    rationale=(
+        "Length is the coarsest complexity signal and the one every code-review standard "
+        "checks. The longest units are usually also the ones with the highest cognitive "
+        "scores, but a long linear unit with one job is not wrong, which is why this is a "
+        "warning that names the count and never fails a plain check."
+    ),
+    guarantees=(
+        "Exact on size/1: the lines of the unit's own span that carry code once comments are "
+        "blanked out, minus the lines of units nested inside it (a nested def/class/function "
+        "declaration gives up its whole span, a nested lambda or arrow only its interior "
+        "lines). Reported when the count is above max_lines_warn. Module bodies are never "
+        "reported: a module is a container, and its length is the sum of what it holds. The "
+        "count is also in metrics.complexity.functions[].size.logical_lines for every unit."
+    ),
+    limitations=(
+        COMPLEXITY_LIMITATIONS_COMMON
+        + " Docstrings and multi-line string literals count as code lines; a table of "
+        "constants inside a function counts like any other code."
+    ),
+    remediation=COMPLEXITY_REMEDIATION,
+    noncompliant_example=(
+        "def handle(request):        # 80 logical lines with max_lines_warn = 50\n"
+        "    # parse, validate, dispatch, format and log, all in one body"
+    ),
+    compliant_example=(
+        "def handle(request):\n    command = parse(request)\n    validate(command)\n"
+        "    return render(dispatch(command))   # each step measured on its own"
+    ),
+)
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -891,6 +939,7 @@ RULES: tuple[RuleSpec, ...] = (
     CPLX003,
     CPLX004,
     CPLX005,
+    CPLX006,
     SUPP001,
     SUPP002,
 )

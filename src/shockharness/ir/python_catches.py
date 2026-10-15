@@ -309,7 +309,12 @@ def describe_statement(stmt: ast.stmt, source: SourceText) -> str:
 
 
 def classify_handler(handler: ast.ExceptHandler, source: SourceText) -> HandlerBody:
-    statements = list(handler.body)
+    return classify_statements(list(handler.body), handler.name, source)
+
+
+def classify_statements(
+    statements: list[ast.stmt], bound_name: str | None, source: SourceText
+) -> HandlerBody:
     if all(is_pass(stmt) for stmt in statements):
         return HandlerBody(BODY_EMPTY, "handler body is pass/...; the failure vanishes")
     remaining = [s for s in statements if not is_pass(s) and not is_logging_statement(s)]
@@ -323,8 +328,54 @@ def classify_handler(handler: ast.ExceptHandler, source: SourceText) -> HandlerB
     if isinstance(stmt, ast.Return) and is_literal_like(stmt.value):
         return HandlerBody(BODY_RETURN_FALLBACK, describe_statement(stmt, source))
     if isinstance(stmt, ast.Raise):
-        return _classify_raise(stmt, handler.name, source)
+        return _classify_raise(stmt, bound_name, source)
     return HandlerBody(BODY_OTHER, "handler body is not classified")
+
+
+def _is_bare_raise_block(body: list[ast.stmt]) -> bool:
+    return len(body) == 1 and isinstance(body[0], ast.Raise) and body[0].exc is None
+
+
+def isinstance_guard(statements: list[ast.stmt], bound_name: str | None) -> list[ast.expr] | None:
+    """``if not isinstance(<caught>, T): raise`` as the first statement -> ``[T]``
+    (or the tuple's members); ``None`` when the handler does not open with that guard."""
+    if bound_name is None or len(statements) == 0:
+        return None
+    guard = statements[0]
+    if not isinstance(guard, ast.If) or len(guard.orelse) > 0:
+        return None
+    if not _is_bare_raise_block(guard.body):
+        return None
+    test = guard.test
+    if not isinstance(test, ast.UnaryOp) or not isinstance(test.op, ast.Not):
+        return None
+    call = test.operand
+    if not isinstance(call, ast.Call) or len(call.keywords) > 0 or len(call.args) != 1 + 1:
+        return None
+    if not isinstance(call.func, ast.Name) or call.func.id != "isinstance":
+        return None
+    subject, types = call.args
+    if not isinstance(subject, ast.Name) or subject.id != bound_name:
+        return None
+    if isinstance(types, ast.Tuple):
+        return list(types.elts)
+    return [types]
+
+
+def guard_call(statements: list[ast.stmt], bound_name: str | None) -> str | None:
+    """The callee, as written, when the first statement is ``callee(<caught>)``."""
+    if bound_name is None or len(statements) == 0:
+        return None
+    first = statements[0]
+    if not isinstance(first, ast.Expr) or not isinstance(first.value, ast.Call):
+        return None
+    call = first.value
+    if len(call.args) != 1 or len(call.keywords) > 0:
+        return None
+    argument = call.args[0]
+    if not isinstance(argument, ast.Name) or argument.id != bound_name:
+        return None
+    return _call_name(call)
 
 
 def _classify_raise(stmt: ast.Raise, bound_name: str | None, source: SourceText) -> HandlerBody:
@@ -406,6 +457,42 @@ def scope_name(node: ast.AST) -> str:
     return ANONYMOUS_SCOPE
 
 
+def _catch_fact(
+    handler: ast.ExceptHandler,
+    kind: str,
+    scope: str,
+    try_statements: tuple[TryStatement, ...],
+    table: SymbolTable,
+    source: SourceText,
+) -> CatchFact:
+    identities = handler_identities(handler, table, source)
+    body_statements = list(handler.body)
+    narrowed_from: str | None = None
+    narrowed = isinstance_guard(body_statements, handler.name)
+    if narrowed is not None and handler.type is not None:
+        # ``except Exception as exc: if not isinstance(exc, T): raise`` catches T.
+        narrowed_from = ", ".join(identity.source for identity in identities)
+        identities = tuple(resolve_identity(expr, table, source) for expr in narrowed)
+        body_statements = body_statements[1:]
+    callee = guard_call(body_statements, handler.name)
+    guard_body: HandlerBody | None = None
+    if callee is not None:
+        guard_body = classify_statements(body_statements[1:], handler.name, source)
+    return CatchFact(
+        span=node_span(source, handler),
+        kind=kind,
+        scope=scope,
+        identities=identities,
+        bare=handler.type is None,
+        bound_name=handler.name,
+        body=classify_statements(body_statements, handler.name, source),
+        try_statements=try_statements,
+        narrowed_from=narrowed_from,
+        guard_call=callee,
+        guard_body=guard_body,
+    )
+
+
 def collect_python_catches(
     source: SourceText, module: ast.Module, relative_path: str
 ) -> tuple[CatchFact, ...]:
@@ -418,19 +505,7 @@ def collect_python_catches(
             kind = CATCH_EXCEPT_STAR if isinstance(node, ast.TryStar) else CATCH_EXCEPT
             statements = tuple(try_statement(stmt, source) for stmt in node.body)
             for handler in node.handlers:
-                identities = handler_identities(handler, table, source)
-                catches.append(
-                    CatchFact(
-                        span=node_span(source, handler),
-                        kind=kind,
-                        scope=scope,
-                        identities=identities,
-                        bare=handler.type is None,
-                        bound_name=handler.name,
-                        body=classify_handler(handler, source),
-                        try_statements=statements,
-                    )
-                )
+                catches.append(_catch_fact(handler, kind, scope, statements, table, source))
         child_scope = scope
         if isinstance(node, SCOPE_NODES):
             name = scope_name(node)

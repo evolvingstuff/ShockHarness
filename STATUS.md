@@ -518,6 +518,182 @@ the installed package. PyPI lists `0.1.0` (latest) and `0.1.0a1`.
 From this release the CLI surface, exit codes, rule IDs and report
 `schema_version` 1 are stable (CHANGELOG 0.1.0).
 
+## Feedback round 0.2.0: precision, noise, adoption — DONE (2026-10-14)
+
+Input: `docs/shockharness-suggestions.md`, written by the maintainer after
+running 0.1.0 (strict, library API) on a 906-file Python/JavaScript
+application. Items 1-5 and 7-9 are implemented here, in the order 2, 5, 8, 9,
+7, 1, 3, 4 decided with the lead session. Item 6 (a content-hash cache) is
+deferred to a later release and was not built. No version bump, no tag; the
+maintainer releases.
+
+### What changed, per item
+
+| Item | Delivered | Where |
+|---|---|---|
+| 2 | `CPLX005` reports one finding per import cycle, anchored on the lexically first member at its import into the cycle; the message names the language, the size, up to 8 members (`CYCLE_MEMBERS_LISTED`) then `... and N more`, the entering import, and the import-time vs call-time note. `metrics.graph.cycles` unchanged. Text output lists cycle findings as a group after the per-file findings, Python first (`output/text.py: finding_lines`). If `CPLX005` is disabled on the first member by an override, the first active member carries the finding. | `rules/complexity.py`, `output/text.py`, `constants.py` |
+| 5 | `CPLX006` unit size: `size/1` logical lines above `complexity.max_lines_warn` (default 50 in every profile; `minimal` has the family off), module bodies exempt, warning, full registry metadata, in `rules_applied`/`rules_disabled`, in `metrics.complexity.thresholds`, in revision-diff regressions (same exemption) and in the summary. | `rules/registry.py`, `rules/complexity.py`, `complexity/{assemble,regressions}.py`, `schema.py`, `defaults.toml` |
+| 8 | `complexity.npath_only_without_cognitive = true`: a unit above both `cognitive_warn` and `npath_warn` is one `CPLX002` finding whose message carries the NPath number (`...; its NPath estimate is ..., reported here instead of as CPLX004`); JSON keeps only `CPLX002` for that unit; `false` reports both as in 0.1.0; NPath alone is still `CPLX004`. The per-unit metrics are untouched. Not a deviation either way. | `rules/complexity.py` |
+| 9 | `recommended`: `allow_unary_negative_one = true`, `fan_out_warn = 30`, and fan-out findings at `review` through the new key `complexity.fan_out_severity` (`"warning"` default, `"review"` in `recommended`; both advisory, so not a deviation). `strict` unchanged. | `profiles/recommended.toml`, `schema.py`, `rules/complexity.py` |
+| 7 | Verified, not changed: `DEF001` dataclass kinds fire only on classes decorated `dataclass` / `dataclasses.dataclass` (with or without arguments); `_decorator_name` reads the attribute name, so the qualified form is recognized. New test with an undecorated class, an ORM-style class (`Mapped[int] = mapped_column(...)`, `Column(..., default=...)`) and both decorator spellings. The report in the brief must have come from a decorated class. | `tests/unit/test_defaults.py` |
+| 1 | `rules.magic_numbers.named_constant_definitions` (`"report"` strict default, `"allow"` in `recommended` and `minimal`). The adapters mark a literal that is the whole value of a module-level named constant definition (`NumericLiteral.constant_definition`): Python `UPPER_SNAKE = <int\|float literal>` with one simple target (leading underscores allowed), or any simple name annotated `Final`/`typing.Final[...]`, as a statement of the module body itself, one unary minus allowed; JavaScript each declarator of a `const`/`export const` statement of the program whose name is UPPER_SNAKE_CASE and whose value is a number (one unary minus allowed). Containers, expressions, chained targets, class/function bodies, `let`/`var`, block-nested `const` and definitions inside module-level `if`/`try` are not marked. `"allow"` is a deviation line (under every profile; under `recommended`/`minimal` it is one of the lines that follow the profile line). Spec section 5 gained the paragraph and section 19 the row (decision 15, "middle ground"). | `ir/{model,python,javascript}.py`, `rules/magic_numbers.py`, `schema.py`, `config.py`, `defaults.toml`, both profile overlays, spec |
+| 3 | `rules.exceptions.transparent_guards` (list of callees as written; each a deviation): a handler whose first statement is `guard(<caught>)` with that one argument is narrowed by it; `EXC001` skips the catch, `EXC002` classifies the statements after the guard (`guard(e);` alone still swallows; `guard(e); return null;` is an `EXC002` fallback, reported there because `DEF005` reads the whole body). Python `if not isinstance(exc, T): raise` (or a tuple) as the first statement narrows the catch to `T` for `EXC001` (each member must be approved; the message says `narrowed from 'Exception' by its isinstance guard`), and `EXC002` classifies what follows, as after a JavaScript `instanceof` guard. `boundaries[].exceptions = [...]` accepted alongside `exception = "..."`; exactly one of the two per entry, non-empty, each name validated; one deviation line listing every class. `EXC003` unchanged (guards are not boundaries). `CatchFact` gained `narrowed_from`, `guard_call`, `guard_body`. | `ir/{model,python_catches,javascript_catches}.py`, `rules/exceptions.py`, `schema.py` (`boundary_exceptions`), `config.py`, `defaults.toml` |
+| 4 | `check --summary` (also `scan`, `gate PATH...`): findings by rule x top-level directory (`src/`, `tests/`, `.` for root files) and by severity, the 10 (`SUMMARY_TOP_FILES`) files with the most policy findings (`MAGIC`/`EXC`/`DEF`/`SUPP`; suppressed ones count, as in `execution_summary`), complexity counts (units, units over each threshold computed from `metrics.complexity` with the same threshold logic as the rules, NPath-saturated units, cycles, units over `fan_out_warn`), parse failures, elapsed seconds (discovery + analysis + gate, measured in `api.analyze_paths` and per revision in `gating/diff.py`), then the full report's trailer verbatim, so the `gate:` line and exit code are identical. JSON always carries the same object as `summary`; `schema_version` stays `"1"` and `schemas/report-v1.schema.json` describes it. `summary.elapsed_seconds` is the one run-dependent field; the byte-identity test zeroes it before comparing. | `report.py`, `output/text.py`, `cli.py`, `api.py`, `gating/diff.py`, schema |
+
+### Decisions taken here (beyond the brief and the lead's notes)
+
+* Item 1 deviation under `recommended`/`minimal`: the line is emitted whenever
+  the value is `"allow"`, so under those profiles it appears among the lines
+  that follow the profile's own deviation line, exactly like
+  `allow_unary_negative_one`. The alternative (suppress it when a profile set
+  it) would have made `_deviations` layer-aware for one key; the existing
+  design lists every changed key after the profile line, and the docs say so.
+* Item 1 scope: a definition must be a statement of the module body itself.
+  Python has no block scope, but `if sys.platform...: TIMEOUT = 5` is a
+  decision about a value and belongs in validated configuration; the narrow
+  definition is what the brief wrote and is documented in `docs/rules.md`.
+  Python covers `int`/`float` literals (the brief's words); JavaScript covers
+  any `number` token (BigInt included). Each JavaScript declarator of one
+  `const` statement is judged on its own; a Python chained assignment
+  (`A = B = 9`) is not a single-target definition and stays reported.
+* Item 2 anchor when `CPLX005` is disabled on the first member: the first
+  member where the rule is active carries the finding (documented); a cycle
+  with no active member has no finding, as before.
+* Item 2 text ordering: cycle findings are a cross-file fact, so the text
+  report groups them after the per-file findings, Python before JavaScript;
+  JSON keeps the fixed path order so `findings` stays byte-stable.
+* Item 3: a guard call is recognized as the first statement only, with
+  exactly one argument (the bound name), not awaited; the callee must be an
+  identifier or member expression and is matched as written. A `DEF005`
+  interaction was found while building it: `DEF005` reads the whole-body
+  classification, so a literal return after a configured guard would have
+  gone unreported; `EXC002` reports it instead and the message names the
+  guard. The `isinstance` guard narrows unconditionally (no configuration):
+  it is the Python spelling of the already-recognized JavaScript `instanceof`
+  guard.
+* Item 4: the elapsed time is in the JSON report because the brief lists it
+  for both outputs (and item 6's acceptance presumes timing fields); the
+  report docstring and the schema say it is the one run-dependent field.
+  `fan_out_severity` and `npath_only_without_cognitive` are not deviations:
+  they change advisory reporting, not what can fail the gate.
+* Item 5 and the tool's own code: see the self-scan below. The 32 `CPLX006`
+  warnings on `src/` (units of 51-111 logical lines: `build_parser`,
+  `prepare_text`, `gate.evaluate`, the IR collectors) are advisory and left in
+  place, like the 62 `CPLX002` warnings already there; splitting those
+  functions is a refactoring pass of its own (`refactor-complexity`, with
+  before/after graphs), not threshold tuning, and the threshold was not
+  touched. No hard finding appeared; the gate passes under both `strict` and
+  `recommended`.
+* `docs/shockharness-suggestions-2.md` appeared untracked in the tree during
+  this session (a second brief from the maintainer); it is not part of this
+  commit and nothing in it was acted on.
+
+### Self-scan before and after (strict, `.shockharness.toml`, `check src tests scripts`)
+
+| Point | Gate | Findings | By rule |
+|---|---|---|---|
+| Before this round (4702882) | PASS | 137 | CPLX002 61, CPLX004 39, CPLX001 23, CPLX003 4, DEF003 10 |
+| After item 2 | PASS | 137 | unchanged (the tool has no import cycle) |
+| After item 5 (`CPLX006`) | PASS | 176 | + CPLX006 38 (30 in `src/`, 1 in `scripts/`, 7 in `tests/`), CPLX004 40 (one new test) |
+| After item 8 (NPath folded) | PASS | 148 | CPLX004 40 -> 11 (29 units were above both thresholds), CPLX001 24 |
+| Final (every item, new tests included) | PASS | 159 | CPLX002 65, CPLX006 42, CPLX001 26, CPLX004 12, CPLX003 4, DEF003 10 |
+
+`check --profile recommended` on the same tree: PASS, the same six rule
+counts (no fan-out above 30, no `-1` or named-constant literal outside the
+exempt `constants.py`, `DEF003` review either way).
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts && ruff format --check src tests scripts
+All checks passed!
+94 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+559 passed in 17.82s
+$ pytest -q                      # CPython 3.13.1
+559 passed in 17.24s
+$ pytest -q                      # CPython 3.12.8
+559 passed in 17.09s
+$ pytest -q                      # CPython 3.11.11
+559 passed in 20.25s
+(535 tests before this round; 24 new)
+
+$ shockharness check src tests scripts          # self-compliance, own strict config
+  analysis status: complete
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+  ... (23 policy deviations: 20 boundaries, 3 overrides)
+
+$ shockharness check src tests scripts --summary
+shockharness 0.1.0 summary: 97 file(s), 97 analyzed, 0 parse failure(s); 159 finding(s), 0 suppressed; 1.668 s
+  by severity: review=10, warning=149
+  findings by rule and top-level directory:
+    rule     scripts/  src/  tests/  total
+    CPLX001              24       2     26
+    CPLX002              62       3     65
+    CPLX003               4              4
+    CPLX004              12             12
+    CPLX006         1    32       9     42
+    DEF003                2       8     10
+    total           1   136      22    159
+  files with the most policy findings (MAGIC/EXC/DEF/SUPP; not CPLX; top 10):
+         8  tests/property/test_complexity_fuzz.py
+         1  src/shockharness/ir/javascript_functions.py
+         1  src/shockharness/ir/python_functions.py
+  complexity: 1299 unit(s) analyzed; over cyclomatic_warn = 15: 26, cognitive_warn = 15: 65, max_nesting_warn = 4: 4, npath_warn = 200: 42, max_lines_warn = 50: 42; 7 NPath saturated; 0 import cycle(s); 0 unit(s) over fan_out_warn = 20
+  parse failures: 0
+  ...
+gate: PASS (exit 0)
+
+$ python -m build
+Successfully built shockharness-0.1.0.tar.gz and shockharness-0.1.0-py3-none-any.whl
+```
+
+Sample 0.2.0 finding lines (from the test fixtures and the self-run):
+
+```text
+py/a.py:1:1: CPLX005 warning: module import cycle of 3 Python module(s): py/a.py -> py/b.py -> py/c.py -> py/a.py (one finding per cycle, anchored on py/a.py, whose import of py/b.py enters it; a Python import cycle fails at import time; resolved edges only; every member is listed in metrics.graph.cycles)  [from py import b]
+src/shockharness/gate.py:86:1: CPLX002 warning: cognitive complexity of function evaluate is 36, above cognitive_warn = 15 (convention cognitive/1; not a Sonar score); its NPath estimate is saturated at the cap (>= 10000) (convention npath/1), reported here instead of as CPLX004 (npath_only_without_cognitive = true)  [def evaluate(]
+src/shockharness/cli.py:75:1: CPLX006 warning: size of function build_parser is 109 logical line(s), above max_lines_warn = 50 (convention size/1; module bodies are exempt)  [def build_parser() -> argparse.ArgumentParser:]
+src/core/reader.py:4:5: EXC001 error: except handler of 'OSError' (narrowed from 'Exception' by its isinstance guard) is forbidden: catch of 'OSError' is not approved by any boundary for this file  [except Exception as exc:]
+web/a.js:4:5: EXC002 error: catch clause after the transparent guard rethrowUnexpectedError(...) swallows the exception: handler body is empty; the failure vanishes  [} catch (error) {]
+```
+
+### Acceptance criteria and their tests
+
+| Brief | Test |
+|---|---|
+| 1: `MAX_PAGES = 8`, `_PORT_WAIT_SECONDS = 10.0` no finding; `x = 8` in a function, `let maxPages = 8;`, `LIMITS = {"retries": 3}` findings; `const`/`export const` no finding; `"report"` reports all; deviation line | `tests/unit/test_magic001.py::test_strict_reports_constant_definitions_and_allow_is_a_deviation`, `::test_constant_definitions_are_marked_in_the_ir`, `::test_recommended_and_minimal_allow_constant_definitions`, `::test_named_constant_mode_is_validated` |
+| 2: 6-module JS + 3-module Python cycle = exactly two cycle findings; fan-out unaffected; `metrics.graph.cycles` unchanged; fingerprint stable when an unrelated module is added; 8-member cap | `tests/unit/test_callgraph.py::test_cycle_findings_are_one_per_cycle_with_stable_fingerprints`, `::test_module_cycles_produce_one_cplx005_per_cycle_in_both_languages` (text order), `::test_long_cycle_lists_eight_members_then_a_count`, `::test_cycle_finding_moves_to_the_first_member_where_cplx005_is_active` |
+| 3: guarded JS catch no `EXC001`, unguarded still; guard alone is `EXC002` swallow; `isinstance` guard checked as a catch of `OSError`; multi-type boundary validates, approves each type, one deviation | `tests/unit/test_exceptions.py::test_transparent_guard_call_narrows_javascript_catch`, `::test_exc002_classifies_the_statements_after_a_transparent_guard`, `::test_python_isinstance_guard_narrows_the_catch_for_exc001`, `::test_python_transparent_guard_call`, `::test_multi_type_boundary_approves_each_listed_type_once`, `::test_boundary_needs_exactly_one_of_exception_and_exceptions` |
+| 4: `--summary` ends with the same `gate:` line; JSON totals equal `execution_summary`; exact `src/`/`tests/` split | `tests/cli/test_cli.py::test_check_summary_ends_with_the_same_gate_line`, `tests/unit/test_gate_and_report.py::test_summary_counts_policy_files_complexity_and_cycles`, `::test_summary_with_complexity_disabled`, `::test_report_matches_published_schema` |
+| 5: 51 lines reported, 50 not, module body never, message names count and threshold, disabled with the family | `tests/unit/test_complexity_metrics.py::test_cplx006_reports_units_above_max_lines_warn_and_exempts_module_bodies`, `::test_cplx006_javascript_and_threshold_key`, `::test_cplx006_is_disabled_with_the_family` |
+| 7: undecorated and ORM-style classes; `dataclasses.dataclass` recognized | `tests/unit/test_defaults.py::test_def001_dataclass_fields_only_on_decorated_classes` |
+| 8: one text line naming both numbers; NPath alone still `CPLX004`; JSON keeps both only with the option off | `tests/unit/test_complexity_metrics.py::test_npath_is_folded_into_cognitive_by_default`, `::test_npath_option_off_reports_both_rule_ids`, `::test_npath_folding_needs_cplx002_active` |
+| 9: `recommended` values and deviations; fan-out `review` above 30, `strict` unchanged | `tests/unit/test_profiles.py::test_recommended_profile_values_and_deviations`, `::test_recommended_fan_out_is_review_above_thirty` |
+
+### Failures observed during development (and what was done)
+
+* The first `CPLX006` edit silently did not land: the replacement anchored on
+  text that item 2 had already moved, and `ruff --fix` then removed the
+  "unused" `size` import. Caught by the new tests (no finding on a 5-line
+  unit with `max_lines_warn = 3`); fixed by re-inserting the branch and the
+  import. Lesson recorded: assert the match count before replacing.
+* A circular import appeared when `rules/exceptions.py` imported the
+  boundary helper from `config.py` (`config` -> `rules.defaults` ->
+  `rules.exceptions` -> `config`). The helper lives in `schema.py`, which has
+  no project imports.
+* The JavaScript rejection-handler path left `statements` unbound for an
+  expression-bodied arrow (`.catch(() => null)`); caught by the existing
+  adapter test, fixed by binding an empty list in that branch.
+* Test-data mistakes caught by the tests themselves: a nested-`if` fixture
+  has NPath 3^8 = 6561, not 2^8; a module made only of functions has 0
+  logical lines of its own (nested units give up their whole span); a JS
+  `const A = 1, TWO = 2;` marks two literals.
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function

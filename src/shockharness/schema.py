@@ -148,6 +148,10 @@ def type_name(value: Any) -> str:
 
 
 SEVERITY_MODES = ("forbid", "review", "allow")
+# MAGIC001 on the definition of a module-level named constant (MAX_PAGES = 8): "report"
+# (strict: a named constant is not automatically justified) or "allow" (the name is the
+# remedy the rule asks for; recommended and minimal).
+NAMED_CONSTANT_MODES = ("report", "allow")
 LANGUAGES = ("python", "javascript")
 # Built-in profiles, strictest first. "strict" is the bundled defaults; the others are
 # overlays shipped as package data under shockharness/profiles/.
@@ -158,15 +162,21 @@ PROFILES = (PROFILE_STRICT, PROFILE_RECOMMENDED, PROFILE_MINIMAL)
 # A rule section's `severity`: "error" keeps each rule's documented severity; "review" caps
 # every error finding of the section at review (reported, never gating).
 SECTION_SEVERITIES = ("error", "review")
+# CPLX005 fan-out findings: a warning (strict) or a review finding (recommended); both are
+# advisory and never fail the gate, so neither is a deviation.
+FAN_OUT_SEVERITIES = ("warning", "review")
 
+# A boundary names the exception(s) it approves either as `exception = "X"` or as
+# `exceptions = ["X", "Y"]` (0.2.0); exactly one of the two, checked in config.py.
 BOUNDARY_SCHEMA = TableField(
     fields={
         "path": StrField(allow_empty=False),
         "language": EnumField(LANGUAGES),
         "exception": StrField(allow_empty=False),
+        "exceptions": ListField(StrField(allow_empty=False)),
         "reason": StrField(allow_empty=False),
     },
-    required=("path", "language", "exception", "reason"),
+    required=("path", "language", "reason"),
 )
 
 OVERRIDE_SCHEMA = TableField(
@@ -193,6 +203,7 @@ CONFIG_SCHEMA = TableField(
                         "severity": EnumField(SECTION_SEVERITIES),
                         "allowed_values": ListField(NumberField()),
                         "allow_unary_negative_one": BoolField(),
+                        "named_constant_definitions": EnumField(NAMED_CONSTANT_MODES),
                         "exclude_configuration_files": BoolField(),
                         "configuration_files": ListField(StrField(allow_empty=False)),
                     },
@@ -208,6 +219,7 @@ CONFIG_SCHEMA = TableField(
                         "severity": EnumField(SECTION_SEVERITIES),
                         "mode": EnumField(("boundary_whitelist",)),
                         "transparent_rethrow": BoolField(),
+                        "transparent_guards": ListField(StrField(allow_empty=False)),
                         "boundaries": ListField(BOUNDARY_SCHEMA),
                     },
                     required=(),
@@ -238,6 +250,9 @@ CONFIG_SCHEMA = TableField(
                 "npath_cap": IntField(minimum=1),
                 "npath_warn": IntField(minimum=1),
                 "fan_out_warn": IntField(minimum=1),
+                "fan_out_severity": EnumField(FAN_OUT_SEVERITIES),
+                "max_lines_warn": IntField(minimum=1),
+                "npath_only_without_cognitive": BoolField(),
                 "abstraction_displacement": BoolField(),
             },
             required=(),
@@ -269,3 +284,10 @@ def validate_shape(raw: Any) -> list[ConfigIssue]:
     issues: list[ConfigIssue] = []
     CONFIG_SCHEMA.check(raw, "", issues)
     return issues
+
+
+def boundary_exceptions(boundary: Mapping[str, Any]) -> tuple[str, ...]:
+    """The exception names a validated boundary approves, whichever key spelled them."""
+    if "exceptions" in boundary:
+        return tuple(str(name) for name in boundary["exceptions"])
+    return (str(boundary["exception"]),)

@@ -5,6 +5,7 @@ all failures are typed exceptions from :mod:`shockharness.errors` or explicit
 statuses inside the returned structures.
 """
 
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -48,11 +49,13 @@ def analyze_paths(
     complete; ``metrics.history`` says ``not_collected`` until :func:`with_history`
     is applied. Complexity never affects the gate here.
     """
+    started = time.perf_counter()
     discovery = discover(root, list(paths), config)
     outcome = analyze_files(discovery.files, config, options)
     findings = [f for result in outcome.files for f in result.findings]
     verdict = gate_module.evaluate(findings, outcome.files, config, None, NO_REGRESSIONS)
-    return build_report(outcome.files, discovery, config, verdict, outcome.metrics)
+    elapsed = time.perf_counter() - started
+    return build_report(outcome.files, discovery, config, verdict, outcome.metrics, elapsed)
 
 
 def apply_baseline(report: Report, baseline: Baseline, config: EffectiveConfig) -> Report:

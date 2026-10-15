@@ -57,7 +57,7 @@ mean nothing was verified.
 4. **Remaining findings and warnings.** List every `error`, `warning` and
    `review` finding in the changed files with its line, including the `review`
    findings that do not gate (`DEF003`, the implicit `None` of `.get(k)`,
-   `approximate` confidences) and the complexity warnings (`CPLX001`-`CPLX005`,
+   `approximate` confidences) and the complexity warnings (`CPLX001`-`CPLX006`,
    never gating; `gate --base/--head` lists per-unit regressions under
    `complexity regressions against base`). For each, say whether it is addressed, accepted
    with a stated contract, or left for a follow-up with a named owner.

@@ -75,3 +75,12 @@ SKILLS_MANIFEST_SCHEMA_VERSION: Final[str] = "1"
 # Human-readable output of hotspots (Milestone E): how many to list, and the score precision.
 HOTSPOTS_SHOWN: Final[int] = 5
 SCORE_DECIMALS: Final[int] = 3
+
+# CPLX005 (0.2.0): a module import cycle is one finding; its message lists at most this
+# many member modules, then "and N more". The full membership is in metrics.graph.cycles.
+CYCLE_MEMBERS_LISTED: Final[int] = 8
+
+# `check --summary` / report `summary` (0.2.0): how many files with the most policy
+# findings to list, and the precision of the elapsed time in seconds.
+SUMMARY_TOP_FILES: Final[int] = 10
+ELAPSED_DECIMALS: Final[int] = 3

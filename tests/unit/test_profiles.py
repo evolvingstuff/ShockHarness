@@ -69,7 +69,7 @@ def test_strict_is_the_bundled_defaults(empty_root: Path) -> None:
     assert all(origin == "bundled" for origin in config.origins.values())
 
 
-def test_recommended_loosens_only_def003_and_def004(
+def test_recommended_profile_values_and_deviations(
     make_config: Callable[[str], EffectiveConfig],
 ) -> None:
     config = make_config('profile = "recommended"\n')
@@ -77,16 +77,30 @@ def test_recommended_loosens_only_def003_and_def004(
     assert config.values["profile"] == "recommended"
     assert config.values["rules"]["defaults"]["nullish_fallbacks"] == "review"
     assert config.values["rules"]["defaults"]["truthiness_fallbacks"] == "review"  # as strict
+    assert config.values["rules"]["magic_numbers"]["allow_unary_negative_one"] is True
+    assert config.values["rules"]["magic_numbers"]["named_constant_definitions"] == "allow"
+    assert config.values["complexity"]["fan_out_warn"] == 30
+    assert config.values["complexity"]["fan_out_severity"] == "review"
     assert config.values["parse_errors"] == "fail"
     assert config.values["complexity"]["enabled"] is True
     for section in ("magic_numbers", "exceptions", "defaults"):
         assert config.values["rules"][section]["severity"] == "error"
-    # everything but the profile name and DEF004's mode is the strict value
     changed = {key for key, origin in config.origins.items() if origin != "bundled"}
-    assert changed == {"profile", "rules.defaults.nullish_fallbacks"}
+    assert changed == {
+        "profile",
+        "rules.defaults.nullish_fallbacks",
+        "rules.magic_numbers.allow_unary_negative_one",
+        "rules.magic_numbers.named_constant_definitions",
+        "complexity.fan_out_warn",
+        "complexity.fan_out_severity",
+    }
     assert config.origins["rules.defaults.nullish_fallbacks"] == "profile:recommended"
     assert config.origins["profile"] == "dedicated"
     assert strict["rules"]["defaults"]["nullish_fallbacks"] == "forbid"
+    assert strict["rules"]["magic_numbers"]["allow_unary_negative_one"] is False
+    assert strict["rules"]["magic_numbers"]["named_constant_definitions"] == "report"
+    assert strict["complexity"]["fan_out_warn"] == 20
+    assert strict["complexity"]["fan_out_severity"] == "warning"
     assert severities(config) == {
         "MAGIC001": "error",
         "DEF001": "error",
@@ -94,12 +108,38 @@ def test_recommended_loosens_only_def003_and_def004(
         "EXC001": "error",
         "DEF004": "review",
     }
+    # the threshold and the advisory severity of fan-out are not loosenings; the rest are
     assert config.deviations == (
         "profile is 'recommended', below 'strict'; the lines that follow are what it changes "
         "(see docs/configuration.md, Profiles)",
+        "rules.magic_numbers.allow_unary_negative_one is enabled",
+        "rules.magic_numbers.named_constant_definitions is 'allow'; a numeric literal that is "
+        "the whole value of a module-level named constant definition is not reported",
         "rules.defaults.nullish_fallbacks is 'review' (strict profile: 'forbid'); DEF004 "
         "findings of that kind are reported as review",
     )
+
+
+def test_recommended_fan_out_is_review_above_thirty(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    helpers = "".join(f"def h{i}():\n    return 1\n\n\n" for i in range(31))
+    calls_31 = " + ".join(f"h{i}()" for i in range(31))
+    calls_25 = " + ".join(f"h{i}()" for i in range(25))
+    text = helpers + f"def wide():\n    return {calls_31}\n\n\ndef mid():\n    return {calls_25}\n"
+    (empty_root / "src").mkdir()
+    (empty_root / "src" / "a.py").write_text(text, encoding="utf-8")
+    recommended = make_config('profile = "recommended"\n')
+    report = analyze_paths([empty_root / "src"], empty_root, recommended, OPTIONS)
+    fan_out = [(f.scope, f.severity) for f in report.findings if f.rule_id == "CPLX005"]
+    assert fan_out == [("wide", "review")]  # mid (25) is under fan_out_warn = 30
+    assert "above fan_out_warn = 30" in report.findings[0].message
+    assert report.gate.review == 1 and report.gate.warnings == 0
+    (empty_root / ".shockharness.toml").unlink()
+    strict = load_config(empty_root, None)
+    report = analyze_paths([empty_root / "src"], empty_root, strict, OPTIONS)
+    fan_out = [(f.scope, f.severity) for f in report.findings if f.rule_id == "CPLX005"]
+    assert fan_out == [("wide", "warning"), ("mid", "warning")]  # source order
 
 
 def test_minimal_reports_everything_at_review_and_never_fails(
@@ -117,9 +157,11 @@ def test_minimal_reports_everything_at_review_and_never_fails(
         "parse_errors",
         "complexity.enabled",
         "rules.magic_numbers.severity",
+        "rules.magic_numbers.named_constant_definitions",
         "rules.exceptions.severity",
         "rules.defaults.severity",
     }
+    assert config.values["rules"]["magic_numbers"]["named_constant_definitions"] == "allow"
     assert severities(config) == {
         "MAGIC001": "review",
         "DEF001": "review",
@@ -134,6 +176,7 @@ def test_minimal_reports_everything_at_review_and_never_fails(
     assert "rules.defaults.severity is 'review'; DEF001-DEF006 findings" in joined
     assert "complexity is disabled" in joined
     assert "parse_errors is 'warn'" in joined
+    assert "rules.magic_numbers.named_constant_definitions is 'allow'" in joined
 
     (empty_root / "src").mkdir()
     (empty_root / "src" / "a.py").write_text(PYTHON_SAMPLE, encoding="utf-8")

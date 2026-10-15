@@ -2,7 +2,7 @@
 
 Milestone E adds a second, **advisory** family next to the hard rules. Every
 number here is reported under `metrics.complexity`, `metrics.graph` and
-`metrics.history.hotspots`, can raise the warnings `CPLX001`-`CPLX005`, and
+`metrics.history.hotspots`, can raise the warnings `CPLX001`-`CPLX006`, and
 **never fails a plain `check`**. The only way complexity touches a verdict is
 `gates.complexity_regressions = "fail"` in a revision diff (`diff`,
 `gate --base/--head`), and then only for a unit whose number grew above its
@@ -195,7 +195,7 @@ Auxiliary numbers, never a verdict.
   JavaScript: every statement and declaration node, blocks and labels being
   transparent). A nested definition counts as one statement of its parent.
 
-## Rules CPLX001-CPLX004
+## Rules CPLX001-CPLX004 and CPLX006
 
 | Rule | Fires when | Threshold key (default) |
 |---|---|---|
@@ -203,10 +203,30 @@ Auxiliary numbers, never a verdict.
 | `CPLX002` | `cognitive > cognitive_warn` | `complexity.cognitive_warn` (15) |
 | `CPLX003` | `nesting > max_nesting_warn` | `complexity.max_nesting_warn` (4) |
 | `CPLX004` | `npath >= npath_warn`, or saturated at `npath_cap` | `complexity.npath_warn` (200), `complexity.npath_cap` (10000) |
+| `CPLX006` | `size.logical_lines > max_lines_warn`; module bodies exempt | `complexity.max_lines_warn` (50) |
+
+`CPLX006` (0.2.0) is the length check every code-review standard has: the
+longest units on a real codebase were also its worst (346, 466 and 273 logical
+lines), and length is the coarsest, most legible signal. Module bodies are
+exempt because a module is a container whose length is the sum of what it
+holds. The count is `size/1` as defined above (nested units excluded,
+docstrings counted), so extracting a helper lowers the parent's count by the
+lines it gave up.
+
+**NPath folded into cognitive** (`complexity.npath_only_without_cognitive`,
+0.2.0, default `true`). NPath explodes on long sequences of independent `if`s
+(a 466-line dispatcher scores `>= 10000` even when every branch is trivial)
+and mostly repeats what cognitive complexity says with less resolution. When a
+unit is above both `cognitive_warn` and `npath_warn`, it is reported once, as
+`CPLX002`, with the NPath estimate in the same message; a unit above the NPath
+threshold alone is still `CPLX004`. With the option `false` both findings
+appear. `metrics.complexity.functions[].npath` is unchanged either way, and
+revision diffs still compare NPath per unit.
 
 Every finding is a `warning`, anchored on the unit's first line with the unit
 as its `scope`, and its message names the measured value, the threshold and
-the convention version:
+the convention version (the `CPLX002` line also carries the NPath number when
+`CPLX004` was folded into it):
 
 ```text
 src/a.py:1:1: CPLX002 warning: cognitive complexity of function f is 17, above cognitive_warn = 15 (convention cognitive/1; not a Sonar score)  [def f(a, b):]
@@ -215,7 +235,7 @@ src/a.py:1:1: CPLX002 warning: cognitive complexity of function f is 17, above c
 They can be disabled per path with `[[overrides]]` and suppressed inline on
 the unit's first line like any finding. `complexity.enabled = false` turns
 the whole family off; the report then says `metrics.complexity.status =
-"disabled"` and lists the five rules under `rules_disabled` for every file.
+"disabled"` and lists the six rules under `rules_disabled` for every file.
 
 ## Call graph (`metrics.graph`)
 
@@ -262,10 +282,24 @@ lists module-level mutable bindings (containers, `let` / `var`, names declared
 
 ### CPLX005
 
-Fires, as a warning, once per member module of a cycle (at the import that
-closes it) and once per unit whose `fan_out_total` is above
-`complexity.fan_out_warn` (default 20). Shared mutable state is a note in
-`metrics.graph`, not a finding.
+Fires once per **cycle** (0.2.0; 0.1.0 fired once per member, which let a
+75-module JavaScript cycle drown two five-module Python cycles) and once per
+unit whose `fan_out_total` is above `complexity.fan_out_warn` (default 20; 30
+in the `recommended` profile, where the fan-out finding is `review` under
+`fan_out_severity = "review"` instead of a warning). Shared mutable state is
+a note in `metrics.graph`, not a finding.
+
+A cycle finding is anchored on the lexically first member of the cycle, at its
+import into the cycle, so its fingerprint does not change when unrelated
+modules are added or when the other members move; if `CPLX005` is disabled
+for that member by an override, the first member where it is active carries
+the finding. The message says how many modules take part and in which
+language, lists up to eight members (then `... and N more`; the full
+membership is always in `metrics.graph.cycles`), names the import that enters
+the cycle, and notes that a Python cycle fails at import time whereas an
+ES-module cycle is usually resolved at call time. For the same reason the text
+report lists Python cycles before JavaScript cycles, as a group after the
+per-file findings; JSON findings keep their path order.
 
 ## Hotspots (`metrics.history.hotspots`)
 

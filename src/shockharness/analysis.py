@@ -46,7 +46,13 @@ ORIGIN_OVERRIDE = "override"
 ORIGIN_CONFIGURATION_FILE = "configuration_file"
 
 COMPLEXITY_SECTION = "complexity"
-UNIT_RULES = (registry.CPLX001, registry.CPLX002, registry.CPLX003, registry.CPLX004)
+UNIT_RULES = (
+    registry.CPLX001,
+    registry.CPLX002,
+    registry.CPLX003,
+    registry.CPLX004,
+    registry.CPLX006,
+)
 
 
 @dataclass(frozen=True)

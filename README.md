@@ -19,7 +19,7 @@ Three default-on hard policies:
 3. **No magic numbers.** Every numeric literal in executable code must be
    exactly `0` or `1`. `range(2)` is a violation. The tool invents no exemptions.
 
-Plus a separate, advisory complexity family (`CPLX001`-`CPLX005`: cyclomatic,
+Plus a separate, advisory complexity family (`CPLX001`-`CPLX006`: cyclomatic,
 cognitive, nesting, NPath, a confidence-classified call graph with cycles and
 fan-out, git churn and hotspots). Hard violations are never averaged into a
 score; complexity never fails a plain `check`.
@@ -60,7 +60,8 @@ Implemented rules:
 | `DEF006` | `os.getenv("X", v)`, `process.env.X || v`, `const { X = v } = process.env` | error |
 | `SUPP001` / `SUPP002` | malformed / unused suppression comment | error / warning |
 | `CPLX001`-`CPLX004` | a unit's cyclomatic, cognitive, nesting or NPath number above its threshold (`docs/complexity.md`) | warning |
-| `CPLX005` | module import cycle, or fan-out above `fan_out_warn` | warning |
+| `CPLX005` | module import cycle (one finding per cycle), or fan-out above `fan_out_warn` | warning (fan-out `review` in `recommended`) |
+| `CPLX006` | a unit longer than `max_lines_warn` logical lines; module bodies exempt | warning |
 
 ## Install
 
@@ -89,6 +90,7 @@ shockharness init --profile recommended # or minimal: a short file selecting the
 shockharness config validate            # exit 0 if valid; prints the profile and every deviation
 shockharness config effective           # merged config with per-key origins
 shockharness check src/                 # human-readable report, exit = gate status
+shockharness check src/ --summary       # first contact: findings by rule x directory, worst files, complexity counts; same gate line
 shockharness check src/ --format json --output report.json
 shockharness check src/ --format sarif --output report.sarif  # GitHub code scanning
 shockharness check src/ --profile minimal                      # try a profile without editing config
@@ -132,9 +134,9 @@ src/client.py:24:5: EXC001 error: except handler of 'OSError' is forbidden: catc
 
 shockharness 0.1.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
   by severity: error=5
-  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, SUPP001, SUPP002
+  rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, CPLX006, SUPP001, SUPP002
   rules not implemented (not analyzed): MAGIC002
-  complexity: 3 unit(s) in 1 file(s); conventions cyclomatic/1, cognitive/1, nesting/1, npath/1; 0 NPath saturated; advisory (CPLX001-CPLX004 are warnings)
+  complexity: 3 unit(s) in 1 file(s); conventions cyclomatic/1, cognitive/1, nesting/1, npath/1; 0 NPath saturated; advisory (CPLX001-CPLX004 and CPLX006 are warnings)
   graph: call edges 2 resolved, 1 probable, 1 unresolved; module edges 0 resolved, 2 external, 0 unresolved; 0 cycle(s); 0 shared mutable binding(s)
 gate: FAIL (exit 1)
   5 hard violation(s) and gates.new_hard_violations = "fail"
@@ -145,9 +147,11 @@ gate: FAIL (exit 1)
 Three built-in profiles ship with the package and are selected with
 `profile = "..."` (or `--profile`): **`strict`** (default: every rule at its
 documented severity, unparseable files fail), **`recommended`** (strict, but
-`DEF003`/`DEF004` fallbacks are `review`), **`minimal`** (`MAGIC001`, `EXC*`
-and `DEF*` all capped at `review`, syntax failures warn, complexity off:
-everything is reported, nothing but malformed suppressions fails). Precedence
+`DEF003`/`DEF004` fallbacks are `review`, `-1` and module-level named constant
+definitions such as `MAX_PAGES = 8` pass `MAGIC001`, and fan-out is `review`
+above 30), **`minimal`** (`MAGIC001`, `EXC*` and `DEF*` all capped at `review`,
+syntax failures warn, complexity off: everything is reported, nothing but
+malformed suppressions fails). Precedence
 is bundled defaults < profile < repository configuration < `--profile` /
 `--parse-errors`. Any profile below `strict` is printed as a policy deviation
 in every report, and the report's `effective_profile` names it.

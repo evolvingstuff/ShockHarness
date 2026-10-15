@@ -20,7 +20,8 @@ def test_nested_unknown_key_has_full_path() -> None:
     messages = issues_for({"rules": {"magic_numbers": {"allow_values": [0]}}})
     assert messages == [
         "rules.magic_numbers.allow_values: unknown key (known keys: allow_unary_negative_one, "
-        "allowed_values, configuration_files, enabled, exclude_configuration_files, severity)"
+        "allowed_values, configuration_files, enabled, exclude_configuration_files, "
+        "named_constant_definitions, severity)"
     ]
 
 

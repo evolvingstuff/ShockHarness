@@ -130,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_arguments(gate)
     _add_baseline_argument(gate)
     _add_exit_zero_argument(gate)
+    _add_summary_argument(gate)
 
     config = commands.add_parser("config", help="validate or print the effective configuration")
     config_commands = config.add_subparsers(
@@ -205,6 +206,18 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     _add_output_arguments(parser)
     _add_baseline_argument(parser)
     _add_exit_zero_argument(parser)
+    _add_summary_argument(parser)
+
+
+def _add_summary_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="text format: print the first-contact overview (findings by rule and directory, "
+        "files with the most policy findings, complexity counts, parse failures, elapsed "
+        "time) instead of every finding; the totals and the gate line are unchanged. The "
+        "JSON report always carries the same overview as `summary`",
+    )
 
 
 def _add_skills_destination_arguments(parser: argparse.ArgumentParser) -> None:
@@ -327,11 +340,13 @@ def _analyze_working_tree(args: argparse.Namespace) -> Report:
     return report
 
 
-def _render_report(report: Report, fmt: str) -> str:
+def _render_report(report: Report, fmt: str, summary: bool) -> str:
     if fmt == FORMAT_JSON:
         return json_output.render(report)
     if fmt == FORMAT_SARIF:
         return sarif_output.render(report)
+    if summary:
+        return text_output.render_summary(report)
     return text_output.render(report)
 
 
@@ -352,7 +367,7 @@ def _report_written(args: argparse.Namespace, status: str, exit_code: int) -> No
 
 def _run_scan(args: argparse.Namespace) -> int:
     report = _analyze_working_tree(args)
-    _write_output(_render_report(report, args.format), args.output)
+    _write_output(_render_report(report, args.format, args.summary), args.output)
     _report_written(args, report.gate.status, process_exit_code(report.gate))
     return process_exit_code(report.gate)
 

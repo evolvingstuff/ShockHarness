@@ -114,6 +114,7 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "CPLX003",
         "CPLX004",
         "CPLX005",
+        "CPLX006",
         "SUPP001",
         "SUPP002",
     ]
@@ -144,11 +145,19 @@ def test_json_output_is_byte_identical_across_runs_and_target_order(
             OPTIONS,
         )
     )
-    assert second == third
+    # summary.elapsed_seconds is the one run-dependent field; everything else is byte-stable
+    assert _without_elapsed(second) == _without_elapsed(third)
     first_data = json.loads(first)
     second_data = json.loads(second)
     assert first_data["findings"] == second_data["findings"]
     assert first_data["gate"] == second_data["gate"]
+    assert first_data["summary"]["findings"] == first_data["execution_summary"]["findings"]
+
+
+def _without_elapsed(rendered: str) -> str:
+    data = json.loads(rendered)
+    data["summary"]["elapsed_seconds"] = 0
+    return json.dumps(data, sort_keys=True)
 
 
 def test_text_output_mentions_everything_that_matters(
@@ -189,7 +198,14 @@ def test_evaluate_gate_rejects_untyped_baselines(
 def _check(schema: dict, value: object, path: str) -> list[str]:
     """Tiny JSON-Schema subset checker: type, enum, required, properties, items."""
     problems: list[str] = []
-    type_names = {"object": dict, "array": list, "string": str, "integer": int, "boolean": bool}
+    type_names = {
+        "object": dict,
+        "array": list,
+        "string": str,
+        "integer": int,
+        "number": (int, float),
+        "boolean": bool,
+    }
     if "type" in schema:
         expected = type_names[schema["type"]]
         ok = isinstance(value, expected) and not (expected is int and isinstance(value, bool))
@@ -245,3 +261,68 @@ def test_advisory_gate_changes_only_the_process_exit_code(
     write(empty_root, "src/bad.js", "function (\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
     assert process_exit_code(as_advisory(report.gate)) == 3
+
+
+def test_summary_counts_policy_files_complexity_and_cycles(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    from shockharness.report import is_policy_rule, top_level_directory
+
+    assert top_level_directory("src/pkg/a.py") == "src/"
+    assert top_level_directory("a.py") == "."
+    assert is_policy_rule("MAGIC001") and is_policy_rule("SUPP002") and is_policy_rule("DEF005")
+    assert not is_policy_rule("CPLX005")
+    deep = (
+        "def f(a):\n"
+        + "".join("    " * (i + 1) + f"if a{i}:\n" for i in range(6))
+        + "    " * 7
+        + "pass\n"
+    )
+    write(empty_root, "src/__init__.py", "")
+    write(empty_root, "src/a.py", "from src import b\n" + deep)
+    write(
+        empty_root,
+        "src/b.py",
+        'from src import a\nx = 2  # shockharness: ignore[MAGIC001] reason="r"\n',
+    )
+    report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
+    summary = report.to_json_dict()["summary"]
+    assert summary["complexity"]["status"] == "available"
+    assert summary["complexity"]["units"] == 4
+    assert summary["complexity"]["units_over"] == {
+        "cyclomatic_warn": 0,
+        "cognitive_warn": 1,  # f: 1+2+3+4+5+6 = 21
+        "max_nesting_warn": 1,
+        "npath_warn": 0,
+        "max_lines_warn": 0,
+    }
+    assert summary["complexity"]["cycles"] == 1
+    assert summary["complexity"]["units_over_fan_out_warn"] == 0
+    assert summary["complexity"]["thresholds"]["cognitive_warn"] == 15
+    # the suppressed MAGIC001 still counts as a policy finding, as in execution_summary
+    assert summary["top_files"] == [{"path": "src/b.py", "policy_findings": 1}]
+    assert summary["suppressed"] == 1 == report.execution_summary["suppressed"]
+    assert summary["by_rule"] == {"CPLX002": 1, "CPLX003": 1, "CPLX005": 1, "MAGIC001": 1}
+    assert summary["by_severity"] == report.execution_summary["findings_by_severity"]
+    assert summary["findings"] == report.execution_summary["findings"] == 4
+    assert summary["elapsed_seconds"] >= 0
+
+
+def test_summary_with_complexity_disabled(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config("[tool.shockharness.complexity]\nenabled = false\n")
+    write(empty_root, "src/a.py", "x = 1\n")
+    report = analyze_paths([empty_root / "src"], empty_root, config, OPTIONS)
+    complexity = report.to_json_dict()["summary"]["complexity"]
+    assert complexity["status"] == "disabled"
+    assert complexity["units"] == 0 and complexity["cycles"] == 0
+    assert complexity["units_over_fan_out_warn"] == 0
+    assert set(complexity["units_over"]) == {
+        "cyclomatic_warn",
+        "cognitive_warn",
+        "max_nesting_warn",
+        "npath_warn",
+        "max_lines_warn",
+    }
+    assert "  complexity: disabled" in text_output.render_summary(report)

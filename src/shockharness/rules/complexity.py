@@ -1,7 +1,7 @@
-"""CPLX001-CPLX005: advisory complexity and coupling warnings.
+"""CPLX001-CPLX006: advisory complexity and coupling warnings.
 
-CPLX001-CPLX004 compare each unit's numbers with the ``complexity`` thresholds;
-CPLX005 reads the cross-file graph (module cycles, fan-out). Every finding
+CPLX001-CPLX004 and CPLX006 compare each unit's numbers with the ``complexity``
+thresholds; CPLX005 reads the cross-file graph (module cycles, fan-out). Every finding
 names the measured value, the threshold and the convention version. None of
 them fails a plain ``check``; in a revision diff ``gates.complexity_regressions``
 decides what a per-unit regression means.
@@ -14,11 +14,24 @@ from shockharness.complexity import cognitive as cognitive_module
 from shockharness.complexity import cyclomatic as cyclomatic_module
 from shockharness.complexity import nesting as nesting_module
 from shockharness.complexity import npath as npath_module
-from shockharness.complexity.coupling import GraphMetrics
+from shockharness.complexity import size as size_module
+from shockharness.complexity.callgraph import ModuleEdge
+from shockharness.complexity.coupling import Cycle, GraphMetrics
 from shockharness.complexity.metrics import UnitMetrics
+from shockharness.constants import CYCLE_MEMBERS_LISTED
 from shockharness.findings import CONFIDENCE_EXACT, Finding
-from shockharness.ir.model import MODULE_SCOPE, Span
-from shockharness.rules.registry import CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, RuleSpec
+from shockharness.ir.model import MODULE_SCOPE, UNIT_MODULE, Span
+from shockharness.rules.registry import (
+    CPLX001,
+    CPLX002,
+    CPLX003,
+    CPLX004,
+    CPLX005,
+    CPLX006,
+    JAVASCRIPT,
+    PYTHON,
+    RuleSpec,
+)
 from shockharness.source import SourceText
 
 SETTING_CYCLOMATIC_WARN = "cyclomatic_warn"
@@ -26,19 +39,26 @@ SETTING_COGNITIVE_WARN = "cognitive_warn"
 SETTING_NESTING_WARN = "max_nesting_warn"
 SETTING_NPATH_WARN = "npath_warn"
 SETTING_FAN_OUT_WARN = "fan_out_warn"
+SETTING_FAN_OUT_SEVERITY = "fan_out_severity"
+SETTING_MAX_LINES_WARN = "max_lines_warn"
+SETTING_NPATH_ONLY_WITHOUT_COGNITIVE = "npath_only_without_cognitive"
 
-# The metric each rule measures, as it appears in metrics.complexity.functions.
+# The metric each rule measures, as it appears in metrics.complexity.functions
+# ("size" is functions[].size.logical_lines).
+METRIC_SIZE = "size"
 METRIC_OF_RULE: Mapping[str, str] = {
     CPLX001.rule_id: "cyclomatic",
     CPLX002.rule_id: "cognitive",
     CPLX003.rule_id: "nesting",
     CPLX004.rule_id: "npath",
+    CPLX006.rule_id: METRIC_SIZE,
 }
 THRESHOLD_OF_RULE: Mapping[str, str] = {
     CPLX001.rule_id: SETTING_CYCLOMATIC_WARN,
     CPLX002.rule_id: SETTING_COGNITIVE_WARN,
     CPLX003.rule_id: SETTING_NESTING_WARN,
     CPLX004.rule_id: SETTING_NPATH_WARN,
+    CPLX006.rule_id: SETTING_MAX_LINES_WARN,
 }
 
 
@@ -53,10 +73,22 @@ def header_span(span: Span, source: SourceText) -> Span:
 def _finding(
     rule: RuleSpec, path: str, span: Span, message: str, source: SourceText, scope: str
 ) -> Finding:
+    return _finding_at(rule, rule.default_severity, path, span, message, source, scope)
+
+
+def _finding_at(
+    rule: RuleSpec,
+    severity: str,
+    path: str,
+    span: Span,
+    message: str,
+    source: SourceText,
+    scope: str,
+) -> Finding:
     return Finding(
         rule_id=rule.rule_id,
         rule_version=rule.version,
-        severity=rule.default_severity,
+        severity=severity,
         path=path,
         span=span,
         message=message,
@@ -79,6 +111,8 @@ def unit_value(unit: UnitMetrics, rule_id: str) -> int:
         return unit.cognitive
     if metric == "nesting":
         return unit.nesting
+    if metric == METRIC_SIZE:
+        return unit.fact.logical_lines
     return unit.npath
 
 
@@ -86,7 +120,15 @@ def exceeds(unit: UnitMetrics, rule_id: str, settings: Mapping[str, Any]) -> boo
     threshold = int(settings[THRESHOLD_OF_RULE[rule_id]])
     if rule_id == CPLX004.rule_id:
         return unit.npath_saturated or unit.npath >= threshold
+    if rule_id == CPLX006.rule_id and unit.kind == UNIT_MODULE:
+        return False  # a module body is a container; its length is the sum of its units
     return unit_value(unit, rule_id) > threshold
+
+
+def _npath_measured(unit: UnitMetrics, settings: Mapping[str, Any]) -> str:
+    if unit.npath_saturated:
+        return f"saturated at the cap ({unit.npath_text()})"
+    return f"{unit.npath}, at or above npath_warn = {settings[SETTING_NPATH_WARN]}"
 
 
 def run_unit_rules(
@@ -96,10 +138,20 @@ def run_unit_rules(
     path: str,
     active: frozenset[str],
 ) -> list[Finding]:
+    """CPLX001-CPLX004 and CPLX006 for every unit of one file.
+
+    With ``complexity.npath_only_without_cognitive`` (the default) a unit above both
+    ``cognitive_warn`` and ``npath_warn`` is reported once, as CPLX002 with the NPath
+    number in the same message, instead of as two findings on the same line.
+    """
+    npath_only_without_cognitive = bool(settings[SETTING_NPATH_ONLY_WITHOUT_COGNITIVE])
     findings: list[Finding] = []
     for unit in units:
         span = header_span(unit.fact.span, source)
         what = f"{unit.kind} {unit.name}"
+        cognitive_fires = CPLX002.rule_id in active and exceeds(unit, CPLX002.rule_id, settings)
+        npath_fires = CPLX004.rule_id in active and exceeds(unit, CPLX004.rule_id, settings)
+        folded = npath_only_without_cognitive and cognitive_fires and npath_fires
         if CPLX001.rule_id in active and exceeds(unit, CPLX001.rule_id, settings):
             findings.append(
                 _finding(
@@ -113,19 +165,19 @@ def run_unit_rules(
                     unit.name,
                 )
             )
-        if CPLX002.rule_id in active and exceeds(unit, CPLX002.rule_id, settings):
-            findings.append(
-                _finding(
-                    CPLX002,
-                    path,
-                    span,
-                    f"cognitive complexity of {what} is {unit.cognitive}, above "
-                    f"cognitive_warn = {settings[SETTING_COGNITIVE_WARN]} "
-                    f"(convention {cognitive_module.CONVENTION}; not a Sonar score)",
-                    source,
-                    unit.name,
-                )
+        if cognitive_fires:
+            message = (
+                f"cognitive complexity of {what} is {unit.cognitive}, above "
+                f"cognitive_warn = {settings[SETTING_COGNITIVE_WARN]} "
+                f"(convention {cognitive_module.CONVENTION}; not a Sonar score)"
             )
+            if folded:
+                message += (
+                    f"; its NPath estimate is {_npath_measured(unit, settings)} (convention "
+                    f"{npath_module.CONVENTION}), reported here instead of as CPLX004 "
+                    f"({SETTING_NPATH_ONLY_WITHOUT_COGNITIVE} = true)"
+                )
+            findings.append(_finding(CPLX002, path, span, message, source, unit.name))
         if CPLX003.rule_id in active and exceeds(unit, CPLX003.rule_id, settings):
             findings.append(
                 _finding(
@@ -139,18 +191,27 @@ def run_unit_rules(
                     unit.name,
                 )
             )
-        if CPLX004.rule_id in active and exceeds(unit, CPLX004.rule_id, settings):
-            if unit.npath_saturated:
-                measured = f"saturated at the cap ({unit.npath_text()})"
-            else:
-                measured = f"{unit.npath}, at or above npath_warn = {settings[SETTING_NPATH_WARN]}"
+        if npath_fires and not folded:
             findings.append(
                 _finding(
                     CPLX004,
                     path,
                     span,
-                    f"NPath estimate of {what} is {measured} (convention "
+                    f"NPath estimate of {what} is {_npath_measured(unit, settings)} (convention "
                     f"{npath_module.CONVENTION}; a bounded estimate, not an exact count)",
+                    source,
+                    unit.name,
+                )
+            )
+        if CPLX006.rule_id in active and exceeds(unit, CPLX006.rule_id, settings):
+            findings.append(
+                _finding(
+                    CPLX006,
+                    path,
+                    span,
+                    f"size of {what} is {unit.fact.logical_lines} logical line(s), above "
+                    f"max_lines_warn = {settings[SETTING_MAX_LINES_WARN]} "
+                    f"(convention {size_module.CONVENTION}; module bodies are exempt)",
                     source,
                     unit.name,
                 )
@@ -158,22 +219,65 @@ def run_unit_rules(
     return findings
 
 
+CYCLE_MESSAGE_PREFIX = "module import cycle of "
+CYCLE_NOTES: Mapping[str, str] = {
+    PYTHON: "a Python import cycle fails at import time",
+    JAVASCRIPT: (
+        "an ES-module cycle is usually resolved at call time, so it ranks after Python cycles"
+    ),
+}
+LANGUAGE_LABELS: Mapping[str, str] = {PYTHON: "Python", JAVASCRIPT: "JavaScript"}
+
+
+def is_cycle_finding(finding: Finding) -> bool:
+    """A CPLX005 finding that reports an import cycle (as opposed to fan-out)."""
+    return finding.rule_id == CPLX005.rule_id and finding.message.startswith(CYCLE_MESSAGE_PREFIX)
+
+
+def cycle_members_text(modules: Sequence[str]) -> str:
+    """``a -> b -> a`` for short cycles; the first ``CYCLE_MEMBERS_LISTED`` members
+    followed by ``and N more`` for long ones."""
+    if len(modules) <= CYCLE_MEMBERS_LISTED:
+        return " -> ".join([*modules, modules[0]])
+    listed = " -> ".join(modules[:CYCLE_MEMBERS_LISTED])
+    return f"{listed} -> ... and {len(modules) - CYCLE_MEMBERS_LISTED} more"
+
+
+def _cycle_anchor(cycle: Cycle, active_paths: frozenset[str]) -> ModuleEdge | None:
+    """The edge that anchors the cycle's one finding: the lexically first member's import
+    into the cycle. A member where CPLX005 is disabled cannot carry the finding, so the
+    first active member is used instead; a cycle with no active member has no finding."""
+    for edge in sorted(cycle.edges, key=lambda e: e.source):
+        if edge.source in active_paths:
+            return edge
+    return None
+
+
 def run_graph_rules(
     metrics: GraphMetrics,
     sources: Mapping[str, SourceText],
+    languages: Mapping[str, str],
     settings: Mapping[str, Any],
     active_paths: frozenset[str],
 ) -> dict[str, list[Finding]]:
-    """CPLX005 findings per path, for the paths where the rule is active."""
+    """CPLX005 findings per path, for the paths where the rule is active.
+
+    Fan-out: one finding per unit above ``fan_out_warn``. Cycles: one finding per
+    cycle (not per member), anchored on the lexically first member so that its
+    fingerprint does not move when unrelated modules are added; the message names
+    the language, the size and up to :data:`CYCLE_MEMBERS_LISTED` members.
+    """
     by_path: dict[str, list[Finding]] = {}
     fan_out_warn = int(settings[SETTING_FAN_OUT_WARN])
+    fan_out_severity = str(settings[SETTING_FAN_OUT_SEVERITY])
     for unit in metrics.units:
         if unit.path not in active_paths or unit.fan_out_total <= fan_out_warn:
             continue
         source = sources[unit.path]
         span = header_span(unit.span, source)
-        finding = _finding(
+        finding = _finding_at(
             CPLX005,
+            fan_out_severity,
             unit.path,
             span,
             f"fan-out of {unit.name} is {unit.fan_out_total} distinct call target(s) "
@@ -187,21 +291,23 @@ def run_graph_rules(
             by_path[unit.path] = []
         by_path[unit.path].append(finding)
     for cycle in metrics.cycles:
-        members = " -> ".join([*cycle.modules, cycle.modules[0]])
-        for edge in cycle.edges:
-            if edge.source not in active_paths:
-                continue
-            source = sources[edge.source]
-            finding = _finding(
-                CPLX005,
-                edge.source,
-                edge.span,
-                f"module import cycle of {len(cycle.modules)} module(s): {members} "
-                f"(this import of {edge.target} closes it; resolved edges only)",
-                source,
-                MODULE_SCOPE,
-            )
-            if edge.source not in by_path:
-                by_path[edge.source] = []
-            by_path[edge.source].append(finding)
+        edge = _cycle_anchor(cycle, active_paths)
+        if edge is None:
+            continue
+        language = languages[edge.source]
+        source = sources[edge.source]
+        finding = _finding(
+            CPLX005,
+            edge.source,
+            edge.span,
+            f"{CYCLE_MESSAGE_PREFIX}{len(cycle.modules)} {LANGUAGE_LABELS[language]} "
+            f"module(s): {cycle_members_text(cycle.modules)} (one finding per cycle, anchored "
+            f"on {edge.source}, whose import of {edge.target} enters it; {CYCLE_NOTES[language]}; "
+            "resolved edges only; every member is listed in metrics.graph.cycles)",
+            source,
+            MODULE_SCOPE,
+        )
+        if edge.source not in by_path:
+            by_path[edge.source] = []
+        by_path[edge.source].append(finding)
     return by_path

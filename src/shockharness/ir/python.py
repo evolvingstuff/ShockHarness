@@ -7,6 +7,7 @@ deeply nested sources cannot exhaust the recursion limit.
 
 import ast
 import io
+import re
 import tokenize
 
 from shockharness.constants import FIRST_COLUMN
@@ -36,6 +37,11 @@ from shockharness.source import SourceText
 PARSER_NAME = "python-ast"
 ANNOTATION_FIELDS = frozenset({"annotation", "returns"})
 NUMERIC_TYPES = (int, float, complex)
+# A named constant for the purposes of rules.magic_numbers.named_constant_definitions:
+# UPPER_SNAKE_CASE, leading underscores allowed (MAX_PAGES, _PORT_WAIT_SECONDS, N).
+CONSTANT_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
+CONSTANT_VALUE_TYPES = (int, float)  # the definition covers int and float literals
+FINAL_ANNOTATION = "Final"
 
 
 def _is_numeric_constant(node: ast.AST) -> bool:
@@ -55,6 +61,50 @@ def _fold_unary(node: ast.AST) -> tuple[ast.Constant, bool] | None:
         return None
     assert isinstance(current, ast.Constant)
     return current, negative
+
+
+def _is_final_annotation(annotation: ast.expr) -> bool:
+    """``Final``, ``typing.Final``, ``Final[int]``, ``t.Final[float]``."""
+    target = annotation.value if isinstance(annotation, ast.Subscript) else annotation
+    if isinstance(target, ast.Name):
+        return target.id == FINAL_ANNOTATION
+    return isinstance(target, ast.Attribute) and target.attr == FINAL_ANNOTATION
+
+
+def _is_constant_value(value: ast.expr | None) -> bool:
+    """An int or float literal, optionally under one unary minus: the whole right-hand side."""
+    if value is None:
+        return False
+    inner = value
+    if isinstance(value, ast.UnaryOp) and isinstance(value.op, ast.USub):
+        inner = value.operand
+    return isinstance(inner, ast.Constant) and type(inner.value) in CONSTANT_VALUE_TYPES
+
+
+def _constant_definition_values(module: ast.Module) -> set[int]:
+    """``id()`` of every value node that is a module-level named constant definition.
+
+    A statement of the module body itself (not nested in an ``if``/``try``/loop):
+    ``NAME = <literal>`` with one simple UPPER_SNAKE_CASE target, or
+    ``name: Final = <literal>`` / ``NAME: <annotation> = <literal>``. Containers,
+    expressions, chained targets, class bodies and function bodies are not covered.
+    """
+    values: set[int] = set()
+    for stmt in module.body:
+        if isinstance(stmt, ast.Assign):
+            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+                continue
+            if CONSTANT_NAME.fullmatch(stmt.targets[0].id) is None:
+                continue
+            if _is_constant_value(stmt.value):
+                values.add(id(stmt.value))
+        elif isinstance(stmt, ast.AnnAssign):
+            if not isinstance(stmt.target, ast.Name) or not _is_constant_value(stmt.value):
+                continue
+            named = CONSTANT_NAME.fullmatch(stmt.target.id) is not None
+            if named or _is_final_annotation(stmt.annotation):
+                values.add(id(stmt.value))
+    return values
 
 
 def _raw(source: SourceText, node: ast.expr) -> str:
@@ -114,6 +164,7 @@ def _comments(source: SourceText) -> tuple[Comment, ...] | ParseFailure:
 
 def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLiteral, ...]:
     literals: list[NumericLiteral] = []
+    definitions = _constant_definition_values(module)
     stack: list[tuple[ast.AST, str, bool]] = [(module, MODULE_SCOPE, False)]
     while len(stack) > 0:
         node, scope, in_annotation = stack.pop()
@@ -132,6 +183,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
                     negated=negated,
                     in_annotation=in_annotation,
                     scope=scope,
+                    constant_definition=id(node) in definitions,
                 )
             )
             continue
@@ -145,6 +197,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
                     negated=False,
                     in_annotation=in_annotation,
                     scope=scope,
+                    constant_definition=id(node) in definitions,
                 )
             )
             continue
