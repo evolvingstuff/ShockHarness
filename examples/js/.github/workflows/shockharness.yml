@@ -18,6 +18,6 @@ jobs:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.1.0a1"
+      shockharness-version: "0.1.0"
       config: .shockharness.toml
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}

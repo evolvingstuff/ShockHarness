@@ -18,7 +18,7 @@ jobs:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.1.0a1"   # keep equal to the pin in pyproject.toml
+      shockharness-version: "0.1.0"   # keep equal to the pin in pyproject.toml
       config: .shockharness.toml
       # On pull requests gate only new findings against the base branch; on pushes check everything.
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}

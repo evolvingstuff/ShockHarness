@@ -5,6 +5,18 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-14
+
+First stable release. Every milestone of the specification (A through G) is
+implemented: the three default-on hard policies (`MAGIC001`, `EXC001`-`EXC003`,
+`DEF001`-`DEF006`), inline suppressions, baselines, revision diff and gate,
+SARIF, git history metrics, advisory complexity metrics and call graph
+(`CPLX001`-`CPLX005`), three profiles, the `check` command, `--exit-zero`,
+tag-triggered publishing, a reusable GitHub Actions workflow, consumer
+examples, four agent skills with `skills install`/`update`, and the eval
+corpus. From this release the CLI surface, exit codes, rule IDs and report
+`schema_version` 1 are stable; changes to them are documented here first.
+
 ### Fixed
 - Skills: `SKILL.md` content is normalized to LF when read from the package, so
   frontmatter checks, installs and manifest hashes are identical on checkouts

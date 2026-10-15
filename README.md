@@ -69,9 +69,9 @@ Requires Python 3.11+. Runtime dependencies are `tree-sitter` and
 published to PyPI from `v*` tags (see `docs/releasing.md`).
 
 ```bash
-pip install "shockharness==0.1.0a1"          # Python project: put the pin in pyproject.toml
-uv tool install "shockharness==0.1.0a1"      # any project (JavaScript included): isolated tool env
-pipx install "shockharness==0.1.0a1"
+pip install "shockharness==0.1.0"          # Python project: put the pin in pyproject.toml
+uv tool install "shockharness==0.1.0"      # any project (JavaScript included): isolated tool env
+pipx install "shockharness==0.1.0"
 ```
 
 From a checkout:
@@ -165,9 +165,9 @@ root.
 The version is always an exact pin; nothing updates to `latest`. Pick one:
 
 ```bash
-uv tool install 'shockharness==0.1.0a1'                    # isolated tool environment; any repository, JavaScript included
-uvx --from 'shockharness==0.1.0a1' shockharness version     # one-off run, nothing installed
-pip install 'shockharness==0.1.0a1'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
+uv tool install 'shockharness==0.1.0'                    # isolated tool environment; any repository, JavaScript included
+uvx --from 'shockharness==0.1.0' shockharness version     # one-off run, nothing installed
+pip install 'shockharness==0.1.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
@@ -237,7 +237,7 @@ jobs:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.1.0a1"
+      shockharness-version: "0.1.0"
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
 
@@ -286,7 +286,7 @@ Each command's output confirms one step.
 
 | Step | Command | Output that confirms it |
 |---|---|---|
-| Install | `shockharness version` | `shockharness 0.1.0a1` |
+| Install | `shockharness version` | `shockharness 0.1.0` |
 | Policy | `shockharness config validate` | a line starting `shockharness: configuration is valid` naming `profile strict`, exit 0 |
 | Analysis | `shockharness check .` | a report whose last lines start with `gate: PASS (exit 0)` or `gate: FAIL (exit 1)`; exit 2 or 3 means the setup is wrong, not the code |
 | Baseline, if used | `shockharness check . --baseline .shockharness-baseline.json` | `gate: PASS (exit 0)` followed by `N legacy finding(s) matched the baseline` |
@@ -354,7 +354,7 @@ jobs:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.1.0a1"
+      shockharness-version: "0.1.0"
 ```
 
 It uploads SARIF to code scanning. Keep the version pin in `pyproject.toml`, a

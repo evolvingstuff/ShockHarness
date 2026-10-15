@@ -18,13 +18,13 @@ Pick one. In every case the version is an exact pin.
 
 ```bash
 # Python project: a development dependency (Dependabot-visible)
-#   pyproject.toml -> [project.optional-dependencies] dev = ["shockharness==0.1.0a1"]
-#   or requirements-dev.txt -> shockharness==0.1.0a1
+#   pyproject.toml -> [project.optional-dependencies] dev = ["shockharness==0.1.0"]
+#   or requirements-dev.txt -> shockharness==0.1.0
 pip install -e ".[dev]"
 
 # JavaScript project or any repository: an isolated tool environment
-uv tool install 'shockharness==0.1.0a1'
-pipx install 'shockharness==0.1.0a1'
+uv tool install 'shockharness==0.1.0'
+pipx install 'shockharness==0.1.0'
 ```
 
 Runtime dependencies are `tree-sitter` and `tree-sitter-javascript` only.
@@ -55,7 +55,7 @@ shockharness gate --base origin/main --head HEAD      # exit 1 only on NEW hard 
 ### A. Direct invocation (any CI system)
 
 ```yaml
-- run: pip install "shockharness==0.1.0a1"   # or: pip install -e ".[dev]" with the pin in pyproject.toml
+- run: pip install "shockharness==0.1.0"   # or: pip install -e ".[dev]" with the pin in pyproject.toml
 - run: shockharness check . --format sarif --output shockharness.sarif
 ```
 
@@ -98,7 +98,7 @@ jobs:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.1.0a1"
+      shockharness-version: "0.1.0"
       config: .shockharness.toml
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
@@ -145,8 +145,8 @@ Rules that make this work:
 * **The pin must live where an updater can see it**: `pyproject.toml`
   (`[project.dependencies]` or `[project.optional-dependencies]`), a
   requirements file, or a workflow input. **Never inside a shell string** such
-  as `uvx --from shockharness==0.1.0a1 shockharness check .` or
-  `pip install shockharness==0.1.0a1` in a `run:` line: Dependabot does not
+  as `uvx --from shockharness==0.1.0 shockharness check .` or
+  `pip install shockharness==0.1.0` in a `run:` line: Dependabot does not
   read shell commands, and that pin would silently rot.
 * Dependabot's `github-actions` ecosystem updates the `uses:` ref of the
   reusable workflow. It does **not** rewrite the `shockharness-version` input;
