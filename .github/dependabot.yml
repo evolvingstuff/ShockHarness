@@ -10,3 +10,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # tree-sitter 0.26.0 segfaults on CPython 3.14 while walking deeply nested
+      # trees (pyproject.toml, CHANGELOG 0.1.0a1). The pin is deliberate; a bump
+      # here must be a reviewed decision, not an automated PR.
+      - dependency-name: tree-sitter
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: tree-sitter-javascript
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]

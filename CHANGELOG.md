@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Fixed
+- History metrics: commit dates are now normalized to one ISO 8601 spelling
+  (`+00:00`) regardless of the host's git version. Git 2.45+ prints UTC as `Z`,
+  which made `metrics.history` differ between machines and broke two tests on
+  CI runners with newer git than the development machine.
+- Dependabot no longer proposes minor or major `tree-sitter` bumps; the 0.25
+  pin is deliberate (0.26.0 segfaults on CPython 3.14).
+
 ### Added
 - Milestone E: complexity metrics, call graph, hotspots. `CPLX001`-`CPLX005`
   are implemented as advisory warnings that never fail a plain `check`. Every

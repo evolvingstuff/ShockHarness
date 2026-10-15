@@ -12,7 +12,13 @@ from shockharness.api import analyze_paths, with_history
 from shockharness.config import EffectiveConfig
 from shockharness.history import git as git_module
 from shockharness.history.cochange import cochange_pairs
-from shockharness.history.git import Commit, parse_log
+from shockharness.history.git import (
+    FIELD_SEPARATOR,
+    RECORD_SEPARATOR,
+    Commit,
+    canonical_iso,
+    parse_log,
+)
 from shockharness.history.hotspots import collect_history
 from tests.conftest import commit_all, init_repo
 
@@ -244,3 +250,24 @@ def test_hotspots_combine_churn_with_normalized_cognitive_complexity(
     report = with_history(report, empty_root, "HEAD", broken)
     assert "src/broken.py" in report.metrics["history"]["files"]
     assert "src/broken.py" not in {h["path"] for h in report.metrics["history"]["hotspots"]}
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("2026-01-01T12:00:00Z", "2026-01-01T12:00:00+00:00"),
+        ("2026-01-01T12:00:00+00:00", "2026-01-01T12:00:00+00:00"),
+        ("2026-01-01T05:00:00-07:00", "2026-01-01T05:00:00-07:00"),
+        ("2026-01-01T12:00:00Z\n", "2026-01-01T12:00:00+00:00"),
+    ],
+)
+def test_git_dates_are_canonical_across_git_versions(raw: str, expected: str) -> None:
+    """Git >= 2.45 prints UTC as Z, older git as +00:00; reports must not depend on which."""
+    assert canonical_iso(raw) == expected
+
+
+def test_parse_log_normalizes_z_dates() -> None:
+    record = f"{RECORD_SEPARATOR}abc{FIELD_SEPARATOR}2026-01-01T12:00:00Z{FIELD_SEPARATOR}2026-01-01T11:00:00Z{FIELD_SEPARATOR}a@example.invalid\nsrc/a.py\n"
+    (commit,) = parse_log(record, "")
+    assert commit.committer_date == "2026-01-01T12:00:00+00:00"
+    assert commit.author_date == "2026-01-01T11:00:00+00:00"

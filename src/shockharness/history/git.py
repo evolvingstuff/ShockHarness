@@ -89,12 +89,22 @@ def resolve_commit(root: Path, ref: str) -> tuple[str | None, str | None]:
     return text.strip(), None
 
 
+def canonical_iso(text: str) -> str:
+    """Normalize a git strict-ISO date to one spelling regardless of git version.
+
+    Git 2.45 and later print UTC as ``Z`` (``2026-01-01T12:00:00Z``); earlier
+    versions print ``+00:00``. Reports must not depend on the host's git, so every
+    date is parsed and re-emitted with an explicit numeric offset.
+    """
+    return datetime.fromisoformat(text.strip()).isoformat()
+
+
 def commit_date(root: Path, commit: str) -> tuple[str | None, str | None]:
-    """The committer date of ``commit`` in strict ISO 8601, or an error."""
+    """The committer date of ``commit`` in canonical ISO 8601, or an error."""
     text, error = run_git_text(root, ["log", "-1", "--format=%cI", "--end-of-options", commit])
     if text is None:
         return None, error
-    return text.strip(), None
+    return canonical_iso(text), None
 
 
 def export_tree(toplevel: Path, commit: str, destination: Path) -> str | None:
@@ -136,8 +146,8 @@ def parse_log(text: str, prefix: str) -> list[Commit]:
         commits.append(
             Commit(
                 sha=sha,
-                committer_date=committer_date,
-                author_date=author_date,
+                committer_date=canonical_iso(committer_date),
+                author_date=canonical_iso(author_date),
                 author=author,
                 paths=tuple(sorted(set(paths))),
             )
