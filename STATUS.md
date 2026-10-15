@@ -481,6 +481,24 @@ UTF-8 only; JS bare-`\r` line breaks may shift line numbers; `.gitignore` is
 not consulted; SARIF, baselines, diff mode, Git features, and skills are not
 built.
 
+## CI after Milestones E, F, G (2026-10-14)
+
+The push of Milestones F, G, E and the logo (e25f195) was the first CI run for
+four milestones at once and it failed on every matrix job. Two real
+portability bugs, neither reproducible on the development Mac:
+
+1. **Git date spelling.** Git 2.45+ prints UTC commit dates as `Z`; the
+   history module passed git's text through, so `metrics.history` differed by
+   host. Fixed in ba20ce8 by parsing and re-emitting dates canonically.
+2. **CRLF checkouts.** Windows runners check out text files with CRLF; the
+   skill reader returned raw bytes, breaking frontmatter checks and manifest
+   hashes. Fixed in ad5dee5 (normalize on read) and `.gitattributes` (LF on
+   checkout everywhere).
+
+Run https://github.com/evolvingstuff/ShockHarness/actions/runs/38677190178
+on ea0aa08: 15 of 15 jobs green (ubuntu/macos/windows x 3.11-3.14, wheel
+build, consumer upgrade check, skill eval corpus).
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
