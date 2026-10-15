@@ -80,6 +80,7 @@ CATCH_EXCEPT_STAR = "except*"  # Python ``except*`` handler of ``try``
 CATCH_CLAUSE = "catch"  # JavaScript ``catch`` clause of ``try``
 CATCH_PROMISE = "promise.catch"  # JavaScript ``promise.catch(handler)``
 CATCH_PROMISE_THEN = "promise.then"  # JavaScript ``promise.then(onFulfilled, onRejected)``
+CATCH_MANAGER = "context manager"  # Python ``with suppress(T):`` / a configured capture manager
 
 # Handler body classifications.
 BODY_EMPTY = "empty"  # ``pass`` / ``...`` / ``{}``: the failure vanishes
@@ -171,6 +172,32 @@ class CatchFact:
     guard_body: HandlerBody | None
 
 
+@dataclass(frozen=True)
+class ManagerFact:
+    """A ``with`` item whose context expression is a call: a candidate exception capture.
+
+    The adapter records every such item (``with open(p) as f:`` included) because it
+    does not know which managers catch; ``rules.exceptions`` turns the ones that do
+    (``contextlib.suppress`` and the configured ``capture_managers``) into
+    :class:`CatchFact` entries of kind ``context manager``. ``qualified`` and
+    ``confidence`` are the callee resolved through the module's symbol table;
+    ``identities`` are the positional arguments that resolve as exception types;
+    ``unreadable_arguments`` counts positional arguments that are not names (a
+    string, a call); keyword arguments are ignored. ``body_statements`` are the
+    ``with`` body, attributed like a ``try`` body.
+    """
+
+    span: Span
+    scope: str
+    callee: str
+    qualified: str | None
+    confidence: str
+    identities: tuple[ExceptionIdentity, ...]
+    unreadable_arguments: int
+    bound_name: str | None
+    body_statements: tuple[TryStatement, ...]
+
+
 # Default/fallback fact families (one rule each; see rules/defaults.py).
 FAMILY_PARAMETER = "parameter"  # DEF001: parameter and dataclass field defaults
 FAMILY_MAPPING = "mapping"  # DEF002: mapping / attribute / property fallbacks
@@ -186,6 +213,10 @@ KIND_PARAMETER = "parameter"  # def f(x=v) / function f(x = v) / lambda x=v
 KIND_PARAMETER_DESTRUCTURING = "parameter_destructuring"  # function f({x = v}) / f([x = v])
 KIND_DATACLASS_FIELD = "dataclass_field"  # x: int = v inside a @dataclass body
 KIND_DATACLASS_FACTORY = "dataclass_default_factory"  # x: list = field(default_factory=list)
+KIND_NEXT_DEFAULT = "next_default"  # next(iterator, v): v when the iterator is exhausted
+KIND_DEFAULTDICT = (
+    "defaultdict"  # collections.defaultdict(factory): every missing key gets factory()
+)
 KIND_MAPPING_GET = "mapping_get"  # m.get(k, v) / m.setdefault(k, v) / m.pop(k, v)
 KIND_MAPPING_GET_IMPLICIT = "mapping_get_implicit"  # m.get(k): None when the key is missing
 KIND_GETATTR = "getattr"  # getattr(o, name, v)
@@ -407,6 +438,7 @@ class ModuleFacts:
     numeric_literals: tuple[NumericLiteral, ...]
     comments: tuple[Comment, ...]
     catches: tuple[CatchFact, ...]
+    managers: tuple[ManagerFact, ...]
     defaults: tuple[DefaultFact, ...]
     functions: tuple[FunctionFact, ...]
     imports: tuple[ImportFact, ...]
@@ -422,6 +454,7 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         numeric_literals=(),
         comments=(),
         catches=(),
+        managers=(),
         defaults=(),
         functions=(),
         imports=(),

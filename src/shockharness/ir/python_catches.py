@@ -40,6 +40,7 @@ from shockharness.ir.model import (
     CatchFact,
     ExceptionIdentity,
     HandlerBody,
+    ManagerFact,
     Span,
     TryStatement,
 )
@@ -514,3 +515,77 @@ def collect_python_catches(
             stack.append((child, child_scope))
     catches.sort(key=lambda catch: catch.span)
     return tuple(catches)
+
+
+def _resolve_callee(expr: ast.expr, table: SymbolTable) -> tuple[str | None, str]:
+    """``(qualified name, confidence)`` of a dotted callee through the symbol table."""
+    dotted = dotted_name(expr)
+    if dotted is None:
+        return None, CONFIDENCE_UNRESOLVED
+    parts = dotted.split(".")
+    root = table.resolve_name(parts[0])
+    if root.qualified is None:
+        return None, CONFIDENCE_UNRESOLVED
+    return _normalize(".".join([root.qualified, *parts[1:]])), root.confidence
+
+
+def _manager_fact(
+    item: ast.withitem,
+    stmt: ast.With | ast.AsyncWith,
+    scope: str,
+    table: SymbolTable,
+    source: SourceText,
+) -> ManagerFact | None:
+    call = item.context_expr
+    if not isinstance(call, ast.Call):
+        return None
+    callee = dotted_name(call.func)
+    if callee is None:
+        return None
+    qualified, confidence = _resolve_callee(call.func, table)
+    identities: list[ExceptionIdentity] = []
+    unreadable = 0
+    for argument in call.args:
+        if dotted_name(argument) is None:
+            unreadable += 1
+            continue
+        identities.append(resolve_identity(argument, table, source))
+    bound: str | None = None
+    if isinstance(item.optional_vars, ast.Name):
+        bound = item.optional_vars.id
+    return ManagerFact(
+        span=node_span(source, stmt),
+        scope=scope,
+        callee=callee,
+        qualified=qualified,
+        confidence=confidence,
+        identities=tuple(identities),
+        unreadable_arguments=unreadable,
+        bound_name=bound,
+        body_statements=tuple(try_statement(s, source) for s in stmt.body),
+    )
+
+
+def collect_python_managers(
+    source: SourceText, module: ast.Module, relative_path: str
+) -> tuple[ManagerFact, ...]:
+    """Every ``with`` item whose context expression is a call, with its callee and
+    positional arguments resolved; the rules decide which ones are catches."""
+    table = SymbolTable(module, module_dotted_name(relative_path))
+    managers: list[ManagerFact] = []
+    stack: list[tuple[ast.AST, str]] = [(module, MODULE_SCOPE)]
+    while len(stack) > 0:
+        node, scope = stack.pop()
+        if isinstance(node, ast.With | ast.AsyncWith):
+            for item in node.items:
+                fact = _manager_fact(item, node, scope, table, source)
+                if fact is not None:
+                    managers.append(fact)
+        child_scope = scope
+        if isinstance(node, SCOPE_NODES):
+            name = scope_name(node)
+            child_scope = name if scope == MODULE_SCOPE else f"{scope}.{name}"
+        for child in ast.iter_child_nodes(node):
+            stack.append((child, child_scope))
+    managers.sort(key=lambda fact: fact.span)
+    return tuple(managers)

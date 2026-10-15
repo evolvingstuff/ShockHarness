@@ -244,6 +244,7 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         numeric_literals=tuple(literals),
         comments=tuple(comments),
         catches=collect_javascript_catches(source, root),
+        managers=(),  # JavaScript has no exception-capturing context manager idiom
         defaults=collect_javascript_defaults(source, root),
         functions=collect_javascript_functions(source, root, tuple(comments)),
         imports=collect_javascript_imports(source, root),

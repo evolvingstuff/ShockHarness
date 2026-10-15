@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from shockharness.analysis import FileResult
+from shockharness.analysis import STATUS_UNSUPPORTED, FileResult
 from shockharness.config import EffectiveConfig
 from shockharness.constants import COMMIT_SHORT_HEX, EXIT_INTERNAL_ERROR, EXIT_OK, EXIT_VIOLATIONS
 from shockharness.findings import Finding
@@ -116,6 +116,8 @@ def evaluate(
             review += 1
     new_hard = hard - legacy_hard
     failures = sum(1 for f in files if f.failed)
+    unsupported = sum(1 for f in files if f.status == STATUS_UNSUPPORTED)
+    parse_failures = failures - unsupported
 
     reasons: list[str] = []
     parse_policy = config.values["parse_errors"]
@@ -123,8 +125,16 @@ def evaluate(
     regression_policy = config.values["gates"]["complexity_regressions"]
     regressions_fail = complexity_regressions > 0 and regression_policy == REGRESSIONS_FAIL
 
-    if failures > 0 and parse_policy == "fail":
-        reasons.append(f'{failures} file(s) could not be analyzed and parse_errors = "fail"')
+    if (parse_failures > 0 and parse_policy == "fail") or unsupported > 0:
+        if parse_failures > 0 and parse_policy == "fail":
+            reasons.append(
+                f'{parse_failures} file(s) could not be analyzed and parse_errors = "fail"'
+            )
+        if unsupported > 0:
+            reasons.append(
+                f"{unsupported} included file(s) have an extension no adapter parses and "
+                'unsupported_sources = "fail"'
+            )
         status = GATE_ERROR
         exit_code = EXIT_INTERNAL_ERROR
     elif new_hard > 0 and hard_policy == "fail":
@@ -141,9 +151,9 @@ def evaluate(
     else:
         status = GATE_PASS
         exit_code = EXIT_OK
-        if failures > 0:
+        if parse_failures > 0:
             reasons.append(
-                f'{failures} file(s) could not be analyzed; parse_errors = "warn" '
+                f'{parse_failures} file(s) could not be analyzed; parse_errors = "warn" '
                 "so the gate passes"
             )
         if new_hard > 0:

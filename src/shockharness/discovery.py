@@ -36,8 +36,12 @@ class SkippedFile:
 
 @dataclass(frozen=True)
 class DiscoveryResult:
+    """``unsupported`` lists the files ``include`` matched (and ``exclude`` kept) whose
+    extension no adapter parses; ``unsupported_sources`` decides what they mean."""
+
     files: tuple[DiscoveredFile, ...]
     explicit_excluded: tuple[SkippedFile, ...]
+    unsupported: tuple[SkippedFile, ...]
     counts: Mapping[str, int]
 
     def counts_json(self) -> dict[str, Any]:
@@ -68,6 +72,7 @@ def _walk_directory(
     exclude: GlobSet,
     follow_symlinks: bool,
     found: dict[str, DiscoveredFile],
+    unsupported: dict[str, SkippedFile],
     counts: dict[str, int],
 ) -> None:
     for current, dirnames, filenames in os.walk(directory, followlinks=follow_symlinks):
@@ -94,6 +99,11 @@ def _walk_directory(
             language = language_for(child)
             if language is None:
                 counts["unsupported_extension"] += 1
+                if include.matches(relative) and not exclude.matches(relative):
+                    counts["unsupported_sources"] += 1
+                    unsupported[relative] = SkippedFile(
+                        relative, f"extension {child.suffix!r} is not a supported language"
+                    )
                 continue
             if not include.matches(relative):
                 counts["not_included"] += 1
@@ -109,11 +119,13 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
     exclude = compile_globset(list(config.values["exclude"]))
     follow_symlinks = bool(config.values["follow_symlinks"])
     found: dict[str, DiscoveredFile] = {}
+    unsupported: dict[str, SkippedFile] = {}
     explicit_excluded: list[SkippedFile] = []
     counts: dict[str, int] = {
         "not_included": 0,
         "excluded": 0,
         "unsupported_extension": 0,
+        "unsupported_sources": 0,
         "symlinks_skipped": 0,
         "directories_pruned": 0,
     }
@@ -123,7 +135,9 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
         if not target.exists():
             raise UsageError("path does not exist", str(target))
         if target.is_dir():
-            _walk_directory(root, target, include, exclude, follow_symlinks, found, counts)
+            _walk_directory(
+                root, target, include, exclude, follow_symlinks, found, unsupported, counts
+            )
             continue
         relative = relative_posix(root, target)
         language = language_for(target)
@@ -139,5 +153,6 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
     return DiscoveryResult(
         files=ordered,
         explicit_excluded=tuple(sorted(explicit_excluded, key=lambda s: s.relative)),
+        unsupported=tuple(unsupported[key] for key in sorted(unsupported)),
         counts=counts,
     )

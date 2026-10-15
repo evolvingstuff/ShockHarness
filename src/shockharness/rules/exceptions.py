@@ -19,7 +19,7 @@ are equal or one is a dotted suffix of the other, so ``.errors.MyError`` matches
 ``pkg.errors.MyError``. The finding's confidence records which case applied.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -29,12 +29,14 @@ from shockharness.ir.model import (
     BODY_EMPTY,
     BODY_LOGGING_ONLY,
     BODY_OPAQUE,
+    BODY_OTHER,
     BODY_RAISE_OTHER,
     BODY_RERAISE,
     BODY_RETURN_FALLBACK,
     CATCH_CLAUSE,
     CATCH_EXCEPT,
     CATCH_EXCEPT_STAR,
+    CATCH_MANAGER,
     CATCH_PROMISE,
     CATCH_PROMISE_THEN,
     CONFIDENCE_APPROXIMATE,
@@ -43,6 +45,7 @@ from shockharness.ir.model import (
     CatchFact,
     ExceptionIdentity,
     HandlerBody,
+    ManagerFact,
     ModuleFacts,
     Span,
 )
@@ -57,7 +60,9 @@ KIND_LABELS: Mapping[str, str] = {
     CATCH_CLAUSE: "catch clause",
     CATCH_PROMISE: "promise .catch handler",
     CATCH_PROMISE_THEN: "promise .then rejection handler",
+    CATCH_MANAGER: "context manager",
 }
+SUPPRESS_MANAGER = "contextlib.suppress"
 EXC002_CLASSIFICATIONS = frozenset(
     {BODY_EMPTY, BODY_LOGGING_ONLY, BODY_RETURN_FALLBACK, BODY_RAISE_OTHER}
 )
@@ -141,6 +146,11 @@ def _bare_problem(catch: CatchFact) -> str:
             "untyped catch binds every error; a JavaScript catch passes only inside an approved "
             "boundary whose error class the handler checks with instanceof and otherwise rethrows"
         )
+    if catch.kind == CATCH_MANAGER:
+        return (
+            "no positional argument names an exception type, so the manager captures an "
+            "unknown set of exceptions; an untyped catch can never be approved"
+        )
     return (
         "rejection handler binds every rejection; it passes only inside an approved boundary "
         "whose error class the handler checks with instanceof and otherwise rethrows"
@@ -201,6 +211,80 @@ def _finding(
         fingerprint=None,
         baseline=None,
     )
+
+
+def _last_component(name: str) -> str:
+    parts = name.split(".")
+    return parts[len(parts) - 1]
+
+
+def _manager_match(manager: ManagerFact, capture_managers: frozenset[str]) -> str | None:
+    """The confidence with which ``manager`` is a catch, or ``None`` when it is an
+    ordinary ``with``. ``contextlib.suppress`` always counts; a configured manager
+    counts when its resolved qualified name is listed (exact), or, when the callee
+    could not be resolved, when its bare name equals a listed manager's bare name
+    (approximate: the call graph's "probable")."""
+    if manager.qualified is not None and manager.confidence != CONFIDENCE_UNRESOLVED:
+        if manager.qualified == SUPPRESS_MANAGER or manager.qualified in capture_managers:
+            return manager.confidence
+        return None
+    bare = _last_component(manager.callee)
+    if any(_last_component(listed) == bare for listed in capture_managers):
+        return CONFIDENCE_APPROXIMATE
+    return None
+
+
+def manager_catches(
+    managers: Sequence[ManagerFact], capture_managers: frozenset[str]
+) -> list[CatchFact]:
+    """The context managers that are catches, as catch facts of kind ``context manager``.
+
+    ``contextlib.suppress`` swallows (its body classifies as empty, like ``except T:
+    pass``); a configured capture manager keeps the exception for inspection after
+    the block, which is ``other`` (EXC001 still judges the catch itself). An
+    unreadable or absent type list is an untyped catch, like a bare ``except``.
+    """
+    found: list[CatchFact] = []
+    for manager in managers:
+        matched = _manager_match(manager, capture_managers)
+        if matched is None:
+            continue
+        identities = manager.identities
+        if matched == CONFIDENCE_APPROXIMATE:
+            identities = tuple(
+                ExceptionIdentity(i.source, i.qualified, CONFIDENCE_APPROXIMATE, i.broad)
+                if i.confidence == CONFIDENCE_EXACT
+                else i
+                for i in identities
+            )
+        if manager.qualified == SUPPRESS_MANAGER:
+            body = HandlerBody(
+                BODY_EMPTY,
+                f"{manager.callee}(...) discards the exception; nothing after the block can "
+                "tell that the operation did not happen",
+            )
+        else:
+            body = HandlerBody(
+                BODY_OTHER,
+                f"{manager.callee}(...) keeps the captured exception for inspection after "
+                "the block; what the code does with it is not inspected",
+            )
+        found.append(
+            CatchFact(
+                span=manager.span,
+                kind=CATCH_MANAGER,
+                scope=manager.scope,
+                identities=identities,
+                bare=len(identities) == 0,
+                bound_name=manager.bound_name,
+                body=body,
+                try_statements=manager.body_statements,
+                narrowed_from=None,
+                guard_call=None,
+                guard_body=None,
+            )
+        )
+    return found
 
 
 def _written(catch: CatchFact) -> str:
@@ -284,8 +368,13 @@ def run_exception_rules(
     applicable = tuple(b for b in boundaries if b.language == language and b.paths.matches(path))
     transparent_rethrow = bool(settings["transparent_rethrow"])
     transparent_guards = frozenset(str(name) for name in settings["transparent_guards"])
+    capture_managers = frozenset(str(name) for name in settings["capture_managers"])
+    catches = sorted(
+        [*facts.catches, *manager_catches(facts.managers, capture_managers)],
+        key=lambda c: c.span,
+    )
     findings: list[Finding] = []
-    for catch in facts.catches:
+    for catch in catches:
         approval = evaluate_approval(catch, applicable)
         guard: str | None = None
         body = catch.body
@@ -319,6 +408,10 @@ def run_exception_rules(
         suppressed = classification in EXC002_CLASSIFICATIONS and not (
             deferred and classification == BODY_RETURN_FALLBACK
         )
+        if catch.kind == CATCH_MANAGER and approval.approved:
+            # ``with suppress(T):`` names its swallow and has no handler to inspect: a
+            # boundary that approves T has approved the discard itself.
+            suppressed = False
         if EXC002.rule_id in active_rule_ids and suppressed:
             findings.append(
                 _finding(

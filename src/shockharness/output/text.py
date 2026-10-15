@@ -151,6 +151,14 @@ def _trailer_lines(report: Report) -> list[str]:
         lines.append(
             "  rules disabled by config: " + ", ".join(coverage["rules_disabled_globally"])
         )
+    unsupported = coverage["unsupported_sources"]
+    if len(unsupported) > 0 and coverage["unsupported_sources_policy"] == "warn":
+        listed = ", ".join(entry["path"] for entry in unsupported)
+        lines.append(
+            f"  warning: {len(unsupported)} included file(s) have an "
+            f'extension no adapter parses and were not analyzed (unsupported_sources = "warn"): '
+            f"{listed}"
+        )
     for note in report.config.notes:
         lines.append(f"  config note: {note}")
     for deviation in report.config.deviations:

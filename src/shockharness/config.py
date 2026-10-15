@@ -45,6 +45,10 @@ DEDICATED_FILENAMES = (DEDICATED_FILENAME, "shockharness.toml")
 PYPROJECT_FILENAME = "pyproject.toml"
 PROFILE_KEY = "profile"
 PARSE_ERRORS_KEY = "parse_errors"
+UNSUPPORTED_SOURCES_KEY = "unsupported_sources"
+UNSUPPORTED_FAIL = "fail"
+UNSUPPORTED_WARN = "warn"
+UNSUPPORTED_IGNORE = "ignore"
 PROFILES_PACKAGE = "shockharness.profiles"
 # Sections that carry a `severity` cap (see rules/severity.py), with the rules they cover.
 SEVERITY_SECTIONS: Mapping[str, str] = {
@@ -313,6 +317,15 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                     "'rethrowUnexpectedError' or 'errors.rethrow_unexpected'",
                 )
             )
+    for index, manager in enumerate(exceptions["capture_managers"]):
+        if EXCEPTION_NAME.fullmatch(manager) is None:
+            issues.append(
+                ConfigIssue(
+                    f"rules.exceptions.capture_managers[{index}]",
+                    "must be the manager's qualified class name such as "
+                    "'app.errors.CapturedExceptionContext'",
+                )
+            )
     magic = values["rules"]["magic_numbers"]
     for index, pattern in enumerate(magic["configuration_files"]):
         problem = validate_glob(pattern)
@@ -408,6 +421,11 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
         found.append(
             f"parse_errors is {values['parse_errors']!r}; syntax failures do not fail the gate"
         )
+    if values[UNSUPPORTED_SOURCES_KEY] == UNSUPPORTED_IGNORE:
+        found.append(
+            "unsupported_sources is 'ignore'; included files no adapter can parse are only "
+            "counted, never listed or failed"
+        )
     exceptions = rules["exceptions"]
     if exceptions["transparent_rethrow"] is True:
         found.append(
@@ -419,6 +437,12 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
             f"rules.exceptions.transparent_guards[{index}] treats a handler whose first "
             f"statement is {guard}(<caught exception>) as narrowed by that guard; EXC001 does "
             "not report the catch and EXC002 classifies the statements after the guard"
+        )
+    for index, manager in enumerate(exceptions["capture_managers"]):
+        found.append(
+            f"rules.exceptions.capture_managers[{index}] treats `with {manager}(T, ...):` as a "
+            "catch of the exception types T passed to it; it is approved by boundaries like an "
+            "except handler and reported by EXC001 otherwise"
         )
     for index, boundary in enumerate(exceptions["boundaries"]):
         approved = ", ".join(boundary_exceptions(boundary))

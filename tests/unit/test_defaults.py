@@ -664,3 +664,114 @@ def test_def001_dataclass_fields_only_on_decorated_classes(strict_config: Effect
     # the ORM model's keyword defaults are DEF001 territory only through a decorator;
     # nothing else in the module is a parameter default either
     assert not any(f.rule_id == "DEF001" and f.span.line < 19 for f in result.findings)
+
+
+# --- 0.2.0 second brief, item 2: the missing default forms ---------------------------------
+
+
+def _def(result: FileResult, rule_id: str) -> list[tuple[int, str]]:
+    return [(f.span.line, f.message) for f in result.findings if f.rule_id == rule_id]
+
+
+def test_pop_setdefault_and_next_with_defaults(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "d = {}\n"
+        "a = d.pop('k', 1)\n"
+        "b = d.setdefault('k', 1)\n"
+        "c = next(it, 1)\n"
+        "e = d.pop('k')\n"
+        "f = next(it)\n"
+        "g = next(it, default=1)\n"
+    )
+    result = _run(strict_config, PY, text)
+    key_note = "substitutes the fallback for a missing key"
+    assert _def(result, "DEF002") == [
+        (2, f"d['k'] falls back to 1 when the key is missing; .pop(key, fallback) {key_note}"),
+        (
+            3,
+            "d['k'] falls back to 1 when the key is missing; .setdefault(key, fallback) "
+            f"{key_note}",
+        ),
+        (
+            4,
+            "next(it) falls back to 1 when the iterator is exhausted; next(iterator, default) "
+            "substitutes the default for an exhausted iterator; an empty sequence and a "
+            "sequence that ends with the default look the same",
+        ),
+    ]
+    assert all(
+        f.severity == "error" and f.confidence == "exact"
+        for f in result.findings
+        if f.rule_id == "DEF002"
+    )
+    review = _defaults_config(make_config, 'missing_value_fallbacks = "review"\n')
+    assert {r[1] for r in _rows(_run(review, PY, text), "DEF002")} == {"review"}
+    allowed = _defaults_config(make_config, 'missing_value_fallbacks = "allow"\n')
+    assert _rows(_run(allowed, PY, text), "DEF002") == []
+
+
+def test_defaultdict_under_every_import_spelling(strict_config: EffectiveConfig) -> None:
+    text = (
+        "import collections\n"
+        "import collections as c\n"
+        "from collections import defaultdict\n"
+        "from collections import defaultdict as dd\n"
+        "a = collections.defaultdict(list)\n"
+        "b = c.defaultdict(int)\n"
+        "c2 = defaultdict(lambda: 1)\n"
+        "d = dd(set)\n"
+        "e = defaultdict()\n"
+        "f = other.defaultdict(list)\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert [(f.span.line, f.evidence) for f in result.findings if f.rule_id == "DEF002"] == [
+        (5, "a = collections.defaultdict(list)"),
+        (6, "b = c.defaultdict(int)"),
+        (7, "c2 = defaultdict(lambda: 1)"),
+        (8, "d = dd(set)"),
+    ]
+    assert _def(result, "DEF002")[1][1] == (
+        "c.defaultdict(int) falls back to int() for every missing key; defaultdict(factory) "
+        "creates factory() for every missing key, so a lookup never fails and a missing key is "
+        "indistinguishable from an empty value"
+    )
+    assert result.findings[0].to_json_dict()["evidence"] == "a = collections.defaultdict(list)"
+    # DEF001 is not involved and the lambda factory is not a parameter default
+    assert _def(result, "DEF001") == []
+
+
+def test_pydantic_model_fields_are_dataclass_fields(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    text = (
+        "import pydantic\n"
+        "from pydantic import BaseModel, Field\n"
+        "from typing import ClassVar\n\n\n"
+        "class Settings(BaseModel):\n"
+        "    host: str\n"
+        "    port: int = 5432\n"
+        "    retries: int = Field(default=3)\n"
+        "    tags: list = Field(default_factory=list)\n"
+        "    name: str = Field(..., min_length=1)\n"
+        "    required: str = Field()\n"
+        "    legacy: int = Field(7)\n"
+        "    version: ClassVar[int] = 2\n"
+        "    optional: int = ...\n\n\n"
+        "class Other(pydantic.BaseModel):\n"
+        "    limit: int = 10\n\n\n"
+        "class Plain(SomethingElse):\n"
+        "    limit: int = 10\n"
+    )
+    result = _run(strict_config, PY, text)
+    assert _def(result, "DEF001") == [
+        (8, "pydantic field 'port' of Settings has a default value: 5432"),
+        (9, "pydantic field 'retries' of Settings has Field(default=...): 3"),
+        (10, "pydantic field 'tags' of Settings has a default_factory: list"),
+        (13, "pydantic field 'legacy' of Settings has Field(default=...): 7"),
+        (19, "pydantic field 'limit' of Other has a default value: 10"),
+    ]
+    assert all(f.severity == "error" for f in result.findings if f.rule_id == "DEF001")
+    allowed = _defaults_config(make_config, 'dataclass_fields = "allow"\n')
+    assert _rows(_run(allowed, PY, text), "DEF001") == []

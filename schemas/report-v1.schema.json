@@ -132,6 +132,32 @@
           "items": {
             "type": "string"
           }
+        },
+        "unsupported_sources_policy": {
+          "type": "string",
+          "enum": [
+            "fail",
+            "warn",
+            "ignore"
+          ]
+        },
+        "unsupported_sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },
@@ -156,7 +182,8 @@
             "type": "string",
             "enum": [
               "python",
-              "javascript"
+              "javascript",
+              "unsupported"
             ]
           },
           "status": {
@@ -165,7 +192,8 @@
               "analyzed",
               "parse_error",
               "decode_error",
-              "read_error"
+              "read_error",
+              "unsupported_source"
             ]
           },
           "line_count": {

@@ -151,7 +151,14 @@ EXC001 = RuleSpec(
         "with instanceof and otherwise re-throws (if (!(err instanceof C)) throw err; or "
         "if (err instanceof C) {...} else { throw err; }). That identity is approximate: nothing "
         "proves what C is bound to. With transparent_rethrow = true, a handler that only "
-        "re-raises the caught exception passes this rule."
+        "re-raises the caught exception passes this rule. Python context managers: with "
+        "contextlib.suppress(T, ...) is a catch of T (exact through either import spelling), "
+        "and with M(T, ...) is a catch of T for every M listed in capture_managers (exact "
+        "when the import resolves, approximate by bare name when it does not); a manager "
+        "with no positional argument that names an exception type is an untyped catch. "
+        "Promise handlers given as a reference to a function defined at the top level of the "
+        "same module are classified by that function's body; other references are "
+        "unresolved. .finally(fn) is never a catch."
     ),
     limitations=(
         "Resolution is static and best effort: a name rebound at runtime, an import inside a "
@@ -216,7 +223,10 @@ EXC002 = RuleSpec(
         "non-logging statement raises or throws something other than the caught exception "
         "without preserving it as the cause (raise X, raise X from None, throw new X()). "
         "Bare raise, raise err, raise X from err, throw err and throw new X(..., {cause: err}) "
-        "are not flagged. Applies to approved and unapproved catches alike."
+        "are not flagged. Applies to approved and unapproved catches alike, except that an "
+        "approved with contextlib.suppress(T) is not reported: the construct names its discard "
+        "and has no handler, so the boundary approved the discard itself; a configured "
+        "capture manager keeps the exception for inspection and is 'other'."
     ),
     limitations=(
         "A handler with several non-logging statements, or one that returns a variable or a "
@@ -381,12 +391,17 @@ DEF001 = RuleSpec(
         "patterns in the parameters of function declarations and expressions, arrow functions, "
         "methods and constructors, including defaults inside destructured parameters. *args, "
         "**kwargs, rest parameters, ClassVar fields, field() without a default, and the ... "
-        "defaults of typing.overload stubs are not defaults."
+        "defaults of typing.overload stubs are not defaults. Pydantic models (a class whose "
+        "base resolves to pydantic.BaseModel through the imports) are checked like "
+        "dataclasses: x: int = v, Field(default=v), Field(v) and Field(default_factory=f) are "
+        "reported under dataclass_fields; Field(...), Field() and x: int = ... are required "
+        "fields, not defaults."
     ),
     limitations=(
         "Decorator detection is by name: a dataclass created through an alias or a wrapper is "
-        "treated as a plain class. attrs, pydantic and NamedTuple field defaults are not "
-        "recognized. Abstract method defaults are reported like any other. Class field "
+        "treated as a plain class. attrs and NamedTuple field defaults are not recognized; a "
+        "pydantic model whose BaseModel import cannot be resolved is a plain class. "
+        "Abstract method defaults are reported like any other. Class field "
         "initializers in JavaScript (class K { x = 1 }) are not parameters and are not reported."
     ),
     remediation=(
@@ -423,7 +438,10 @@ DEF002 = RuleSpec(
     ),
     guarantees=(
         "Python: m.get(k, v), m.setdefault(k, v), m.pop(k, v) on any receiver, getattr(o, a, v), "
-        "and 'm[k] if k in m else v'. The receiver is proven a mapping (exact confidence) when it "
+        "'m[k] if k in m else v', next(iterator, v), and collections.defaultdict(factory) "
+        "through any import spelling (import collections as c; c.defaultdict(list)); "
+        "d.pop(k), next(it) and defaultdict() with no default are not findings. The receiver "
+        "is proven a mapping (exact confidence) when it "
         "is a dict display, a name bound to a dict display or dict/defaultdict/OrderedDict/"
         "Counter/ChainMap call, or a name annotated as dict/Dict/Mapping/MutableMapping (and "
         "relatives) anywhere in the module; otherwise the finding is approximate. m.get(k) with "

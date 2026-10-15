@@ -15,8 +15,13 @@ Stated so that a clean report is never read as more than it is.
   3.11 cannot parse 3.12-only syntax; such files are parse failures, not clean.
   The report records `coverage.host_python`.
 * JavaScript coverage is the pinned `tree-sitter-javascript` grammar (ESM,
-  CommonJS, JSX). TypeScript is not analyzed; `.ts`/`.tsx` in `include` is a
-  configuration error.
+  CommonJS, JSX). **TypeScript is not analyzed.** A `.ts`/`.tsx` file that an
+  `include` pattern matches is an *unsupported source*: `unsupported_sources`
+  (`warn` in `strict` and `recommended`: listed under
+  `coverage.unsupported_sources` with a warning line; `fail`: an analysis
+  failure and exit 3; `ignore` in `minimal`) is how a project notices that a
+  file left the policy. An `include` pattern that names an unsupported
+  extension literally (`**/*.ts`) is still a configuration error.
 * Only UTF-8 (with or without BOM) sources are read. Other encodings are a
   `decode_error` file status. Python's PEP 263 coding declarations are not honored.
 
@@ -32,6 +37,13 @@ Stated so that a clean report is never read as more than it is.
   rejects it, but the grammar accepts it, so the value is reported as 15.
 
 ## EXC001-EXC003
+
+* Context managers are catches only when they are `contextlib.suppress` or a
+  manager listed in `rules.exceptions.capture_managers`; a manager whose
+  `__exit__` swallows but is not listed is an ordinary `with`.
+* A promise rejection handler passed by reference is classified only when the
+  reference is a function defined at the top level of the same module; an
+  imported or computed handler is unresolved and fails closed.
 
 * Exception identity resolution is static and best effort. It follows builtins,
   module-level imports (exact), relative imports, module-level classes and

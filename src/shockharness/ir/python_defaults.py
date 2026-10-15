@@ -12,8 +12,12 @@ Recognized shapes:
 * parameter defaults (positional, keyword-only, lambda) and dataclass field
   defaults (``x: int = 0``, ``field(default=...)``, ``field(default_factory=...)``);
 * mapping fallbacks: ``m.get(k, v)``, ``m.setdefault(k, v)``, ``m.pop(k, v)``,
-  ``getattr(o, a, v)``, ``m[k] if k in m else v``, and ``m.get(k)`` with no
-  fallback (an implicit ``None``);
+  ``getattr(o, a, v)``, ``m[k] if k in m else v``, ``next(it, v)``,
+  ``collections.defaultdict(factory)`` (through any import spelling), and
+  ``m.get(k)`` with no fallback (an implicit ``None``);
+* pydantic model fields (``class M(BaseModel)`` with ``BaseModel`` resolved through
+  the imports): ``x: int = 1``, ``Field(default=...)``, ``Field(1)``,
+  ``Field(default_factory=...)``, reported with the dataclass kinds;
 * truthiness fallbacks: ``x or v`` outside a boolean test, ``x if x else v``;
 * nullish fallbacks: ``x if x is not None else v`` and the inverted form;
 * configuration fallbacks: ``os.getenv("X", v)``, ``os.environ.get("X", v)``,
@@ -50,6 +54,7 @@ from shockharness.ir.model import (
     FAMILY_TRUTHINESS,
     KIND_DATACLASS_FACTORY,
     KIND_DATACLASS_FIELD,
+    KIND_DEFAULTDICT,
     KIND_ENV_GET,
     KIND_ENV_GET_IMPLICIT,
     KIND_ENV_NULLISH,
@@ -60,6 +65,7 @@ from shockharness.ir.model import (
     KIND_MAPPING_GET,
     KIND_MAPPING_GET_IMPLICIT,
     KIND_MEMBERSHIP_TERNARY,
+    KIND_NEXT_DEFAULT,
     KIND_NULLISH_TERNARY,
     KIND_PARAMETER,
     KIND_TRUTHINESS_OR,
@@ -69,6 +75,7 @@ from shockharness.ir.model import (
 )
 from shockharness.ir.python_catches import (
     SCOPE_NODES,
+    SymbolTable,
     bound_name,
     dotted_name,
     is_literal_like,
@@ -98,6 +105,10 @@ MAPPING_ANNOTATIONS = frozenset(
 )
 MAPPING_CONSTRUCTORS = frozenset({"dict", "defaultdict", "OrderedDict", "Counter", "ChainMap"})
 DATACLASS_DECORATORS = frozenset({"dataclass"})
+PYDANTIC_BASE_MODEL = "pydantic.BaseModel"
+PYDANTIC_FIELD_FUNCTIONS = frozenset({"Field"})
+DEFAULTDICT_QUALIFIED = "collections.defaultdict"
+NEXT_WITH_DEFAULT_ARITY = LOOKUP_WITH_FALLBACK_ARITY  # next(iterator, default)
 OVERLOAD_DECORATORS = frozenset({"overload"})
 FIELD_FUNCTIONS = frozenset({"field"})
 GET_METHODS = frozenset({"get", "setdefault", "pop"})
@@ -121,6 +132,7 @@ class _ModuleIndex:
     mappings: frozenset[str]
     constants: dict[str, ast.expr]
     helpers: dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
+    table: SymbolTable  # import resolution for defaultdict and pydantic.BaseModel
 
 
 def _text(source: SourceText, node: ast.AST) -> str:
@@ -297,7 +309,22 @@ def _index_module(module: ast.Module) -> _ModuleIndex:
                 constants[stmt.target.id] = stmt.value
         elif isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             helpers[stmt.name] = stmt
-    return _ModuleIndex(_env_names(module), _mapping_names(module), constants, helpers)
+    return _ModuleIndex(
+        _env_names(module), _mapping_names(module), constants, helpers, SymbolTable(module, "")
+    )
+
+
+def _resolved_dotted(table: SymbolTable, expr: ast.expr) -> str | None:
+    """A dotted expression resolved through the module's imports (``c.defaultdict`` after
+    ``import collections as c`` is ``collections.defaultdict``); ``None`` when unresolved."""
+    dotted = dotted_name(expr)
+    if dotted is None:
+        return None
+    parts = dotted.split(".")
+    root = table.resolve_name(parts[0])
+    if root.qualified is None:
+        return None
+    return ".".join([root.qualified, *parts[1:]])
 
 
 class _Collector:
@@ -402,8 +429,20 @@ class _Collector:
                 f"parameter {arg.arg!r} of {owner} has a default value",
             )
 
+    def _is_pydantic_model(self, node: ast.ClassDef) -> bool:
+        """A class whose bases include ``pydantic.BaseModel`` resolved through the imports
+        (``from pydantic import BaseModel`` or ``import pydantic``); an unresolved base
+        does not count."""
+        return any(_resolved_dotted(self.index.table, b) == PYDANTIC_BASE_MODEL for b in node.bases)
+
     def _dataclass_fields(self, node: ast.ClassDef, scope: str) -> None:
-        if not _has_decorator(node, DATACLASS_DECORATORS):
+        if _has_decorator(node, DATACLASS_DECORATORS):
+            label = "dataclass field"
+            field_functions = FIELD_FUNCTIONS
+        elif self._is_pydantic_model(node):
+            label = "pydantic field"
+            field_functions = PYDANTIC_FIELD_FUNCTIONS
+        else:
             return
         for stmt in node.body:
             if not isinstance(stmt, ast.AnnAssign) or stmt.value is None:
@@ -414,35 +453,11 @@ class _Collector:
                 continue
             name = stmt.target.id
             value = stmt.value
-            if isinstance(value, ast.Call) and _decorator_name(value.func) in FIELD_FUNCTIONS:
-                keywords = {k.arg: k.value for k in value.keywords if k.arg is not None}
-                if "default_factory" in keywords:
-                    factory = keywords["default_factory"]
-                    self._add(
-                        factory,
-                        scope,
-                        FAMILY_PARAMETER,
-                        KIND_DATACLASS_FACTORY,
-                        name,
-                        factory,
-                        CONTEXT_DECLARATION,
-                        CONFIDENCE_EXACT,
-                        f"dataclass field {name!r} of {node.name} has a default_factory",
-                    )
-                elif "default" in keywords:
-                    default = keywords["default"]
-                    self._add(
-                        default,
-                        scope,
-                        FAMILY_PARAMETER,
-                        KIND_DATACLASS_FIELD,
-                        name,
-                        default,
-                        CONTEXT_DECLARATION,
-                        CONFIDENCE_EXACT,
-                        f"dataclass field {name!r} of {node.name} has field(default=...)",
-                    )
+            if isinstance(value, ast.Call) and _decorator_name(value.func) in field_functions:
+                self._field_call(value, node, name, scope, label)
                 continue
+            if isinstance(value, ast.Constant) and value.value is Ellipsis:
+                continue  # ``x: int = ...``: pydantic's spelling of "required"
             self._add(
                 value,
                 scope,
@@ -452,7 +467,47 @@ class _Collector:
                 value,
                 CONTEXT_DECLARATION,
                 CONFIDENCE_EXACT,
-                f"dataclass field {name!r} of {node.name} has a default value",
+                f"{label} {name!r} of {node.name} has a default value",
+            )
+
+    def _field_call(
+        self, value: ast.Call, node: ast.ClassDef, name: str, scope: str, label: str
+    ) -> None:
+        """``field(...)`` / ``Field(...)``: ``default=``, ``default_factory=``, or (pydantic)
+        a positional default; ``...`` and no default are not defaults."""
+        function = _decorator_name(value.func)
+        keywords = {k.arg: k.value for k in value.keywords if k.arg is not None}
+        default: ast.expr | None = None
+        if "default" in keywords:
+            default = keywords["default"]
+        elif len(value.args) >= 1 and function in PYDANTIC_FIELD_FUNCTIONS:
+            default = value.args[0]
+        if default is not None and isinstance(default, ast.Constant) and default.value is Ellipsis:
+            default = None
+        if "default_factory" in keywords:
+            factory = keywords["default_factory"]
+            self._add(
+                factory,
+                scope,
+                FAMILY_PARAMETER,
+                KIND_DATACLASS_FACTORY,
+                name,
+                factory,
+                CONTEXT_DECLARATION,
+                CONFIDENCE_EXACT,
+                f"{label} {name!r} of {node.name} has a default_factory",
+            )
+        elif default is not None:
+            self._add(
+                default,
+                scope,
+                FAMILY_PARAMETER,
+                KIND_DATACLASS_FIELD,
+                name,
+                default,
+                CONTEXT_DECLARATION,
+                CONFIDENCE_EXACT,
+                f"{label} {name!r} of {node.name} has {function}(default=...)",
             )
 
     # -- calls -------------------------------------------------------------------------------
@@ -481,6 +536,39 @@ class _Collector:
                 CONFIDENCE_EXACT,
                 "getattr with a third argument substitutes the fallback for a missing attribute",
             )
+            return
+        if (
+            callee == "next"
+            and len(positional) == NEXT_WITH_DEFAULT_ARITY
+            and len(node.keywords) == 0
+        ):
+            self._add(
+                node,
+                scope,
+                FAMILY_MAPPING,
+                KIND_NEXT_DEFAULT,
+                _text(self.source, positional[0]),
+                positional[1],
+                context,
+                CONFIDENCE_EXACT,
+                "next(iterator, default) substitutes the default for an exhausted iterator; "
+                "an empty sequence and a sequence that ends with the default look the same",
+            )
+            return
+        if _resolved_dotted(self.index.table, node.func) == DEFAULTDICT_QUALIFIED:
+            if len(positional) >= 1 and not _is_none(positional[0]):
+                self._add(
+                    node,
+                    scope,
+                    FAMILY_MAPPING,
+                    KIND_DEFAULTDICT,
+                    _text(self.source, node),
+                    positional[0],
+                    context,
+                    CONFIDENCE_EXACT,
+                    "defaultdict(factory) creates factory() for every missing key, so a lookup "
+                    "never fails and a missing key is indistinguishable from an empty value",
+                )
             return
         variable = self._env_variable(node)
         if variable is not None:

@@ -149,7 +149,8 @@ Three built-in profiles ship with the package and are selected with
 documented severity, unparseable files fail), **`recommended`** (strict, but
 `DEF003`/`DEF004` fallbacks are `review`, `-1` and module-level named constant
 definitions such as `MAX_PAGES = 8` pass `MAGIC001`, and fan-out is `review`
-above 30), **`minimal`** (`MAGIC001`, `EXC*` and `DEF*` all capped at `review`,
+above 30; included files no adapter parses are warned about, as in strict),
+**`minimal`** (`MAGIC001`, `EXC*` and `DEF*` all capped at `review`,
 syntax failures warn, complexity off: everything is reported, nothing but
 malformed suppressions fails). Precedence
 is bundled defaults < profile < repository configuration < `--profile` /

@@ -102,6 +102,7 @@ include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**",
            "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
 parse_errors = "fail"                   # "fail" -> exit 3 on any unparseable file; "warn" -> reported, gate unaffected
+unsupported_sources = "warn"            # an included file no adapter parses (.ts, .pyx): "fail" -> exit 3, "warn" -> listed, "ignore" -> counted only ("ignore" in minimal)
 follow_symlinks = false                 # never leave the root through a link unless asked
 
 [tool.shockharness.rules.magic_numbers]
@@ -125,6 +126,7 @@ severity = "error"                        # "review" caps EXC001-EXC003 at revie
 mode = "boundary_whitelist"               # the only mode
 transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
 transparent_guards = []                   # guard callees ("rethrowUnexpectedError"): a handler opening with guard(<caught>) is narrowed by it (each a deviation)
+capture_managers = []                     # qualified names of the project's exception-capturing context managers; `with M(T):` is then a catch of T (each a deviation)
 boundaries = []                           # see below
 
 [tool.shockharness.rules.defaults]        # DEF001-DEF006; each mode: "forbid" -> error, "review" -> review, "allow" -> off
@@ -207,6 +209,18 @@ listed once in `config.deviations` so the approval is never silent.
 * Python: a handler that opens with `if not isinstance(exc, T): raise` is
   matched against the boundaries as a catch of `T` (or of each member of a
   tuple), not of the broad type on the `except` line.
+
+**Capture managers** (`rules.exceptions.capture_managers`, 0.2.0). Qualified
+class names (`["app.errors.CapturedExceptionContext"]`) of context managers
+that catch a declared exception type and expose it after the block.
+`with Manager(T1, T2, ...):` is then a catch of `T1` and `T2` (the positional
+arguments that name exception types), checked by `EXC001` against the
+boundaries exactly like `except (T1, T2):`; a manager with no readable type is
+an untyped catch. `contextlib.suppress(...)` is always such a catch and one
+that swallows (`EXC002`, unless a boundary approves it). A listed manager
+matches by qualified name when its import resolves (exact) and by bare name
+when it does not (approximate). Each entry is a reported deviation; an
+unlisted manager is an ordinary `with`. See `docs/rules.md`, EXC001.
 
 **Transparent guards** (`rules.exceptions.transparent_guards`, 0.2.0). A list
 of guard callees as written (`["rethrowUnexpectedError"]`,
@@ -405,6 +419,25 @@ reason; with `enabled = false` it is `"disabled"`; a report produced by the
 library's `analyze_paths` alone is `"not_collected"` (use
 `shockharness.api.with_history`). It is never silently empty.
 
+## Unsupported sources
+
+`unsupported_sources` (top level, next to `parse_errors`; 0.2.0) decides what
+a file that `include` matches but no adapter can parse means. ShockHarness
+reads `.py`, `.js`, `.mjs` and `.cjs`; a `.ts`, `.tsx`, `.pyx` or `.ipynb`
+file in an included tree is otherwise silently outside the policy.
+
+| Value | Effect |
+|---|---|
+| `fail` | each such file is an analysis failure: status `unsupported_source`, counted in `coverage.files_failed`, `analysis_status = "failed"`, gate `ERROR` and exit 3, like an unparseable file under `parse_errors = "fail"` |
+| `warn` (strict and recommended) | the files are listed under `coverage.unsupported_sources` with a `warning:` line in the text report; the gate is unaffected |
+| `ignore` (minimal) | only `coverage.discovery.unsupported_sources` counts them; nothing is listed. A reported deviation under every profile |
+
+Files that `include` does not match, that `exclude` drops, or that sit in a
+pruned directory are never affected; `coverage.discovery.unsupported_extension`
+still counts every unparseable file the walk saw. An explicit target with an
+unsupported extension stays a usage error (exit 2). `fail` is stricter than
+the profile default and is not a deviation.
+
 ## Glob semantics
 
 * Forward slashes only; patterns are relative to the root.
@@ -450,7 +483,8 @@ Everything that loosens the strict profile is surfaced, never silent:
   every `rules.<section>.severity = "review"`
   cap, extra `allowed_values`, `allow_unary_negative_one`,
   `named_constant_definitions = "allow"`, `parse_errors = "warn"`,
-  `transparent_rethrow`, every transparent guard, every exception boundary
+  `unsupported_sources = "ignore"`, `transparent_rethrow`, every transparent
+  guard, every capture manager, every exception boundary
   (once, listing every class it approves), every `rules.defaults` mode looser
   than the strict profile, and every override, each with its reason. The same list is in the text report, SARIF
   run properties, and `config validate`.

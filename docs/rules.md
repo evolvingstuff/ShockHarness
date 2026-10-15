@@ -112,8 +112,15 @@ The guarded class is the catch's identity with `approximate` confidence
 is rejected at configuration time. `err.name === "..."` checks, guards joined
 with `||`, and a catch without a binding are untyped and fail. Promise
 `.catch(handler)` and `.then(onFulfilled, onRejected)` are checked the same
-way when the handler is an inline function; a handler passed by reference is
-opaque and fails closed.
+way when the handler is an inline function or a reference to a function defined
+at the top level of the same module (a declaration, exported or not, or a
+`const` bound to an arrow or function expression), whose body is then
+classified; any other reference (an import, `obj.method`) is opaque and fails
+closed with `unresolved` confidence. `.finally(fn)` is never a catch. With
+`transparent_rethrow = true` a rethrowing handler (`.catch((e) => { throw e; })`)
+passes like a rethrowing `catch` clause. An expression-bodied arrow that only
+logs (`(error) => log(error)`) is `logging_only`; a bare `log(...)` call counts
+as logging in JavaScript, next to `console.*` and `logger.*`.
 
 **`transparent_rethrow`.** Off by default. When true, a handler whose only
 non-logging statement re-raises the caught exception (`raise`, `raise err`,
@@ -144,11 +151,34 @@ the guard, as it already does after a JavaScript `instanceof` guard. Any other
 shape (an inverted test, a guard that returns, an `else` branch, another
 subject) leaves the broad catch as written.
 
+**Context managers that catch (0.2.0).** A `with` block is a catch when its
+context expression calls `contextlib.suppress` (either import spelling, resolved
+through the module's symbol table) or one of the project's own capture managers
+listed in `rules.exceptions.capture_managers` (qualified class names). The
+exception types are the call's positional arguments that resolve as exception
+identities (`suppress(FileNotFoundError, PermissionError)`,
+`CapturedExceptionContext(ProcessLookupError, boundary="x")`); keyword
+arguments and non-name arguments are ignored, and a manager with no readable
+type is an untyped catch that no boundary can approve, like a bare `except`.
+The finding sits on the `with` line, in the enclosing unit's scope, with the
+kind `context manager`, and is approved exactly like an `except` handler: a
+boundary for the file, the language and every type. A listed manager whose
+import resolves matches by qualified name with `exact` confidence; one whose
+import cannot be resolved matches by bare name with `approximate` confidence
+(the call graph's "probable"). An unlisted manager is an ordinary `with`.
+`contextlib.suppress` swallows by definition: EXC002 reports it as a swallow
+unless a boundary approved it (the construct has no handler, so the boundary
+approved the discard itself). A capture manager keeps the exception for
+inspection after the block and is not an EXC002 finding; what the code does
+with it is not inspected. EXC003 applies to an approved manager's body as to
+a `try` body. Every configured manager is a reported policy deviation.
+
 **Limitations.** Class hierarchies are not known: a boundary for `OSError` does
 not approve `FileNotFoundError`, and a broad library base class other than
 `Exception`/`BaseException` is only flagged for not being approved. Shadowing by
-a nested import that rebinds a module-level name is not tracked. Context
-managers, `__exit__`, `contextlib.suppress`, signal handlers, and
+a nested import that rebinds a module-level name is not tracked. `__exit__`
+methods that swallow, context managers other than `contextlib.suppress` and
+the configured capture managers, signal handlers, and
 `addEventListener("error")` are not catches and are not inspected.
 
 ### EXC002: suppressed or converted exception (error, Python and JavaScript)
@@ -242,6 +272,7 @@ value, and nothing proves the value was optional.
 |---|---|
 | Python `def f(a, b=1, *, c=None)`, `lambda x, y=2`, async defs, methods, nested functions | `*args`, `**kwargs`, `...` defaults under `@overload` |
 | dataclass fields: `x: int = 0`, `field(default=...)`, `field(default_factory=list)` (own kinds, mode `dataclass_fields`) | `ClassVar` fields, `field()` without a default, attributes of classes without the `dataclass` decorator |
+| pydantic model fields (0.2.0; a class whose base resolves to `pydantic.BaseModel` through `from pydantic import BaseModel` or `import pydantic`): `x: int = 1`, `Field(default=3)`, `Field(7)`, `Field(default_factory=list)` (the dataclass kinds, mode `dataclass_fields`, messages say `pydantic field`) | `Field(...)`, `Field()`, `x: int = ...` (required), `ClassVar`, a class whose base cannot be resolved (`class M(SomethingElse)`) |
 | JavaScript `function f(a = 1)`, arrow, method, constructor, `static`, generator parameters | rest parameters, class field initializers (`class K { x = 1 }`) |
 | destructuring defaults inside parameters: `function f({ retries = 3 }, [first = 0] = [])` (each default is a finding) | |
 
@@ -256,6 +287,8 @@ pydantic and NamedTuple defaults are not recognized.
 |---|---|
 | Python `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)` | `exact` when the receiver is proven a mapping (a dict display; a name bound to a dict display or to `dict`/`defaultdict`/`OrderedDict`/`Counter`/`ChainMap(...)`; a name or parameter annotated `dict`/`Dict`/`Mapping`/`MutableMapping` and relatives, anywhere in the module); otherwise `approximate` |
 | Python `getattr(o, a, v)` | `exact` |
+| Python `next(iterator, v)` (0.2.0) | `exact`; `next(iterator)` is not a finding |
+| Python `collections.defaultdict(factory)` (0.2.0) through any import spelling: `defaultdict(list)`, `collections.defaultdict(int)`, `c.defaultdict(set)` after `import collections as c`, `dd(set)` after `from collections import defaultdict as dd` | `exact`; every lookup creates `factory()` for a missing key, so a missing key is indistinguishable from an empty value; `defaultdict()` with no factory is not a finding |
 | Python `m[k] if k in m else v`, `v if k not in m else m[k]` | by the fallback |
 | Python `m.get(k)` with no fallback | `review`; reported when the receiver is a known mapping, or when it is unknown and the key is a string literal; not when the result is awaited, compared with `None`, or the left operand of a reported `or` |
 | JavaScript `const {x = v} = o`, `const [x = v] = a`, `for (const {x = v} of rows)`, `({x = v} = o)` | `exact` |

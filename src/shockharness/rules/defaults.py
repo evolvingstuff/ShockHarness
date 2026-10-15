@@ -40,6 +40,7 @@ from shockharness.ir.model import (
     FAMILY_TRUTHINESS,
     KIND_DATACLASS_FACTORY,
     KIND_DATACLASS_FIELD,
+    KIND_DEFAULTDICT,
     KIND_DESTRUCTURING,
     KIND_ENV_DESTRUCTURING,
     KIND_ENV_GET_IMPLICIT,
@@ -47,6 +48,7 @@ from shockharness.ir.model import (
     KIND_MAPPING_GET_IMPLICIT,
     KIND_MEMBER_NULLISH,
     KIND_MEMBERSHIP_TERNARY,
+    KIND_NEXT_DEFAULT,
     KIND_PARAMETER,
     KIND_PARAMETER_DESTRUCTURING,
     DefaultFact,
@@ -171,6 +173,15 @@ def _message(fact: DefaultFact, language: str) -> str:
         return f"{fact.subject} falls back to {fact.fallback} when {missing}; {fact.detail}"
     if fact.kind == KIND_MEMBER_NULLISH:
         return f"{fact.subject} falls back to {fact.fallback}; {fact.detail}"
+    if fact.kind == KIND_NEXT_DEFAULT:
+        return (
+            f"next({fact.subject}) falls back to {fact.fallback} when the iterator is "
+            f"exhausted; {fact.detail}"
+        )
+    if fact.kind == KIND_DEFAULTDICT:
+        return (
+            f"{fact.subject} falls back to {fact.fallback}() for every missing key; {fact.detail}"
+        )
     what = "attribute" if fact.kind == KIND_GETATTR else "key"
     if fact.kind in MISSING_KEY_KINDS or fact.family == FAMILY_MAPPING:
         return (

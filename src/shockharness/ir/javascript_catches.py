@@ -17,7 +17,9 @@ The guarded class becomes the catch's identity with ``approximate`` confidence
 other shape, including ``err.name === "TimeoutError"`` or guards joined with
 ``||``, leaves the catch untyped. Promise ``.catch(handler)`` and
 ``.then(onFulfilled, onRejected)`` produce the same fact when the handler is an
-inline function; a handler passed by reference is *opaque*.
+inline function or a reference to a function defined at the top level of the
+same module (its body is classified); any other reference is *opaque* and
+resolves as unresolved. ``.finally(fn)`` is never a catch.
 """
 
 import re
@@ -94,7 +96,7 @@ LOGGING_CALL = re.compile(
     r"(?:console|logger|log|LOGGER|LOG|_logger|_log)"
     r"\.(?:log|debug|info|warn|warning|error|exception|critical|fatal|trace|dir)$"
 )
-LOGGING_EXACT = frozenset({"process.stderr.write", "process.stdout.write"})
+LOGGING_EXACT = frozenset({"process.stderr.write", "process.stdout.write", "log"})
 REJECTION_HANDLER_ARGS = {"catch": 0, "then": 1}
 
 
@@ -279,7 +281,7 @@ def is_literal_like(node: Node) -> bool:
 
 
 def _callee_name(statement: Node) -> str | None:
-    expression = first_expression(statement)
+    expression = statement if statement.type == "call_expression" else first_expression(statement)
     if expression is None or expression.type != "call_expression":
         return None
     function = expression.child_by_field_name("function")
@@ -291,7 +293,12 @@ def _callee_name(statement: Node) -> str | None:
 def is_logging_statement(statement: Node) -> bool:
     if statement.type != "expression_statement":
         return False
-    name = _callee_name(statement)
+    return is_logging_expression(statement)
+
+
+def is_logging_expression(node: Node) -> bool:
+    """``console.error(e)``, ``logger.warn(e)``, ``log(e)``: a call that only records."""
+    name = _callee_name(node)
     if name is None:
         return False
     return name in LOGGING_EXACT or LOGGING_CALL.match(name) is not None
@@ -506,7 +513,13 @@ def _receiver_statement(source: SourceText, receiver: Node) -> TryStatement:
 
 
 def _rejection_handler(
-    source: SourceText, scope: str, call: Node, member: Node, handler: Node, kind: str
+    source: SourceText,
+    scope: str,
+    call: Node,
+    member: Node,
+    handler: Node,
+    kind: str,
+    functions: dict[str, Node],
 ) -> CatchFact:
     receiver = member.child_by_field_name("object")
     property_node = member.child_by_field_name("property")
@@ -515,7 +528,9 @@ def _rejection_handler(
     end_span = node_span(source, call)
     span = Span(start_span.line, start_span.column, end_span.end_line, end_span.end_column)
     protected = (_receiver_statement(source, receiver),)
-    if handler.type not in ("arrow_function", "function_expression"):
+    if handler.type == "identifier" and node_text(handler) in functions:
+        handler = functions[node_text(handler)]  # a reference to a module-level function
+    if handler.type not in FUNCTION_NODE_TYPES:
         return CatchFact(
             span=span,
             kind=kind,
@@ -525,8 +540,9 @@ def _rejection_handler(
             bound_name=None,
             body=HandlerBody(
                 BODY_OPAQUE,
-                f"rejection handler {node_text(handler)!r} is not an inline function; "
-                "its behaviour cannot be inspected",
+                f"rejection handler {node_text(handler)!r} is not an inline function or a "
+                "function defined at the top level of this module; its behaviour cannot be "
+                "inspected",
             ),
             try_statements=protected,
             narrowed_from=None,
@@ -550,6 +566,10 @@ def _rejection_handler(
         statements = []  # an expression body has no statements and cannot open with a guard
         if is_literal_like(body):
             classified = HandlerBody(BODY_RETURN_FALLBACK, "=> " + node_text(body).strip())
+        elif is_logging_expression(unwrap_parens(body)):
+            classified = HandlerBody(
+                BODY_LOGGING_ONLY, "handler only logs; the failure is recorded, not handled"
+            )
         else:
             classified = HandlerBody(BODY_OTHER, "handler body is not classified")
     return CatchFact(
@@ -565,6 +585,37 @@ def _rejection_handler(
         guard_call=guard_call(statements, name),
         guard_body=_guard_body(statements, name),
     )
+
+
+FUNCTION_NODE_TYPES = frozenset({"function_declaration", "arrow_function", "function_expression"})
+
+
+def module_functions(root: Node) -> dict[str, Node]:
+    """Top-level functions by name: declarations (exported or not) and ``const``/``let``
+    bindings to an arrow or function expression."""
+    found: dict[str, Node] = {}
+    for statement in root.named_children:
+        node = statement
+        if node.type == "export_statement":
+            exported = node.child_by_field_name("declaration")
+            if exported is None:
+                continue
+            node = exported
+        if node.type == "function_declaration":
+            name = node.child_by_field_name("name")
+            if name is not None:
+                found[node_text(name)] = node
+        elif node.type in ("lexical_declaration", "variable_declaration"):
+            for declarator in node.named_children:
+                if declarator.type != "variable_declarator":
+                    continue
+                name = declarator.child_by_field_name("name")
+                value = declarator.child_by_field_name("value")
+                if name is None or value is None or name.type != "identifier":
+                    continue
+                if value.type in FUNCTION_NODE_TYPES:
+                    found[node_text(name)] = value
+    return found
 
 
 def _promise_handler(call: Node) -> tuple[Node, Node, str] | None:
@@ -589,6 +640,7 @@ def _promise_handler(call: Node) -> tuple[Node, Node, str] | None:
 
 def collect_javascript_catches(source: SourceText, root: Node) -> tuple[CatchFact, ...]:
     catches: list[CatchFact] = []
+    functions = module_functions(root)
     stack: list[tuple[Node, str]] = [(root, MODULE_SCOPE)]
     while len(stack) > 0:
         node, scope = stack.pop()
@@ -600,7 +652,9 @@ def collect_javascript_catches(source: SourceText, root: Node) -> tuple[CatchFac
             promise = _promise_handler(node)
             if promise is not None:
                 member, handler, kind = promise
-                catches.append(_rejection_handler(source, scope, node, member, handler, kind))
+                catches.append(
+                    _rejection_handler(source, scope, node, member, handler, kind, functions)
+                )
         child_scope = scope_for(node, scope)
         for child in reversed(node.children):
             stack.append((child, child_scope))

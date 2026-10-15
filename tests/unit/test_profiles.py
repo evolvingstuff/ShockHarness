@@ -151,10 +151,12 @@ def test_minimal_reports_everything_at_review_and_never_fails(
     for section in ("magic_numbers", "exceptions", "defaults"):
         assert config.values["rules"][section]["severity"] == "review"
         assert config.values["rules"][section]["enabled"] is True
+    assert config.values["unsupported_sources"] == "ignore"
     changed = {key for key, origin in config.origins.items() if origin != "bundled"}
     assert changed == {
         "profile",
         "parse_errors",
+        "unsupported_sources",
         "complexity.enabled",
         "rules.magic_numbers.severity",
         "rules.magic_numbers.named_constant_definitions",
@@ -177,6 +179,7 @@ def test_minimal_reports_everything_at_review_and_never_fails(
     assert "complexity is disabled" in joined
     assert "parse_errors is 'warn'" in joined
     assert "rules.magic_numbers.named_constant_definitions is 'allow'" in joined
+    assert "unsupported_sources is 'ignore'" in joined
 
     (empty_root / "src").mkdir()
     (empty_root / "src" / "a.py").write_text(PYTHON_SAMPLE, encoding="utf-8")

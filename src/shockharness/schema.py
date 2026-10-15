@@ -148,6 +148,10 @@ def type_name(value: Any) -> str:
 
 
 SEVERITY_MODES = ("forbid", "review", "allow")
+# A file matched by `include` whose extension no adapter parses (a .ts file in a JavaScript
+# tree): "fail" is an analysis failure (exit 3), "warn" lists it under coverage, "ignore"
+# says nothing. Strictest first.
+UNSUPPORTED_SOURCE_POLICIES = ("fail", "warn", "ignore")
 # MAGIC001 on the definition of a module-level named constant (MAX_PAGES = 8): "report"
 # (strict: a named constant is not automatically justified) or "allow" (the name is the
 # remedy the rule asks for; recommended and minimal).
@@ -194,6 +198,7 @@ CONFIG_SCHEMA = TableField(
         "include": ListField(StrField(allow_empty=False)),
         "exclude": ListField(StrField(allow_empty=False)),
         "parse_errors": EnumField(("fail", "warn")),
+        "unsupported_sources": EnumField(UNSUPPORTED_SOURCE_POLICIES),
         "follow_symlinks": BoolField(),
         "rules": TableField(
             fields={
@@ -220,6 +225,7 @@ CONFIG_SCHEMA = TableField(
                         "mode": EnumField(("boundary_whitelist",)),
                         "transparent_rethrow": BoolField(),
                         "transparent_guards": ListField(StrField(allow_empty=False)),
+                        "capture_managers": ListField(StrField(allow_empty=False)),
                         "boundaries": ListField(BOUNDARY_SCHEMA),
                     },
                     required=(),

@@ -1031,3 +1031,86 @@ def test_check_summary_ends_with_the_same_gate_line(
     assert data["summary"]["complexity"]["units"] == 5
     assert data["summary"]["elapsed_seconds"] >= 0
     assert data["schema_version"] == "1"
+
+
+@pytest.mark.parametrize("policy", ["fail", "warn", "ignore"])
+def test_unsupported_sources_policy(
+    empty_root: Path, capsys: pytest.CaptureFixture[str], policy: str
+) -> None:
+    """0.2.0 second brief, item 4: fail exits 3 and names the file, warn lists it, ignore
+    says nothing; a .ts file outside include is never mentioned."""
+    write(
+        empty_root,
+        ".shockharness.toml",
+        f'[tool.shockharness]\ninclude = ["src/**/*"]\nunsupported_sources = "{policy}"\n',
+    )
+    write(empty_root, "src/a.ts", "const x: number = 1;\n")
+    write(empty_root, "src/ok.js", "const y = 1;\n")
+    write(empty_root, "docs/outside.ts", "export {};\n")
+    root = ["--root", str(empty_root)]
+    code, out, _ = run(["check", str(empty_root), *root], capsys)
+    assert "docs/outside.ts" not in out
+    if policy == "fail":
+        assert code == 3
+        assert "gate: ERROR (exit 3)" in out
+        assert (
+            "1 included file(s) have an extension no adapter parses and unsupported_sources "
+            '= "fail"' in out
+        )
+        assert (
+            "src/a.ts: unsupported_source: extension '.ts' is not a supported language and "
+            'unsupported_sources = "fail"' in out
+        )
+        assert "analysis status: failed" in out
+    elif policy == "warn":
+        assert code == 0
+        assert "gate: PASS (exit 0)" in out
+        assert (
+            "  warning: 1 included file(s) have an extension no adapter parses and were not "
+            'analyzed (unsupported_sources = "warn"): src/a.ts' in out
+        )
+        assert "analysis status: complete" in out
+    else:
+        assert code == 0
+        assert "a.ts" not in out
+        assert "policy deviation: unsupported_sources is 'ignore'" in out
+    code, out, _ = run(["check", str(empty_root), "--format", "json", *root], capsys)
+    data = json.loads(out)
+    coverage = data["coverage"]
+    assert coverage["unsupported_sources_policy"] == policy
+    assert coverage["discovery"]["unsupported_sources"] == 1
+    assert coverage["discovery"]["unsupported_extension"] == 3  # .shockharness.toml too
+    if policy == "ignore":
+        assert coverage["unsupported_sources"] == []
+        assert data["files"] == [data["files"][0]] and data["files"][0]["path"] == "src/ok.js"
+    else:
+        assert coverage["unsupported_sources"] == [
+            {"path": "src/a.ts", "reason": "extension '.ts' is not a supported language"}
+        ]
+    if policy == "fail":
+        failed = [f for f in data["files"] if f["status"] == "unsupported_source"]
+        assert [(f["path"], f["language"], f["parser"]) for f in failed] == [
+            ("src/a.ts", "unsupported", None)
+        ]
+        assert data["coverage"]["files_failed"] == 1 and data["analysis_status"] == "failed"
+        assert data["gate"]["analysis_failures"] == 1
+        assert data["summary"]["parse_failures"] == 1
+    else:
+        assert all(f["status"] == "analyzed" for f in data["files"])
+
+
+def test_unsupported_sources_default_and_config_effective(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out, _ = run(["config", "effective", "--root", str(empty_root)], capsys)
+    data = json.loads(out)
+    assert data["values"]["unsupported_sources"] == "warn"
+    assert data["origins"]["unsupported_sources"] == "bundled"
+    code, out, _ = run(
+        ["config", "effective", "--root", str(empty_root), "--profile", "minimal"], capsys
+    )
+    assert json.loads(out)["values"]["unsupported_sources"] == "ignore"
+    # "fail" is stricter than the profile default and is not a deviation; "ignore" is one
+    write(empty_root, ".shockharness.toml", '[tool.shockharness]\nunsupported_sources = "fail"\n')
+    code, out, _ = run(["config", "validate", "--root", str(empty_root)], capsys)
+    assert code == 0 and "policy deviation" not in out

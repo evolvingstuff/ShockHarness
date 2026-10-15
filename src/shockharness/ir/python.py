@@ -23,6 +23,7 @@ from shockharness.ir.model import (
 from shockharness.ir.python_catches import (
     SCOPE_NODES,
     collect_python_catches,
+    collect_python_managers,
     node_span,
     scope_name,
 )
@@ -230,6 +231,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         numeric_literals=_collect_literals(source, parsed),
         comments=comments,
         catches=collect_python_catches(source, parsed, filename),
+        managers=collect_python_managers(source, parsed, filename),
         defaults=collect_python_defaults(source, parsed),
         functions=collect_python_functions(source, parsed, comments),
         imports=collect_python_imports(source, parsed),

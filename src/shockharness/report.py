@@ -16,10 +16,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from shockharness.analysis import FileResult
+from shockharness.analysis import STATUS_UNSUPPORTED, FileResult
 from shockharness.complexity.coupling import STATUS_AVAILABLE
 from shockharness.complexity.regressions import exceeds_threshold
-from shockharness.config import EffectiveConfig
+from shockharness.config import UNSUPPORTED_IGNORE, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
 from shockharness.constants import ELAPSED_DECIMALS, REPORT_SCHEMA_VERSION, SUMMARY_TOP_FILES
 from shockharness.discovery import DiscoveryResult
 from shockharness.findings import Finding
@@ -90,7 +90,8 @@ def _analysis_status(files: Sequence[FileResult], config: EffectiveConfig) -> st
     failures = sum(1 for f in files if f.failed)
     if failures == 0:
         return STATUS_COMPLETE
-    if config.values["parse_errors"] == "fail":
+    unsupported = any(f.status == STATUS_UNSUPPORTED for f in files)
+    if config.values["parse_errors"] == "fail" or unsupported:
         return STATUS_FAILED
     return STATUS_INCOMPLETE
 
@@ -111,11 +112,15 @@ def _coverage(
     # analyze_source has no discovery step; the report says so with empty sections.
     discovery_counts: dict[str, Any] = {}
     explicit_excluded: list[dict[str, str]] = []
+    unsupported: list[dict[str, str]] = []
+    policy = str(config.values[UNSUPPORTED_SOURCES_KEY])
     if discovery is not None:
         discovery_counts = discovery.counts_json()
         explicit_excluded = [
             {"path": s.relative, "reason": s.reason} for s in discovery.explicit_excluded
         ]
+        if policy != UNSUPPORTED_IGNORE:
+            unsupported = [{"path": s.relative, "reason": s.reason} for s in discovery.unsupported]
     disabled_globally: list[str] = []
     for rule in registry.implemented_rules():
         if (
@@ -134,6 +139,8 @@ def _coverage(
         "files_failed": sum(1 for f in files if f.failed),
         "discovery": discovery_counts,
         "explicit_targets_excluded": explicit_excluded,
+        "unsupported_sources_policy": policy,
+        "unsupported_sources": unsupported,
         "limitations": [
             "Only rules listed in rules_implemented produced findings; every other registered "
             "rule is not analyzed.",

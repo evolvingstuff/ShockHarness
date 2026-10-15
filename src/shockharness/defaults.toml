@@ -7,6 +7,11 @@ profile = "strict"
 include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
 parse_errors = "fail"
+# A file that `include` matches but no adapter can parse (.ts in a JavaScript tree, .pyx):
+# "fail" -> analysis failure, exit 3, like an unparseable file; "warn" -> listed under
+# coverage.unsupported_sources with a warning line; "ignore" -> only counted. Files that
+# `include` does not match or `exclude` drops are never affected.
+unsupported_sources = "warn"
 follow_symlinks = false
 overrides = []
 
@@ -60,6 +65,12 @@ transparent_rethrow = false
 # treated as narrowed by it: EXC001 does not report the catch, and EXC002 classifies the
 # statements after the guard. Every entry is reported as a policy deviation.
 transparent_guards = []
+# A project's own exception-capturing context managers, by qualified name
+# ("app.errors.CapturedExceptionContext"). `with Manager(T1, T2, ...):` is then a catch of
+# T1 and T2 (its positional arguments that name exception types), approved by boundaries
+# like an except handler. `contextlib.suppress(...)` is always such a catch, and one whose
+# handler swallows. Every entry is reported as a policy deviation.
+capture_managers = []
 # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
 # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
 # match `path` for one language. Every entry is reported as a policy deviation.

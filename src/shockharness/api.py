@@ -11,7 +11,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from shockharness import gate as gate_module
-from shockharness.analysis import AnalysisOptions, FileResult, analyze_files, analyze_text
+from shockharness.analysis import (
+    AnalysisOptions,
+    FileResult,
+    analyze_files,
+    analyze_text,
+    with_unsupported_sources,
+)
 from shockharness.config import EffectiveConfig, load_config
 from shockharness.discovery import discover
 from shockharness.errors import UsageError
@@ -52,10 +58,11 @@ def analyze_paths(
     started = time.perf_counter()
     discovery = discover(root, list(paths), config)
     outcome = analyze_files(discovery.files, config, options)
-    findings = [f for result in outcome.files for f in result.findings]
-    verdict = gate_module.evaluate(findings, outcome.files, config, None, NO_REGRESSIONS)
+    files = with_unsupported_sources(outcome.files, discovery, config)
+    findings = [f for result in files for f in result.findings]
+    verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
     elapsed = time.perf_counter() - started
-    return build_report(outcome.files, discovery, config, verdict, outcome.metrics, elapsed)
+    return build_report(files, discovery, config, verdict, outcome.metrics, elapsed)
 
 
 def apply_baseline(report: Report, baseline: Baseline, config: EffectiveConfig) -> Report:

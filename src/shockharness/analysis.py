@@ -19,8 +19,8 @@ from typing import Any
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
 from shockharness.complexity.callgraph import ModuleInput
 from shockharness.complexity.metrics import UnitMetrics, measure_units
-from shockharness.config import EffectiveConfig
-from shockharness.discovery import DiscoveredFile
+from shockharness.config import UNSUPPORTED_FAIL, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
+from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
@@ -39,7 +39,11 @@ STATUS_ANALYZED = "analyzed"
 STATUS_PARSE_ERROR = "parse_error"
 STATUS_DECODE_ERROR = "decode_error"
 STATUS_READ_ERROR = "read_error"
-FAILURE_STATUSES = frozenset({STATUS_PARSE_ERROR, STATUS_DECODE_ERROR, STATUS_READ_ERROR})
+STATUS_UNSUPPORTED = "unsupported_source"  # only under unsupported_sources = "fail"
+LANGUAGE_UNSUPPORTED = "unsupported"
+FAILURE_STATUSES = frozenset(
+    {STATUS_PARSE_ERROR, STATUS_DECODE_ERROR, STATUS_READ_ERROR, STATUS_UNSUPPORTED}
+)
 
 ORIGIN_CONFIG = "config"
 ORIGIN_OVERRIDE = "override"
@@ -424,6 +428,35 @@ def complete(
         files=tuple(results),
         metrics={"complexity": outcome.complexity, "graph": outcome.graph},
     )
+
+
+def unsupported_source_result(relative: str, reason: str) -> FileResult:
+    """The failed result an included-but-unparseable file becomes under
+    ``unsupported_sources = "fail"``: it counts as an analysis failure, never as clean."""
+    return FileResult(
+        path=relative,
+        language=LANGUAGE_UNSUPPORTED,
+        parser=None,
+        status=STATUS_UNSUPPORTED,
+        line_count=0,
+        rules_applied=(),
+        rules_disabled=(),
+        parse_failure=None,
+        error=f'{reason} and unsupported_sources = "fail"',
+        findings=(),
+    )
+
+
+def with_unsupported_sources(
+    files: Sequence[FileResult], discovery: DiscoveryResult, config: EffectiveConfig
+) -> tuple[FileResult, ...]:
+    """Under ``unsupported_sources = "fail"``, the included files no adapter can parse
+    join the results as analysis failures; under ``warn``/``ignore`` they stay in
+    ``coverage`` only."""
+    if config.values[UNSUPPORTED_SOURCES_KEY] != UNSUPPORTED_FAIL:
+        return tuple(files)
+    extra = [unsupported_source_result(s.relative, s.reason) for s in discovery.unsupported]
+    return tuple(sorted([*files, *extra], key=lambda f: f.path))
 
 
 def analyze_files(

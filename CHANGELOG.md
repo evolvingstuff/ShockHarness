@@ -51,6 +51,45 @@ content-hash cache) is deferred to a later release.
 - `complexity.fan_out_severity` (`"warning"` | `"review"`): the severity of
   `CPLX005` fan-out findings; both are advisory, so neither is a deviation.
 
+Second batch, from `docs/shockharness-suggestions-2.md` (coverage gaps found
+against the project's own linter); items 1-4 are implemented, item 5 (a
+plugin API) is a design note for later:
+
+- `EXC001`/`EXC002` see exception capture through context managers:
+  `with contextlib.suppress(T, ...):` (either import spelling) is a catch of
+  `T` that swallows, and `rules.exceptions.capture_managers` lists a
+  project's own managers by qualified name (`with M(T, ...):` is a catch of
+  the exception types passed positionally; exact when the import resolves,
+  approximate by bare name when it does not; no readable type is an untyped
+  catch). Findings sit on the `with` line with the kind `context manager`,
+  boundaries approve them like `except` handlers, an approved `suppress` is
+  not an `EXC002` swallow, and every configured manager is a reported
+  deviation. New IR fact `ManagerFact` (`ModuleFacts.managers`) and catch kind
+  `context manager`.
+- `DEF002` covers `next(iterator, default)` and
+  `collections.defaultdict(factory)` through any import spelling (new kinds
+  `next_default` and `defaultdict`); `d.pop(key, default)` and
+  `d.setdefault(key, default)` were already covered and now have dedicated
+  tests. `DEF001` covers pydantic model fields (a class whose base resolves to
+  `pydantic.BaseModel`): `x: int = v`, `Field(default=v)`, `Field(v)`,
+  `Field(default_factory=f)` under `dataclass_fields`, with `pydantic field`
+  messages; `Field(...)`, `Field()` and `= ...` are required fields.
+- Promise rejection handlers: a handler given as a reference to a function
+  defined at the top level of the same module is classified by that
+  function's body; other references stay unresolved; an expression-bodied
+  arrow that only logs is `logging_only`; a bare `log(...)` call counts as
+  logging in JavaScript. Swallowing, rethrowing (with `transparent_rethrow`),
+  `.finally(fn)` and `async` `try`/`catch` already behaved as the brief asks
+  and are pinned by tests.
+- `unsupported_sources` (top level; `"fail"` | `"warn"` | `"ignore"`; `warn`
+  in `strict` and `recommended`, `ignore` in `minimal`): what an included file
+  no adapter can parse means. `fail` makes each one an analysis failure (file
+  status `unsupported_source`, language `unsupported`, exit 3); `warn` lists
+  them under `coverage.unsupported_sources` with a `warning:` line; `ignore`
+  only counts them (a reported deviation). `coverage.discovery` gains
+  `unsupported_sources`; `coverage` gains `unsupported_sources_policy` and
+  `unsupported_sources` (additive, `schema_version` stays `"1"`).
+
 ### Changed
 - `CPLX005` reports one finding per import cycle instead of one per member,
   anchored on the lexically first member at its import into the cycle (stable
@@ -81,7 +120,11 @@ content-hash cache) is deferred to a later release.
   consumers comparing reports ignore it. `metrics.complexity.thresholds` gains
   `max_lines_warn`. `CPLX006` appears in `coverage.rules_implemented` and in
   every file's `rules_applied`/`rules_disabled`. Boundary entries in
-  `config.values` may carry `exceptions` instead of `exception`.
+  `config.values` may carry `exceptions` instead of `exception`. Second batch:
+  `files[].status` may be `unsupported_source` and `files[].language`
+  `unsupported` (only under `unsupported_sources = "fail"`); `coverage` gains
+  `unsupported_sources_policy` and `unsupported_sources`;
+  `coverage.discovery` gains `unsupported_sources`.
 
 ## [0.1.0] - 2026-10-14
 

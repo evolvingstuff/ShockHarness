@@ -694,6 +694,136 @@ web/a.js:4:5: EXC002 error: catch clause after the transparent guard rethrowUnex
   logical lines of its own (nested units give up their whole span); a JS
   `const A = 1, TWO = 2;` marks two literals.
 
+## Feedback round 0.2.0, second batch: coverage gaps — DONE (2026-10-14)
+
+Input: `docs/shockharness-suggestions-2.md` (the same codebase compared rule by
+rule with its own startup linter). Items 1-4 are implemented; item 5 (a plugin
+API) is a design note and was not built. Same rules as the first batch: no
+version bump, no tag, the maintainer releases. Both suggestion documents are
+committed with this batch so the reasoning travels with the code.
+
+### What changed, per item
+
+| Item | Delivered | Where |
+|---|---|---|
+| 1 | `ModuleFacts.managers`: every `with` item whose context expression is a call, with the callee resolved through the symbol table, its positional arguments resolved as exception identities, the `as` name and the body attributed like a `try` body (`ManagerFact`). The exception rule turns the ones that catch into catch facts of kind `context manager`: `contextlib.suppress` (either import spelling; swallows, so `EXC002` reports it unless a boundary approved it) and the configured `rules.exceptions.capture_managers` (qualified names; exact when the import resolves, approximate by bare name when it does not; the exception stays available after the block, so `other` for `EXC002`). No readable type is an untyped catch (`unresolved`, never approvable). Boundaries approve them like `except` handlers; `EXC003` reads the body; each configured manager is a deviation and is validated as a dotted name. | `ir/model.py`, `ir/python_catches.py` (`collect_python_managers`), `ir/python.py`, `ir/javascript.py` (empty), `rules/exceptions.py` (`manager_catches`), `schema.py`, `config.py`, `defaults.toml` |
+| 2 | `DEF002`: `next(iterator, default)` (kind `next_default`) and `collections.defaultdict(factory)` through any import spelling (kind `defaultdict`; resolved with the catch module's `SymbolTable`, so `import collections as c; c.defaultdict(list)` and `from collections import defaultdict as dd` are found; `defaultdict()` is not). `d.pop(k, v)` and `d.setdefault(k, v)` were already covered since Milestone D and gained dedicated tests. `DEF001`: pydantic models (a base that resolves to `pydantic.BaseModel`) are checked like dataclasses with `pydantic field` messages: `x: int = v`, `Field(default=v)`, `Field(v)`, `Field(default_factory=f)`; `Field(...)`, `Field()` and `= ...` are required fields; an unresolved base does not count. The golden fixture `def_mapping_get.py` gained its `defaultdict(int)` row. | `ir/python_defaults.py`, `rules/defaults.py`, `ir/model.py`, `tests/fixtures/expected.json` |
+| 3 | Verified against Milestone C's promise handling, criterion by criterion (below). Gaps fixed: a handler given as a reference to a function defined at the top level of the module (declaration, exported or not, or a `const` bound to an arrow/function expression) is classified by that function's body; any other reference stays opaque with `unresolved` confidence and a message that says so; an expression-bodied arrow that only logs is `logging_only`; a bare `log(...)` call joins the JavaScript logging set. | `ir/javascript_catches.py` (`module_functions`, `is_logging_expression`) |
+| 4 | `unsupported_sources` (`fail` / `warn` / `ignore`; `warn` in strict and recommended, `ignore` in minimal). Discovery lists the files `include` matched (and `exclude` kept) whose extension no adapter parses (`DiscoveryResult.unsupported`, `counts.unsupported_sources`; `unsupported_extension` still counts every unparseable file). `fail`: each becomes a `FileResult` with status `unsupported_source` and language `unsupported` (`analysis.with_unsupported_sources`, applied in `api.analyze_paths` and per revision in `gating/diff.py`), the gate errors with its own reason regardless of `parse_errors`, `analysis_status` is `failed`, exit 3, and the text report names the file. `warn`: `coverage.unsupported_sources` lists them and the text trailer prints a `warning:` line. `ignore`: only counted; a reported deviation. `coverage.unsupported_sources_policy` records the value. An explicit unsupported target stays a usage error. | `discovery.py`, `analysis.py`, `api.py`, `gating/diff.py`, `gate.py`, `report.py`, `output/text.py`, `schema.py`, `config.py`, `defaults.toml`, `profiles/minimal.toml`, `schemas/report-v1.schema.json` |
+
+### Item 3: which acceptance criteria already held
+
+| Criterion | Before this batch | Work |
+|---|---|---|
+| `fetchData().catch(() => {})`: `EXC001` and `EXC002` swallow | held (inline arrow, empty block) | test only |
+| `.catch((error) => { throw error; })`: `EXC001` without `transparent_rethrow`, nothing with it | held (`reraise` classification, the `transparent_rethrow` path is kind-agnostic) | test only |
+| `.then(render, (error) => log(error))`: `EXC002` log-only | did not hold: an expression body was `other` and a bare `log(...)` was not a logging call | fixed |
+| `.finally(cleanup)`: nothing | held (`REJECTION_HANDLER_ARGS` lists `catch` and `then` only) | test only |
+| an `async` function's `try`/`catch` unchanged | held | test only |
+| a reference to a module function is classified by its body; other references are `unresolved` | did not hold: every reference was opaque | fixed |
+
+### Decisions taken here
+
+* Item 1, `EXC002` on an approved `suppress`: the brief says `EXC002` reports
+  the swallow "unless a boundary approves it" and its acceptance expects no
+  finding for an approved `suppress(FileNotFoundError)`, which differs from an
+  approved `except T: pass` (still `EXC002`). The brief is followed:
+  `suppress` names its discard and has no handler to inspect, so the boundary
+  approved the discard itself. Documented in `docs/rules.md` and the registry.
+* Item 1, configured capture managers are `other` for `EXC002`: the manager
+  keeps the exception for inspection after the block (`capture.captured_exception`),
+  which is the equivalent of `except T as exc: captured = exc`, not of `pass`.
+* Item 1, confidence vocabulary: the lead's "probable" for a bare-name match
+  is reported as `approximate`, the finding confidence the schema allows
+  (`exact` / `approximate` / `unresolved`); the docs say so.
+* Item 2, `defaultdict` resolution reuses `python_catches.SymbolTable` (the
+  defaults index now carries one), so the spelling table matches the one
+  `EXC001` uses for exception identities.
+* Item 3, bare `log(...)` as logging is JavaScript-only (Python keeps its
+  receiver-based regex plus `print`); the brief's acceptance names it.
+* Item 4, deviation: `"ignore"` is reported under every profile, as
+  `parse_errors = "warn"` is; `"fail"` is stricter than any profile default
+  and is not a deviation. The gate's reason for unsupported sources is its
+  own line, independent of `parse_errors`.
+* Item 5 was not built.
+
+### Self-scan before and after (strict, `.shockharness.toml`, `check src tests scripts`)
+
+| Point | Gate | Findings | By rule |
+|---|---|---|---|
+| After the first batch (38bb8f2) | PASS | 159 | CPLX002 65, CPLX006 42, CPLX001 26, CPLX004 12, CPLX003 4, DEF003 10 |
+| Final (second batch, new tests included) | PASS | 162 | CPLX002 67, CPLX006 43, CPLX001 26, CPLX004 12, CPLX003 4, DEF003 10 |
+
+No new hard finding: the tool uses no `contextlib.suppress`, `defaultdict`,
+`next(it, default)` or pydantic model, and `coverage.unsupported_sources` is
+empty under the default `warn` (the eight unparseable files the walk sees are
+`.toml`, `.md` and `.json` that `include` does not match). `--profile
+recommended`: PASS, same counts.
+
+### Evidence (all run 2026-10-14 on macOS arm64)
+
+```text
+$ ruff check src tests scripts && ruff format --check src tests scripts
+All checks passed!
+94 files already formatted
+
+$ pytest -q                      # CPython 3.14.7
+572 passed in 18.73s
+$ pytest -q                      # CPython 3.13.1
+572 passed in 18.55s
+$ pytest -q                      # CPython 3.12.8
+572 passed in 18.47s
+$ pytest -q                      # CPython 3.11.11
+572 passed in 21.01s
+(559 tests after the first batch; 13 new)
+
+$ shockharness check src tests scripts          # self-compliance, own strict config
+  analysis status: complete
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+  ... (23 policy deviations: 20 boundaries, 3 overrides)
+
+$ python -m build
+Successfully built shockharness-0.1.0.tar.gz and shockharness-0.1.0-py3-none-any.whl
+```
+
+Sample finding lines (a throwaway tree with `include = ["src/**/*"]` and one
+configured capture manager, `--parse-errors warn`):
+
+```text
+src/app.js:1:13: EXC002 error: promise .then rejection handler only logs the exception; logging is not handling  [fetchData().then(render, (error) => log(error));]
+src/app.js:3:13: EXC002 error: promise .catch handler swallows the exception: handler body is empty; the failure vanishes  [fetchData().catch(swallow);]
+src/io/fs.py:7:34: DEF001 error: pydantic field 'retries' of Settings has Field(default=...): 3  [retries: int = Field(default=3)]
+src/io/fs.py:11:5: EXC001 error: context manager of 'FileNotFoundError' is forbidden: catch of 'FileNotFoundError' is not approved by any boundary for this file  [with suppress(FileNotFoundError):]
+src/io/fs.py:11:5: EXC002 error: context manager swallows the exception: suppress(...) discards the exception; nothing after the block can tell that the operation did not happen  [with suppress(FileNotFoundError):]
+src/io/fs.py:13:14: DEF002 error: defaultdict(int) falls back to int() for every missing key; defaultdict(factory) creates factory() for every missing key, so a lookup never fails and a missing key is indistinguishable from an empty value  [counts = defaultdict(int)]
+src/io/fs.py:14:13: DEF002 error: next(iter(counts)) falls back to 0 when the iterator is exhausted; next(iterator, default) substitutes the default for an exhausted iterator; an empty sequence and a sequence that ends with the default look the same  [first = next(iter(counts), 0)]
+src/io/fs.py:15:5: EXC001 error: context manager of 'ProcessLookupError' is forbidden: catch of 'ProcessLookupError' is not approved by any boundary for this file  [with CapturedExceptionContext(ProcessLookupError, boundary="x") as capture:]
+  warning: 1 included file(s) have an extension no adapter parses and were not analyzed (unsupported_sources = "warn"): src/types.ts
+```
+
+### Acceptance criteria and their tests
+
+| Brief | Test |
+|---|---|
+| 1: `with suppress(FileNotFoundError)` without a boundary: `EXC001` + `EXC002` on the `with` line; with a boundary: nothing; `suppress(Exception)`: broad; configured manager behaves like `except ProcessLookupError:`; unlisted manager is an ordinary `with`; fingerprints stable | `tests/unit/test_exceptions.py::test_contextlib_suppress_is_a_swallowing_catch`, `::test_capture_managers_are_catches_when_configured`, `::test_manager_catch_fingerprints_survive_unrelated_edits` |
+| 2: one finding per form, none for the no-default variants, aliased `defaultdict` found, evidence in JSON | `tests/unit/test_defaults.py::test_pop_setdefault_and_next_with_defaults`, `::test_defaultdict_under_every_import_spelling`, `::test_pydantic_model_fields_are_dataclass_fields`; golden `python/def_mapping_get.py` |
+| 3: swallow, rethrow with/without `transparent_rethrow`, log-only, `.finally`, async `try`/`catch`; references | `tests/unit/test_exceptions.py::test_promise_rejection_handlers_acceptance`, `::test_promise_handler_references_resolve_to_module_functions` |
+| 4: `fail` exits 3 and names the file; `warn` lists it; `ignore` says nothing; a `.ts` outside `include` is never mentioned; strict default `warn` shown by `config effective` | `tests/cli/test_cli.py::test_unsupported_sources_policy[fail|warn|ignore]`, `::test_unsupported_sources_default_and_config_effective`, `tests/unit/test_discovery.py::test_unsupported_sources_are_listed_only_when_included`, `tests/unit/test_profiles.py::test_minimal_reports_everything_at_review_and_never_fails` |
+
+### Failures observed during development (and what was done)
+
+* The `warn` policy first exited 3 in its CLI test: the text renderer raised
+  `NameError` because a formatter pass had split the condition my edit was
+  anchored on, leaving the variable unbound. The process boundary turned it
+  into exit 3 with a traceback, as designed. Fixed; the test now distinguishes
+  the three policies' exit codes.
+* The golden fixture `def_mapping_get.py` already contained
+  `counts = defaultdict(int)`; the new `DEF002` row was reviewed and added to
+  `expected.json`.
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function

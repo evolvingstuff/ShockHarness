@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from shockharness import gate as gate_module
-from shockharness.analysis import AnalysisOptions, analyze_files
+from shockharness.analysis import AnalysisOptions, analyze_files, with_unsupported_sources
 from shockharness.complexity.regressions import abstraction_displacement, complexity_regressions
 from shockharness.config import EffectiveConfig
 from shockharness.constants import REPORT_SCHEMA_VERSION
@@ -156,10 +156,11 @@ def analyze_revision(
             raise UsageError(f"the analysis root ({where}) does not exist at {ref}", ref)
         discovery = discover(export_root, [export_root], config)
         outcome = analyze_files(discovery.files, config, options)
-    findings = [f for result in outcome.files for f in result.findings]
-    verdict = gate_module.evaluate(findings, outcome.files, config, None, NO_REGRESSIONS)
+    files = with_unsupported_sources(outcome.files, discovery, config)
+    findings = [f for result in files for f in result.findings]
+    verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
     elapsed = time.perf_counter() - started
-    report = build_report(outcome.files, discovery, config, verdict, outcome.metrics, elapsed)
+    report = build_report(files, discovery, config, verdict, outcome.metrics, elapsed)
     return Revision(ref=ref, commit=commit, report=report)
 
 

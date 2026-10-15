@@ -108,3 +108,21 @@ def test_duplicate_targets_collapse(empty_root: Path, strict_config: EffectiveCo
     file = touch(empty_root, "src/a.py", "")
     result = discover(empty_root, [file, empty_root / "src", file], strict_config)
     assert [f.relative for f in result.files] == ["src/a.py"]
+
+
+def test_unsupported_sources_are_listed_only_when_included(
+    make_config: Callable[[str], EffectiveConfig], empty_root: Path
+) -> None:
+    """0.2.0 second brief, item 4: an included file with an unparseable extension."""
+    config = make_config('include = ["src/**/*"]\nexclude = ["src/vendor/**"]\n')
+    touch(empty_root, "src/a.ts", "")
+    touch(empty_root, "src/b.js", "")
+    touch(empty_root, "src/vendor/c.ts", "")
+    touch(empty_root, "docs/d.ts", "")
+    result = discover(empty_root, [empty_root], config)
+    assert [f.relative for f in result.files] == ["src/b.js"]
+    assert [(s.relative, s.reason) for s in result.unsupported] == [
+        ("src/a.ts", "extension '.ts' is not a supported language")
+    ]
+    assert result.counts["unsupported_sources"] == 1
+    assert result.counts["unsupported_extension"] == 3  # every unparseable file, as before

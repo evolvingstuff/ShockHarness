@@ -1728,6 +1728,13 @@
     "findings": [
       [
         "DEF002",
+        7,
+        10,
+        "defaultdict(int) falls back to int() for",
+        false
+      ],
+      [
+        "DEF002",
         11,
         15,
         "CONFIG[\"timeout\"] falls back to 30 when ",

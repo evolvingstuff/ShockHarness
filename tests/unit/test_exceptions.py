@@ -681,3 +681,201 @@ def test_boundary_needs_exactly_one_of_exception_and_exceptions(
         make_config(head + 'exceptions = ["OSError", "*"]\n')
     with pytest.raises(ConfigError, match=r"transparent_guards\[0\]: must be the guard"):
         make_config('[tool.shockharness.rules.exceptions]\ntransparent_guards = ["not a name"]\n')
+
+
+# --- 0.2.0 second brief, item 1: context managers as catches -------------------------------
+
+SUPPRESS_PY = (
+    "from contextlib import suppress\n"
+    "def remove(path):\n"
+    "    with suppress(FileNotFoundError):\n"
+    "        path.unlink()\n"
+)
+FNF_BOUNDARY = (
+    "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+    'path = "src/io/**"\nlanguage = "python"\nexception = "FileNotFoundError"\nreason = "race"\n'
+)
+MANAGER_CONFIG = (
+    "[tool.shockharness.rules.exceptions]\n"
+    'capture_managers = ["app.errors.CapturedExceptionContext"]\n'
+)
+
+
+def test_contextlib_suppress_is_a_swallowing_catch(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    result = _run(strict_config, "src/io/fs.py", "python", SUPPRESS_PY)
+    assert finding_tuples(result) == [("EXC001", 3, 5), ("EXC002", 3, 5)]
+    assert result.findings[0].message == (
+        "context manager of 'FileNotFoundError' is forbidden: catch of 'FileNotFoundError' is "
+        "not approved by any boundary for this file"
+    )
+    assert result.findings[0].confidence == "exact"
+    assert result.findings[1].message.startswith(
+        "context manager swallows the exception: suppress(...) discards the exception"
+    )
+    assert result.findings[0].scope == "remove"
+    # approved by a boundary for that path: nothing; EXC003 still watches the body
+    approved = make_config(FNF_BOUNDARY)
+    assert _run(approved, "src/io/fs.py", "python", SUPPRESS_PY).findings == ()
+    wide = SUPPRESS_PY.replace(
+        "        path.unlink()\n", "        prepare(path)\n        path.unlink()\n"
+    )
+    wide_result = _run(approved, "src/io/fs.py", "python", wide)
+    assert [f.rule_id for f in wide_result.findings] == ["EXC003"]
+    assert "approved context manager protects 2 statements" in wide_result.findings[0].message
+    # the module-import spelling and a tuple of types
+    qualified = (
+        "import contextlib\n"
+        "with contextlib.suppress(FileNotFoundError, PermissionError):\n    cleanup()\n"
+    )
+    result = _run(approved, "src/io/fs.py", "python", qualified)
+    assert [f.rule_id for f in result.findings] == ["EXC001", "EXC002"]  # not approved: both
+    assert "'PermissionError' is not approved" in result.findings[0].message
+    # broad
+    broad = _run(
+        strict_config,
+        "src/a.py",
+        "python",
+        "from contextlib import suppress\nwith suppress(Exception):\n    go()\n",
+    )
+    assert "broad catch of 'Exception'" in broad.findings[0].message
+    # no readable type: untyped, like a bare except
+    untyped = _run(
+        strict_config,
+        "src/a.py",
+        "python",
+        "from contextlib import suppress\nwith suppress(*kinds):\n    go()\n",
+    )
+    assert untyped.findings[0].rule_id == "EXC001"
+    assert "no positional argument names an exception type" in untyped.findings[0].message
+    assert untyped.findings[0].confidence == "unresolved"
+    # an ordinary context manager is not a catch
+    assert (
+        _run(strict_config, "src/a.py", "python", "with open(p) as f:\n    f.read()\n").findings
+        == ()
+    )
+
+
+def test_capture_managers_are_catches_when_configured(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    config = make_config(MANAGER_CONFIG)
+    assert config.deviations == (
+        "rules.exceptions.capture_managers[0] treats `with "
+        "app.errors.CapturedExceptionContext(T, ...):` as a catch of the exception types T "
+        "passed to it; it is approved by boundaries like an except handler and reported by "
+        "EXC001 otherwise",
+    )
+    resolved = (
+        "from app.errors import CapturedExceptionContext\n"
+        "def alive(pid):\n"
+        "    capture = CapturedExceptionContext(ProcessLookupError, boundary='x')\n"
+        "    with CapturedExceptionContext(ProcessLookupError, boundary='x') as capture:\n"
+        "        os.kill(pid, 0)\n"
+        "    return capture.captured_exception is None\n"
+    )
+    result = _run(config, "src/proc.py", "python", resolved)
+    assert finding_tuples(result) == [("EXC001", 4, 5)]
+    assert result.findings[0].message == (
+        "context manager of 'ProcessLookupError' is forbidden: catch of 'ProcessLookupError' "
+        "is not approved by any boundary for this file"
+    )
+    assert result.findings[0].confidence == "exact"
+    # the same manager is not a swallow for EXC002: the exception is kept for inspection
+    assert not any(f.rule_id == "EXC002" for f in result.findings)
+    # approved like an except handler
+    approved = make_config(
+        MANAGER_CONFIG + "[[tool.shockharness.rules.exceptions.boundaries]]\n"
+        'path = "src/proc.py"\nlanguage = "python"\nexception = "ProcessLookupError"\n'
+        'reason = "the process may be gone"\n'
+    )
+    assert _run(approved, "src/proc.py", "python", resolved).findings == ()
+    # an unresolved import matches by bare name with approximate confidence
+    unresolved = resolved.replace("from app.errors import CapturedExceptionContext\n", "")
+    result = _run(config, "src/proc.py", "python", unresolved)
+    assert [(f.rule_id, f.confidence) for f in result.findings] == [("EXC001", "approximate")]
+    # an unlisted manager is an ordinary with
+    assert _run(strict_config, "src/proc.py", "python", resolved).findings == ()
+    # a listed manager without a readable type is an untyped catch
+    untyped = resolved.replace(
+        "CapturedExceptionContext(ProcessLookupError, boundary='x') as",
+        "CapturedExceptionContext(boundary='x') as",
+    )
+    result = _run(config, "src/proc.py", "python", untyped)
+    assert result.findings[0].confidence == "unresolved"
+    assert "an untyped catch can never be approved" in result.findings[0].message
+    with pytest.raises(ConfigError, match=r"capture_managers\[0\]: must be the manager"):
+        make_config('[tool.shockharness.rules.exceptions]\ncapture_managers = ["not a name"]\n')
+
+
+def test_manager_catch_fingerprints_survive_unrelated_edits(
+    strict_config: EffectiveConfig,
+) -> None:
+    before = _run(strict_config, "src/io/fs.py", "python", SUPPRESS_PY)
+    after = _run(strict_config, "src/io/fs.py", "python", "import os\n\n\n" + SUPPRESS_PY)
+    assert [f.fingerprint for f in before.findings] == [f.fingerprint for f in after.findings]
+    assert [f.span.line for f in after.findings] == [6, 6]
+
+
+# --- 0.2.0 second brief, item 3: promise rejection handlers ---------------------------------
+
+
+def _js(config: EffectiveConfig, text: str) -> list[tuple[str, int, str]]:
+    result = _run(config, "web/a.js", "javascript", text)
+    return [(f.rule_id, f.span.line, f.message) for f in result.findings]
+
+
+def test_promise_rejection_handlers_acceptance(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    swallow = _js(strict_config, "fetchData().catch(() => {});\n")
+    assert [(r[0], r[1]) for r in swallow] == [("EXC001", 1), ("EXC002", 1)]
+    assert "promise .catch handler swallows the exception" in swallow[1][2]
+    rethrow = "fetchData().catch((error) => { throw error; });\n"
+    assert [(r[0], r[1]) for r in _js(strict_config, rethrow)] == [("EXC001", 1)]
+    transparent = make_config("[tool.shockharness.rules.exceptions]\ntransparent_rethrow = true\n")
+    assert _js(transparent, rethrow) == []
+    logged = _js(strict_config, "fetchData().then(render, (error) => log(error));\n")
+    assert [(r[0], r[1]) for r in logged] == [("EXC001", 1), ("EXC002", 1)]
+    assert "promise .then rejection handler only logs the exception" in logged[1][2]
+    assert _js(strict_config, "fetchData().finally(cleanup);\n") == []
+    assert _js(strict_config, "fetchData().then(render);\n") == []
+    # an async function's try/catch is a catch clause, unchanged
+    clause = _js(
+        strict_config,
+        "async function load() {\n  try {\n    await fetchData();\n  } catch (error) {\n"
+        "    return null;\n  }\n}\n",
+    )
+    assert [(r[0], r[1]) for r in clause] == [("DEF005", 4), ("EXC001", 4)]
+
+
+def test_promise_handler_references_resolve_to_module_functions(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = (
+        "function swallow(error) {}\n"
+        "const rethrow = (error) => { throw error; };\n"
+        "export function logOnly(error) { console.error(error); }\n"
+        "fetchData().catch(swallow);\n"
+        "fetchData().catch(rethrow);\n"
+        "fetchData().then(ok, logOnly);\n"
+        "fetchData().catch(imported);\n"
+        "fetchData().catch(obj.method);\n"
+    )
+    result = _run(strict_config, "web/a.js", "javascript", text)
+    rows = [(f.rule_id, f.span.line, f.confidence) for f in result.findings]
+    assert rows == [
+        ("EXC001", 4, "unresolved"),
+        ("EXC002", 4, "exact"),
+        ("EXC001", 5, "unresolved"),
+        ("EXC001", 6, "unresolved"),
+        ("EXC002", 6, "exact"),
+        ("EXC001", 7, "unresolved"),
+        ("EXC001", 8, "unresolved"),
+    ]
+    messages = {f.span.line: f.message for f in result.findings if f.rule_id == "EXC001"}
+    assert "swallows" in [f.message for f in result.findings if f.span.line == 4][1]
+    assert "only logs" in [f.message for f in result.findings if f.span.line == 6][1]
+    assert "'imported' is not an inline function or a function defined" in messages[7]
+    assert "'obj.method' is not an inline function" in messages[8]
