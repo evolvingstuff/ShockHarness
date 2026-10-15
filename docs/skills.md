@@ -75,7 +75,7 @@ Add this line to the agent's instruction file (for example AGENTS.md):
       "sha256": "<hex SHA-256 of the file as written>"
     }
   },
-  "tool_version": "0.1.0"
+  "tool_version": "0.2.0"
 }
 ```
 

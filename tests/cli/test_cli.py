@@ -980,7 +980,7 @@ def test_check_summary_ends_with_the_same_gate_line(
     assert code == code_summary == 1
     assert "src/a.py:1:5: MAGIC001" in full and "src/a.py:1:5: MAGIC001" not in summary
     assert summary.startswith(
-        "shockharness 0.1.0 summary: 5 file(s), 4 analyzed, 1 parse failure(s); "
+        f"shockharness {__version__} summary: 5 file(s), 4 analyzed, 1 parse failure(s); "
     )
     assert "finding(s), 0 suppressed; " in summary.splitlines()[0]
     assert "  by severity: error=7, review=1" in summary

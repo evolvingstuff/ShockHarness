@@ -3,7 +3,9 @@
 All notable changes to ShockHarness. Format follows Keep a Changelog; versions
 follow Semantic Versioning. The report `schema_version` is tracked separately.
 
-## [Unreleased] (planned 0.2.0)
+## [Unreleased]
+
+## [0.2.0] - 2026-10-14
 
 The feedback round after the first run of 0.1.0 on a 906-file codebase
 (`docs/shockharness-suggestions.md`): precision, noise and adoption cost.
