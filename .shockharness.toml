@@ -44,6 +44,54 @@ exception = "UnicodeDecodeError"
 reason = "Config file bytes are external input; non-UTF-8 becomes a ConfigError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/policy_integrity.py"
+language = "python"
+exception = "OSError"
+reason = "VERIFY003 reads policy files of an exported revision; an unreadable one is recorded under coverage read_errors, never a pass"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/policy_integrity.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "A policy file of an exported revision is external bytes; undecodable text is recorded as a read error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/policy_integrity.py"
+language = "python"
+exception = "shockharness.errors.ConfigError"
+reason = "A revision's committed configuration is external input; an invalid one makes the VERIFY003 comparison unknown, never a crash or a pass"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/policy_integrity.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Candidate baseline files of the analyzed tree are external JSON; a file that is not JSON is not a baseline"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/tool_configs.py"
+language = "python"
+exception = "tomllib.TOMLDecodeError"
+reason = "ruff and pyproject settings of a revision are external input; invalid TOML makes the comparison unknown"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/tool_configs.py"
+language = "python"
+exception = "configparser.Error"
+reason = "setup.cfg, tox.ini, .flake8, pytest.ini and .coveragerc are external input; an invalid file makes the comparison unknown"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/tool_configs.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "An .eslintrc is external input and may be YAML; a file that is not JSON makes the comparison unknown"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/tool_configs.py"
+language = "python"
+exception = "ValueError"
+reason = "pytest addopts is external text; shlex rejects unbalanced quotes, and such a value is split on whitespace instead"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/analysis.py"
 language = "python"
 exception = "OSError"

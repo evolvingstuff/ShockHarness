@@ -2572,3 +2572,163 @@ H2 part 2: VERIFY003 (semantic diff of `.shockharness.toml`, workflows,
 baselines and tool configuration against the trusted base), the `--policy FILE`
 tier (spec 21.1 decision 6), the `verification-integrity` skill, and adversarial
 PR fixtures. The next release waits for it, per the maintainer.
+
+## Milestone H2 part 2: VERIFY003, --policy tier, verification-integrity skill — DONE (2026-10-16)
+
+Implemented in the lead session (the maintainer chose "do it here"). Spec section
+21.2, H2 row, second half; spec 21.1 decision 6 (the policy tier). With part 1
+this completes H2; release 0.4.0 waits for the maintainer.
+
+### What was built
+
+* **Loosening test** (`loosening.py`), shared by the policy tier and VERIFY003:
+  new deviation lines (list indices normalized, multiset difference, so
+  reordering is not a loosening), ordered settings moved to their looser end
+  (gate modes, `unsupported_sources`, `parse_errors`, VERIFY severity, fan-out
+  severity), raised complexity thresholds, a narrower `include` or wider
+  `exclude`. One entry per key.
+* **VERIFY003** (`rules/policy_integrity.py`): each revision's export is
+  snapshotted (committed configuration loaded as `check` would, tool
+  configuration files, workflows, baselines, and the head tree's file scope under
+  both configurations). `compare_policy` reports configuration loosenings,
+  dropped files (first five listed), baseline growth, workflow tampering
+  (`rules/workflows.py`, line-based, no YAML library) and tool-config loosening
+  (`rules/tool_configs.py`: ruff, flake8, pytest, coverage, JSON ESLint; stdlib
+  `tomllib`, `configparser`, `json`, `shlex`). An unreadable or unparseable side
+  makes the finding `unknown` (inventoried in
+  `tests/unit/test_unknown_inventory.py`).
+* **`--policy FILE`** (`config.py`): refused inside the root (exit 2); layered
+  between profile and repository; a repository key that would loosen a policy
+  key is dropped and recorded as `PolicyAttempt` (`config.policy_attempts`, a
+  config note, and a VERIFY003 finding at the key's line, in `check` too).
+  `config.policy` carries the path, the SHA-256 of the canonical JSON and the
+  keys.
+* **Strictest of base** (`strictest_verification`): in a diff the VERIFY rules
+  run with the stricter of the run's and the base revision's
+  `rules.verification`.
+* **Reusable workflow**: `check.yml` gains `policy-repository`, `policy-ref`,
+  `policy-path` and a `policy-token` secret.
+* **Skill**: `verification-integrity` (fifth skill; the generic pointer line
+  and every count derive from `SKILL_NAMES`).
+* **Reports**: `config.policy`, `config.policy_attempts`,
+  `coverage.verification.policy`, `coverage.verification.policy_attempts`;
+  both schema files updated (additive). The test suite's schema checker now
+  understands union types (`["object", "null"]`).
+
+### Decisions (beyond the brief; review these)
+
+1. **`check.yml` takes a repository, not a path.** The brief asked for a policy
+   path input, but any path inside the checked-out workspace is editable by the
+   change under review and is refused by `--policy`. The workflow clones
+   `policy-repository` at `policy-ref` (a branch or tag: `git clone --branch`
+   does not take a commit) into `$RUNNER_TEMP` and passes that path. A private
+   policy repository needs the `policy-token` secret; the token is used only in
+   the clone URL of that step.
+2. **Strictest of base.** Without it a change could set
+   `rules.verification.enabled = false` (or `severity = "review"`, or an
+   allowed skip reason for its own skip) and the rules reporting it would obey
+   the head. The loosening is reported by VERIFY003 and applies after merge.
+   `tests/cli/test_verification_cli.py` now commits the allowed reason at base,
+   and a new test checks that a same-change exemption does not apply.
+3. **Command-line overrides stay above the policy.** `--profile` and
+   `--parse-errors` are the operator's (the layer order in spec 19 puts the CLI
+   last). A `--profile` looser than the policy's adds a config note, and a
+   workflow that adds `--profile minimal|recommended` or `--parse-errors warn`
+   to a ShockHarness job is a VERIFY003 finding. The reusable workflow has no
+   input for either flag.
+4. **A list is one policy key.** A repository `exclude` that extends the
+   policy's list is an attempt and the policy's list applies, rather than a
+   merge.
+5. **A tightening of a policy key is allowed** (a lower threshold, a stricter
+   severity); only loosening is reverted.
+6. **Boundaries are loosenings.** A new `[[rules.exceptions.boundaries]]` entry
+   is a deviation, so it is a VERIFY003 finding. This change itself adds eight
+   (the new modules read external files) and the self-diff reports exactly
+   those eight, at warning. All of them anchor at the first boundaries header,
+   because a TOML array-of-tables entry has no key of its own to find.
+7. **Workflows only at the repository top level**: when `--root` is a
+   subdirectory, `.github/workflows` is outside the analysis and
+   `coverage.verification.policy.workflows_checked` is false, with a note.
+8. **Complexity in the new code**: the first self-diff showed new CPLX warnings
+   on `take_snapshot`, `_config_findings`, `parse_jobs`, `workflow_loosenings`,
+   `_ini`, `tool_loosenings`, `diff_revisions` and `load_config_with_overrides`;
+   each was split into named steps. The final self-diff adds no CPLX finding.
+9. **Self-compliance caught**: a `-1` step in `range` (rewritten with
+   `reversed`), five DEF004 and three DEF002 fallbacks, three EXC003 try bodies
+   that returned a tuple (now a single call followed by the return), and a
+   DEF003 review `a.startswith(x) or a.startswith(y)` (now one `startswith`
+   with a tuple). Eight new boundaries are declared in `.shockharness.toml`.
+
+### Evidence (2026-10-16, macOS, all commands from the repository root)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+119 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  191 findings  (cache hits 0 / misses 122, then 122 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1022 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1 (fresh uv environments)
+1021 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+New tests: `tests/cli/test_policy_integrity_cli.py` (14: adversarial fixtures
+(a) to (i) parametrized, (j) the policy attempt, an untouched repository,
+`check --policy`, a policy inside the root, and a plain check without a policy;
+reports validated against both schemas), `tests/unit/test_policy_tier.py` (10),
+`tests/unit/test_loosening.py` (9), `tests/unit/test_tool_configs.py` (8),
+`tests/unit/test_workflow_loosening.py` (8), plus updates to the registry,
+config, report, inventory, workflow and verification CLI tests.
+
+Adversarial fixtures, each one head commit on a small repository whose base
+sets `rules.verification.severity = "error"`; `gate` exits 1 on every one with
+a `new`, `error`, `policy_integrity` finding: (a) magic numbers disabled,
+(b) `exclude = ["src/**"]` (dropped files), (c) `it.only`, (d) `assert True`,
+(e) a baseline fingerprint added, (f) `continue-on-error: true`, (g) the gate
+job deleted, (h) `--exit-zero`, (i) a ruff per-file-ignore, (j) a repository
+`cognitive_warn = 40` against a policy's 15 (reverted, attempt recorded).
+
+Verdicts against published 0.3.0 (`pip install shockharness==0.3.0`), same
+inputs, all three profiles, no `--policy`: golden fixtures (410/400/402
+findings, exits 3/3/1), both examples, and the self-scan (191 findings, exit 0;
+0.3.0 run with the pre-H1 `.shockharness.toml` plus this change's eight new
+boundaries) are **identical**.
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+Self-diff: the working tree committed in a scratch clone and gated against H2
+part 1 (`gate --base b608940 --head HEAD`): 123 files compared (9 new),
+VERIFY001-VERIFY004 applied, policy configuration `compared`, five policy files
+checked (three workflows, `.shockharness.toml`, `pyproject.toml`); new findings
+are exactly the eight VERIFY003 boundary additions (warning); `gate: PASS
+(exit 0)`.
+
+### Failures observed during development (and what was done)
+
+* One run of the 3.12 suite, in parallel with the 3.11 and 3.13 suites,
+  reported one failure that was not captured; two more parallel runs and a
+  serial run passed on every version. Running the three suites in parallel also
+  made a concurrent warm self-gate miss the cache: the suites' own self-scan
+  writes the repository's `.shockharness-cache`. The cold/warm figures above
+  were taken with nothing else running.
+* The first test of fixture (d) used `assert LIMIT == LIMIT`, which VERIFY004
+  does not treat as a tautology (it judges equal *constants* only, as
+  documented); the fixture now uses `assert True`.
+
+### Limitations and next tasks
+
+* Listed in `docs/limitations.md` (VERIFY001-VERIFY004): workflow text parsing,
+  tool configuration at the root only, ESLint flat config not read, baselines by
+  file name, and the CLI overrides above the policy.
+* Release 0.4.0 (H1 + H2) when the maintainer asks: bump, changelog date, pins
+  in the examples and docs (`docs/configuration.md` already shows `@v0.4.0` for
+  the policy inputs), tag after CI.

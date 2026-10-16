@@ -268,6 +268,13 @@ def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
         "--root", type=Path, default=Path.cwd(), help="analysis root (default: current directory)"
     )
     parser.add_argument("--config", type=Path, default=None, help="explicit configuration file")
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        default=None,
+        help="organization policy file (TOML with [tool.shockharness]) kept outside the "
+        "analyzed root; the repository's configuration cannot loosen the keys it sets",
+    )
     # The only two configuration keys the command line may override (docs/configuration.md).
     parser.add_argument(
         "--profile",
@@ -341,7 +348,9 @@ def _options(args: argparse.Namespace) -> AnalysisOptions:
 
 
 def _load_config(args: argparse.Namespace) -> EffectiveConfig:
-    overrides = CliOverrides(profile=args.profile, parse_errors=args.parse_errors)
+    overrides = CliOverrides(
+        profile=args.profile, parse_errors=args.parse_errors, policy=args.policy
+    )
     return load_config_with_overrides(args.root, args.config, overrides)
 
 

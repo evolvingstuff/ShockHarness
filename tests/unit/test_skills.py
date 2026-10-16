@@ -69,12 +69,13 @@ def section(text: str, heading: str) -> str:
 # ----------------------------------------------------------------- shipped files
 
 
-def test_four_skills_ship_with_valid_frontmatter() -> None:
+def test_five_skills_ship_with_valid_frontmatter() -> None:
     assert skill_names() == (
         "write-compliant-code",
         "fix-violations",
         "refactor-complexity",
         "pre-commit-review",
+        "verification-integrity",
     )
     for name in SKILL_NAMES:
         text = skill_text(name)
@@ -438,7 +439,7 @@ def test_cli_install_update_check_exit_codes(
         ["skills", "install", "--agent", "claude", "--project", str(project)], capsys
     )
     assert code == 0
-    assert "installed 4 skill(s) for claude" in out
+    assert f"installed {len(SKILL_NAMES)} skill(s) for claude" in out
     assert (project / ".claude" / "skills" / MANIFEST_FILENAME).is_file()
     code, _, err = run(
         ["skills", "install", "--agent", "claude", "--project", str(project)], capsys
@@ -447,7 +448,7 @@ def test_cli_install_update_check_exit_codes(
     code, out, _ = run(
         ["skills", "update", "--agent", "claude", "--project", str(project), "--check"], capsys
     )
-    assert code == 0 and out.rstrip().endswith("4 skill(s) up to date")
+    assert code == 0 and out.rstrip().endswith(f"{len(SKILL_NAMES)} skill(s) up to date")
     (project / ".claude" / "skills" / "fix-violations" / "SKILL.md").write_text(
         "x", encoding="utf-8"
     )
@@ -462,7 +463,7 @@ def test_cli_install_update_check_exit_codes(
     )
     assert code == 0
     code, out, _ = run(["skills", "update", "--agent", "claude", "--project", str(project)], capsys)
-    assert code == 0 and out.rstrip().endswith("4 skill(s) up to date")
+    assert code == 0 and out.rstrip().endswith(f"{len(SKILL_NAMES)} skill(s) up to date")
 
 
 def test_cli_codex_destination_and_user_flag(

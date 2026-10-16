@@ -45,13 +45,24 @@ from shockharness.report import (
     Report,
     build_report,
     build_summary,
+    config_block,
     execution_summary,
     rebuild_with_findings,
+)
+from shockharness.roles import FILE_ROLES_KEY, role_classifier
+from shockharness.rules.policy_integrity import (
+    PolicySnapshot,
+    compare_policy,
+    fingerprinted,
+    policy_attempt_findings,
+    strictest_verification,
+    take_snapshot,
 )
 from shockharness.rules.registry import (
     CATEGORY_POLICY,
     SEVERITY_ERROR,
     VERIFICATION_SECTION,
+    VERIFY003,
     category_of,
 )
 from shockharness.rules.verification import (
@@ -74,8 +85,10 @@ class Revision:
     ref: str
     commit: str
     report: Report
-    # Per-file verification facts (H2); compared between base and head, never serialized.
+    # Per-file verification facts (H2) and the committed policy (H2 part 2); compared
+    # between base and head, never serialized.
     verification: Mapping[str, FileVerification]
+    policy: PolicySnapshot
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -153,11 +166,7 @@ class DiffReport:
             "analysis_status": self.head.report.analysis_status,
             "config_digest": self.config.digest,
             "effective_profile": self.config.values["profile"],
-            "config": {
-                "source": {"tier": self.config.source.tier, "path": self.config.source.path},
-                "notes": list(self.config.notes),
-                "deviations": list(self.config.deviations),
-            },
+            "config": config_block(self.config),
             "coverage": dict(self.head.report.coverage),
             "base": self.base.to_json_dict(),
             "head": self.head.to_json_dict(),
@@ -188,8 +197,14 @@ def analyze_revision(
     ref: str,
     config: EffectiveConfig,
     options: AnalysisOptions,
+    base_config: EffectiveConfig | None,
+    is_head: bool,
 ) -> Revision:
-    """Export the tree at ``ref`` and analyze the part that corresponds to ``root``."""
+    """Export the tree at ``ref`` and analyze the part that corresponds to ``root``.
+
+    While the tree exists, the revision's committed policy is read (VERIFY003); for the
+    head revision, ``base_config`` (the base revision's committed configuration) is used
+    to list the files the base configuration would analyze in the head tree."""
     commit = resolve_commit(root, ref)
     started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="shockharness-") as exported:
@@ -202,6 +217,7 @@ def analyze_revision(
             raise UsageError(f"the analysis root ({where}) does not exist at {ref}", ref)
         discovery = discover(export_root, [export_root], config)
         outcome = analyze_files(discovery.files, config, options, None)
+        policy = take_snapshot(export_root, Path(exported), location.prefix, base_config, is_head)
     files = with_unsupported_sources(outcome.files, discovery, config)
     findings = [f for result in files for f in result.findings]
     verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
@@ -209,8 +225,12 @@ def analyze_revision(
     cache = cache_coverage_without_cache(
         STATUS_BYPASSED, str(cache_settings(config)["directory"]), REASON_REVISION
     )
-    report = build_report(files, discovery, config, verdict, outcome.metrics, elapsed, cache)
-    return Revision(ref=ref, commit=commit, report=report, verification=outcome.verification)
+    report = build_report(
+        files, discovery, config, verdict, outcome.metrics, elapsed, cache, (), {}
+    )
+    return Revision(
+        ref=ref, commit=commit, report=report, verification=outcome.verification, policy=policy
+    )
 
 
 def _renames(location: RepositoryLocation, base: str, head: str) -> Renames:
@@ -241,13 +261,56 @@ def with_verification(report: Report, result: VerificationResult) -> Report:
     findings = tuple(sorted([*report.findings, *result.findings], key=lambda f: f.sort_key()))
     coverage = dict(report.coverage)
     coverage[VERIFICATION_COVERAGE] = result.coverage
+    analyzed = {file.path for file in report.files}
+    classifier = role_classifier(report.config.values[FILE_ROLES_KEY])
+    extra_roles = {
+        f.path: classifier.classify(f.path).role for f in result.findings if f.path not in analyzed
+    }
     return replace(
         report,
         files=tuple(files),
         findings=findings,
         coverage=coverage,
         execution_summary=execution_summary(files, findings),
-        summary=build_summary(files, findings, report.metrics),
+        summary=build_summary(files, findings, report.metrics, extra_roles),
+    )
+
+
+def _verify(
+    root: Path,
+    location: RepositoryLocation,
+    config: EffectiveConfig,
+    base: Revision,
+    head: Revision,
+) -> VerificationResult:
+    """VERIFY001-VERIFY004 for the change from ``base`` to ``head``, plus the ``--policy``
+    attempts, as one result for the head report."""
+    base_settings = None
+    if base.policy.config is not None:
+        base_settings = base.policy.config.section(VERIFICATION_SECTION)
+    # A change cannot switch off or lower the rules that report it doing so.
+    settings = strictest_verification(config.section(VERIFICATION_SECTION), base_settings)
+    renames = _renames(location, base.commit, head.commit)
+    verification = compare_revisions(
+        base.verification, head.verification, renames, settings, base.commit
+    )
+    policy = compare_policy(base.policy, head.policy, renames.head_to_base, settings, base.commit)
+    attempts = policy_attempt_findings(config, root, settings)
+    policy_findings = fingerprinted([*policy.findings, *attempts])
+    rules = set(verification.coverage["rules"])
+    if settings["enabled"] is True:
+        rules.add(VERIFY003.rule_id)
+    return VerificationResult(
+        findings=tuple(
+            sorted([*verification.findings, *policy_findings], key=lambda f: f.sort_key())
+        ),
+        applied=verification.applied,
+        coverage={
+            **verification.coverage,
+            "rules": sorted(rules),
+            "policy": policy.coverage,
+            "policy_attempts": len(attempts),
+        },
     )
 
 
@@ -268,16 +331,10 @@ def diff_revisions(
     ``metrics.graph.abstraction_displacement``.
     """
     location = _require_repository(root)
-    base = analyze_revision(root, location, base_ref, config, options)
-    head = analyze_revision(root, location, head_ref, config, options)
-    verification = compare_revisions(
-        base.verification,
-        head.verification,
-        _renames(location, base.commit, head.commit),
-        config.section(VERIFICATION_SECTION),
-        base.commit,
-    )
-    head = replace(head, report=with_verification(head.report, verification))
+    base = analyze_revision(root, location, base_ref, config, options, None, False)
+    head = analyze_revision(root, location, head_ref, config, options, base.policy.config, True)
+    combined = _verify(root, location, config, base, head)
+    head = replace(head, report=with_verification(head.report, combined))
     base_by_fp = {f.fingerprint: f for f in base.report.findings if f.fingerprint is not None}
     head_by_fp = {f.fingerprint: f for f in head.report.findings if f.fingerprint is not None}
     assert len(base_by_fp) == len(base.report.findings), "fingerprints must be unique"

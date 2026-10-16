@@ -36,7 +36,7 @@ def test_severities_are_valid() -> None:
         assert rule.default_severity in registry.SEVERITIES, rule.rule_id
 
 
-def test_implemented_rules_are_exactly_the_h2_part_1_set() -> None:
+def test_implemented_rules_are_exactly_the_h2_set() -> None:
     assert {r.rule_id for r in registry.implemented_rules()} == {
         "MAGIC001",
         "EXC001",
@@ -58,15 +58,17 @@ def test_implemented_rules_are_exactly_the_h2_part_1_set() -> None:
         "SUPP002",
         "VERIFY001",
         "VERIFY002",
+        "VERIFY003",
         "VERIFY004",
     }
-    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002", "VERIFY003"}
+    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
 
 
 def test_verification_rules_need_a_base_revision_and_are_policy_integrity() -> None:
     assert [r.rule_id for r in registry.base_revision_rules()] == [
         "VERIFY001",
         "VERIFY002",
+        "VERIFY003",
         "VERIFY004",
     ]
     for rule in registry.RULES:

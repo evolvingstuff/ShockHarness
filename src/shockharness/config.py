@@ -7,9 +7,16 @@ shadowed ``pyproject.toml`` table is reported in ``notes`` rather than silently
 ignored.
 
 Layers (lowest first): bundled defaults < the selected built-in profile
-(``profile = "..."``; an overlay shipped as package data) < the user source <
-the two command-line overrides (``--profile``, ``--parse-errors``). Every key
-records the layer it came from in ``origins``.
+(``profile = "..."``; an overlay shipped as package data) < the policy file
+(``--policy FILE``, H2 part 2) < the user source < the two command-line overrides
+(``--profile``, ``--parse-errors``). Every key records the layer it came from in
+``origins``.
+
+The policy file is the organization's: it must live outside the analyzed root, and
+the repository's configuration cannot loosen a key it sets (spec 21.1 decision 6).
+A repository key that would loosen one is reverted to the policy's value and kept as
+a :class:`PolicyAttempt`, which VERIFY003 reports. Tightening a policy key is allowed.
+A list is one key: a policy that sets ``overrides = []`` locks the overrides.
 
 Nothing here reads environment variables or executes configuration content.
 """
@@ -27,6 +34,7 @@ from typing import Any
 
 from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
+from shockharness.loosening import loosenings
 from shockharness.roles import CLASSIFIED_ROLES, FILE_ROLES_KEY, ROLE_CONFIG
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
@@ -102,18 +110,53 @@ class ConfigSource:
 
 @dataclass(frozen=True)
 class CliOverrides:
-    """The only configuration keys the command line may override.
+    """What the command line contributes to the configuration.
 
     ``--profile`` replaces the profile layer (the repository's own keys still apply on
     top of it); ``--parse-errors`` decides whether syntax failures fail the run. Both
-    are recorded in ``origins`` as ``cli_override`` and in ``notes``.
+    are recorded in ``origins`` as ``cli_override`` and in ``notes``. ``--policy``
+    names the organization's policy file (H2 part 2), a layer of its own.
     """
 
     profile: str | None
     parse_errors: str | None
+    policy: Path | None
 
 
-NO_OVERRIDES = CliOverrides(profile=None, parse_errors=None)
+NO_OVERRIDES = CliOverrides(profile=None, parse_errors=None, policy=None)
+ORIGIN_POLICY = "policy"
+
+
+@dataclass(frozen=True)
+class PolicyFile:
+    """The ``--policy`` file in effect: its path, a digest of its table, and the dotted
+    keys it sets (a list is one key)."""
+
+    path: str
+    digest: str
+    keys: tuple[str, ...]
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"path": self.path, "digest": self.digest, "keys": list(self.keys)}
+
+
+@dataclass(frozen=True)
+class PolicyAttempt:
+    """A repository key that would have loosened a key the policy sets. The policy's
+    value applies; ``reasons`` say what would have got looser."""
+
+    key: str
+    policy_value: Any
+    attempted_value: Any
+    reasons: tuple[str, ...]
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "policy_value": json.loads(json.dumps(self.policy_value)),
+            "attempted_value": json.loads(json.dumps(self.attempted_value)),
+            "reasons": list(self.reasons),
+        }
 
 
 @dataclass(frozen=True)
@@ -124,6 +167,8 @@ class EffectiveConfig:
     notes: tuple[str, ...]
     deviations: tuple[str, ...]
     digest: str
+    policy: PolicyFile | None
+    policy_attempts: tuple[PolicyAttempt, ...]
 
     def section(self, dotted: str) -> Mapping[str, Any]:
         node: Any = self.values
@@ -139,6 +184,8 @@ class EffectiveConfig:
             "deviations": list(self.deviations),
             "origins": dict(sorted(self.origins.items())),
             "values": json.loads(json.dumps(self.values)),
+            "policy": None if self.policy is None else self.policy.to_json_dict(),
+            "policy_attempts": [attempt.to_json_dict() for attempt in self.policy_attempts],
         }
 
 
@@ -598,6 +645,186 @@ def config_digest(values: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _leaves(table: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+    """Dotted leaf keys of a configuration table; a list is a leaf."""
+    found: dict[str, Any] = {}
+    for key, value in table.items():
+        dotted = key if prefix == "" else f"{prefix}.{key}"
+        if isinstance(value, Mapping):
+            found.update(_leaves(value, dotted))
+        else:
+            found[dotted] = value
+    return found
+
+
+def _nested(dotted: str, value: Any) -> dict[str, Any]:
+    """``{"a": {"b": value}}`` for ``"a.b"``."""
+    parts = dotted.split(".")
+    node: dict[str, Any] = {parts[len(parts) - 1]: copy.deepcopy(value)}
+    for part in reversed(parts[: len(parts) - 1]):
+        node = {part: node}
+    return node
+
+
+def _without(table: Mapping[str, Any], dotted: str) -> dict[str, Any]:
+    """A deep copy of ``table`` without the leaf ``dotted`` (empty tables pruned)."""
+    copied = copy.deepcopy(dict(table))
+    parts = dotted.split(".")
+    trail: list[dict[str, Any]] = [copied]
+    for part in parts[: len(parts) - 1]:
+        trail.append(trail[len(trail) - 1][part])
+    del trail[len(trail) - 1][parts[len(parts) - 1]]
+    for index in reversed(range(1, len(trail))):
+        if len(trail[index]) == 0:
+            del trail[index - 1][parts[index - 1]]
+    return copied
+
+
+def _load_policy(root: Path, path: Path) -> tuple[PolicyFile, dict[str, Any]]:
+    """Read and validate the ``--policy`` file. It must live outside the analyzed root:
+    a policy that the change under review can edit protects nothing."""
+    if not path.is_file():
+        raise ConfigError("policy file does not exist", str(path))
+    if path.resolve().is_relative_to(root.resolve()):
+        raise ConfigError(
+            "the policy file must live outside the analyzed root, where the change under "
+            "review cannot edit it (check it out from a separate, protected repository)",
+            str(path),
+        )
+    table = _extract_tool_table(_read_toml(path), str(path))
+    if table is None:
+        raise ConfigError("policy file has no [tool.shockharness] table", str(path))
+    issues = validate_shape(table)
+    if len(issues) > 0:
+        raise ConfigError(
+            "policy file is invalid:\n  " + "\n  ".join(issue.render() for issue in issues),
+            str(path),
+        )
+    canonical = json.dumps(table, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    keys = tuple(sorted(_leaves(table, "")))
+    return PolicyFile(path=str(path), digest=digest, keys=keys), table
+
+
+def _protect(
+    policy_values: dict[str, Any],
+    profile_values: Mapping[str, Any],
+    policy_keys: frozenset[str],
+    user_table: Mapping[str, Any],
+) -> tuple[dict[str, Any], list[PolicyAttempt]]:
+    """The user table minus every key that would loosen a key the policy sets."""
+    kept = copy.deepcopy(dict(user_table))
+    attempts: list[PolicyAttempt] = []
+    reference = _deviations(policy_values, profile_values)
+    for dotted, value in sorted(_leaves(user_table, "").items()):
+        if dotted not in policy_keys:
+            continue
+        policy_value = _section(policy_values, dotted)
+        if value == policy_value:
+            continue
+        trial = _deep_merge(policy_values, _nested(dotted, value), {}, ORIGIN_POLICY, "")
+        found = loosenings(policy_values, reference, trial, _deviations(trial, profile_values))
+        if len(found) == 0:
+            continue  # a tightening (or a neutral change) of a policy key is allowed
+        attempts.append(
+            PolicyAttempt(
+                key=dotted,
+                policy_value=policy_value,
+                attempted_value=value,
+                reasons=tuple(item.message for item in found),
+            )
+        )
+        kept = _without(kept, dotted)
+    return kept, attempts
+
+
+def _profile_looser(candidate: str, reference: str) -> bool:
+    """``PROFILES`` is ordered strictest first."""
+    return PROFILES.index(candidate) > PROFILES.index(reference)
+
+
+def _select_profile(
+    bundled: str,
+    policy_table: Mapping[str, Any],
+    user_table: dict[str, Any],
+    attempts: list[PolicyAttempt],
+) -> tuple[str, dict[str, Any]]:
+    """The profile before command-line overrides: the user source's, else the policy's,
+    else the bundled one. A user profile looser than the policy's is an attempt and is
+    dropped from the user table."""
+    profile_name = bundled
+    if PROFILE_KEY in policy_table:
+        profile_name = str(policy_table[PROFILE_KEY])
+    if PROFILE_KEY not in user_table:
+        return profile_name, user_table
+    wanted = str(user_table[PROFILE_KEY])
+    if PROFILE_KEY in policy_table and _profile_looser(wanted, profile_name):
+        attempts.append(
+            PolicyAttempt(
+                key=PROFILE_KEY,
+                policy_value=profile_name,
+                attempted_value=wanted,
+                reasons=(f"profile {wanted!r} is looser than the policy's {profile_name!r}",),
+            )
+        )
+        return profile_name, _without(user_table, PROFILE_KEY)
+    return wanted, user_table
+
+
+def _note_cli_profile(
+    selected: str, profile_name: str, policy_table: Mapping[str, Any], notes: list[str]
+) -> None:
+    if PROFILE_KEY in policy_table and _profile_looser(selected, profile_name):
+        notes.append(
+            f"--profile {selected!r} on the command line is looser than the policy "
+            f"file's profile {profile_name!r}; command-line overrides are the operator's and "
+            "are not bound by the policy (VERIFY003 reports a workflow that adds the flag)"
+        )
+    if selected != profile_name:
+        notes.append(
+            f"profile {selected!r} selected by --profile on the command line "
+            f"replaces profile {profile_name!r}; the configuration file's other keys "
+            "still apply on top of it"
+        )
+
+
+def _apply_policy(
+    merged: dict[str, Any],
+    profile_values: Mapping[str, Any],
+    policy: PolicyFile,
+    policy_table: Mapping[str, Any],
+    user_table: dict[str, Any],
+    origins: dict[str, str],
+    attempts: list[PolicyAttempt],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Merge the policy layer; return it and the user table minus every key that would
+    loosen a policy key (each recorded in ``attempts``)."""
+    policy_layer = {k: v for k, v in policy_table.items() if k != PROFILE_KEY}
+    merged = _deep_merge(merged, policy_layer, origins, ORIGIN_POLICY, "")
+    if PROFILE_KEY in policy_table:
+        origins[PROFILE_KEY] = ORIGIN_POLICY
+    user_table, protected = _protect(merged, profile_values, frozenset(policy.keys), user_table)
+    attempts.extend(protected)
+    return merged, user_table
+
+
+def _apply_cli_overrides(
+    merged: dict[str, Any], overrides: CliOverrides, origins: dict[str, str], notes: list[str]
+) -> dict[str, Any]:
+    cli_layer: dict[str, Any] = {}
+    if overrides.profile is not None:
+        cli_layer[PROFILE_KEY] = overrides.profile
+    if overrides.parse_errors is not None:
+        cli_layer[PARSE_ERRORS_KEY] = overrides.parse_errors
+        notes.append(
+            f"parse_errors = {overrides.parse_errors!r} set by --parse-errors on the command "
+            f"line (configured value: {merged[PARSE_ERRORS_KEY]!r})"
+        )
+    if len(cli_layer) == 0:
+        return merged
+    return _deep_merge(merged, cli_layer, origins, ORIGIN_CLI_OVERRIDE, "")
+
+
 def load_config(root: Path, explicit: Path | None) -> EffectiveConfig:
     """Discover, validate, and merge configuration for ``root`` with no CLI overrides.
 
@@ -625,13 +852,23 @@ def load_config_with_overrides(
     """Discover, validate, and merge configuration for ``root``.
 
     Layers, lowest first: bundled defaults, the profile overlay (selected by
-    ``--profile``, else the user source's ``profile`` key, else ``strict``), the user
-    source, the CLI overrides. Raises :class:`ConfigError` listing every shape and
-    semantic problem found.
+    ``--profile``, else the user source's ``profile`` key, else the policy file's, else
+    ``strict``), the ``--policy`` file, the user source minus every key that would
+    loosen a policy key, the CLI overrides. Raises :class:`ConfigError` listing every
+    shape and semantic problem found.
     """
     _validate_overrides(overrides)
     defaults = load_bundled_defaults()
     source, user_table, notes = _discover_source(root, explicit)
+    policy: PolicyFile | None = None
+    policy_table: dict[str, Any] = {}
+    attempts: list[PolicyAttempt] = []
+    if overrides.policy is not None:
+        policy, policy_table = _load_policy(root, overrides.policy)
+        notes.append(
+            f"policy file {policy.path} sets {len(policy.keys)} key(s); the repository's "
+            "configuration cannot loosen them"
+        )
 
     issues = validate_shape(user_table)
     if len(issues) > 0:
@@ -640,16 +877,11 @@ def load_config_with_overrides(
             source.path,
         )
 
-    profile_name = str(defaults[PROFILE_KEY])
-    if PROFILE_KEY in user_table:
-        profile_name = str(user_table[PROFILE_KEY])
+    profile_name, user_table = _select_profile(
+        str(defaults[PROFILE_KEY]), policy_table, user_table, attempts
+    )
     if overrides.profile is not None:
-        if overrides.profile != profile_name:
-            notes.append(
-                f"profile {overrides.profile!r} selected by --profile on the command line "
-                f"replaces profile {profile_name!r}; the configuration file's other keys "
-                "still apply on top of it"
-            )
+        _note_cli_profile(overrides.profile, profile_name, policy_table, notes)
         profile_name = overrides.profile
 
     origins: dict[str, str] = {}
@@ -657,19 +889,18 @@ def load_config_with_overrides(
     overlay = load_profile_overlay(profile_name)
     merged = _deep_merge(defaults, overlay, origins, ORIGIN_PROFILE_PREFIX + profile_name, "")
     profile_values = copy.deepcopy(merged)
+    if policy is not None:
+        merged, user_table = _apply_policy(
+            merged, profile_values, policy, policy_table, user_table, origins, attempts
+        )
+        for attempt in attempts:
+            notes.append(
+                f"{attempt.key} = {attempt.attempted_value!r} in {source.path} would loosen the "
+                f"policy file's {attempt.policy_value!r}; the policy's value applies"
+            )
     merged = _deep_merge(merged, user_table, origins, source.tier, "")
 
-    cli_layer: dict[str, Any] = {}
-    if overrides.profile is not None:
-        cli_layer[PROFILE_KEY] = overrides.profile
-    if overrides.parse_errors is not None:
-        cli_layer[PARSE_ERRORS_KEY] = overrides.parse_errors
-        notes.append(
-            f"parse_errors = {overrides.parse_errors!r} set by --parse-errors on the command "
-            f"line (configured value: {merged[PARSE_ERRORS_KEY]!r})"
-        )
-    if len(cli_layer) > 0:
-        merged = _deep_merge(merged, cli_layer, origins, ORIGIN_CLI_OVERRIDE, "")
+    merged = _apply_cli_overrides(merged, overrides, origins, notes)
 
     semantic = _semantic_issues(merged)
     if len(semantic) > 0:
@@ -686,6 +917,8 @@ def load_config_with_overrides(
         notes=tuple(notes),
         deviations=_deviations(merged, profile_values),
         digest=config_digest(merged),
+        policy=policy,
+        policy_attempts=tuple(attempts),
     )
 
 

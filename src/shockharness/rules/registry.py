@@ -1095,14 +1095,68 @@ VERIFY004 = RuleSpec(
     compliant_example="def test_total():\n    assert total([1, 2]) == expected_total",
 )
 
-VERIFY003 = _planned(
-    "VERIFY003",
-    "weakened policy, workflow or baseline",
-    VERIFICATION_FAMILY,
-    VERIFICATION_SECTION,
-    SEVERITY_WARNING,
-    "Semantic diff of protected paths: lowered thresholds, disabled rules, widened "
-    "allowlists, edited baselines, workflow pins and removed jobs (H2 part 2).",
+VERIFY003 = RuleSpec(
+    rule_id="VERIFY003",
+    version="1",
+    name="weakened policy, workflow or baseline",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A change loosens the policy that judges it: the ShockHarness configuration, a "
+        "baseline, the CI workflow that runs the gate, or another tool's configuration; or "
+        "the repository tries to loosen a key the organization's --policy file sets."
+    ),
+    rationale=(
+        "The cheapest way to pass a gate is to move it: disable a rule, raise a threshold, "
+        "exclude a directory, add fingerprints to the baseline, mark the CI step "
+        "continue-on-error, or ignore a code in ruff. Each of these is a policy decision "
+        "that deserves review, and none of them shows up as a code finding."
+    ),
+    guarantees=(
+        "Revision comparison (diff, gate --base --head), with each revision's committed "
+        "configuration loaded from its own tree: every policy deviation present at head and "
+        "absent at base (list order ignored), looser gate modes, unsupported_sources, "
+        "parse_errors, VERIFY or fan-out severity, raised complexity thresholds, patterns "
+        "removed from include or added to exclude, and the files the base configuration "
+        "analyzes in the head tree that the head configuration does not; baselines "
+        "(*baseline*.json) that gained fingerprints; workflow jobs (.github/workflows, "
+        "when the analysis root is the repository top level) that ran ShockHarness and were "
+        "removed or stopped, or gained continue-on-error: true, if: false, --exit-zero, "
+        "--profile minimal|recommended or --parse-errors warn, or an older analyzer pin; "
+        "ruff, flake8, pytest, coverage and JSON ESLint settings at the analysis root that "
+        "added ignores, deselections or omissions, removed selections or test paths, "
+        "lowered fail_under, or turned an ESLint rule down. With --policy, in any run: every "
+        "repository key that would loosen a key the policy file sets (the policy's value "
+        "applies)."
+    ),
+    limitations=(
+        "Workflows are read as text, not YAML: flow style, anchors and matrix-generated "
+        "jobs are not interpreted, and a renamed job looks removed. Tool configuration is "
+        "read only at the analysis root and only from the files listed in docs/rules.md; "
+        "flat-config eslint.config.js and YAML .eslintrc are not compared. A change that "
+        "makes a configuration invalid at one revision yields an unknown finding. Per-path "
+        "[[overrides]] do not apply to VERIFY003; only rules.verification.enabled turns it "
+        "off, and the strictest of the run's and the base revision's rules.verification "
+        "applies, so a change cannot switch off the rule reporting it."
+    ),
+    remediation=(
+        "Revert the loosening, or make the policy change deliberately in its own reviewed "
+        "change with the reason in the commit message. An organization that wants a key "
+        "fixed sets it in the --policy file kept outside the repository. "
+        + VERIFICATION_REMEDIATION_COMMON
+    ),
+    noncompliant_example=(
+        "[tool.shockharness.rules.magic_numbers]\nenabled = false\n"
+        "# .github/workflows/ci.yml\n- run: shockharness gate --base origin/main --head HEAD\n"
+        "  continue-on-error: true"
+    ),
+    compliant_example=(
+        "A separate pull request titled 'Policy: allow X in Y because Z' that changes only "
+        "the configuration, reviewed by the owners of .shockharness.toml (CODEOWNERS)."
+    ),
 )
 
 

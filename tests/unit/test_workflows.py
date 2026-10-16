@@ -75,6 +75,18 @@ def test_reusable_check_workflow_inputs_and_permissions() -> None:
     assert "fetch-depth: 0" in text
 
 
+def test_check_workflow_fetches_the_policy_outside_the_workspace() -> None:
+    text = read(".github/workflows/check.yml")
+    for name in ("policy-repository:", "policy-ref:", "policy-path:", "policy-token:"):
+        assert name in text
+    assert '"${RUNNER_TEMP}/shockharness-policy"' in text
+    assert 'args+=(--policy "${RUNNER_TEMP}/shockharness-policy/${POLICY_PATH}")' in text
+    assert "if: ${{ inputs.policy-repository != '' }}" in text
+    # A token is only ever read from the secret, never from an input.
+    assert "${{ secrets.policy-token }}" in text
+    assert "inputs.policy-token" not in text
+
+
 def test_dependabot_covers_actions_and_pip_weekly() -> None:
     text = read(".github/dependabot.yml")
     assert "version: 2" in text

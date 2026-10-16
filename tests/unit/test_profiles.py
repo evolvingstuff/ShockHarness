@@ -228,7 +228,7 @@ def test_cli_overrides_sit_above_the_repository_config(empty_root: Path) -> None
         encoding="utf-8",
     )
     config = load_config_with_overrides(
-        empty_root, None, CliOverrides(profile="strict", parse_errors="fail")
+        empty_root, None, CliOverrides(profile="strict", parse_errors="fail", policy=None)
     )
     assert config.values["profile"] == "strict"
     assert config.values["parse_errors"] == "fail"
@@ -252,9 +252,9 @@ def test_cli_overrides_sit_above_the_repository_config(empty_root: Path) -> None
 
 def test_invalid_cli_overrides_are_config_errors(empty_root: Path) -> None:
     with pytest.raises(ConfigError, match="--profile must be one of"):
-        load_config_with_overrides(empty_root, None, CliOverrides("lenient", None))
+        load_config_with_overrides(empty_root, None, CliOverrides("lenient", None, None))
     with pytest.raises(ConfigError, match="--parse-errors must be one of"):
-        load_config_with_overrides(empty_root, None, CliOverrides(None, "ignore"))
+        load_config_with_overrides(empty_root, None, CliOverrides(None, "ignore", None))
 
 
 def test_section_severity_without_a_profile_is_a_deviation(

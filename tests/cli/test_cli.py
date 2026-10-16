@@ -955,7 +955,7 @@ def test_check_reports_complexity_as_warnings_in_every_format(
     assert "gate: PASS (exit 0)" in out
     code, out, _ = run(["check", str(empty_root / "src"), "--format", "json", *root], capsys)
     data = json.loads(out)
-    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002", "VERIFY003"]
+    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002"]
     assert "CPLX005" in data["coverage"]["rules_implemented"]
     assert data["metrics"]["complexity"]["status"] == "available"
     assert data["metrics"]["graph"]["summary"]["units"] == 4

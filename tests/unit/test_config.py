@@ -192,7 +192,18 @@ def test_section_lookup(empty_root: Path) -> None:
 
 def test_effective_config_json_shape(empty_root: Path) -> None:
     data = load_config(empty_root, None).to_json_dict()
-    assert set(data) == {"source", "digest", "notes", "deviations", "origins", "values"}
+    assert set(data) == {
+        "source",
+        "digest",
+        "notes",
+        "deviations",
+        "origins",
+        "values",
+        "policy",
+        "policy_attempts",
+    }
+    assert data["policy"] is None
+    assert data["policy_attempts"] == []
     assert data["values"]["profile"] == "strict"
 
 

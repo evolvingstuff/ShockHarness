@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from shockharness.cache.store import STATUS_ENABLED as CACHE_ENABLED
-from shockharness.config import SUPPORTED_EXTENSIONS
+from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
 from shockharness.constants import (
     COMMIT_SHORT_HEX,
     CONFIG_DIGEST_SHORT_HEX,
@@ -176,12 +176,33 @@ def _verification_line(verification: Mapping[str, Any], rules: Sequence[str]) ->
     if verification["rename_detection"] != VERIFICATION_RENAMES_AVAILABLE:
         renames = f"rename detection unavailable ({verification['rename_detection_error']})"
     base = str(verification["base_commit"])[:COMMIT_SHORT_HEX]
-    return (
-        f"  verification: {', '.join(verification['rules'])} compared "
-        f"{verification['files_compared']} file(s) with base {base} "
+    line = (
+        f"  verification: {', '.join(verification['rules'])} against base {base}: "
+        f"{verification['files_compared']} source file(s) compared "
         f"({verification['files_new']} new, {renames}, {verification['base_unanalyzable']} "
-        f"with an unanalyzable base); severity {verification['severity']}"
+        f"with an unanalyzable base)"
     )
+    if "policy" in verification:
+        policy = verification["policy"]
+        line += (
+            f"; {len(policy['files_compared'])} policy file(s) and "
+            f"{len(policy['baselines'])} baseline(s) checked"
+        )
+        if policy["workflows_checked"] is not True:
+            line += " (workflows not checked: the analysis root is not the repository top level)"
+    return line + f"; severity {verification['severity']}"
+
+
+def _policy_lines(config: EffectiveConfig) -> list[str]:
+    """The ``--policy`` file and every repository key that tried to loosen it."""
+    if config.policy is None:
+        return []
+    lines = [
+        f"  policy: {config.policy.path} sets {len(config.policy.keys)} key(s) "
+        f"(digest {config.policy.digest[:CONFIG_DIGEST_SHORT_HEX]}); "
+        f"{len(config.policy_attempts)} repository key(s) tried to loosen them (VERIFY003)"
+    ]
+    return lines
 
 
 def _trailer_lines(report: Report) -> list[str]:
@@ -219,6 +240,7 @@ def _trailer_lines(report: Report) -> list[str]:
     lines.extend(_cache_lines(coverage["cache"]))
     for note in report.config.notes:
         lines.append(f"  config note: {note}")
+    lines.extend(_policy_lines(report.config))
     for deviation in report.config.deviations:
         lines.append(f"  policy deviation: {deviation}")
     lines.append(
@@ -372,6 +394,7 @@ def render_diff(diff: DiffReport) -> str:
     lines.append("  uncommitted changes are not part of HEAD; only committed trees are compared")
     for note in diff.config.notes:
         lines.append(f"  config note: {note}")
+    lines.extend(_policy_lines(diff.config))
     for deviation in diff.config.deviations:
         lines.append(f"  policy deviation: {deviation}")
     lines.append(

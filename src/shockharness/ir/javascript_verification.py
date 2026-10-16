@@ -208,7 +208,7 @@ def _is_assertion(call: Node) -> bool:
         return False
     if function.type == IDENTIFIER:
         name = node_text(function)
-        return name.startswith(EXPECT_PREFIX) or name.startswith(ASSERT)
+        return name.startswith((EXPECT_PREFIX, ASSERT))
     if function.type == MEMBER:
         target = function.child_by_field_name("object")
         return target is not None and target.type == IDENTIFIER and node_text(target) == ASSERT

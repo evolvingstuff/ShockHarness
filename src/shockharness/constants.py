@@ -102,3 +102,7 @@ EQUALITY_OPERANDS: Final[int] = 2
 # "status, old path, new path"; every other change is "status, path".
 GIT_RENAME_RECORD_TOKENS: Final[int] = 3
 GIT_CHANGE_RECORD_TOKENS: Final[int] = 2
+
+# VERIFY003 (H2 part 2): how many dropped file paths a scope finding lists before
+# saying "and N more".
+VERIFY003_LISTED_FILES: Final[int] = 5

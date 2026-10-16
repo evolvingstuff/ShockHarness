@@ -1,13 +1,13 @@
 # Agent skills
 
-ShockHarness ships four vendor-neutral agent skills as package data
+ShockHarness ships five vendor-neutral agent skills as package data
 (`src/shockharness/skills/<name>/SKILL.md`), in the open Agent Skills format:
 YAML frontmatter with `name` and `description`, then a Markdown body. The
 files mention no agent's internals; the `skills` command knows where each
 supported agent expects them. Installing is opt-in and never touches a file
 outside the chosen destination.
 
-## The four skills
+## The five skills
 
 | Skill | Use it when | What it enforces |
 |---|---|---|
@@ -15,6 +15,7 @@ outside the chosen destination.
 | `fix-violations` | `shockharness check` or `gate` exits 1 | Run the analyzer, identify the intended contract behind each finding, add a characterization test, change the code, rerun tests and analyzer. Never delete a `try`/`except`, replace `.get` with indexing or add a suppression without a contract review; a suppression needs an exact rule ID and a cited reason |
 | `refactor-complexity` | Simplifying or untangling code | Address repeated cognitive work and coupling rather than a metric; record call structure and behavior tests before and after. Quotes the real rules `CPLX001`-`CPLX006`, their thresholds, the report fields and the commands |
 | `pre-commit-review` | Before a commit or pull request | Run `shockharness gate --base <default branch> --head HEAD` (or `check .`), report unsupported analysis, policy deviations, suppressions and remaining warnings, run the tests; never claim a pass without the quoted output |
+| `verification-integrity` | A test, linter or gate fails and it is tempting to skip, suppress or loosen instead of fixing; editing `.shockharness.toml`, a baseline, a CI workflow or another tool's settings; a `VERIFY00x` finding | Fix the cause or stop and say what could not be fixed; never make a check pass by weakening it. Explains each of `VERIFY001`-`VERIFY004`, why they cannot be suppressed inline, the `--policy` floor and the strictest-of-base rule, and how to propose a policy change as its own reviewed change |
 
 Every skill contains compliant and non-compliant Python and JavaScript
 examples (the worked examples are `examples/python` and `examples/js`), exact
@@ -49,7 +50,7 @@ with `generic`, an unknown agent) exit 2 and write nothing.
 shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force]
 ```
 
-Writes `<destination>/<name>/SKILL.md` for each of the four skills, byte for
+Writes `<destination>/<name>/SKILL.md` for each of the five skills, byte for
 byte as shipped, then `<destination>/.shockharness-skills.json`. If any of
 those files already exists the command refuses (exit 2) and writes nothing;
 `--force` replaces them all. The command never creates, edits or deletes any
@@ -58,7 +59,7 @@ agent configuration. For `generic` it prints the line to add by hand:
 
 ```text
 Add this line to the agent's instruction file (for example AGENTS.md):
-  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review).
+  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review, verification-integrity).
 ```
 
 ## The manifest

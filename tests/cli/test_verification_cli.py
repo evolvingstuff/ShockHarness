@@ -124,7 +124,7 @@ def test_diff_reports_every_weakening_as_new_policy_integrity(
     assert coverage["status"] == "analyzed"
     assert coverage["base_commit"] == base
     assert coverage["files_compared"] == 3
-    assert coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY004"]
+    assert coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY003", "VERIFY004"]
     test_file = next(f for f in data["head"]["files"] if f["path"] == "tests/test_calc.py")
     assert {"VERIFY001", "VERIFY002", "VERIFY004"} <= set(test_file["rules_applied"])
     assert data["gate"]["status"] == "pass"
@@ -143,7 +143,8 @@ def test_diff_text_lists_policy_integrity_first(
     assert lines[1].startswith("  new: src/app.py:2:")
     assert "VERIFY002 warning: blanket suppression # noqa added" in lines[1]
     assert any(
-        line.startswith("  verification: VERIFY001, VERIFY002, VERIFY004 compared 3")
+        line.startswith("  verification: VERIFY001, VERIFY002, VERIFY003, VERIFY004 against base ")
+        and "3 source file(s) compared" in line
         for line in lines
     )
 
@@ -171,29 +172,62 @@ def test_gate_passes_by_default_and_fails_when_raised_to_error(
     assert "advisory run (--exit-zero)" in out
 
 
+ALLOWED_CONFIG = (
+    '[tool.shockharness.rules.verification]\nseverity = "review"\n'
+    'allowed_skip_reasons = ["flaky on CI"]\n'
+)
+
+
 def test_allowed_skip_reason_and_review_severity_are_deviations(
     empty_root: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    base, _ = weakened_repo(empty_root)
-    write(
-        empty_root,
-        ".shockharness.toml",
-        '[tool.shockharness.rules.verification]\nseverity = "review"\n'
-        'allowed_skip_reasons = ["flaky on CI"]\n',
-    )
+    # Committed at base: the change under review did not grant itself the exemption.
+    init_repo(empty_root)
+    write(empty_root, ".shockharness.toml", ALLOWED_CONFIG)
+    write(empty_root, "tests/test_calc.py", BASE_PY)
+    base = commit_all(empty_root, "base", BASE_DATE, "one@example.invalid")
+    write(empty_root, "tests/test_calc.py", HEAD_PY)
+    commit_all(empty_root, "head", HEAD_DATE, "two@example.invalid")
     code, out, _ = run(
         ["diff", "--base", base, "--head", "HEAD", "--format", "json", "--root", str(empty_root)],
         capsys,
     )
     assert code == 0
     data = json.loads(out)
-    assert ("VERIFY001", "tests/test_calc.py", 9) not in verify_rows(data)
+    rows = verify_rows(data)
+    assert ("VERIFY001", "tests/test_calc.py", 9) not in rows
+    assert ("VERIFY004", "tests/test_calc.py", 11) in rows
+    assert {f["severity"] for f in data["findings"] if f["rule_id"].startswith("VERIFY")} == {
+        "review"
+    }
     deviations = "\n".join(data["config"]["deviations"])
     assert "rules.verification.severity is 'review'" in deviations
     assert (
         "allowed_skip_reasons[0] accepts an added skip marker whose reason is 'flaky on CI'"
         in deviations
     )
+
+
+def test_an_exemption_granted_in_the_same_change_does_not_apply(
+    empty_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Strictest of base: the head may not lower or exempt the VERIFY rules reporting it.
+    base, _ = weakened_repo(empty_root)
+    write(empty_root, ".shockharness.toml", ALLOWED_CONFIG)
+    commit_all(empty_root, "exempt", LATER_DATE, "two@example.invalid")
+    code, out, _ = run(
+        ["diff", "--base", base, "--head", "HEAD", "--format", "json", "--root", str(empty_root)],
+        capsys,
+    )
+    assert code == 0
+    data = json.loads(out)
+    rows = verify_rows(data)
+    assert ("VERIFY001", "tests/test_calc.py", 9) in rows
+    severities = {f["severity"] for f in data["findings"] if f["rule_id"].startswith("VERIFY")}
+    assert severities == {"warning"}
+    loosened = [f["message"] for f in data["findings"] if f["rule_id"] == "VERIFY003"]
+    assert any("allowed_skip_reasons" in message for message in loosened)
+    assert any("rules.verification.severity" in message for message in loosened)
 
 
 def test_plain_check_reports_verification_as_not_applicable(
@@ -209,6 +243,7 @@ def test_plain_check_reports_verification_as_not_applicable(
     assert data["coverage"]["rules_needing_base_revision"] == [
         "VERIFY001",
         "VERIFY002",
+        "VERIFY003",
         "VERIFY004",
     ]
     _code, out, _ = run(["check", str(empty_root), "--root", str(empty_root)], capsys)

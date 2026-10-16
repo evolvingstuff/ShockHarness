@@ -95,8 +95,13 @@ def test_hard_violations_warn_mode(
 def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: EffectiveConfig) -> None:
     write(empty_root, "src/a.py", "x = 1\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
-    assert report.coverage["rules_not_implemented"] == ["MAGIC002", "VERIFY003"]
-    assert report.coverage["rules_needing_base_revision"] == ["VERIFY001", "VERIFY002", "VERIFY004"]
+    assert report.coverage["rules_not_implemented"] == ["MAGIC002"]
+    assert report.coverage["rules_needing_base_revision"] == [
+        "VERIFY001",
+        "VERIFY002",
+        "VERIFY003",
+        "VERIFY004",
+    ]
     assert report.coverage["verification"]["status"] == "not_applicable"
     assert "DEF001" not in report.coverage["rules_not_implemented"]
     assert "EXC001" not in report.coverage["rules_not_implemented"]
@@ -121,6 +126,7 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "SUPP002",
         "VERIFY001",
         "VERIFY002",
+        "VERIFY003",
         "VERIFY004",
     ]
     assert report.coverage["languages"]["python"]["parser"] == "python-ast"
@@ -203,10 +209,17 @@ def _check(schema: dict, value: object, path: str) -> list[str]:
         "integer": int,
         "number": (int, float),
         "boolean": bool,
+        "null": type(None),
     }
     if "type" in schema:
-        expected = type_names[schema["type"]]
-        ok = isinstance(value, expected) and not (expected is int and isinstance(value, bool))
+        allowed = schema["type"]
+        if isinstance(allowed, str):
+            allowed = [allowed]
+        ok = any(
+            isinstance(value, type_names[name])
+            and not (name == "integer" and isinstance(value, bool))
+            for name in allowed
+        )
         if not ok:
             problems.append(f"{path}: expected {schema['type']}")
             return problems

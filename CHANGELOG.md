@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H2 part 2 of specification section 21: `VERIFY003` reports a change
+that loosens the policy that judges it (configuration, files dropped from
+analysis, baselines, workflows, other tools' settings); `--policy FILE` adds an
+organization floor the repository cannot loosen; a fifth agent skill,
+`verification-integrity`. A plain `check` without `--policy` keeps its 0.3.0
+verdict.
+
 Milestone H2 part 1 of specification section 21: verification integrity.
 `VERIFY001`, `VERIFY002` and `VERIFY004` compare a head revision with its base
 in `diff` and `gate --base/--head` and report what the change added to weaken
@@ -17,6 +24,32 @@ corpus under all three profiles and the self-gate keep their 0.3.0 verdicts
 and exit codes (pinned by `tests/unit/test_profile_regression.py`).
 
 ### Added
+- `VERIFY003` (looser policy), in `diff` and `gate --base/--head`: a new
+  policy deviation, an ordered setting moved to its looser end (gate modes,
+  `unsupported_sources`, `parse_errors`, VERIFY severity, fan-out severity), a
+  raised complexity threshold, a narrower `include` or wider `exclude`; files
+  the base analyzed that the head configuration no longer does; fingerprints
+  added to a ShockHarness baseline; in a GitHub Actions job that runs
+  ShockHarness, the job removed, `continue-on-error: true`, `if: false`,
+  `--exit-zero`, `--profile minimal|recommended`, `--parse-errors warn` or an
+  older version pin; codes added to ruff/flake8 ignore, per-file-ignores and
+  exclude lists or removed from ruff `select`, deselecting pytest `addopts`,
+  removed `testpaths`, coverage `omit`/`exclude_lines`, a lowered or removed
+  `fail_under`, an ESLint rule turned down or removed (JSON `.eslintrc`). An
+  unreadable or unparseable file makes its comparison `unknown`.
+- `--policy FILE` on every command that loads configuration: a
+  `[tool.shockharness]` file that must live outside the analysis root, layered
+  between the profile and the repository's configuration. A repository key
+  that would loosen a key the policy sets is dropped (the policy's value
+  applies), noted, and reported as `VERIFY003`, in a plain `check` too.
+- In a revision diff the VERIFY rules use the stricter of the run's and the
+  base revision's `rules.verification` (strictest of base): a change cannot
+  disable, lower or exempt the rules that report it.
+- The reusable workflow `check.yml` takes `policy-repository`, `policy-ref`,
+  `policy-path` and a `policy-token` secret, clones the policy into
+  `$RUNNER_TEMP` and passes `--policy`.
+- A fifth bundled skill, `verification-integrity`: fix the cause instead of
+  skipping, suppressing or loosening, and what each VERIFY finding means.
 - `VERIFY001` (added test skip, expected-failure or focus marker: pytest and
   unittest markers, `pytestmark`, `pytest.skip` / `self.skipTest` in a test
   body; `describe` / `it` / `test` with `.skip` / `.only`, `x*` and `f*`
@@ -40,7 +73,6 @@ and exit codes (pinned by `tests/unit/test_profile_regression.py`).
   `gate` lists policy-integrity findings first under their own heading and
   prints a `verification:` line; `check` lists the rules that need a base
   revision on their own line instead of under "rules applied".
-- `VERIFY003` is registered (not implemented) for H2 part 2.
 - Every finding has a `status`: `violation` (the rule established the property
   and it does not hold) or `unknown` (the rule could not establish it).
   Severity is unchanged and orthogonal. Unknown today: `EXC001` on a catch
@@ -81,6 +113,11 @@ and exit codes (pinned by `tests/unit/test_profile_regression.py`).
   on it.
 
 ### Changed
+- The `verification:` line of `diff` and `gate` text output reads
+  `RULES against base X: N source file(s) compared (...); M policy file(s) and
+  K baseline(s) checked; severity S`, and `policy:` lines name the
+  `--policy` file and each attempt before the policy deviations.
+- `coverage.rules_not_implemented` is `["MAGIC002"]`.
 - A `shockharness: ignore[...]` comment naming a VERIFY rule is a `SUPP001`
   error and suppresses nothing: a change cannot excuse its own weakening of
   the checks inline (spec 21.1 decision 5).
@@ -103,6 +140,14 @@ and exit codes (pinned by `tests/unit/test_profile_regression.py`).
 ### Schema
 All additive under report `schema_version` "1" (the new properties are
 optional in `schemas/report-v1.schema.json`, so 0.3.0 reports still validate):
+- H2 part 2: `config.policy` (`path`, `digest`, `keys`; `null` without
+  `--policy`) and `config.policy_attempts` (`key`, `policy_value`,
+  `attempted_value`, `reasons`) in reports and diff reports;
+  `coverage.verification.policy` (`configuration`, `workflows_checked`,
+  `workflows_note`, `files_compared`, `baselines`, `read_errors`) and
+  `coverage.verification.policy_attempts` in diff reports; `VERIFY003` in
+  `coverage.rules_implemented` and `rules_needing_base_revision`. The
+  configuration origin `policy` in `config effective`.
 - H2: `findings[].category` (`policy_integrity` | `contract_integrity` |
   `structural`), in reports, diff reports and SARIF `properties.category`;
   `coverage.rules_needing_base_revision`; `coverage.verification`

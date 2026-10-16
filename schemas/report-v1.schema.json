@@ -81,6 +81,58 @@
           "items": {
             "type": "string"
           }
+        },
+        "policy": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "H2 part 2, additive: the --policy file, null without one. keys lists every dotted key it sets; digest is the SHA-256 of its canonical JSON.",
+          "required": [
+            "path",
+            "digest",
+            "keys"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "policy_attempts": {
+          "type": "array",
+          "description": "H2 part 2, additive: every repository key that would have loosened a key the --policy file sets. The policy's value applies, and each attempt is reported as VERIFY003.",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "policy_value",
+              "attempted_value",
+              "reasons"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "policy_value": {},
+              "attempted_value": {},
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -245,7 +297,7 @@
           "items": {
             "type": "string"
           },
-          "description": "H2, additive: implemented rules that compare a head revision with a base revision (VERIFY001, VERIFY002, VERIFY004); they produce findings only under diff or gate --base/--head."
+          "description": "H2, additive: implemented rules that compare a head revision with a base revision (VERIFY001 to VERIFY004); they produce findings only under diff or gate --base/--head."
         },
         "verification": {
           "type": "object",
@@ -316,6 +368,55 @@
             },
             "report_narrow_suppressions": {
               "type": "boolean"
+            },
+            "policy": {
+              "type": "object",
+              "description": "H2 part 2, additive (revision diff only): what VERIFY003 compared. configuration is compared, unknown (a revision's committed configuration could not be read) or disabled; workflows are checked only when the analysis root is the repository's top level; read_errors maps a path to why it could not be read.",
+              "required": [
+                "configuration",
+                "workflows_checked",
+                "files_compared",
+                "baselines",
+                "read_errors"
+              ],
+              "properties": {
+                "configuration": {
+                  "type": "string",
+                  "enum": [
+                    "compared",
+                    "unknown",
+                    "disabled"
+                  ]
+                },
+                "workflows_checked": {
+                  "type": "boolean"
+                },
+                "workflows_note": {
+                  "type": "string"
+                },
+                "files_compared": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "baselines": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "read_errors": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "policy_attempts": {
+              "type": "integer",
+              "description": "H2 part 2, additive (revision diff only): the number of --policy attempts reported as VERIFY003."
             }
           }
         }

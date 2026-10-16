@@ -16,11 +16,14 @@ One **source** applies, chosen in this order (highest first):
 | `pyproject` | `[tool.shockharness]` in `<root>/pyproject.toml` | Used only when no dedicated file exists. |
 | `bundled` | `defaults.toml` inside the package | Always present; the strict profile. |
 
-The effective configuration is then built from four **layers**, lowest first:
+The effective configuration is then built from these **layers**, lowest first:
 
 ```text
-bundled defaults  <  built-in profile  <  the source above  <  command-line overrides
+bundled defaults  <  built-in profile  <  --policy file  <  the source above  <  command-line overrides
 ```
+
+The `--policy` layer is present only with `--policy FILE` (see [The policy
+tier](#the-policy-tier)); the source above cannot loosen a key it sets.
 
 * The profile layer is the overlay for `profile = "strict" | "recommended" |
   "minimal"` (see Profiles below); `strict` changes nothing.
@@ -36,7 +39,7 @@ bundled defaults  <  built-in profile  <  the source above  <  command-line over
 are a usage error, so relative paths in reports are always root-relative.
 
 `shockharness config effective` prints the merged values with a per-key
-origin (`bundled`, `profile:<name>`, `cli`/`dedicated`/`pyproject`, or
+origin (`bundled`, `profile:<name>`, `policy`, `cli`/`dedicated`/`pyproject`, or
 `cli_override`), the digest, notes, and policy deviations. `shockharness
 config validate` exits 0 only when the configuration is valid, prints the
 effective profile, and lists every policy deviation; every problem is listed
@@ -68,6 +71,59 @@ The per-section severity cap is also available directly:
 turns the section's error findings into review findings (reported, never
 gating; `DEF005` included for `rules.defaults`); warnings and review findings
 are unchanged. Each cap below `"error"` is a reported deviation.
+
+## The policy tier
+
+```bash
+shockharness check . --policy /path/outside/the/repo/shockharness-policy.toml
+shockharness gate --base origin/main --head HEAD --policy "$RUNNER_TEMP/policy/shockharness-policy.toml"
+```
+
+`--policy FILE` (on every command that loads configuration) names an
+organization's policy: a file with a `[tool.shockharness]` table, validated
+like any configuration. It is a floor the repository cannot lower:
+
+* **It must live outside the analysis root.** A policy the change under review
+  can edit protects nothing, so a file inside `--root` is a configuration error
+  (exit 2). Check it out from a separate, protected repository.
+* **It sits between the profile and the repository's configuration.** Its keys
+  replace the profile's. A `profile` key in it selects the profile unless the
+  repository selects a stricter one.
+* **The repository may tighten a policy key, never loosen it.** A repository
+  key that would loosen a key the policy sets (by the same test VERIFY003 uses:
+  a new deviation, an ordered setting moved to its looser end, a raised
+  threshold, a narrower include or wider exclude) is dropped, the policy's value
+  applies, and the attempt is recorded in `config.policy_attempts`, as a config
+  note, and as a `VERIFY003` finding at the key's line, in a plain `check` as
+  well as in `diff` and `gate`. A list is one key: a repository `exclude` that
+  adds a pattern to the policy's list is an attempt, and the policy's list
+  applies.
+* **Command-line overrides stay on top.** `--profile` and `--parse-errors`
+  belong to whoever runs the command; a `--profile` looser than the policy's
+  adds a config note, and a workflow that adds such a flag to a ShockHarness
+  job is a `VERIFY003` finding.
+
+The report's `config.policy` names the file, the SHA-256 digest of its
+canonical JSON (formatting and comments do not change it) and every key it
+sets; the text output prints the same as `policy:` lines before the policy
+deviations. Its values enter `config_digest` like any other layer.
+
+In CI, the reusable workflow (0.4.0 and later) fetches the policy from its own
+repository so it is never inside the workspace:
+
+```yaml
+jobs:
+  shockharness:
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.4.0
+    with:
+      shockharness-version: "0.4.0"
+      base: ${{ github.event.pull_request.base.sha }}
+      policy-repository: my-org/engineering-policy   # cloned into $RUNNER_TEMP
+      policy-ref: main                               # a branch or tag
+      policy-path: shockharness-policy.toml          # the default
+    secrets:
+      policy-token: ${{ secrets.POLICY_READ_TOKEN }} # only for a private repository
+```
 
 ## Command-line overrides
 
@@ -524,15 +580,17 @@ allowed_skip_reasons = []         # e.g. ["POSIX signals only"]
 report_narrow_suppressions = false
 ```
 
-`VERIFY001`, `VERIFY002` and `VERIFY004` compare the head revision of a `diff`
-or `gate --base/--head` with its base revision and report what the change
-**added**: test skip and focus markers, blanket suppression comments, and
-assertions made unable to fail. A plain `check` has no base and reports them as
-not applicable. See `docs/rules.md` for every pattern.
+`VERIFY001`-`VERIFY004` compare the head revision of a `diff` or `gate
+--base/--head` with its base revision and report what the change **added**:
+test skip and focus markers, blanket suppression comments, a looser policy
+(configuration, files dropped from analysis, baselines, workflows, other tools'
+settings), and assertions made unable to fail. A plain `check` has no base and
+reports them as not applicable, except the `--policy` attempts of `VERIFY003`.
+See `docs/rules.md` for every pattern.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `true` | `false` turns the three rules off (a policy deviation) |
+| `enabled` | `true` | `false` turns the four rules off (a policy deviation) |
 | `severity` | `"warning"` | the severity of every VERIFY finding. `"error"` makes them gate like any hard violation; that tightens the policy and is not a deviation. `"review"` lowers them further and is a deviation |
 | `fail_on_unknown` | `false` | whether an `unknown` VERIFY finding (the base version could not be analyzed, or rename detection failed) gates according to its severity |
 | `allowed_skip_reasons` | `[]` | exact reason strings that make an added Python skip acceptable (JavaScript skips carry no reason). Each entry is listed as a policy deviation |
@@ -543,6 +601,14 @@ The bundled default is the same in all three profiles: specification section
 measured. A repository that wants agents stopped, not just told, sets
 `severity = "error"`.
 
+**Strictest of base.** In a revision diff the rules run with the stricter of
+this table as the run sees it and the base revision's committed table:
+`enabled` and `fail_on_unknown` and `report_narrow_suppressions` are true if
+either side says so, `severity` is the stricter one, and
+`allowed_skip_reasons` keeps only the reasons both list. A change cannot switch
+off or lower the rules that report it; the loosening is a `VERIFY003` finding
+and takes effect once it is merged.
+
 VERIFY findings cannot be suppressed inline: `shockharness: ignore[VERIFY001]`
 is a `SUPP001` error. Exceptions belong in this table or in an `[[overrides]]`
 entry by path or role, where review sees them.
@@ -551,8 +617,9 @@ entry by path or role, where review sees them.
 the configuration that would report them, or from not running the tool.
 Verification integrity is enforceable when the gate runs in CI as a required
 check on protected branches, and changes to `.shockharness.toml`, workflow
-files and baselines need review (CODEOWNERS). `VERIFY003`, planned for part 2
-of the milestone, reports such policy changes themselves.
+files and baselines need review (CODEOWNERS). `VERIFY003` reports such policy
+changes themselves, and `--policy` keeps the organization's floor out of the
+repository's reach.
 
 ## History
 
@@ -710,3 +777,8 @@ Everything that loosens the strict profile is surfaced, never silent:
   (`config`, `overrides[i]`, or `configuration_file`).
 * `coverage.rules_not_implemented` lists rules that exist in the registry but produce nothing yet.
 * `config_digest` is a SHA-256 of the effective configuration so two reports can be compared.
+* `config.policy` and `config.policy_attempts` name the `--policy` file and
+  every repository key that tried to loosen it; each attempt is also a
+  `VERIFY003` finding.
+* In a revision diff, `VERIFY003` reports every loosening the change itself
+  makes to the configuration, baselines, workflows and other tools' settings.

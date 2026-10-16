@@ -559,7 +559,7 @@ early return, a catch or a default; the graph records the delegation and the
 numbers stay advisory either way. The `refactor-complexity` skill walks
 through it.
 
-### VERIFY001, VERIFY002, VERIFY004: verification integrity (warning, Python and JavaScript; need a base revision)
+### VERIFY001-VERIFY004: verification integrity (warning, Python and JavaScript; need a base revision)
 
 These rules ask what a change did to its **own verification**. They compare a
 head revision with a base revision, so they run only under
@@ -581,6 +581,7 @@ tell what this change added. `rules.verification.fail_on_unknown` (default
 |---|---|---|
 | `VERIFY001` | a skip, expected-failure or focus marker on a test | test |
 | `VERIFY002` | a blanket suppression comment (names no rule codes, names `all`, or covers a file); narrow ones too with `report_narrow_suppressions = true` | every role except generated and vendor |
+| `VERIFY003` | a looser ShockHarness configuration, files dropped from analysis, baseline fingerprints, a weakened workflow that runs ShockHarness, or loosened ruff, flake8, pytest, coverage or ESLint settings; and, with `--policy`, a repository key that loosens the policy file (also in a plain `check`) | configuration, workflow and baseline files |
 | `VERIFY004` | an assertion that can never fail; a test whose assertions all disappeared; a test whose body became empty | test |
 
 **VERIFY001 markers.** Python: `pytest.mark.skip` / `skipif` / `xfail` (also
@@ -632,8 +633,68 @@ checks with a comment it adds itself (spec section 21.1 decision 5). A
 exceptions centrally: `rules.verification.*`, or an `[[overrides]]` entry by
 path or role, both of which are visible policy changes in review.
 
-`VERIFY003` (a semantic diff of policy files, workflows and baselines) is
-registered for part 2 of the milestone and produces no findings yet.
+**VERIFY003: a looser policy.** The base and head revisions' committed
+configurations are loaded the way `check` loads them (no `--config`, no
+`--policy`) and compared. A configuration is looser when:
+
+* it has a policy deviation the base did not have (a disabled family, a lowered
+  severity, an allowed value, a new boundary, guard or capture manager, an
+  `[[overrides]]` entry, a looser profile, `parse_errors = "warn"`,
+  `fail_on_unknown = false`, an allowed skip reason, ...). List entries are
+  matched by text, so reordering a list is not a loosening;
+* an ordered setting moved towards its looser end: `gates.*`,
+  `unsupported_sources`, `parse_errors`, `rules.verification.severity`
+  (`error` < `warning` < `review`), `complexity.fan_out_severity`;
+* a complexity threshold (`*_warn`) was raised;
+* `include` lost a pattern or `exclude` gained one.
+
+Each is one finding, anchored at the key's line in the head configuration file.
+Separately, files analyzed at base that the head configuration no longer
+analyzes (the base revision's files under the head's include/exclude, renames
+followed) are one finding listing the first five paths and the count.
+
+The other inputs compared, each by path (renames followed):
+
+* **Baselines.** Every ShockHarness baseline file (`*baseline*.json` with
+  `fingerprint_version` and `fingerprints`) outside `.git`, `node_modules`,
+  virtual environments and caches: fingerprints the head has and the base did
+  not are one finding per file, with the rule IDs they cover. A new baseline
+  file counts all its fingerprints.
+* **Workflows** (`.github/workflows/*.yml|yaml`, only when the analysis root is
+  the repository's top level): a job that ran ShockHarness at base and was
+  removed or no longer mentions it; a deleted workflow file; and, in a job that
+  still runs it, an added `continue-on-error: true`, `if: false`,
+  `--exit-zero`, `--profile minimal` / `recommended`, `--parse-errors warn`, or
+  a ShockHarness version pin moved to an older version.
+* **Tool configurations** at the analysis root: `pyproject.toml`
+  (`[tool.ruff]`, `[tool.pytest.ini_options]`, `[tool.coverage.*]`),
+  `ruff.toml` / `.ruff.toml`, `setup.cfg` / `tox.ini` / `.flake8`
+  (`[flake8]`, `[tool:pytest]`, `[coverage:*]`), `pytest.ini`, `.coveragerc`,
+  `.eslintrc.json` / `.eslintrc` (JSON). Reported: a code added to an
+  ignore, extend-ignore, per-file-ignores or exclude list; a code removed from
+  `select` / `extend-select`; a path removed from `testpaths`; a deselecting
+  pytest option added to `addopts` (`-k`, `-m`, `--deselect`, `--ignore`,
+  `--ignore-glob`, `-p no:...`); a pattern added to coverage `omit` or
+  `exclude_lines`; a lowered or removed `fail_under`; an ESLint rule turned
+  down (`error` > `warn` > `off`) or removed, or an `ignorePatterns` entry added.
+
+A file that cannot be read or parsed at either revision (invalid TOML, a YAML
+`.eslintrc`, a configuration ShockHarness rejects) makes its comparison
+`unknown` (confidence `unresolved`), never a pass; the reason is in the
+message and under `coverage.verification.policy.read_errors`.
+
+**`--policy` attempts.** With `--policy FILE` (see
+[`configuration.md`](configuration.md#the-policy-tier)), every repository key
+that would loosen a key the policy file sets is reverted to the policy's value
+and reported as a `VERIFY003` finding at that key's line. This also happens in
+a plain `check`, because it needs no base revision.
+
+**Strictest of base.** In a revision diff the VERIFY rules use the stricter of
+the run's `rules.verification` and the base revision's committed one: a change
+cannot disable or lower the rules that report it, add an allowed skip reason
+for its own skips, or turn off `fail_on_unknown` or
+`report_narrow_suppressions` for itself. The loosening itself is reported by
+`VERIFY003`, and takes effect once it is on the base branch.
 
 ## Registered, not implemented
 
@@ -643,7 +704,6 @@ listed in every report under `coverage.rules_not_implemented`.
 | ID | Name | Planned milestone |
 |---|---|---|
 | MAGIC002 | suspicious string literal (advisory) | post-B |
-| VERIFY003 | weakened policy, workflow or baseline (semantic diff of protected paths) | H2 part 2 |
 
 ## Rule metadata contract
 

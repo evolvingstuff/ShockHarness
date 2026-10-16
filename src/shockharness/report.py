@@ -88,11 +88,7 @@ class Report:
             "analysis_status": self.analysis_status,
             "config_digest": self.config.digest,
             "effective_profile": self.config.values["profile"],
-            "config": {
-                "source": {"tier": self.config.source.tier, "path": self.config.source.path},
-                "notes": list(self.config.notes),
-                "deviations": list(self.config.deviations),
-            },
+            "config": config_block(self.config),
             "coverage": dict(self.coverage),
             "files": [f.to_json_dict() for f in self.files],
             "findings": [f.to_json_dict() for f in self.findings],
@@ -221,10 +217,23 @@ def _complexity_summary(metrics: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def config_block(config: EffectiveConfig) -> dict[str, Any]:
+    """The report's ``config`` object: source, notes, deviations, and the ``--policy``
+    file with every repository key that tried to loosen it (H2 part 2)."""
+    return {
+        "source": {"tier": config.source.tier, "path": config.source.path},
+        "notes": list(config.notes),
+        "deviations": list(config.deviations),
+        "policy": None if config.policy is None else config.policy.to_json_dict(),
+        "policy_attempts": [attempt.to_json_dict() for attempt in config.policy_attempts],
+    }
+
+
 def build_summary(
     files: Sequence[FileResult],
     findings: Sequence[Finding],
     metrics: Mapping[str, Any],
+    extra_roles: Mapping[str, str],
 ) -> dict[str, Any]:
     """The first-contact overview: every count derives from the same findings and files
     as ``execution_summary``, so the totals agree by construction."""
@@ -232,7 +241,9 @@ def build_summary(
     by_status = {status: 0 for status in FINDING_STATUSES}
     by_category = {category: 0 for category in CATEGORIES}
     by_role = empty_role_counts()
-    role_of = {file.path: file.role for file in files}
+    # Files that carry findings without being analyzed sources (VERIFY003 on a
+    # configuration file or a workflow) get their role from ``extra_roles``.
+    role_of = {**dict(extra_roles), **{file.path: file.role for file in files}}
     by_rule: dict[str, int] = {}
     by_directory: dict[str, int] = {}
     by_rule_and_directory: dict[str, dict[str, int]] = {}
@@ -310,6 +321,8 @@ def build_report(
     metrics: Mapping[str, Any],
     elapsed_seconds: float,
     cache: Mapping[str, Any],
+    extra: Sequence[Finding],
+    extra_roles: Mapping[str, str],
 ) -> Report:
     """``metrics`` carries the ``complexity`` and ``graph`` sections from the analysis;
     ``history`` is added here as ``not_collected`` until the CLI or ``with_history`` runs git.
@@ -317,7 +330,10 @@ def build_report(
     ``cache`` is the ``coverage.cache`` block (status and counters of the content-hash cache)."""
     ordered_files = tuple(sorted(files, key=lambda f: f.path))
     findings = tuple(
-        sorted((f for file in ordered_files for f in file.findings), key=lambda f: f.sort_key())
+        sorted(
+            [*(f for file in ordered_files for f in file.findings), *extra],
+            key=lambda f: f.sort_key(),
+        )
     )
     return Report(
         schema_version=REPORT_SCHEMA_VERSION,
@@ -330,7 +346,7 @@ def build_report(
         metrics={**dict(metrics), "history": dict(HISTORY_NOT_COLLECTED)},
         gate=gate,
         execution_summary=execution_summary(ordered_files, findings),
-        summary=build_summary(ordered_files, findings, metrics),
+        summary=build_summary(ordered_files, findings, metrics, extra_roles),
         elapsed_seconds=round(elapsed_seconds, ELAPSED_DECIMALS),
     )
 

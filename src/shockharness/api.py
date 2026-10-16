@@ -38,7 +38,10 @@ from shockharness.gating.baseline import Baseline
 from shockharness.gating.baseline import apply_baseline as apply_baseline_fingerprints
 from shockharness.history.hotspots import collect_history
 from shockharness.report import Report, build_report, rebuild_with_findings
+from shockharness.roles import FILE_ROLES_KEY, role_classifier
 from shockharness.rules import registry
+from shockharness.rules.policy_integrity import fingerprinted, policy_attempt_findings
+from shockharness.rules.registry import VERIFICATION_SECTION
 
 SOURCE_PSEUDO_PATH = "<source>"
 
@@ -78,10 +81,27 @@ def analyze_paths(
     if cache is not None:
         cache_coverage = cache.coverage()
     files = with_unsupported_sources(outcome.files, discovery, config)
-    findings = [f for result in files for f in result.findings]
+    # VERIFY003 for repository keys that tried to loosen the --policy file (H2 part 2):
+    # the only verification finding a run without a base revision can produce.
+    attempts = fingerprinted(
+        policy_attempt_findings(config, root, config.section(VERIFICATION_SECTION))
+    )
+    classifier = role_classifier(config.values[FILE_ROLES_KEY])
+    attempt_roles = {f.path: classifier.classify(f.path).role for f in attempts}
+    findings = [*(f for result in files for f in result.findings), *attempts]
     verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
     elapsed = time.perf_counter() - started
-    return build_report(files, discovery, config, verdict, outcome.metrics, elapsed, cache_coverage)
+    return build_report(
+        files,
+        discovery,
+        config,
+        verdict,
+        outcome.metrics,
+        elapsed,
+        cache_coverage,
+        attempts,
+        attempt_roles,
+    )
 
 
 def _open_cache(

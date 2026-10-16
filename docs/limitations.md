@@ -259,15 +259,15 @@ Stated so that a clean report is never read as more than it is.
   package version of the skill's own release, so an installed skill may name
   an older version than the latest on PyPI until `skills update` is run.
 
-## VERIFY001, VERIFY002, VERIFY004
+## VERIFY001-VERIFY004
 
 * They need a base revision. A plain `check` reports them as not applicable;
   only `diff` and `gate --base/--head` run them.
 * Syntax, not intent. A skip inside a conditional branch of a test body, a
   skip applied by a fixture or a conftest hook, a test deselected by runner
   configuration (`-k`, `addopts`, `testPathIgnorePatterns`) and an ignore list
-  in a tool's configuration file are not seen. Configuration changes are
-  `VERIFY003`'s, planned for H2 part 2.
+  in a tool's configuration file are not seen by `VERIFY001`; `VERIFY003`
+  reports the configuration changes it knows (below).
 * `VERIFY004` knows patterns, not semantics: an assertion weakened to one that
   is merely unlikely to fail (`assert len(x) >= 0`, a loosened tolerance) is
   not judged. Assertions are counted syntactically; a test that moved its
@@ -285,9 +285,27 @@ Stated so that a clean report is never read as more than it is.
   rules are enforceable when `gate` runs in CI as a required check on protected
   branches and policy files need review (spec section 21.1 decision 5).
 
+* `VERIFY003` reads workflows as text, without a YAML parser: flow-style
+  mappings, anchors and aliases, matrix-generated jobs and steps defined in a
+  composite action or another reusable workflow are not interpreted, and a job
+  renamed in the same change looks like a removed job plus a new one. Workflows
+  are checked only when the analysis root is the repository's top level.
+* `VERIFY003` compares the tool configuration files at the analysis root only,
+  and only the settings listed in `docs/rules.md`. Not read: ESLint flat config
+  (`eslint.config.js`), `package.json` `eslintConfig`, a YAML `.eslintrc`
+  (reported as `unknown`), mypy, pyright, tsconfig, Jest/Vitest configuration,
+  `conftest.py` hooks, and nested configuration files in subdirectories.
+* Baseline growth is detected for files whose name contains `baseline` and that
+  parse as ShockHarness baselines. A baseline passed with `--baseline` under
+  another name is not compared.
+* The policy floor protects the keys the policy file sets, compared with the
+  same loosening test as `VERIFY003`. A key the policy does not set is the
+  repository's to change. Command-line `--profile` and `--parse-errors` are not
+  bound by the policy; a workflow that adds them is reported instead.
+
 ## Not yet built (see the specification)
 
-`MAGIC002`, `VERIFY003` and the `--policy FILE` tier (H2 part 2), the
+`MAGIC002`, the
 remaining advanced-guardrail rules of specification section 21, per-function
 churn and rename following, change-impact radius,
 data flow, and `.gitignore` awareness. Unknown CLI commands are argparse

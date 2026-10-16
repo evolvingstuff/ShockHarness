@@ -34,17 +34,18 @@ Pre-release. Milestones A (skeleton and contracts), B (parsers and
 rules `DEF001`-`DEF006`), F (baselines, revision diff and gate, SARIF
 output, git churn and co-change metrics, built-in profiles, the `check`
 command, tag-triggered PyPI publishing, a reusable GitHub Actions workflow and
-two consumer examples) and G (four bundled agent skills, `skills install` /
+two consumer examples) and G (bundled agent skills, `skills install` /
 `skills update` with a manifest, and a skill evaluation corpus) and E
 (per-unit complexity metrics with versioned conventions, a call graph whose
 edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
 shared-mutable-state notes, hotspots from churn and cognitive complexity, and
 per-unit regressions in revision diffs) are implemented, as are the first two
 milestones of the advanced guardrails: H1 (an explicit `unknown` finding status
-and file roles) and H2 part 1 (verification integrity: in a revision diff,
-report test skips and focus markers, blanket suppressions and neutralized
-assertions that a change adds). `MAGIC002` and `VERIFY003` are **not yet
-implemented**; every report lists unimplemented rules under
+and file roles) and H2 (verification integrity: in a revision diff, report test
+skips and focus markers, blanket suppressions, neutralized assertions and
+looser policy, baselines, workflows or tool settings that a change adds; an
+organization `--policy` file the repository cannot loosen; and a fifth agent
+skill, `verification-integrity`). `MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
 
@@ -68,6 +69,7 @@ Implemented rules:
 | `CPLX006` | a unit longer than `max_lines_warn` logical lines; module bodies exempt | warning |
 | `VERIFY001` | a test skip, xfail or focus marker the change adds (needs `diff`/`gate --base`) | warning |
 | `VERIFY002` | a blanket suppression comment the change adds (`# noqa`, `// eslint-disable`, `@ts-ignore`, ...) | warning |
+| `VERIFY003` | a looser configuration, files dropped from analysis, baseline growth, a weakened ShockHarness workflow job, loosened ruff/flake8/pytest/coverage/ESLint settings; a key that loosens the `--policy` file (also in `check`) | warning |
 | `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
 
 ## Install
@@ -110,7 +112,7 @@ shockharness diff --base main --head HEAD                      # new / fixed / u
 shockharness gate --base main --head HEAD                      # exit 1 only on new hard violations
 shockharness rules list
 shockharness rules explain MAGIC001
-shockharness skills list                                       # the four bundled agent skills
+shockharness skills list                                       # the five bundled agent skills
 shockharness skills install --agent claude                     # .claude/skills/<name>/SKILL.md + manifest
 shockharness skills update --agent claude --check              # exit 1 when a skill is stale or edited
 ```

@@ -49,6 +49,64 @@
     "effective_profile": {
       "type": "string"
     },
+    "config": {
+      "type": "object",
+      "description": "The effective configuration's source, notes and deviations, as in the check report. H2 part 2, additive: policy and policy_attempts.",
+      "properties": {
+        "policy": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "H2 part 2, additive: the --policy file, null without one. keys lists every dotted key it sets; digest is the SHA-256 of its canonical JSON.",
+          "required": [
+            "path",
+            "digest",
+            "keys"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "digest": {
+              "type": "string"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "policy_attempts": {
+          "type": "array",
+          "description": "H2 part 2, additive: every repository key that would have loosened a key the --policy file sets. The policy's value applies, and each attempt is reported as VERIFY003.",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "policy_value",
+              "attempted_value",
+              "reasons"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "policy_value": {},
+              "attempted_value": {},
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "base": {
       "$ref": "#/$defs/revision"
     },

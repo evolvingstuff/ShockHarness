@@ -118,6 +118,13 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "unresolved) when the base version could not be analyzed, or when rename detection "
         "failed and the file has no base version under its own path",
     ),
+    # VERIFY003 (H2 part 2).
+    ("rules/policy_integrity.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),
+        "violation when both sides of the comparison were read; unknown (confidence "
+        "unresolved) when a configuration, tool configuration or baseline of either "
+        "revision could not be read or parsed",
+    ),
     ("suppressions.py", "_problem_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "SUPP001 is exact: violation",

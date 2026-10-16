@@ -27,6 +27,25 @@ on:
         required: false
         type: string
         default: "3.12"
+      policy-repository:
+        description: "owner/name of a separate repository holding the organization's policy file; empty for none. It is cloned outside the workspace, where the change under review cannot edit it, and passed as --policy"
+        required: false
+        type: string
+        default: ""
+      policy-ref:
+        description: "Branch or tag of policy-repository (git clone --branch does not take a commit)"
+        required: false
+        type: string
+        default: "main"
+      policy-path:
+        description: "Path of the policy file inside policy-repository"
+        required: false
+        type: string
+        default: "shockharness-policy.toml"
+    secrets:
+      policy-token:
+        description: "Token that can read policy-repository when it is private"
+        required: false
 
 jobs:
   shockharness:
@@ -40,6 +59,9 @@ jobs:
       SHOCKHARNESS_VERSION: ${{ inputs.shockharness-version }}
       SHOCKHARNESS_CONFIG: ${{ inputs.config }}
       SHOCKHARNESS_BASE: ${{ inputs.base }}
+      POLICY_REPOSITORY: ${{ inputs.policy-repository }}
+      POLICY_REF: ${{ inputs.policy-ref }}
+      POLICY_PATH: ${{ inputs.policy-path }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,11 +72,24 @@ jobs:
           python-version: ${{ inputs.python-version }}
       - name: Install the pinned analyzer
         run: python -m pip install --disable-pip-version-check "shockharness==${SHOCKHARNESS_VERSION}"
+      - name: Fetch the organization policy (outside the workspace)
+        if: ${{ inputs.policy-repository != '' }}
+        env:
+          POLICY_TOKEN: ${{ secrets.policy-token }}
+        run: |
+          url="https://github.com/${POLICY_REPOSITORY}.git"
+          if [ -n "${POLICY_TOKEN}" ]; then
+            url="https://x-access-token:${POLICY_TOKEN}@github.com/${POLICY_REPOSITORY}.git"
+          fi
+          git clone --quiet --depth 1 --branch "${POLICY_REF}" "${url}" "${RUNNER_TEMP}/shockharness-policy"
       - name: Run shockharness
         run: |
           args=(--format sarif --output shockharness.sarif)
           if [ -n "${SHOCKHARNESS_CONFIG}" ]; then
             args+=(--config "${SHOCKHARNESS_CONFIG}")
+          fi
+          if [ -n "${POLICY_REPOSITORY}" ]; then
+            args+=(--policy "${RUNNER_TEMP}/shockharness-policy/${POLICY_PATH}")
           fi
           if [ -n "${SHOCKHARNESS_BASE}" ]; then
             shockharness gate --base "${SHOCKHARNESS_BASE}" --head HEAD "${args[@]}"
