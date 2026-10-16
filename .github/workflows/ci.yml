@@ -61,7 +61,10 @@ jobs:
           /tmp/clean/bin/shockharness version
           /tmp/clean/bin/shockharness rules list
           /tmp/clean/bin/shockharness skills list
-          unzip -l dist/*.whl | grep -c 'shockharness/skills/.*/SKILL.md' | grep -qx 4
+          # Every skill the package names is in the wheel (the count follows SKILL_NAMES).
+          shipped=$(unzip -l dist/*.whl | grep -c 'shockharness/skills/.*/SKILL.md')
+          expected=$(/tmp/clean/bin/python -c 'from shockharness.skills import SKILL_NAMES; print(len(SKILL_NAMES))')
+          test "${shipped}" = "${expected}"
       - uses: actions/upload-artifact@v4
         with:
           name: dist
