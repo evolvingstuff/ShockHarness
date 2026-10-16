@@ -1162,14 +1162,34 @@ environment from PyPI; `shockharness --version` prints `shockharness 0.4.0`;
 runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
 0.25.0 only. PyPI lists `0.4.0` as the latest release, with a wheel and an sdist.
 
+## Release 0.5.0 (2026-10-16)
+
+Tag `v0.5.0` at 25e49cb. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/38965371003)
+after the maintainer's approval at the `pypi` environment; the release commit's
+CI run (https://github.com/evolvingstuff/ShockHarness/actions/runs/38964860058)
+was green before the tag. Contents: the fourth suggestions brief and plan
+(899c5e5), feedback round F4 (56af310) and the release commit 25e49cb. Since
+0.4.0, `main` also carries the five GitHub Actions bumps applied from
+Dependabot (52c069b to 7643b56; `actions/download-artifact` v8 ran for the first
+time in this publish, without problems).
+
+Verified after publication: `uv pip install shockharness==0.5.0` into a fresh
+environment from PyPI (the simple index lagged the JSON API by under a minute;
+the install was retried until it resolved); `shockharness --version` prints
+`shockharness 0.5.0`; `shockharness exceptions` runs; a `@router.get(...)`
+decorator and a checked-then-raised `getattr(o, a, None)` are not reported;
+runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
+0.25.0 only. PyPI lists `0.5.0` as the latest release, with a wheel and an sdist.
+
 ## Next tasks
 
 Updated 2026-10-16, after the fourth suggestions batch
 (`docs/shockharness-suggestions-4.md`; spec 21.1 decisions 12-18, 21.2 table).
 In order:
 
-1. **F4, the 0.5.0 feedback round** (done 2026-10-16, see its entry below; the
-   0.5.0 release waits for the maintainer) (suggestions-4 items 1-9): DEF002
+1. **F4, the 0.5.0 feedback round** (done and released as 0.5.0 on 2026-10-16)
+   (suggestions-4 items 1-9): DEF002
    precision (decorator `.get`, checked-then-raise, discarded `pop(k, None)`,
    the `setdefault` grouping idiom, "absence is normal" remediation);
    `recommended` stops gating on unknown `DEF*` findings; the `shockharness
