@@ -5,6 +5,8 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+
 Milestone H2 part 2 of specification section 21: `VERIFY003` reports a change
 that loosens the policy that judges it (configuration, files dropped from
 analysis, baselines, workflows, other tools' settings); `--policy FILE` adds an
