@@ -1182,6 +1182,24 @@ decorator and a checked-then-raised `getattr(o, a, None)` are not reported;
 runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
 0.25.0 only. PyPI lists `0.5.0` as the latest release, with a wheel and an sdist.
 
+## Release 0.6.0 (2026-10-16)
+
+Tag `v0.6.0` at c8cad1b. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/38976324000)
+after the maintainer's approval; the release commit's CI run
+(https://github.com/evolvingstuff/ShockHarness/actions/runs/38975889655) was
+green before the tag. Contents: Milestone H3 (5b00143), the guard-consistency
+note for H6 (650eab3), the tool's Boolean flags passed by keyword (9050b4f),
+`write-compliant-code` principle 8 on immutable values (af192d5) and the
+release commit c8cad1b.
+
+Verified after publication: `uv pip install shockharness==0.6.0` into a fresh
+environment from PyPI; `shockharness --version` prints `shockharness 0.6.0`;
+`rules list` shows EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001 and
+IMPORT001; runtime dependencies are `tree-sitter` 0.25.2 and
+`tree-sitter-javascript` 0.25.0 only. PyPI lists `0.6.0` as the latest release,
+with a wheel and an sdist.
+
 ## Next tasks
 
 Updated 2026-10-16, after the fourth suggestions batch
@@ -1199,7 +1217,7 @@ In order:
    flow-sensitive refinement for the implicit-`None` finding. Release 0.5.0.
 2. **H3**: STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001, plus
    EXC004 (`return`/`break`/`continue` in `finally`). Done 2026-10-16 (see its
-   entry below); not released.
+   entry below); released as 0.6.0.
 3. **H4** (async lifecycle, including uninspected `gather(return_exceptions=True)`
    and `Promise.allSettled` results), **H5** (API catalog, PROCESS001 naming
    `check=False`), **H-TS** (TypeScript; `tree-sitter-typescript` approved),
