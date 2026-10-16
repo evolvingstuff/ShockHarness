@@ -67,7 +67,7 @@ jobs:
         with:
           # `gate --base` needs the base commit; a shallow clone would not have it.
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
       - name: Install the pinned analyzer
