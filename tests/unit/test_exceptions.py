@@ -427,7 +427,7 @@ def test_exception_rules_share_one_enabled_switch(
     config = make_config("[tool.shockharness.rules.exceptions]\nenabled = false\n")
     result = _run(config, "a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert result.findings == ()
-    assert [d.rule_id for d in result.rules_disabled] == ["EXC001", "EXC002", "EXC003"]
+    assert [d.rule_id for d in result.rules_disabled] == ["EXC001", "EXC002", "EXC003", "EXC004"]
     assert "rules.exceptions is disabled" in config.deviations
 
 
@@ -441,6 +441,8 @@ def test_single_exception_rule_can_be_disabled_by_override(
     result = _run(config, "legacy/a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert [f.rule_id for f in result.findings] == ["EXC001"]
     assert result.rules_applied == (
+        "ASSERT001",
+        "BOOL001",
         "CPLX001",
         "CPLX002",
         "CPLX003",
@@ -455,7 +457,12 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "DEF006",
         "EXC001",
         "EXC003",
+        "EXC004",
+        "IMPORT001",
         "MAGIC001",
+        "STATE001",
+        "STUB001",
+        "STUB002",
         "SUPP001",
         "SUPP002",
     )

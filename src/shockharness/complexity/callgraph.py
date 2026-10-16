@@ -666,7 +666,8 @@ def _classify(
         resolution = resolver.resolve_name(path, unit, call.callee)
         assert resolution is not None
         return resolution, EDGE_NEW
-    assert call.shape == CALL_ARGUMENT
+    if call.shape != CALL_ARGUMENT:
+        raise AssertionError(f"unexpected call shape {call.shape!r}")
     resolution = resolver.resolve_name(path, unit, call.callee)
     if resolution is None or resolution.target.kind in (TARGET_UNRESOLVED, TARGET_BUILTIN):
         return None

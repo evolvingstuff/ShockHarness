@@ -1198,7 +1198,8 @@ In order:
    checks. The checked-then-raise item supersedes the earlier note here about a
    flow-sensitive refinement for the implicit-`None` finding. Release 0.5.0.
 2. **H3**: STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001, plus
-   EXC004 (`return`/`break`/`continue` in `finally`).
+   EXC004 (`return`/`break`/`continue` in `finally`). Done 2026-10-16 (see its
+   entry below); not released.
 3. **H4** (async lifecycle, including uninspected `gather(return_exceptions=True)`
    and `Promise.allSettled` results), **H5** (API catalog, PROCESS001 naming
    `check=False`), **H-TS** (TypeScript; `tree-sitter-typescript` approved),
@@ -2911,4 +2912,138 @@ updated golden, inventory, profile and regression expectations.
   diff is the one removed finding.
 * macOS `sed` has no `\b`; a rename done with it silently did nothing and was
   redone with Python.
+
+## Milestone H3: syntax-level guardrails — DONE (2026-10-16)
+
+EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001 and IMPORT001, as
+recorded in spec 21.2 (H3 row) and 21.1 decisions 14 and 19. Implemented in the
+lead session; not released.
+
+### What was built
+
+* **Facts** (`ir/model.py`: `FinallyExit`, `Placeholder`, `AssertFact`,
+  `BooleanArgument`, `ImportTimeCall`, `GuardrailFacts`;
+  `ModuleFacts.guardrails`), extracted by `ir/python_guardrails.py` and
+  `ir/javascript_guardrails.py` and cached with the other facts (cache schema
+  "4"). STUB002 reads the existing import facts; STATE001 the existing binding,
+  `global` and write facts (the same ones `metrics.graph.shared_mutable_state`
+  uses).
+* **Rules** (`rules/guardrails.py`), run in the per-file phase after the
+  defaults rules. IMPORT001 resolves callees through the file's own imports
+  (`import subprocess as sp`, `from os import system`, `import { execSync } from
+  "node:child_process"`, `require`).
+* **Registry**: seven implemented rules with full metadata; families `stubs`,
+  `assertions`, `import_effects` (contract_integrity) and `boolean_arguments`,
+  `module_state` (structural).
+* **Config**: `rules.stubs`, `.assertions`, `.boolean_arguments`, `.module_state`,
+  `.import_effects` (enabled, severity, roles, plus each rule's catalogs and
+  permissions); deviation lines for every loosening; the five severities in the
+  loosening order, so VERIFY003 and `--policy` cover them.
+
+### Decisions (mine; review these)
+
+1. **Severities** follow decision 9: `warning` for all, `review` for BOOL001,
+   whose callee is not resolved. Each section's `severity` is the findings'
+   severity, as in `rules.verification`, so `error` opts in to gating.
+2. **Role scoping** like the VERIFY rules: a rule outside its section's
+   `roles` is not applied to the file and not listed in `rules_disabled`. A first
+   version listed them as disabled; that put six entries on every test file and
+   changed many expected lists for no information the section does not already
+   give.
+3. **EXC004 is in `rules.exceptions`** and applies to every role: a `return` in
+   `finally` discards an exception in a test as surely as in production.
+4. **ASSERT001 allows type narrowing by default** (`x is not None`,
+   `isinstance`, `and` of those): 51 of the tool's own 57 asserts were of this
+   kind, and they record invariants for the type checker rather than validate
+   input. `allow_type_narrowing = false` tightens.
+5. **BOOL001 needs more than one positional argument**: `toggle(True)` names its
+   flag in the function name. The lookups DEF002 judges (`get`, `getattr`,
+   `setdefault`, `pop`, `next`, and `setattr`) are allowed by default.
+6. **STUB001 treats as abstract**: `@abstractmethod`, `@overload`, and every
+   method of a class deriving from `ABC`/`Protocol` or using `ABCMeta`. A
+   docstring-only body is not a stub; empty JavaScript functions are not
+   reported. `raise NotImplemented` is reported even in abstract code (it is a
+   `TypeError`).
+7. **STUB002 matches names, not files**, and treats a JavaScript bare package
+   name as never being a path (`import x from "fixtures"` is a package).
+8. **IMPORT001 reports only catalog operations**; an unresolved top-level call
+   (most of them: `FastAPI()`, `getLogger()`) is not an unknown finding, which
+   would bury the list. Instance field initializers in JavaScript run at
+   construction and are excluded; static fields and static blocks are included.
+9. **The 0.3.0 regression** runs with the H3 rules off (their sections disabled
+   and an override for EXC004), and a new test checks that turning them on
+   changes no gate status, exit code or hard-violation count.
+10. **The made-up-identifier suggestion** (a `run_id` from `start_run()` in one
+    place and `uuid4()` in another) is recorded as decision 20 for H6: it needs
+    argument provenance across files.
+
+### The tool's own code
+
+The new rules found, on `src/` and `scripts/`: six asserts that check real
+invariants (`findings.py`, `analysis.py`, `gating/diff.py` (3),
+`complexity/callgraph.py`), now explicit `raise AssertionError(...)`; two
+`raise NotImplementedError` in `schema.Field`, which is now an `ABC` with
+abstract methods; one module-level cache in `cache/codec.py`, now
+`functools.cache`. Left as reported: **49 BOOL001 review findings**
+(`CallSite(..., False)`, `ModuleBinding(..., False, span)`,
+`analyze_revision(..., None, False)`, `_add_revision_arguments(diff, True)` ...).
+They do not gate; converting them to keyword arguments is a mechanical cleanup
+proposed as its own session. The H3 code itself passes its own rules: its flags
+are keyword-only.
+
+### Regression against 0.5.0
+
+`pip install shockharness==0.5.0` against this tree, same inputs, all three
+profiles, H3 findings excluded from the comparison: the self-scan (191), the
+golden fixtures (409/399/401, exits 3/3/1) and both examples are identical.
+H3 adds 49 findings to the self-scan (all BOOL001 review) and 10 to the golden
+corpus (8 IMPORT001 on top-level `fetch` calls in `exc_promise_catch.js`, one
+STATE001 on `counts` in `def_mapping_get.py`, one ASSERT001 in
+`def_truthiness.py`); `expected.json` records them.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+126 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  240 findings  (cache hits 0 / misses 129, then 129 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1056 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1
+1055 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+Self-diff in a scratch clone against a1a8874 (the 0.5.0 STATUS commit): 130
+files compared (4 new), `gate: PASS (exit 0)`, **no new findings**. The first
+self-diff showed new complexity warnings in `prepare_text`,
+`_guardrail_deviations`, `diff_revisions`, `_scan_finally`,
+`_Placeholders.visit` and `_aliases`, one DEF003 review and four BOOL001 reviews
+in the new code; each was split or rewritten.
+
+New tests: `tests/unit/test_guardrails.py` (18), a loosening test for the H3
+settings, the regression test's H3-on verdict check (3), and the updated golden,
+registry, report, analysis, exception and inventory expectations.
+
+### Failures observed during development (and what was done)
+
+* `isinstance(node, FUNCTIONS | ast.Lambda)` with `FUNCTIONS` a tuple raised a
+  `TypeError`; spelled out as a union of classes.
+* A stray `[2]` index in the new rule code was a MAGIC001 error in the self-gate;
+  replaced by unpacking.
+* STATE001 first missed a variable named only by a `global` statement: the
+  binding fact marks mutable containers, and the `global` declaration is on the
+  function fact. It now combines both, as `complexity/coupling.py` does.
+* Two expected line numbers in the new tests were miscounted by hand.
 

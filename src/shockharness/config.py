@@ -358,6 +358,10 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                         f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
                     )
                 )
+    for index, allowed in enumerate(values["rules"]["module_state"]["allowed"]):
+        problem = validate_glob(allowed["path"])
+        if problem is not None:
+            issues.append(ConfigIssue(f"rules.module_state.allowed[{index}].path", problem))
     exceptions = values["rules"]["exceptions"]
     for index, boundary in enumerate(exceptions["boundaries"]):
         key = f"rules.exceptions.boundaries[{index}]"
@@ -495,6 +499,70 @@ def _unknown_deviations(values: Mapping[str, Any], strict_values: Mapping[str, A
     return found
 
 
+# H3 guardrail sections: which rules each one carries, which of its lists are catalogs
+# (removing an entry loosens) and which are permissions (adding one loosens).
+GUARDRAIL_RULES = {
+    "stubs": "STUB001, STUB002",
+    "assertions": "ASSERT001",
+    "boolean_arguments": "BOOL001",
+    "module_state": "STATE001",
+    "import_effects": "IMPORT001",
+}
+GUARDRAIL_CATALOGS = (
+    ("stubs", "roles"),
+    ("stubs", "test_path_segments"),
+    ("stubs", "mock_modules"),
+    ("assertions", "roles"),
+    ("boolean_arguments", "roles"),
+    ("module_state", "roles"),
+    ("import_effects", "roles"),
+    ("import_effects", "python_operations"),
+    ("import_effects", "javascript_operations"),
+)
+GUARDRAIL_PERMISSIONS = (("boolean_arguments", "allowed_callees"),)
+REVIEW = "review"
+
+
+def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
+    """H3: a severity lowered to review, a catalog entry removed, a permission added, and
+    every declared module-state binding."""
+    found: list[str] = []
+    for section, rule_ids in GUARDRAIL_RULES.items():
+        if rules[section]["severity"] == REVIEW and strict[section]["severity"] != REVIEW:
+            found.append(
+                f"rules.{section}.severity is 'review'; {rule_ids} findings are reported as review"
+            )
+    found.extend(_guardrail_list_deviations(rules, strict))
+    for index, allowed in enumerate(rules["module_state"]["allowed"]):
+        found.append(
+            f"rules.module_state.allowed[{index}] permits module state {allowed['name']!r} in "
+            f"{allowed['path']}: {allowed['reason']}"
+        )
+    return found
+
+
+def _guardrail_list_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
+    """A catalog entry removed, a permission added."""
+    found: list[str] = []
+    for section, key in GUARDRAIL_CATALOGS:
+        removed = [v for v in strict[section][key] if v not in rules[section][key]]
+        if len(removed) > 0:
+            found.append(
+                f"rules.{section}.{key} no longer lists "
+                + ", ".join(repr(v) for v in removed)
+                + f"; {GUARDRAIL_RULES[section]} no longer cover them"
+            )
+    for section, key in GUARDRAIL_PERMISSIONS:
+        added = [v for v in rules[section][key] if v not in strict[section][key]]
+        if len(added) > 0:
+            found.append(
+                f"rules.{section}.{key} also permits "
+                + ", ".join(repr(v) for v in added)
+                + f"; {GUARDRAIL_RULES[section]} does not report those calls"
+            )
+    return found
+
+
 def _verification_deviations(verification: Mapping[str, Any]) -> list[str]:
     """VERIFY findings lowered to review, and every allowed skip reason (H2). Raising the
     severity to error tightens the policy and is not a deviation."""
@@ -590,6 +658,7 @@ def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> 
         )
     found.extend(loosened_modes(rules["defaults"]))
     found.extend(_verification_deviations(rules["verification"]))
+    found.extend(_guardrail_deviations(rules, strict_values["rules"]))
     found.extend(_unknown_deviations(values, strict_values))
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])

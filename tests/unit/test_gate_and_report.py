@@ -110,6 +110,7 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "EXC001",
         "EXC002",
         "EXC003",
+        "EXC004",
         "DEF001",
         "DEF002",
         "DEF003",
@@ -128,6 +129,12 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "VERIFY002",
         "VERIFY003",
         "VERIFY004",
+        "STUB001",
+        "STUB002",
+        "ASSERT001",
+        "BOOL001",
+        "STATE001",
+        "IMPORT001",
     ]
     assert report.coverage["languages"]["python"]["parser"] == "python-ast"
 

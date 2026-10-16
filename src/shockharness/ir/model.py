@@ -577,6 +577,86 @@ class VerificationFacts:
 NO_VERIFICATION = VerificationFacts(markers=(), suppressions=(), cases=())
 
 
+# --- Guardrail facts (H3) ----------------------------------------------------------------
+# Syntax for EXC004, STUB001, ASSERT001, BOOL001 and IMPORT001 (rules/guardrails.py).
+# STUB002 reads ``imports`` and STATE001 reads ``bindings`` and ``functions``.
+
+EXIT_RETURN = "return"
+EXIT_BREAK = "break"
+EXIT_CONTINUE = "continue"
+
+PLACEHOLDER_NOT_IMPLEMENTED = (
+    "not_implemented"  # raise NotImplementedError / throw new Error("not implemented")
+)
+PLACEHOLDER_NOT_IMPLEMENTED_CONSTANT = "not_implemented_constant"  # raise NotImplemented
+PLACEHOLDER_EMPTY_BODY = "empty_body"  # a function whose body is only pass / ... / a docstring
+
+
+@dataclass(frozen=True)
+class FinallyExit:
+    """A ``return``/``break``/``continue`` that leaves a ``finally`` block, discarding the
+    exception in flight (one inside a loop or nested function within the block does not)."""
+
+    kind: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class Placeholder:
+    """Code that stands in for an implementation. ``scope`` is the enclosing unit."""
+
+    kind: str
+    text: str
+    scope: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class AssertFact:
+    """A Python ``assert`` statement. ``narrowing`` is true when its test only narrows types
+    (``x is not None``, ``isinstance(x, T)``, or an ``and`` of those)."""
+
+    text: str
+    narrowing: bool
+    span: Span
+
+
+@dataclass(frozen=True)
+class BooleanArgument:
+    """A ``True``/``False`` (``true``/``false``) literal passed positionally to a call that
+    takes more than one positional argument. ``callee`` is the dotted callee as written."""
+
+    callee: str
+    position: int
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class ImportTimeCall:
+    """A call executed when the module is imported (module body, class bodies, decorators,
+    default values; not function bodies, not under ``if __name__ == "__main__"`` or
+    ``if TYPE_CHECKING``). ``callee`` is the dotted callee as written."""
+
+    callee: str
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class GuardrailFacts:
+    finally_exits: tuple[FinallyExit, ...]
+    placeholders: tuple[Placeholder, ...]
+    asserts: tuple[AssertFact, ...]
+    boolean_arguments: tuple[BooleanArgument, ...]
+    import_time_calls: tuple[ImportTimeCall, ...]
+
+
+NO_GUARDRAILS = GuardrailFacts(
+    finally_exits=(), placeholders=(), asserts=(), boolean_arguments=(), import_time_calls=()
+)
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -590,6 +670,7 @@ class ModuleFacts:
     imports: tuple[ImportFact, ...]
     bindings: tuple[ModuleBinding, ...]
     verification: VerificationFacts
+    guardrails: GuardrailFacts
     parse_failure: ParseFailure | None
 
 
@@ -607,5 +688,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         imports=(),
         bindings=(),
         verification=NO_VERIFICATION,
+        guardrails=NO_GUARDRAILS,
         parse_failure=failure,
     )

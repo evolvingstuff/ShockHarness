@@ -14,6 +14,11 @@ comparing, so every other change still fails. 0.5.0 (docs/shockharness-suggestio
 item 2 removes the checked-then-raised ``table.get("raw")`` finding in every profile, and
 item 6 (``recommended`` sets ``rules.defaults.fail_on_unknown = false``) moves two unknown
 DEF002 findings out of the gate's hard and review counts under ``recommended``.
+
+The H3 rules (EXC004, STUB*, ASSERT001, BOOL001, STATE001, IMPORT001) did not exist in
+0.3.0: the snapshot comparison runs with them switched off, and
+``test_h3_rules_never_change_a_gate_verdict`` checks that switching them on changes no
+gate status, exit code or hard-violation count (they ship at warning and review).
 """
 
 import functools
@@ -83,16 +88,34 @@ def _verdict(gate: GateResult) -> dict[str, Any]:
     }
 
 
+# The H3 rules switched off: their sections, and EXC004 (which shares rules.exceptions).
+H3_OFF = (
+    "".join(
+        f"[tool.shockharness.rules.{section}]\nenabled = false\n"
+        for section in (
+            "stubs",
+            "assertions",
+            "boolean_arguments",
+            "module_state",
+            "import_effects",
+        )
+    )
+    + '[[tool.shockharness.overrides]]\npaths = ["**"]\ndisable = ["EXC004"]\nreason = "0.3.0"\n'
+)
+
+
 def _write_config(root: Path, profile: str, extra: str) -> None:
     cache = "[tool.shockharness.cache]\nenabled = false\n"
     body = f'[tool.shockharness]\nprofile = "{profile}"\n{cache}{extra}'
     (root / ".shockharness.toml").write_text(body, encoding="utf-8")
 
 
-def fixture_outcome(name: str, profile: str, root: Path) -> dict[str, Any]:
+def fixture_outcome(name: str, profile: str, root: Path, h3: bool) -> dict[str, Any]:
     extra = ""
     if "exceptions" in EXPECTED[name]:
         extra = exceptions_config_toml(EXPECTED[name]["exceptions"])
+    if not h3:
+        extra = H3_OFF + extra
     _write_config(root, profile, extra)
     config = load_config(root, None)
     text = (FIXTURES / name).read_text(encoding="utf-8")
@@ -105,10 +128,10 @@ def fixture_outcome(name: str, profile: str, root: Path) -> dict[str, Any]:
     }
 
 
-def corpus_outcome(profile: str, root: Path) -> dict[str, Any]:
+def corpus_outcome(profile: str, root: Path, h3: bool) -> dict[str, Any]:
     for directory in CORPUS_DIRECTORIES:
         shutil.copytree(FIXTURES / directory, root / directory)
-    _write_config(root, profile, "")
+    _write_config(root, profile, "" if h3 else H3_OFF)
     config = load_config(root, None)
     report = analyze_paths([root], root, config, OPTIONS)
     return {
@@ -126,10 +149,13 @@ def snapshot(scratch: Path) -> dict[str, Any]:
         for name in sorted(EXPECTED):
             root = scratch / profile / "fixtures" / name.replace("/", "__")
             root.mkdir(parents=True)
-            fixtures[name] = fixture_outcome(name, profile, root)
+            fixtures[name] = fixture_outcome(name, profile, root, False)
         corpus_root = scratch / profile / "corpus"
         corpus_root.mkdir(parents=True)
-        document[profile] = {"fixtures": fixtures, "corpus": corpus_outcome(profile, corpus_root)}
+        document[profile] = {
+            "fixtures": fixtures,
+            "corpus": corpus_outcome(profile, corpus_root, False),
+        }
     return document
 
 
@@ -167,12 +193,22 @@ def test_snapshot_covers_every_profile_and_fixture() -> None:
 @pytest.mark.parametrize("profile", PROFILES)
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_fixture_verdict_unchanged_since_0_3_0(name: str, profile: str, tmp_path: Path) -> None:
-    assert fixture_outcome(name, profile, tmp_path) == expected_outcome(profile, name)
+    assert fixture_outcome(name, profile, tmp_path, False) == expected_outcome(profile, name)
 
 
 @pytest.mark.parametrize("profile", PROFILES)
 def test_corpus_verdict_unchanged_since_0_3_0(profile: str, tmp_path: Path) -> None:
-    assert corpus_outcome(profile, tmp_path) == expected_outcome(profile, CORPUS)
+    assert corpus_outcome(profile, tmp_path, False) == expected_outcome(profile, CORPUS)
+
+
+VERDICT_KEYS = ("status", "exit_code", "hard_violations", "analysis_failures")
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+def test_h3_rules_never_change_a_gate_verdict(profile: str, tmp_path: Path) -> None:
+    expected = expected_outcome(profile, CORPUS)["gate"]
+    actual = corpus_outcome(profile, tmp_path, True)["gate"]
+    assert {k: actual[k] for k in VERDICT_KEYS} == {k: expected[k] for k in VERDICT_KEYS}
 
 
 if __name__ == "__main__":

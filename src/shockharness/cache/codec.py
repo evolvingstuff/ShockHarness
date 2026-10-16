@@ -10,6 +10,7 @@ so a deeply nested unit cannot exhaust the recursion limit.
 """
 
 import dataclasses
+import functools
 import types
 import typing
 from collections.abc import Callable
@@ -92,13 +93,9 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-_HINTS: dict[type, dict[str, Any]] = {}
-
-
+@functools.cache
 def _hints(cls: type) -> dict[str, Any]:
-    if cls not in _HINTS:
-        _HINTS[cls] = typing.get_type_hints(cls)
-    return _HINTS[cls]
+    return typing.get_type_hints(cls)
 
 
 def from_plain(hint: Any, data: Any, where: str) -> Any:

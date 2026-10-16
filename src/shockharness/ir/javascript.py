@@ -30,6 +30,7 @@ from shockharness.ir.javascript_functions import (
     collect_javascript_functions,
     collect_javascript_imports,
 )
+from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -298,5 +299,6 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         imports=collect_javascript_imports(source, root),
         bindings=collect_javascript_bindings(source, root),
         verification=collect_javascript_verification(source, root, tuple(comments)),
+        guardrails=collect_javascript_guardrails(source, root),
         parse_failure=None,
     )

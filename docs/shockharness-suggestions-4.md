@@ -260,6 +260,7 @@ documentation list.
 | Reading `__qualname__`/`__name__` on a value of unknown type | Recorded, unscheduled | Needs type inference ShockHarness does not have. A syntactic version (no `callable`/`isinstance`/`inspect` check before the read) would be noisy. Candidate for an advisory `TYPE` rule after H5 (decision 16) |
 | TypeScript | H-TS, approved | `tree-sitter-typescript` is approved as a runtime dependency for H-TS, pinned like `tree-sitter-javascript` (decision 8, updated) |
 | Python 3.10 support | Declined | `tomllib` is 3.11+, and the runtime stays stdlib-only plus tree-sitter. Section 9 documents the separate CI job instead (decision 17) |
+| A made-up id passed where ids come from a registry: `run_id` filled from `agent_trace_store.start_run()` in one place and from `str(uuid4())` in another (a later note from the same project) | H6, recorded | Needs argument provenance across files; candidate rule alongside INPUT001-INPUT002, advisory until measured (decision 20) |
 | "Would ShockHarness absolve this?" | — | The note's context did not survive the export, so there is nothing to act on |
 
 ## What worked well, and stays

@@ -63,6 +63,13 @@ Ask what the code promises when the value is absent or the operation fails.
 | `EXC001`, `EXC003` | Is this really an external boundary? | External (file, network, subprocess, decoding external input): declare a boundary with `path`, `language`, qualified `exception`, `reason`; keep one operation inside the `try`; re-raise a typed error with `from exc`. Internal: remove the catch and fix the cause or let it propagate. |
 | `EXC002`, `DEF005` | What should the caller see when this fails? | A typed error. Not `None`, not `[]`, not a logged line and a continue. |
 | `SUPP001`, `SUPP002` | Is the suppression still justified? | Fix the comment syntax, or delete a suppression that no longer silences anything. |
+| `EXC004` | Should the exception really disappear? | No: move the `return` after the `try`; keep `finally` to cleanup. If it must be discarded, catch the type at a declared boundary. |
+| `STUB001` | What should this do? | Implement it, delete the unused entry point, or stop and say the behavior is underspecified. Never write a plausible fake. An abstract method is `@abstractmethod` on an ABC or a `Protocol`. |
+| `STUB002` | Why does production depend on a test double? | Invert it: production defines the interface, tests inject the double. A real production module under `tests/` moves. |
+| `ASSERT001` | Must this check survive `python -O`? | Yes for input, permissions and state: `if not ok: raise ValueError(...)`. A type-narrowing `assert x is not None` is allowed. |
+| `BOOL001` | What does the flag switch? | Pass it by keyword (`escape=True`) or in an options object; a flag that selects behavior may be two functions. |
+| `STATE001` | Who owns this state? | An object the caller creates and passes in, or a returned value. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
+| `IMPORT001` | Who asked for this effect? | Move it into a function the entry point calls (`main()`, a factory, `start()`). |
 
 An **unknown** finding means the rule could not establish the property, not
 that the code is fine or that it is wrong. Treat it as a request for the

@@ -38,7 +38,7 @@ What is unknown today (the inventory, kept as a test in
 | EXC001 | capture manager whose positional arguments name no readable exception type (`suppress(*errors)`), or whose type does not resolve | `unknown` |
 | EXC001 | bare `except:`, untyped JavaScript `catch (e)`, inline untyped rejection handler: each provably binds every exception | `violation` |
 | DEF002 | `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)`, `m.get(k)` on a receiver not proven a mapping (`approximate` confidence): whether it is a fallback depends on the receiver's type | `unknown` |
-| every other finding | MAGIC001, EXC002, EXC003, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002 | `violation` |
+| every other finding | MAGIC001, EXC002, EXC003, EXC004, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002, STUB001, STUB002, ASSERT001, BOOL001, STATE001 (its `approximate` confidence is about aliasing, not about whether the binding is written), IMPORT001 | `violation` |
 
 Unresolved call-graph edges never become findings: CPLX005 counts resolved
 targets only and names the unresolved count in its message.
@@ -68,8 +68,8 @@ weakened" without a separate exit code: a gating finding of any category exits
 | Category | Families | Meaning |
 |---|---|---|
 | `policy_integrity` | `VERIFY*` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
-| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*` | the code hides a failure, a missing value or an unexplained number |
-| `structural` | `CPLX*` | complexity and coupling (advisory) |
+| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
+| `structural` | `CPLX*`, `BOOL001`, `STATE001` | complexity, coupling, unreadable call sites and shared state (advisory) |
 
 The JSON report counts findings per category in `summary.by_category`; SARIF
 results carry it in `properties.category`; the text output of `diff` and `gate`
@@ -727,6 +727,90 @@ cannot disable or lower the rules that report it, add an allowed skip reason
 for its own skips, or turn off `fail_on_unknown` or
 `report_narrow_suppressions` for itself. The loosening itself is reported by
 `VERIFY003`, and takes effect once it is on the base branch.
+
+### EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: syntax-level guardrails (H3; warning, BOOL001 review)
+
+Milestone H3 of specification section 21. Each rule ships at `warning`
+(`BOOL001` at `review`) until its precision has been measured on a reviewed
+corpus (decision 9), so none of them fails a gate by default. Set a section's
+`severity = "error"` to gate on its rules; `"review"` lowers them and is a policy
+deviation. Every finding is a `violation` (the facts are exact syntax).
+
+| Rule | Reports | Languages | Files (role) |
+|---|---|---|---|
+| `EXC004` | `return`, `break` or `continue` that leaves a `finally` block, discarding the exception in flight | Python, JavaScript | every role (section `rules.exceptions`) |
+| `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body (`pass`/`...`/docstring), `throw new XError("not implemented")`; comments with a configured marker | Python, JavaScript | `rules.stubs.roles` (production) |
+| `STUB002` | an import of a mocking or fake-data library, or of a module under a test path segment | Python, JavaScript | `rules.stubs.roles` (production) |
+| `ASSERT001` | an `assert` (removed under `python -O`); type-narrowing asserts allowed by default | Python | `rules.assertions.roles` (production) |
+| `BOOL001` | a `True`/`False` literal passed positionally to a call with several arguments | Python, JavaScript | `rules.boolean_arguments.roles` (production) |
+| `STATE001` | a module-level mutable binding that a function assigns or mutates | Python, JavaScript | `rules.module_state.roles` (production) |
+| `IMPORT001` | a configured side-effecting call (processes, network, sockets, threads, deletion) executed at import time | Python, JavaScript | `rules.import_effects.roles` (production) |
+
+A rule whose section does not list a file's role is not applied to that file
+(it is absent from `rules_applied`, as the VERIFY role scopes are), so a test
+file may use `mock` and `assert` freely.
+
+**EXC004.** Python: `return` anywhere in a `finally` block, and `break`/`continue`
+not inside a loop of their own within the block (a `break` in the `else` of such
+a loop leaves the block). JavaScript: `return` in a `finally` clause; an
+unlabeled `break` not inside a loop or `switch` of its own, an unlabeled
+`continue` not inside a loop of its own, and a labeled `break`/`continue` whose
+label is declared outside the clause. Nested functions, lambdas, arrows,
+methods and classes are separate scopes. CPython 3.14 warns about the same
+constructs (PEP 765). Boundaries do not apply: there is no exception type to
+approve.
+
+**STUB001.** An intentionally abstract API is not a stub: functions decorated
+`@abstractmethod` or `@overload`, and every method of a class deriving from
+`ABC` or `Protocol` or using `ABCMeta`, are not reported. `raise NotImplemented`
+is reported in any function: `NotImplemented` is not an exception, and raising
+it is a `TypeError`. A function whose body is only a docstring is not reported
+(it needs a `pass` or `...`); empty JavaScript functions are not reported
+(no-op callbacks are idiomatic). `rules.stubs.markers` (empty by default) adds
+comments containing a listed word (`["TODO", "FIXME"]`, matched as whole words).
+
+**STUB002.** Python: the module of every `import` / `from ... import` is
+compared with `rules.stubs.mock_modules` (the module itself or one below it,
+including `from unittest import mock`, which names `unittest.mock`) and its
+dotted segments (and the names of `from . import x`) with
+`rules.stubs.test_path_segments`. JavaScript: the specifier is compared with
+`mock_modules` (`@faker-js/faker/locale/en` is below `@faker-js/faker`), and the
+segments of a relative or absolute specifier (`./__mocks__/api.js`) with
+`test_path_segments`; a bare package name is never a path. Matching is by name,
+not by resolving files.
+
+**ASSERT001.** Every `assert` outside `if TYPE_CHECKING:`. With
+`rules.assertions.allow_type_narrowing = true` (the default) an assert whose
+test only narrows types (`x is not None`, `isinstance(x, T)`, or an `and` of
+those) is not reported: it records an invariant for the type checker. `false`
+reports those too.
+
+**BOOL001.** A call with more than one positional argument (and no `*args` or
+spread) where one of them is a Boolean literal: one finding per literal, at
+`review`. Calls whose last callee segment is in
+`rules.boolean_arguments.allowed_callees` are skipped (default: `get`,
+`getattr`, `setattr`, `setdefault`, `pop`, `next`, which DEF002 already judges);
+each addition is a policy deviation. A single-argument call (`toggle(True)`) is
+not reported.
+
+**STATE001.** The module-level variables the analyzer marks mutable (bound to a
+list/dict/set display or a mutable constructor, a JavaScript `let`/`var` or a
+container `const`, or named by a Python `global` statement) that at least one
+function, method or arrow assigns or mutates; one finding per binding at its
+definition, naming the writers. `[[rules.module_state.allowed]]` declares a
+deliberate process-wide binding (`path` glob, `name`, `reason`); each entry is
+a policy deviation. Per file: writes through another module or an alias are not
+seen, hence `approximate`.
+
+**IMPORT001.** Calls executed when the module is imported (module body, class
+bodies, decorators, default values; JavaScript top level, class static blocks
+and static field initializers), not under `if __name__ == "__main__":` or
+`if TYPE_CHECKING:`, whose callee resolved through the file's own imports
+(`import subprocess as sp`, `from os import system`, `import { execSync } from
+"node:child_process"`, `const cp = require("child_process")`) is in
+`rules.import_effects.python_operations` / `javascript_operations`. An
+unresolved framework call (`app.run()`, `server.listen()`) is not reported;
+calls reached through a function called at import time are not followed.
 
 ## Registered, not implemented
 

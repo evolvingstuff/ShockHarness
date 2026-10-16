@@ -118,6 +118,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "unresolved) when the base version could not be analyzed, or when rename detection "
         "failed and the file has no base version under its own path",
     ),
+    # H3: every guardrail finding is a violation (the facts are exact syntax; STATE001's
+    # approximate confidence concerns aliasing, not whether the binding is written).
+    ("rules/guardrails.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: violation",
+    ),
     # VERIFY003 (H2 part 2).
     ("rules/policy_integrity.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),

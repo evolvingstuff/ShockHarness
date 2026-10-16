@@ -314,6 +314,13 @@ def _verify(
     )
 
 
+def _by_fingerprint(findings: Sequence[Finding]) -> dict[str, Finding]:
+    by_fp = {f.fingerprint: f for f in findings if f.fingerprint is not None}
+    if len(by_fp) != len(findings):
+        raise AssertionError("fingerprints must be unique")
+    return by_fp
+
+
 def diff_revisions(
     root: Path,
     base_ref: str,
@@ -335,10 +342,8 @@ def diff_revisions(
     head = analyze_revision(root, location, head_ref, config, options, base.policy.config, True)
     combined = _verify(root, location, config, base, head)
     head = replace(head, report=with_verification(head.report, combined))
-    base_by_fp = {f.fingerprint: f for f in base.report.findings if f.fingerprint is not None}
-    head_by_fp = {f.fingerprint: f for f in head.report.findings if f.fingerprint is not None}
-    assert len(base_by_fp) == len(base.report.findings), "fingerprints must be unique"
-    assert len(head_by_fp) == len(head.report.findings), "fingerprints must be unique"
+    base_by_fp = _by_fingerprint(base.report.findings)
+    head_by_fp = _by_fingerprint(head.report.findings)
 
     entries: list[DiffFinding] = []
     for fingerprint, finding in head_by_fp.items():
@@ -373,7 +378,8 @@ def diff_revisions(
         if entry.status == STATUS_FIXED:
             relabelled.append(entry)
             continue
-        assert entry.finding.fingerprint in by_fp
+        if entry.finding.fingerprint not in by_fp:
+            raise AssertionError(f"no head finding for fingerprint {entry.finding.fingerprint}")
         relabelled.append(DiffFinding(entry.status, by_fp[entry.finding.fingerprint]))
     metrics = dict(head_marked.report.metrics)
     complexity = dict(metrics[COMPLEXITY_SECTION])

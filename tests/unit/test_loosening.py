@@ -108,3 +108,26 @@ def test_each_key_is_reported_once(empty_root: Path) -> None:
         '[tool.shockharness]\nparse_errors = "warn"\n',
     )
     assert [key for key, _ in found] == ["parse_errors"]
+
+
+def test_h3_guardrail_settings_loosen_like_the_others(empty_root: Path) -> None:
+    keys = [
+        key
+        for key, _ in compare(
+            empty_root,
+            "[tool.shockharness]\n",
+            '[tool.shockharness.rules.stubs]\nseverity = "review"\nroles = []\n'
+            "[tool.shockharness.rules.import_effects]\npython_operations = []\n"
+            "[tool.shockharness.rules.assertions]\nenabled = false\n",
+        )
+    ]
+    assert "rules.stubs.severity" in keys
+    assert "rules.stubs.roles" in keys
+    assert "rules.import_effects.python_operations" in keys
+    assert "rules.assertions" in keys
+    tightened = compare(
+        empty_root,
+        "[tool.shockharness]\n",
+        '[tool.shockharness.rules.stubs]\nseverity = "error"\nmarkers = ["TODO"]\n',
+    )
+    assert tightened == []

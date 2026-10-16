@@ -5,6 +5,51 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H3 of specification section 21: syntax-level guardrails. Seven new
+rules ship at `warning` (`BOOL001` at `review`) until their precision is measured
+(decision 9), so no gate verdict changes: with the new rules switched off, the
+golden corpus keeps its 0.3.0 verdicts under every profile, and with them on no
+gate status, exit code or hard-violation count changes (both pinned in
+`tests/unit/test_profile_regression.py`).
+
+### Added
+- `EXC004` (`rules.exceptions`, every role): `return`, `break` or `continue` that
+  leaves a `finally` block, discarding the exception in flight. Python and
+  JavaScript, including labeled jumps.
+- `STUB001` (`rules.stubs`): `raise NotImplementedError`, `raise NotImplemented`,
+  a function whose body is only `pass`/`...`/a docstring, `throw new
+  XError("not implemented")`; abstract API (`@abstractmethod`, `@overload`,
+  `ABC`/`Protocol`/`ABCMeta` classes) exempt; optional comment `markers`.
+- `STUB002` (`rules.stubs`): production imports of mocking or fake-data libraries
+  (`mock_modules`) or of modules under test path segments (`test_path_segments`).
+- `ASSERT001` (`rules.assertions`, Python): `assert` in production code;
+  type-narrowing asserts allowed by default (`allow_type_narrowing`).
+- `BOOL001` (`rules.boolean_arguments`, review): a Boolean literal passed
+  positionally to a call with several arguments; `allowed_callees`.
+- `STATE001` (`rules.module_state`): a module-level mutable binding written by a
+  function, method or arrow; `[[allowed]]` entries with a reason.
+- `IMPORT001` (`rules.import_effects`): configured side-effecting calls
+  (processes, network, sockets, threads, deletion, `fetch`, `setInterval`)
+  executed at import time, resolved through the file's own imports.
+- Each new section has `enabled`, `severity` (`warning`/`error`/`review`, the
+  findings' severity) and `roles` (default `["production"]`); every loosening
+  of them is a policy deviation, reported by VERIFY003 and protected by
+  `--policy`.
+
+### Changed
+- The tool's own code: six `assert`s that checked real invariants raise
+  explicitly; `schema.Field` is an `ABC` with abstract methods; the codec's type
+  hint cache uses `functools.cache` instead of a module-level dict.
+- The content-hash cache schema is "4" (guardrail facts are cached); earlier
+  caches are invalidated.
+
+### Schema
+- Report shapes are unchanged (`schema_version` "1"); the new rule IDs appear in
+  `coverage.rules_implemented`, findings and SARIF rules, and the new categories
+  map `STUB*`, `ASSERT001`, `IMPORT001` to `contract_integrity` and `BOOL001`,
+  `STATE001` to `structural`.
+- Configuration: the five `rules.*` tables above.
+
 ## [0.5.0] - 2026-10-16
 
 Feedback round F4 (`docs/shockharness-suggestions-4.md`, from agents running

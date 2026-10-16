@@ -160,6 +160,8 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/verification.py` | VERIFY001, VERIFY002, VERIFY004: what a change added to its tests and suppression comments, against the base revision |
 | `rules/policy_integrity.py` | VERIFY003: snapshots of each revision's configuration, tool configurations, workflows and baselines, and their comparison; `--policy` attempt findings |
 | `rules/tool_configs.py`, `rules/workflows.py` | ruff/flake8/pytest/coverage/ESLint settings and GitHub Actions jobs, read with the standard library, and what got looser between two versions |
+| `ir/python_guardrails.py`, `ir/javascript_guardrails.py` | H3 facts: exits from `finally`, placeholders, asserts, positional Boolean arguments, import-time calls |
+| `rules/guardrails.py` | EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001 |
 | `loosening.py` | What makes one configuration looser than another (shared by `--policy` and VERIFY003) |
 | `inventory.py` | `shockharness exceptions`: inline suppressions, configuration exceptions with their source, policy attempts, baseline contents |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |

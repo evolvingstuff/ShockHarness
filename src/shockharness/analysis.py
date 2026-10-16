@@ -38,7 +38,9 @@ from shockharness.rules import registry
 from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
+from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
+from shockharness.rules.registry import GUARDRAIL_SECTIONS
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -232,6 +234,27 @@ def _disabled_rules(
     return tuple(disabled[key] for key in sorted(disabled))
 
 
+def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) -> bool:
+    """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
+    scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
+    section = rule.config_section
+    if section is None or section not in GUARDRAIL_SECTIONS:
+        return True
+    return role.role in config.section(section)["roles"]
+
+
+def _active_guardrails(
+    language: str, role: FileRole, config: EffectiveConfig, disabled_ids: set[str]
+) -> frozenset[str]:
+    return frozenset(
+        rule.rule_id
+        for rule in GUARDRAIL_RULES
+        if rule.rule_id not in disabled_ids
+        and language in rule.languages
+        and _in_scope(rule, role, config)
+    )
+
+
 def _extract(language: str, source: SourceText, filename: str) -> ModuleFacts:
     if language == registry.PYTHON:
         return extract_python_facts(source, filename)
@@ -336,6 +359,14 @@ def prepare_text(
                 active_default_rules,
             )
         )
+
+    active_guardrails = _active_guardrails(language, role, config, disabled_ids)
+    applied.extend(sorted(active_guardrails))
+    findings.extend(
+        run_guardrail_rules(
+            facts, source, config.values["rules"], relative_path, language, active_guardrails
+        )
+    )
 
     complexity = config.section(COMPLEXITY_SECTION)
     units: tuple[UnitMetrics, ...] = ()
@@ -460,7 +491,8 @@ def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOpti
     if pending.failed:
         return _file_result(pending, (), (), ())
     assert pending.source is not None and pending.facts is not None
-    assert pending.status == STATUS_ANALYZED and pending.parse_failure is None
+    if pending.status != STATUS_ANALYZED or pending.parse_failure is not None:
+        raise AssertionError(f"{pending.path}: finishing a file that was not analyzed")
     disabled_ids = pending.disabled_ids()
     applied = list(pending.rules_applied)
     supp001_enabled = registry.SUPP001.rule_id not in disabled_ids

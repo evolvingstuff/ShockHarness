@@ -6,6 +6,7 @@ error format. Semantic checks that need other modules (rule IDs, glob validity,
 supported languages) live in :mod:`shockharness.config`.
 """
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -22,14 +23,14 @@ class ConfigIssue:
         return f"{self.key_path}: {self.message}"
 
 
-class Field:
+class Field(ABC):
     """Base descriptor. Subclasses append :class:`ConfigIssue` for every problem."""
 
-    def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None:
-        raise NotImplementedError(type(self).__name__)
+    @abstractmethod
+    def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None: ...
 
-    def describe(self) -> str:
-        raise NotImplementedError(type(self).__name__)
+    @abstractmethod
+    def describe(self) -> str: ...
 
 
 class StrField(Field):
@@ -207,6 +208,25 @@ FILE_ROLES_SCHEMA = TableField(
     required=(),
 )
 
+# The H3 guardrail sections (rules.stubs, .assertions, .boolean_arguments, .module_state,
+# .import_effects) share these keys; `severity` is the findings' severity, as in
+# rules.verification.
+GUARDRAIL_COMMON: dict[str, Field] = {
+    "enabled": BoolField(),
+    "severity": EnumField(VERIFICATION_SEVERITIES),
+    "roles": ListField(EnumField(ROLES)),
+}
+
+# `[[tool.shockharness.rules.module_state.allowed]]`: a deliberate process-wide binding.
+ALLOWED_STATE_SCHEMA = TableField(
+    fields={
+        "path": StrField(allow_empty=False),
+        "name": StrField(allow_empty=False),
+        "reason": StrField(allow_empty=False),
+    },
+    required=("path", "name", "reason"),
+)
+
 CONFIG_SCHEMA = TableField(
     fields={
         "profile": EnumField(PROFILES),
@@ -258,6 +278,38 @@ CONFIG_SCHEMA = TableField(
                         "nullish_fallbacks": EnumField(SEVERITY_MODES),
                         "configuration_fallbacks": EnumField(SEVERITY_MODES),
                         "fail_on_unknown": BoolField(),
+                    },
+                    required=(),
+                ),
+                "stubs": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "markers": ListField(StrField(allow_empty=False)),
+                        "test_path_segments": ListField(StrField(allow_empty=False)),
+                        "mock_modules": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "assertions": TableField(
+                    fields={**GUARDRAIL_COMMON, "allow_type_narrowing": BoolField()},
+                    required=(),
+                ),
+                "boolean_arguments": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "allowed_callees": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "module_state": TableField(
+                    fields={**GUARDRAIL_COMMON, "allowed": ListField(ALLOWED_STATE_SCHEMA)},
+                    required=(),
+                ),
+                "import_effects": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "python_operations": ListField(StrField(allow_empty=False)),
+                        "javascript_operations": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

@@ -33,6 +33,7 @@ from shockharness.ir.python_functions import (
     collect_python_functions,
     collect_python_imports,
 )
+from shockharness.ir.python_guardrails import collect_python_guardrails
 from shockharness.ir.python_verification import collect_python_verification
 from shockharness.source import SourceText
 
@@ -276,5 +277,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         imports=collect_python_imports(source, parsed),
         bindings=collect_python_bindings(source, parsed),
         verification=collect_python_verification(source, parsed, comments),
+        guardrails=collect_python_guardrails(source, parsed),
         parse_failure=None,
     )

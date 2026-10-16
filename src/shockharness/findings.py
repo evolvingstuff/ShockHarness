@@ -68,7 +68,8 @@ class Finding:
     baseline: str | None
 
     def __post_init__(self) -> None:
-        assert self.status in FINDING_STATUSES, f"unknown finding status {self.status!r}"
+        if self.status not in FINDING_STATUSES:
+            raise AssertionError(f"unknown finding status {self.status!r}")
 
     @property
     def is_unknown(self) -> bool:

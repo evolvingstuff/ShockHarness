@@ -39,13 +39,16 @@ two consumer examples) and G (bundled agent skills, `skills install` /
 (per-unit complexity metrics with versioned conventions, a call graph whose
 edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
 shared-mutable-state notes, hotspots from churn and cognitive complexity, and
-per-unit regressions in revision diffs) are implemented, as are the first two
+per-unit regressions in revision diffs) are implemented, as are the first three
 milestones of the advanced guardrails: H1 (an explicit `unknown` finding status
 and file roles) and H2 (verification integrity: in a revision diff, report test
 skips and focus markers, blanket suppressions, neutralized assertions and
 looser policy, baselines, workflows or tool settings that a change adds; an
 organization `--policy` file the repository cannot loosen; and a fifth agent
-skill, `verification-integrity`). `MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
+skill, `verification-integrity`) and H3 (syntax-level guardrails: `return` in
+`finally`, stubs and production imports of test doubles, removable asserts,
+positional Boolean flags, module state written from functions, side effects at
+import time; advisory until their precision is measured). `MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
 
@@ -57,6 +60,7 @@ Implemented rules:
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |
+| `EXC004` | `return`, `break` or `continue` that leaves a `finally` block, discarding the exception in flight | warning |
 | `DEF001` | parameter default, dataclass field default / `default_factory` | error |
 | `DEF002` | `m.get(k, v)`, `getattr(o, a, v)`, `o?.x ?? v`, `const {x = v} = o`; `.get(k)` implicit `None` as review | error |
 | `DEF003` | `x or v`, `x || v` outside Boolean logic | review |
@@ -71,6 +75,12 @@ Implemented rules:
 | `VERIFY002` | a blanket suppression comment the change adds (`# noqa`, `// eslint-disable`, `@ts-ignore`, ...) | warning |
 | `VERIFY003` | a looser configuration, files dropped from analysis, baseline growth, a weakened ShockHarness workflow job, loosened ruff/flake8/pytest/coverage/ESLint settings; a key that loosens the `--policy` file (also in `check`) | warning |
 | `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
+| `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body, `throw new Error("not implemented")` in production code (abstract API exempt) | warning |
+| `STUB002` | production code importing a mocking or fake-data library or a module under `tests/`, `fixtures/`, `mocks/` | warning |
+| `ASSERT001` | a Python `assert` in production code (removed under `python -O`); type-narrowing asserts allowed | warning |
+| `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
+| `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
+| `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |
 
 ## Install
 

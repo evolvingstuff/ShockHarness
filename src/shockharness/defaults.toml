@@ -176,6 +176,121 @@ allowed_skip_reasons = []
 # when this is true.
 report_narrow_suppressions = false
 
+# H3 guardrails (STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001; EXC004 lives in
+# rules.exceptions). Each table's `severity` is the severity of every finding of its rules:
+# "warning" (BOOL001: "review") until the rule's precision is measured (spec 21.1 decision
+# 9), "error" to gate on it, "review" to lower it (a policy deviation). `roles` lists the
+# file roles the rules apply to; removing a role is a policy deviation.
+[tool.shockharness.rules.stubs]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# STUB001 also reports a comment containing one of these markers (e.g. ["TODO", "FIXME"]).
+markers = []
+# STUB002: an import whose module path has one of these segments is test code.
+test_path_segments = ["tests", "test", "__tests__", "fixtures", "mocks", "__mocks__", "conftest"]
+# STUB002: mocking and fake-data libraries (an import of one, or below one, is test code).
+mock_modules = [
+  "unittest.mock",
+  "mock",
+  "pytest",
+  "pytest_mock",
+  "faker",
+  "freezegun",
+  "responses",
+  "sinon",
+  "jest",
+  "@jest/globals",
+  "jest-mock",
+  "vitest",
+  "@faker-js/faker",
+  "msw",
+  "nock",
+]
+
+[tool.shockharness.rules.assertions]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# An assert that only narrows types (x is not None, isinstance(x, T)) documents an
+# invariant for the type checker; false reports it too.
+allow_type_narrowing = true
+
+[tool.shockharness.rules.boolean_arguments]
+enabled = true
+severity = "review"
+roles = ["production"]
+# Calls whose last callee segment is listed here are not reported (each addition is a
+# policy deviation); the defaults are the lookups DEF002 already judges.
+allowed_callees = ["get", "getattr", "setattr", "setdefault", "pop", "next"]
+
+[tool.shockharness.rules.module_state]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# [[tool.shockharness.rules.module_state.allowed]] entries (path glob, name, reason)
+# declare a deliberate process-wide binding; each is a policy deviation.
+allowed = []
+
+[tool.shockharness.rules.import_effects]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# Qualified callees that must not run at import time; removing one is a policy deviation.
+python_operations = [
+  "subprocess.run",
+  "subprocess.call",
+  "subprocess.check_call",
+  "subprocess.check_output",
+  "subprocess.Popen",
+  "os.system",
+  "os.popen",
+  "os.remove",
+  "os.unlink",
+  "os.rmdir",
+  "os.removedirs",
+  "shutil.rmtree",
+  "socket.socket",
+  "socket.create_connection",
+  "threading.Thread",
+  "multiprocessing.Process",
+  "urllib.request.urlopen",
+  "requests.get",
+  "requests.post",
+  "requests.put",
+  "requests.patch",
+  "requests.delete",
+  "requests.head",
+  "requests.request",
+  "httpx.get",
+  "httpx.post",
+  "httpx.put",
+  "httpx.patch",
+  "httpx.delete",
+  "httpx.request",
+  "asyncio.run",
+]
+javascript_operations = [
+  "child_process.exec",
+  "child_process.execSync",
+  "child_process.execFile",
+  "child_process.execFileSync",
+  "child_process.spawn",
+  "child_process.spawnSync",
+  "child_process.fork",
+  "fs.rmSync",
+  "fs.rm",
+  "fs.unlinkSync",
+  "fs.unlink",
+  "fs.rmdirSync",
+  "fs.writeFileSync",
+  "fs.writeFile",
+  "net.connect",
+  "net.createConnection",
+  "fetch",
+  "setInterval",
+]
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

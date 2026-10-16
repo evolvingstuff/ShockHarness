@@ -1173,6 +1173,312 @@ VERIFY003 = RuleSpec(
 )
 
 
+# --- H3: syntax-level guardrails (spec 21.2) -----------------------------------------------
+# Each ships at warning (BOOL001 at review) until its precision is measured on a reviewed
+# corpus (spec 21.1 decision 9). STUB*, ASSERT001, BOOL001, STATE001 and IMPORT001 apply to
+# the file roles listed in their section's `roles` (default: production only).
+
+STUBS_SECTION = "rules.stubs"
+ASSERTIONS_SECTION = "rules.assertions"
+BOOLEAN_ARGUMENTS_SECTION = "rules.boolean_arguments"
+MODULE_STATE_SECTION = "rules.module_state"
+IMPORT_EFFECTS_SECTION = "rules.import_effects"
+GUARDRAIL_SECTIONS = (
+    STUBS_SECTION,
+    ASSERTIONS_SECTION,
+    BOOLEAN_ARGUMENTS_SECTION,
+    MODULE_STATE_SECTION,
+    IMPORT_EFFECTS_SECTION,
+)
+
+EXC004 = RuleSpec(
+    rule_id="EXC004",
+    version="1",
+    name="control flow leaves a finally block",
+    family="exceptions",
+    config_section="rules.exceptions",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "return, break or continue that leaves a finally block discards the exception in "
+        "flight, and the return value or loop step silently replaces it."
+    ),
+    rationale=(
+        "A finally block runs while an exception may be propagating. Leaving it with return, "
+        "break or continue cancels that exception: the caller sees an ordinary result. This is "
+        "the most silent catch there is, and it needs no except clause at all. CPython 3.14 "
+        "warns about it (PEP 765)."
+    ),
+    guarantees=(
+        "Python: return anywhere in a finally block; break/continue not inside a loop of their "
+        "own within the block (the else of such a loop counts as outside). JavaScript: return "
+        "in a finally clause; unlabeled break not inside a loop or switch of its own, "
+        "unlabeled continue not inside a loop of its own, and a labeled break/continue whose "
+        "label is not declared inside the clause. Nested functions, lambdas, arrows, methods "
+        "and classes are separate scopes. Exact."
+    ),
+    limitations=(
+        "Syntax only: a finally block that calls a function which itself exits the process "
+        "or re-raises a different exception is not judged. Exception boundaries do not apply: "
+        "there is no exception type to approve."
+    ),
+    remediation=(
+        "Move the return after the try statement, or compute the value in the try and return "
+        "it there; keep the finally block to cleanup that cannot fail. If the exception really "
+        "must be discarded, catch the specific type in an except clause at a declared boundary "
+        "so the decision is visible."
+    ),
+    noncompliant_example="try:\n    return compute()\nfinally:\n    return DEFAULT",
+    compliant_example="try:\n    value = compute()\nfinally:\n    release()\nreturn value",
+)
+
+STUB001 = RuleSpec(
+    rule_id="STUB001",
+    version="1",
+    name="placeholder in place of an implementation",
+    family="stubs",
+    config_section=STUBS_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "Production code that raises NotImplementedError, raises NotImplemented, throws "
+        "'not implemented', or is an empty function body ships a stub instead of behavior."
+    ),
+    rationale=(
+        "An agent under pressure to make the code compile or the tests pass writes the "
+        "signature and leaves the body for later. The program then fails at run time, in "
+        "production, on the first real call, or (for an empty body) silently does nothing."
+    ),
+    guarantees=(
+        "Python: raise NotImplementedError (bare or called), raise NotImplemented (itself a "
+        "bug: NotImplemented is not an exception), and a function whose body is only pass, "
+        "... and a docstring. Not reported: functions decorated @abstractmethod or @overload, "
+        "and every method of a class deriving from ABC or Protocol or using ABCMeta. "
+        "JavaScript: throw new XError('...') where the constructor name ends in Error and the "
+        "message says not implemented, not yet implemented, unimplemented, or starts with "
+        "TODO. Both: a comment containing one of rules.stubs.markers (none by default). Only "
+        "in files whose role is in rules.stubs.roles (production by default). Exact."
+    ),
+    limitations=(
+        "An abstract API written without ABC, Protocol or @abstractmethod looks like a stub; "
+        "declare it abstract. Empty JavaScript functions are not reported (no-op callbacks are "
+        "idiomatic). A plausible but fake implementation (return True) is STUB003's, which is "
+        "not built yet."
+    ),
+    remediation=(
+        "Implement the behavior, delete the unused entry point, or, if the behavior is "
+        "genuinely underspecified, stop and say so. Never replace the stub with a plausible "
+        "fake to silence the finding. Make an intentionally abstract method abstract "
+        "(@abstractmethod on an ABC, or a Protocol)."
+    ),
+    noncompliant_example="def refund(order):\n    raise NotImplementedError",
+    compliant_example=(
+        "class Gateway(ABC):\n    @abstractmethod\n    def refund(self, order): ..."
+    ),
+)
+
+STUB002 = RuleSpec(
+    rule_id="STUB002",
+    version="1",
+    name="test double imported by production code",
+    family="stubs",
+    config_section=STUBS_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "Production code imports a mocking or fake-data library, or a module under tests/, "
+        "fixtures/ or mocks/: test behavior wired into the shipped program."
+    ),
+    rationale=(
+        "A mock that leaks into production makes the program report success for work it never "
+        "did. The import direction is the cheapest place to stop it: production code has no "
+        "reason to depend on test code."
+    ),
+    guarantees=(
+        "Every import in a file whose role is in rules.stubs.roles (production by default) "
+        "whose module is one of rules.stubs.mock_modules or below it (unittest.mock, "
+        "from unittest import mock, @faker-js/faker/locale/en), or whose path has a segment "
+        "in rules.stubs.test_path_segments: Python dotted modules (absolute or relative, and "
+        "the names of a 'from . import x'), JavaScript relative and absolute specifiers "
+        "('./__mocks__/api.js'). Exact."
+    ),
+    limitations=(
+        "Imports are matched by name, not resolved to files: a production package that is "
+        "itself named fixtures is reported. A library that deliberately exports test "
+        "utilities should mark those files with a test role (file_roles.test) or an override."
+    ),
+    remediation=(
+        "Move the dependency the other way: production code defines an interface, tests "
+        "provide the double. If the module is really production code, rename or move it out "
+        "of the test directory, or classify the file's role explicitly."
+    ),
+    noncompliant_example="from tests.fakes import FakePaymentClient\nfrom unittest import mock",
+    compliant_example="from payments.client import PaymentClient  # tests inject a fake",
+)
+
+ASSERT001 = RuleSpec(
+    rule_id="ASSERT001",
+    version="1",
+    name="runtime check that python -O removes",
+    family="assertions",
+    config_section=ASSERTIONS_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "An assert statement in production code is removed under python -O: a check the "
+        "program depends on disappears in optimized deployments."
+    ),
+    rationale=(
+        "assert reads like validation, so it gets used as validation: of input, of "
+        "permissions, of state. Run with -O or PYTHONOPTIMIZE and every one of those checks "
+        "is gone, silently."
+    ),
+    guarantees=(
+        "Every assert in a Python file whose role is in rules.assertions.roles (production by "
+        "default), outside if TYPE_CHECKING. With rules.assertions.allow_type_narrowing = true "
+        "(the default), an assert whose test only narrows types (x is not None, isinstance(x, "
+        "T), or an and of those) is not reported: it documents an invariant for the type "
+        "checker. Exact."
+    ),
+    limitations=(
+        "Intent is not inferred: an internal invariant written as assert len(x) == n is "
+        "reported like input validation. JavaScript has no removable assert statement."
+    ),
+    remediation=(
+        "Validate with an explicit check that raises a typed error (if not ok: raise "
+        "ValueError(...)). For an internal invariant that must hold in every build, raise "
+        "explicitly as well; an assert is for checks you are content to lose."
+    ),
+    noncompliant_example='assert amount > 0, "amount must be positive"',
+    compliant_example=(
+        'if amount <= 0:\n    raise ValueError(f"amount must be positive, got {amount}")'
+    ),
+)
+
+BOOL001 = RuleSpec(
+    rule_id="BOOL001",
+    version="1",
+    name="positional Boolean argument",
+    family="boolean_arguments",
+    config_section=BOOLEAN_ARGUMENTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A True/False literal passed positionally to a call with several arguments does not "
+        "say what it switches: analyze(path, cfg, None, False)."
+    ),
+    rationale=(
+        "A bare Boolean at a call site is a flag whose meaning lives in another file. It is "
+        "easy to pass in the wrong position and impossible to review without opening the "
+        "callee."
+    ),
+    guarantees=(
+        "Python: a True/False literal among the positional arguments of a call that has more "
+        "than one positional argument and no *args. JavaScript: a true/false literal among "
+        "the arguments of a call with more than one argument and no spread. Calls whose last "
+        "callee segment is in rules.boolean_arguments.allowed_callees are not reported "
+        "(defaults: the lookup functions DEF002 already covers). Only in files whose role is "
+        "in rules.boolean_arguments.roles (production by default). Exact."
+    ),
+    limitations=(
+        "The callee is not resolved, so a parameter whose Boolean meaning is obvious from the "
+        "function name is reported too; that is why the rule ships at review."
+    ),
+    remediation=(
+        "Pass the flag by keyword (Python) or in a named options object (JavaScript), or "
+        "replace the flag with two functions or an enum when it selects behavior."
+    ),
+    noncompliant_example="render(page, True, False)\nconnect(host, true);",
+    compliant_example="render(page, escape=True, cache=False)\nconnect(host, { secure: true });",
+)
+
+STATE001 = RuleSpec(
+    rule_id="STATE001",
+    version="1",
+    name="module state written from functions",
+    family="module_state",
+    config_section=MODULE_STATE_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A module-level mutable binding (a container, a let/var, a name named by global) that "
+        "functions assign or mutate is shared state with no owner."
+    ),
+    rationale=(
+        "Module state outlives every call, is shared by every caller and every thread, and "
+        "makes the order of calls part of every function's contract. Tests pass one at a "
+        "time and fail together."
+    ),
+    guarantees=(
+        "Every module-level binding the analyzer marks mutable (bound to a list, dict, set or "
+        "mutable constructor; a JavaScript let/var; a Python name named by a global "
+        "statement) that at least one function, method or arrow assigns or mutates, one "
+        "finding per binding at its definition, naming the writers. Entries in "
+        "[[rules.module_state.allowed]] (path glob, name, reason) are not reported; each is a "
+        "policy deviation. Only in files whose role is in rules.module_state.roles. Approximate."
+    ),
+    limitations=(
+        "Per file: writes through another module (other.CACHE.append) and through aliases are "
+        "not seen. Module-level code that mutates its own containers while building them is "
+        "not a finding."
+    ),
+    remediation=(
+        "Give the state an owner: an object created by the caller and passed in, or a value "
+        "returned and threaded through. A deliberate process-wide cache is declared in "
+        "[[rules.module_state.allowed]] with its reason (thread safety, invalidation)."
+    ),
+    noncompliant_example="_SEEN = set()\n\ndef mark(key):\n    _SEEN.add(key)",
+    compliant_example="class Tracker:\n    def __init__(self):\n        self.seen = set()",
+)
+
+IMPORT001 = RuleSpec(
+    rule_id="IMPORT001",
+    version="1",
+    name="side effect at import time",
+    family="import_effects",
+    config_section=IMPORT_EFFECTS_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A process, network request, socket, thread or destructive file operation started "
+        "when the module is imported, before any caller asked for it."
+    ),
+    rationale=(
+        "Importing a module should not do anything. An import-time effect runs in every test, "
+        "every tool that inspects the package, and every process that merely needs a "
+        "constant; it fails or hangs where no one called it."
+    ),
+    guarantees=(
+        "Calls executed at import time (module body, class bodies, decorators and default "
+        "values; JavaScript top level, class static blocks and static fields) whose callee, "
+        "resolved through the file's own imports, is in rules.import_effects.python_operations "
+        "or javascript_operations (subprocess, os.system, socket, threading.Thread, "
+        "urllib/requests/httpx requests, asyncio.run, shutil.rmtree, os.remove; "
+        "child_process, fetch, fs deletion and writes, net connections, setInterval). Not under "
+        "if __name__ == '__main__' or if TYPE_CHECKING. Only in files whose role is in "
+        "rules.import_effects.roles. Exact for the listed operations."
+    ),
+    limitations=(
+        "Only the configured operations are recognized; framework calls with effects "
+        "(app.run(), server.listen()) are not, because the receiver's type is not known. "
+        "Calls reached through a function called at import time are not followed."
+    ),
+    remediation=(
+        "Move the effect into a function the entry point calls (main(), a factory, an "
+        "explicit start()). Keep module bodies to definitions."
+    ),
+    noncompliant_example="CONFIG = requests.get(CONFIG_URL).json()",
+    compliant_example="def load_config(url: str) -> dict:\n    return requests.get(url).json()",
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -1186,6 +1492,7 @@ RULES: tuple[RuleSpec, ...] = (
     EXC001,
     EXC002,
     EXC003,
+    EXC004,
     DEF001,
     DEF002,
     DEF003,
@@ -1204,6 +1511,12 @@ RULES: tuple[RuleSpec, ...] = (
     VERIFY002,
     VERIFY003,
     VERIFY004,
+    STUB001,
+    STUB002,
+    ASSERT001,
+    BOOL001,
+    STATE001,
+    IMPORT001,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -1244,6 +1557,11 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "suppressions": CATEGORY_CONTRACT,
     "complexity": CATEGORY_STRUCTURAL,
     VERIFICATION_FAMILY: CATEGORY_POLICY,
+    "stubs": CATEGORY_CONTRACT,
+    "assertions": CATEGORY_CONTRACT,
+    "import_effects": CATEGORY_CONTRACT,
+    "boolean_arguments": CATEGORY_STRUCTURAL,
+    "module_state": CATEGORY_STRUCTURAL,
 }
 
 

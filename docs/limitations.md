@@ -303,6 +303,28 @@ Stated so that a clean report is never read as more than it is.
   repository's to change. Command-line `--profile` and `--parse-errors` are not
   bound by the policy; a workflow that adds them is reported instead.
 
+## EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001 (H3)
+
+* They ship at `warning` (`BOOL001` at `review`) and never gate by default: their
+  precision has not been measured on a reviewed corpus yet (spec 21.1 decision 9).
+* Syntax, not intent. `STUB001` does not recognize an abstract API written
+  without `ABC`, `Protocol` or `@abstractmethod`, and cannot tell a plausible
+  fake (`return True`) from an implementation (that is the planned `STUB003`).
+  `ASSERT001` cannot tell an internal invariant from input validation.
+  `BOOL001` does not resolve the callee, so a flag whose meaning is obvious from
+  the function name is reported too.
+* `STUB002` matches import names, not files: a production package named
+  `fixtures` is reported, and a mock reached through a re-export is not.
+* `STATE001` is per file: writes through another module (`other.CACHE.append`)
+  or an alias are not seen.
+* `IMPORT001` recognizes only the configured qualified operations, resolved
+  through the file's own imports; framework calls on objects (`app.run()`,
+  `server.listen()`) and effects reached through a function called at import
+  time are not reported. A local function that shadows a global such as `fetch`
+  is still matched.
+* JavaScript has no removable `assert`, so `ASSERT001` is Python only; empty
+  JavaScript functions are not `STUB001` findings.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
@@ -311,9 +333,10 @@ Stated so that a clean report is never read as more than it is.
 * For projects that run their own checker alongside ShockHarness, what is
   covered today: `contextlib.suppress` (a catch that swallows: `EXC001`,
   `EXC002`), JavaScript `.catch(...)` rejection handlers (`EXC001`, `EXC002`,
-  `DEF005`), every `except`/`catch` outside a declared boundary. Planned and not
-  yet reported: `return`/`break`/`continue` in a `finally` block (`EXC004`,
-  H3); `subprocess` calls with `check=False` or without `check=True`
+  `DEF005`), every `except`/`catch` outside a declared boundary, and since H3
+  `return`/`break`/`continue` in a `finally` block (`EXC004`, at `warning`
+  until measured). Planned and not yet reported: `subprocess` calls with
+  `check=False` or without `check=True`
   (`PROCESS001`, H5); `asyncio.gather(..., return_exceptions=True)` and
   `Promise.allSettled` whose results are never inspected (H4); TypeScript
   (H-TS). Keep those in the layered checker until the milestone lands.

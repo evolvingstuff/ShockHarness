@@ -622,6 +622,70 @@ files and baselines need review (CODEOWNERS). `VERIFY003` reports such policy
 changes themselves, and `--policy` keeps the organization's floor out of the
 repository's reach.
 
+## Syntax-level guardrails (H3)
+
+```toml
+[tool.shockharness.rules.stubs]            # STUB001, STUB002
+enabled = true
+severity = "warning"                       # "warning" | "error" | "review"
+roles = ["production"]
+markers = []                               # e.g. ["TODO", "FIXME"]
+test_path_segments = ["tests", "test", "__tests__", "fixtures", "mocks", "__mocks__", "conftest"]
+mock_modules = ["unittest.mock", "mock", "pytest", "pytest_mock", "faker", "freezegun",
+                "responses", "sinon", "jest", "@jest/globals", "jest-mock", "vitest",
+                "@faker-js/faker", "msw", "nock"]
+
+[tool.shockharness.rules.assertions]       # ASSERT001
+enabled = true
+severity = "warning"
+roles = ["production"]
+allow_type_narrowing = true
+
+[tool.shockharness.rules.boolean_arguments]  # BOOL001
+enabled = true
+severity = "review"
+roles = ["production"]
+allowed_callees = ["get", "getattr", "setattr", "setdefault", "pop", "next"]
+
+[tool.shockharness.rules.module_state]     # STATE001
+enabled = true
+severity = "warning"
+roles = ["production"]
+allowed = []                               # [[...allowed]] path, name, reason
+
+[tool.shockharness.rules.import_effects]   # IMPORT001
+enabled = true
+severity = "warning"
+roles = ["production"]
+python_operations = ["subprocess.run", "os.system", "socket.socket", "requests.get", ...]
+javascript_operations = ["child_process.exec", "fs.rmSync", "fetch", "setInterval", ...]
+```
+
+The full lists are in the bundled `defaults.toml` (`shockharness config
+effective` prints them). `EXC004` belongs to `rules.exceptions` (its `enabled`
+switch and `severity` cap) and applies to every role.
+
+| Key | Meaning | Policy deviation when |
+|---|---|---|
+| `severity` | the severity of every finding of the section's rules, as in `rules.verification`: `warning` by default (`review` for BOOL001, decision 9), `error` to gate | lowered to `review` |
+| `roles` | the file roles the rules apply to; a rule is not applied to (and not listed in `rules_applied` of) a file of another role | a default role is removed |
+| `markers` | STUB001 also reports comments containing one of these whole words | never (adding tightens) |
+| `test_path_segments`, `mock_modules` | what STUB002 treats as test code | an entry is removed |
+| `allow_type_narrowing` | ASSERT001 skips asserts that only narrow types | never (`false` tightens) |
+| `allowed_callees` | BOOL001 skips calls whose last callee segment is listed | an entry is added |
+| `allowed` | STATE001 skips `name` in files matching `path` | always, one line per entry, with its `reason` |
+| `python_operations`, `javascript_operations` | the qualified callees IMPORT001 reports at import time | an entry is removed |
+
+The same loosenings are what `VERIFY003` reports in a revision diff and what a
+`--policy` file protects.
+
+```toml
+[[tool.shockharness.rules.module_state.allowed]]
+path = "src/app/cache.py"
+name = "_MEMO"
+reason = "process-wide memo; read-mostly, guarded by _LOCK"
+```
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report
