@@ -8,6 +8,56 @@ Severities: `error` fails the gate (unless suppressed or the gate is set to
 `warn`); `warning` and `review` are reported and counted but never fail; `note`
 is informational.
 
+## Finding status
+
+Every finding also has a **status** (H1), orthogonal to its severity:
+
+* `violation`: the rule established the property it checks, and it does not hold.
+* `unknown`: the rule could not establish the property, and says so instead of
+  passing. Whether an unknown finding gates is decided per rule family by
+  `fail_on_unknown` (`rules.exceptions` and `rules.defaults`: true, so they
+  keep failing closed as they always have; `rules.magic_numbers` and
+  `complexity`: false). With `true` it gates by its severity like a violation;
+  with `false` it is reported, counted in `gate.unknown`, and never fails. See
+  [configuration.md, Unknown findings](configuration.md#unknown-findings).
+
+The text report marks an unknown finding `EXC001 error (unknown): ...`; JSON has
+`findings[].status` and `summary.by_status`; SARIF keeps `level` from the
+severity and adds `properties.status`; a revision diff, whose `status` already
+means new/fixed/unchanged, carries it as `finding_status`.
+
+What is unknown today (the inventory, kept as a test in
+`tests/unit/test_unknown_inventory.py`):
+
+| Rule | Finding | Status |
+|---|---|---|
+| EXC001 | handler whose only obstacles are exception types that do not resolve (`except MissingError`, `except make_error_type()`, `except errors[0]`, a name rebound by assignment) | `unknown` |
+| EXC001 | the same with at least one resolved type that no boundary approves (`except (Missing, KeyError)`) | `violation` |
+| EXC001 | promise rejection handler that references a function this module does not define (`p.catch(onError)` with `onError` imported) | `unknown` |
+| EXC001 | `with name:` whose binding to a capture manager cannot be established (rebound, bound elsewhere, `with M() as name`) | `unknown` |
+| EXC001 | capture manager whose positional arguments name no readable exception type (`suppress(*errors)`), or whose type does not resolve | `unknown` |
+| EXC001 | bare `except:`, untyped JavaScript `catch (e)`, inline untyped rejection handler: each provably binds every exception | `violation` |
+| DEF002 | `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)`, `m.get(k)` on a receiver not proven a mapping (`approximate` confidence): whether it is a fallback depends on the receiver's type | `unknown` |
+| every other finding | MAGIC001, EXC002, EXC003, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002 | `violation` |
+
+Unresolved call-graph edges never become findings: CPLX005 counts resolved
+targets only and names the unresolved count in its message.
+
+**The guardrails brief's five states.** `docs/shockharness_advanced_guardrails_spec.md`
+section 1 names five finding states; they map onto ShockHarness as follows.
+
+| Brief | ShockHarness |
+|---|---|
+| `violation` | `status: violation` with severity `error` |
+| `warning` | `status: violation` with severity `warning` or `review` (advisory) |
+| `unknown` | `status: unknown` (any severity), gated per family by `fail_on_unknown` |
+| `pass` | a rule listed in the file's `rules_applied` with no finding there (per file, not per finding) |
+| `not_applicable` | a rule listed in the file's `rules_disabled` (with its reason and origin), or in `coverage.rules_disabled_globally` / `rules_not_implemented` |
+
+A file that could not be analyzed is never `pass`: its `status` is
+`parse_error`/`decode_error`/`read_error`/`unsupported_source` and its
+`rules_applied` is empty.
+
 ## Implemented
 
 ### MAGIC001: numeric literal outside 0/1 (error, Python and JavaScript)
@@ -61,7 +111,9 @@ specification's semantics (section 5) are unchanged there; `"allow"` under
 of the lines that follow the profile's own deviation line.
 
 **Configuration.** `rules.magic_numbers.*`; see `docs/configuration.md`.
-Files matching `configuration_files` skip this rule and say so in the report.
+Files whose role is `config` (`file_roles.config`, legacy spelling
+`configuration_files`) skip this rule under `exclude_configuration_files = true`
+and say so in the report.
 
 **Remediation.** Find the contract behind the value. Variable policy (timeouts,
 limits, sizes) becomes a required, validated configuration parameter. Invariant
@@ -101,7 +153,11 @@ process boundary in `cli.py` does), which is visible in `config.deviations`.
 Tuples are checked member by member and every member must be approved. An
 `exact` identity must equal the boundary's `exception` string; an `approximate`
 identity matches when one dotted name is a suffix of the other, so `.errors.X`
-and `src.pkg.errors.X` both match a boundary for `pkg.errors.X`.
+and `src.pkg.errors.X` both match a boundary for `pkg.errors.X`. The finding's
+status (H1) separates the two cases: a bare `except` provably catches
+everything and is a `violation`; a catch whose only obstacle is a type that did
+not resolve is `unknown` (see [Finding status](#finding-status)), and still
+fails the gate under the default `rules.exceptions.fail_on_unknown = true`.
 
 **JavaScript.** A `catch` has no type. The convention is: a JavaScript catch is
 approved only inside a boundary whose `exception` names an error class, and only
@@ -344,7 +400,10 @@ pydantic and NamedTuple defaults are not recognized.
 | JavaScript ternaries on a null/undefined check of a property (`o.x == null ? v : o.x`) and membership ternaries (`k in o ? o[k] : v`, `o.hasOwnProperty(k) ? ...`, `Object.hasOwn(o, k) ? ...`) | by the fallback |
 
 Method names are matched, not types: `client.get(url, params)` is an
-approximate error and `client.get("path")` an approximate review finding. A
+approximate error and `client.get("path")` an approximate review finding. Both
+have status `unknown` (H1): the verdict depends on the receiver's type, which
+was not established. `rules.defaults.fail_on_unknown = true` (the default)
+keeps them gating by severity as before. A
 bare JavaScript property read (`o.x`, `map.get(k)`) is never a finding: every
 absent property yields `undefined` and nothing in the syntax singles it out.
 Object spread merging and `Object.assign` are not recognized.

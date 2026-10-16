@@ -23,7 +23,10 @@ from shockharness.rules.registry import PYTHON, RuleSpec
 
 def _finding_line(finding: Finding) -> str:
     location = f"{finding.path}:{finding.span.line}:{finding.span.column}"
-    line = f"{location}: {finding.rule_id} {finding.severity}: {finding.message}"
+    severity = finding.severity
+    if finding.is_unknown:
+        severity += f" ({finding.status})"
+    line = f"{location}: {finding.rule_id} {severity}: {finding.message}"
     if finding.evidence != "":
         line += f"  [{finding.evidence}]"
     if finding.suppression is not None:
@@ -31,6 +34,17 @@ def _finding_line(finding: Finding) -> str:
     if finding.baseline is not None:
         line += f"  (baseline: {finding.baseline})"
     return line
+
+
+def _unknown_line(gate: GateResult) -> str:
+    """How many findings the rules could not establish, and which families gate on them."""
+    families = ", ".join(gate.unknown_gating_families)
+    if families == "":
+        families = "none"
+    return (
+        f"  unknown: {gate.unknown} finding(s) the rules could not establish; "
+        f"fail_on_unknown families: {families}"
+    )
 
 
 def _gate_lines(gate: GateResult) -> list[str]:
@@ -184,6 +198,7 @@ def _trailer_lines(report: Report) -> list[str]:
     lines.extend(_complexity_lines(dict(report.metrics)))
     lines.extend(_history_lines(dict(report.metrics)))
     lines.append(f"  analysis status: {report.analysis_status}")
+    lines.append(_unknown_line(report.gate))
     lines.extend(_gate_lines(report.gate))
     return lines
 
@@ -331,6 +346,7 @@ def render_diff(diff: DiffReport) -> str:
     lines.extend(_complexity_lines(diff.metrics))
     lines.extend(_history_lines(diff.metrics))
     lines.append(f"  analysis status: {head.report.analysis_status}")
+    lines.append(_unknown_line(diff.gate))
     lines.extend(_gate_lines(diff.gate))
     return "\n".join(lines) + "\n"
 

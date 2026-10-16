@@ -207,6 +207,38 @@
               }
             }
           }
+        },
+        "roles": {
+          "type": "object",
+          "description": "H1, additive: analyzed and failed files per role; every role is listed.",
+          "required": [
+            "generated",
+            "vendor",
+            "config",
+            "test",
+            "docs",
+            "production"
+          ],
+          "properties": {
+            "generated": {
+              "type": "integer"
+            },
+            "vendor": {
+              "type": "integer"
+            },
+            "config": {
+              "type": "integer"
+            },
+            "test": {
+              "type": "integer"
+            },
+            "docs": {
+              "type": "integer"
+            },
+            "production": {
+              "type": "integer"
+            }
+          }
         }
       }
     },
@@ -278,6 +310,29 @@
           },
           "finding_count": {
             "type": "integer"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "generated",
+              "vendor",
+              "config",
+              "test",
+              "docs",
+              "production"
+            ],
+            "description": "H1, additive: the file's role, the first of generated, vendor, config, test, docs whose file_roles globs match its path, else production."
+          },
+          "role_pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "H1, additive: the file_roles glob that decided the role as written; null for production."
           }
         }
       }
@@ -373,6 +428,14 @@
               "ignored",
               null
             ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "violation",
+              "unknown"
+            ],
+            "description": "H1, additive: 'violation' when the rule established the property and it does not hold; 'unknown' when the rule could not establish it (an unresolved exception identity, an opaque handler, a receiver whose type is not established). Orthogonal to severity; rules.<family>.fail_on_unknown (complexity.fail_on_unknown) decides whether an unknown finding gates."
           }
         }
       }
@@ -1008,6 +1071,23 @@
         },
         "complexity_regressions": {
           "type": "integer"
+        },
+        "unknown": {
+          "type": "integer",
+          "description": "H1, additive: findings with status unknown that are neither suppressed nor ignored by a baseline, whether or not they gate."
+        },
+        "unknown_gating_families": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "magic_numbers",
+              "exceptions",
+              "defaults",
+              "complexity"
+            ]
+          },
+          "description": "H1, additive: the rule families whose fail_on_unknown is true; their unknown findings gate by severity, the others are reported only."
         }
       }
     },
@@ -1151,6 +1231,54 @@
               "additionalProperties": {
                 "type": "integer"
               }
+            }
+          }
+        },
+        "by_status": {
+          "type": "object",
+          "description": "H1, additive: findings per status; both statuses are listed.",
+          "required": [
+            "violation",
+            "unknown"
+          ],
+          "properties": {
+            "violation": {
+              "type": "integer"
+            },
+            "unknown": {
+              "type": "integer"
+            }
+          }
+        },
+        "by_role": {
+          "type": "object",
+          "description": "H1, additive: findings per role of the file they are in; every role is listed.",
+          "required": [
+            "generated",
+            "vendor",
+            "config",
+            "test",
+            "docs",
+            "production"
+          ],
+          "properties": {
+            "generated": {
+              "type": "integer"
+            },
+            "vendor": {
+              "type": "integer"
+            },
+            "config": {
+              "type": "integer"
+            },
+            "test": {
+              "type": "integer"
+            },
+            "docs": {
+              "type": "integer"
+            },
+            "production": {
+              "type": "integer"
             }
           }
         }

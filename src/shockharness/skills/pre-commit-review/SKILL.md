@@ -61,6 +61,18 @@ mean nothing was verified.
    never gating; `gate --base/--head` lists per-unit regressions under
    `complexity regressions against base`). For each, say whether it is addressed, accepted
    with a stated contract, or left for a follow-up with a named owner.
+   **Unknown findings** (`RULE severity (unknown): ...`; quote the `unknown:`
+   trailer line, which also names the families whose `fail_on_unknown` makes
+   them gate) are listed separately: the analyzer could not establish the
+   property, so the change has neither passed nor failed that check. Ask for the
+   missing information to be supplied (a resolvable exception import, an inline
+   or module-level rejection handler, the manager constructed in the `with` and
+   listed in `capture_managers`, a receiver typed as a mapping); see
+   `fix-violations`. An unknown finding in a family with `fail_on_unknown =
+   false` does not fail the gate and still blocks the review until it is
+   answered or suppressed with a reason that states what could not be
+   determined. A suppression of an unknown finding without such a reason, or a
+   change that sets `fail_on_unknown = false`, is a blocking item.
 5. **Tests.** Quote the test runner's summary line (`N passed`, or `node
    --test`'s `# pass N` / `# fail N`). A change that removes a default,
    a catch or a fallback must come with a characterization test for the new
@@ -149,6 +161,7 @@ NOT_FOUND = 404  # shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.
 - [ ] Every policy deviation quoted; any new boundary or override reviewed for its reason.
 - [ ] Every suppression in the change listed with rule ID and cited reason; unused ones deleted.
 - [ ] Every remaining finding in changed files listed with a disposition.
+- [ ] Every unknown finding in changed files answered by supplying the missing information, or suppressed with a reason that names what could not be determined.
 - [ ] Characterization tests named for every removed default, catch or fallback.
 - [ ] Verdict is `PASS` only with `gate: PASS (exit 0)` and a green test summary in the quoted output.
 

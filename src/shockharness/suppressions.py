@@ -15,7 +15,7 @@ attached; only the gate ignores them.
 import re
 from dataclasses import dataclass
 
-from shockharness.findings import CONFIDENCE_EXACT, Finding, SuppressionRecord
+from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding, SuppressionRecord
 from shockharness.ir.model import Comment, Span
 from shockharness.rules import registry
 from shockharness.rules.registry import SUPP001, SUPP002
@@ -91,6 +91,7 @@ def _problem_finding(path: str, problem: SuppressionProblem, evidence: str) -> F
         message=problem.message,
         evidence=evidence,
         confidence=CONFIDENCE_EXACT,
+        status=STATUS_VIOLATION,
         remediation=SUPP001.remediation,
         safe_autofix=False,
         scope=None,
@@ -110,6 +111,7 @@ def _unused_finding(path: str, suppression: Suppression, rule_id: str, evidence:
         message=f"suppression of {rule_id} on this line silences nothing",
         evidence=evidence,
         confidence=CONFIDENCE_EXACT,
+        status=STATUS_VIOLATION,
         remediation=SUPP002.remediation,
         safe_autofix=False,
         scope=None,

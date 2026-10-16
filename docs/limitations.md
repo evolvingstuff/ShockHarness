@@ -24,6 +24,18 @@ Stated so that a clean report is never read as more than it is.
   extension literally (`**/*.ts`) is still a configuration error.
 * Only UTF-8 (with or without BOM) sources are read. Other encodings are a
   `decode_error` file status. Python's PEP 263 coding declarations are not honored.
+* File roles (H1) are labels from path globs, not from file contents: a test
+  helper outside the test globs is `production`, a generated file outside the
+  generated globs is analyzed as written by hand. Roles never exclude a file from
+  analysis; `exclude` does that.
+* The `unknown` status (H1) covers what the inventory in `docs/rules.md` lists
+  and nothing more. Some shapes whose verdict also rests on missing information
+  are not yet unknown findings: a capture manager with one readable exception
+  type and further unreadable positional arguments (`suppress(OSError, *more)`)
+  is judged by the readable type alone, and a unit whose unresolved calls could
+  push it over `fan_out_warn` gets no CPLX005 finding (the resolved count is
+  below the threshold). Turning these into findings would add findings, so it is
+  left to a later milestone.
 
 ## MAGIC001
 

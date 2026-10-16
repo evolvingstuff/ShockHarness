@@ -15,6 +15,12 @@ per-unit complexity regressions it found; ``gates.complexity_regressions``
 decides whether they fail the gate (``fail``), are listed (``warn``), or are
 not mentioned (``ignore``).
 
+Finding status (H1) is orthogonal to severity. A ``violation`` gates by its
+severity. An ``unknown`` finding (the rule could not establish the property) is
+always counted in ``unknown``; it gates by its severity exactly like a violation
+when its family's ``fail_on_unknown`` is true, and otherwise is reported only: it
+adds to no other count and never fails the gate.
+
 An *advisory* run (``--exit-zero``) leaves the verdict, its exit code and every
 count untouched and only changes what the process returns: a ``fail`` verdict
 exits 0. ``error`` (exit 3) is never masked, and configuration or usage errors
@@ -27,7 +33,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from shockharness.analysis import STATUS_UNSUPPORTED, FileResult
-from shockharness.config import EffectiveConfig
+from shockharness.config import FAIL_ON_UNKNOWN_KEY, FAIL_ON_UNKNOWN_SECTIONS, EffectiveConfig
 from shockharness.constants import COMMIT_SHORT_HEX, EXIT_INTERNAL_ERROR, EXIT_OK, EXIT_VIOLATIONS
 from shockharness.findings import Finding
 from shockharness.gating.baseline import (
@@ -36,7 +42,12 @@ from shockharness.gating.baseline import (
     SOURCE_FILE,
     BaselineApplication,
 )
-from shockharness.rules.registry import SEVERITY_ERROR, SEVERITY_REVIEW, SEVERITY_WARNING
+from shockharness.rules.registry import (
+    SEVERITY_ERROR,
+    SEVERITY_REVIEW,
+    SEVERITY_WARNING,
+    get_rule,
+)
 
 GATE_PASS = "pass"
 GATE_FAIL = "fail"
@@ -55,6 +66,8 @@ class GateResult:
     baselined: int
     new_hard_violations: int
     complexity_regressions: int
+    unknown: int
+    unknown_gating_families: tuple[str, ...]
     baseline: BaselineApplication | None
     reasons: tuple[str, ...]
     advisory: bool
@@ -71,6 +84,8 @@ class GateResult:
             "baselined": self.baselined,
             "new_hard_violations": self.new_hard_violations,
             "complexity_regressions": self.complexity_regressions,
+            "unknown": self.unknown,
+            "unknown_gating_families": list(self.unknown_gating_families),
             "baseline": None if self.baseline is None else self.baseline.to_json_dict(),
             "reasons": list(self.reasons),
             "advisory": self.advisory,
@@ -78,6 +93,39 @@ class GateResult:
 
 
 NO_REGRESSIONS = 0
+
+
+def family_name(section: str) -> str:
+    """``rules.exceptions`` -> ``exceptions``; ``complexity`` -> ``complexity``."""
+    parts = section.split(".")
+    return parts[len(parts) - 1]
+
+
+def unknown_gating_sections(config: EffectiveConfig) -> frozenset[str]:
+    """The sections (``rules.exceptions`` ...) whose ``fail_on_unknown`` is true."""
+    return frozenset(
+        section
+        for section in FAIL_ON_UNKNOWN_SECTIONS
+        if config.section(section)[FAIL_ON_UNKNOWN_KEY] is True
+    )
+
+
+def unknown_gating_families(config: EffectiveConfig) -> tuple[str, ...]:
+    """Family names that gate on unknown findings, in ``FAIL_ON_UNKNOWN_SECTIONS`` order."""
+    gating = unknown_gating_sections(config)
+    return tuple(family_name(s) for s in FAIL_ON_UNKNOWN_SECTIONS if s in gating)
+
+
+def gates_by_severity(finding: Finding, gating_sections: frozenset[str]) -> bool:
+    """True when ``finding`` counts by its severity: a violation always, an unknown
+    finding only when its family's ``fail_on_unknown`` is true."""
+    if not finding.is_unknown:
+        return True
+    section = get_rule(finding.rule_id).config_section
+    assert section is not None, f"{finding.rule_id} has no family and cannot be unknown"
+    return section in gating_sections
+
+
 REGRESSIONS_FAIL = "fail"
 REGRESSIONS_WARN = "warn"
 REGRESSIONS_IGNORE = "ignore"
@@ -98,6 +146,9 @@ def evaluate(
     warnings = 0
     review = 0
     baselined = 0
+    unknown = 0
+    unknown_reported_only = 0
+    gating_sections = unknown_gating_sections(config)
     for finding in findings:
         if finding.is_suppressed:
             suppressed += 1
@@ -105,6 +156,11 @@ def evaluate(
         if finding.baseline is not None:
             baselined += 1
             if finding.baseline == MARKER_IGNORED:
+                continue
+        if finding.is_unknown:
+            unknown += 1
+            if not gates_by_severity(finding, gating_sections):
+                unknown_reported_only += 1
                 continue
         if finding.severity == SEVERITY_ERROR:
             hard += 1
@@ -172,6 +228,11 @@ def evaluate(
             f"{complexity_regressions} complexity regression(s) against the base revision and "
             'gates.complexity_regressions = "fail"'
         )
+    if unknown_reported_only > 0:
+        reasons.append(
+            f"{unknown_reported_only} unknown finding(s) (the rule could not establish the "
+            "property) are reported only: their family's fail_on_unknown is false"
+        )
     reasons.extend(_baseline_reasons(baseline, baselined, legacy_hard))
 
     return GateResult(
@@ -185,6 +246,8 @@ def evaluate(
         baselined=baselined,
         new_hard_violations=new_hard,
         complexity_regressions=complexity_regressions,
+        unknown=unknown,
+        unknown_gating_families=unknown_gating_families(config),
         baseline=baseline,
         reasons=tuple(reasons),
         advisory=False,

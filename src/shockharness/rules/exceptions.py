@@ -17,13 +17,31 @@ string. An ``approximate`` identity (relative import, class defined in the
 analyzed module, JavaScript instanceof guard) matches when the two dotted names
 are equal or one is a dotted suffix of the other, so ``.errors.MyError`` matches
 ``pkg.errors.MyError``. The finding's confidence records which case applied.
+
+Status (H1): an EXC001 finding is ``unknown`` when the verdict rests on something the
+analyzer could not establish, and ``violation`` when the catch is provably forbidden:
+
+* every exception identity the handler names that was not approved is ``unresolved``
+  (an unbound or rebound name, a dynamic type expression): ``unknown``; one resolved
+  identity that no boundary approves makes the catch a ``violation`` whatever else
+  it names;
+* a promise rejection handler that is a reference to a function this module does not
+  define (``opaque``): ``unknown``, its body cannot be inspected for an instanceof guard;
+* a ``with`` whose name cannot be tied to the capture manager it was bound to: ``unknown``;
+* a capture manager none of whose positional arguments names an exception type
+  (``suppress(*errors)``): ``unknown``, the set it captures cannot be read;
+* a bare ``except``, an untyped JavaScript ``catch`` clause, an inline untyped
+  rejection handler: ``violation``, each provably binds every exception.
+
+EXC002 and EXC003 findings are always ``violation``. ``rules.exceptions.fail_on_unknown``
+(default true: EXC001 has always failed closed) decides whether unknown ones gate.
 """
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from shockharness.findings import Finding
+from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
 from shockharness.globs import GlobSet, compile_globset
 from shockharness.ir.model import (
     BODY_EMPTY,
@@ -88,10 +106,14 @@ class Boundary:
 
 @dataclass(frozen=True)
 class Approval:
+    """``status`` is the EXC001 finding status when the catch is not approved (see the
+    module docstring); it is ``violation`` for an approved catch, which has no finding."""
+
     approved: bool
     boundaries: tuple[Boundary, ...]
     problems: tuple[str, ...]
     confidence: str
+    status: str
 
 
 def load_boundaries(settings: Mapping[str, Any]) -> tuple[Boundary, ...]:
@@ -162,13 +184,27 @@ def _bare_problem(catch: CatchFact) -> str:
     )
 
 
+def bare_status(catch: CatchFact) -> str:
+    """The EXC001 status of an untyped catch: ``unknown`` when what it binds could not be
+    read (an opaque handler or manager binding, a manager without a readable exception
+    type), ``violation`` when it provably binds every exception."""
+    if catch.body.classification == BODY_OPAQUE or catch.kind == CATCH_MANAGER:
+        return STATUS_UNKNOWN
+    return STATUS_VIOLATION
+
+
 def evaluate_approval(catch: CatchFact, applicable: tuple[Boundary, ...]) -> Approval:
     if catch.bare:
-        return Approval(False, (), (_bare_problem(catch),), CONFIDENCE_UNRESOLVED)
+        return Approval(
+            False, (), (_bare_problem(catch),), CONFIDENCE_UNRESOLVED, bare_status(catch)
+        )
     matched: list[Boundary] = []
     problems: list[str] = []
+    unresolved = 0
+    refused = 0
     for identity in catch.identities:
         if identity.confidence == CONFIDENCE_UNRESOLVED:
+            unresolved += 1
             problems.append(
                 f"{identity.source!r} could not be resolved to a known exception (not a builtin, "
                 "an import, or a class defined in this module); strict mode fails closed"
@@ -176,17 +212,22 @@ def evaluate_approval(catch: CatchFact, applicable: tuple[Boundary, ...]) -> App
             continue
         hits = [b for b in applicable if identity_matches(identity, b)]
         if len(hits) == 0:
+            refused += 1
             kind = "broad catch of" if identity.broad else "catch of"
             problems.append(
                 f"{kind} {identity.qualified!r} is not approved by any boundary for this file"
             )
             continue
         matched.extend(hits)
+    # Unknown only when nothing but unresolved identities stands in the way: one resolved
+    # identity that no boundary approves is a violation whatever the others are.
+    status = STATUS_UNKNOWN if unresolved > 0 and refused == 0 else STATUS_VIOLATION
     return Approval(
         approved=len(problems) == 0,
         boundaries=tuple(matched),
         problems=tuple(problems),
         confidence=_worst_confidence(catch.identities),
+        status=status,
     )
 
 
@@ -198,6 +239,7 @@ def _finding(
     message: str,
     source: SourceText,
     confidence: str,
+    status: str,
     scope: str,
 ) -> Finding:
     return Finding(
@@ -209,6 +251,7 @@ def _finding(
         message=message,
         evidence=source.excerpt(span.line),
         confidence=confidence,
+        status=status,
         remediation=rule.remediation,
         safe_autofix=False,
         scope=scope,
@@ -460,6 +503,7 @@ def _exc003(
             f"the one sanctioned external operation (approved by {approved_by})",
             source,
             CONFIDENCE_EXACT,
+            STATUS_VIOLATION,
             catch.scope,
         )
     statement = statements[0]
@@ -475,6 +519,7 @@ def _exc003(
         "tell which part may raise",
         source,
         CONFIDENCE_APPROXIMATE,
+        STATUS_VIOLATION,
         catch.scope,
     )
 
@@ -527,6 +572,7 @@ def run_exception_rules(
                     f"{label}{_written(catch)} is forbidden: " + "; ".join(approval.problems),
                     source,
                     approval.confidence,
+                    approval.status,
                     catch.scope,
                 )
             )
@@ -551,6 +597,7 @@ def run_exception_rules(
                     _exc002_message(catch, body, guard),
                     source,
                     CONFIDENCE_EXACT,
+                    STATUS_VIOLATION,
                     catch.scope,
                 )
             )

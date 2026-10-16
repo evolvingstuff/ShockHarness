@@ -2219,3 +2219,249 @@ src/shockharness/suppressions.py:122:1: CPLX002 warning: cognitive complexity of
   remain Milestone H.
 * `docs/shockharness_advanced_guardrails_spec.md` existed untracked in the
   tree before this session and is not part of this commit.
+
+## Milestone H1: unknown finding status, fail_on_unknown, file roles — DONE (2026-10-16)
+
+Scope: specification section 21, decisions 3 and 4 and the H1 row of 21.2
+(guardrails brief Phase A, A1 and A4). Built on main at 68fa69a (0.3.0 plus
+spec 21.1 decision 11). The report shape changed only additively, so
+`schema_version` stays `"1"` (decision recorded in the 21.2 row: "bump if the
+report shape changes"; additive fields are allowed under schema "1").
+
+Delivered:
+
+* `Finding.status` (`violation` | `unknown`), required on every construction,
+  validated in `__post_init__`; JSON `findings[].status`, SARIF
+  `properties.status` (`level` still from severity), text marker
+  `RULE severity (unknown):`, diff `findings[].finding_status` (a diff
+  finding's `status` already meant new/fixed/unchanged).
+* `fail_on_unknown` per family; `gate.unknown`, `gate.unknown_gating_families`,
+  a gate reason when unknown findings are reported only, the text line
+  `unknown: N finding(s) the rules could not establish; fail_on_unknown
+  families: ...`, `summary.by_status`.
+* `src/shockharness/roles.py`: six roles, precedence generated > vendor >
+  config > test > docs > production, `[tool.shockharness.file_roles]` with the
+  documented defaults; `files[].role`, `files[].role_pattern`,
+  `coverage.roles`, `summary.by_role`.
+* `[[overrides]]` with `roles = [...]` (exactly one of `paths`/`roles`,
+  validated), deviation `overrides[i] disables ... for file role(s) ...`,
+  origin `overrides[i]`.
+* The MAGIC001 configuration-file exemption on top of the config role;
+  `rules.magic_numbers.configuration_files` as the legacy spelling, folded into
+  `file_roles.config` at load time.
+* Cache schema `"2"`; report and diff schemas, CHANGELOG `[Unreleased]` (with a
+  Schema heading), `docs/rules.md` (Finding status, the five-state mapping, the
+  inventory), `docs/configuration.md` (File roles, Unknown findings, overrides by
+  role, precedence), `docs/limitations.md`, `docs/architecture.md`, README
+  Configuration, and the `fix-violations` and `pre-commit-review` skills.
+* This repository: the `tests/**` override is now `roles = ["test"]`
+  (dogfooding); `test_file_roles.py::test_override_by_path_still_works` keeps
+  the `paths` form tested.
+
+### Unresolved-finding inventory (status decisions)
+
+Every place in `src/` that produces an `unresolved` confidence, an `opaque`
+handler body or a status decision, or constructs a `Finding`, is listed in
+`tests/unit/test_unknown_inventory.py::SITES` with its decision; the test
+AST-scans `src/shockharness` and fails on any function not listed (and on a
+listed one that no longer exists), so a new unresolved finding cannot appear
+without an explicit status decision here. One snippet per row below pins the
+assigned status (`CASES`), and the golden corpus's nine unknown findings are
+pinned (`CORPUS_UNKNOWN`); every `unresolved`-confidence finding in the corpus
+is EXC001.
+
+| # | Where | Finding | Confidence | Status |
+|---|---|---|---|---|
+| 1 | `rules/exceptions.py` `evaluate_approval` (identities from `ir/python_catches.py` `resolve_identity`, `SymbolTable.resolve_name`, `_bind_statement`) | EXC001, every unapproved identity is unresolved: unbound name, name rebound by assignment, `except errors[0]`, `except make()`, star import | unresolved | **unknown** |
+| 2 | same | EXC001, an unresolved identity plus a resolved one no boundary approves (`except (Missing, KeyError)`, corpus `exc_tuple.py:21`) | unresolved | violation |
+| 3 | same, inside a boundary approving the resolved member (`except (Missing, ValueError)` with ValueError approved) | EXC001, only the unresolved member stands in the way | unresolved | **unknown** |
+| 4 | `rules/exceptions.py` `bare_status`; `ir/javascript_catches.py` `_rejection_handler` | EXC001, promise rejection handler referencing a function the module does not define (`p.catch(onError)`, corpus `exc_promise_catch.js:10`) | unresolved | **unknown** |
+| 5 | `rules/exceptions.py` `_unresolved`, `manager_catches`, `bare_status` | EXC001, `with name:` whose capture-manager binding cannot be established (rebound, bound elsewhere, `with M() as name`) | unresolved | **unknown** |
+| 6 | `rules/exceptions.py` `bare_status` | EXC001, capture manager with no readable exception-type argument (`suppress(*errors)`) | unresolved | **unknown** |
+| 7 | `rules/exceptions.py` `evaluate_approval` via the manager's identities | EXC001, capture manager whose type argument does not resolve (`suppress(Missing)`) | unresolved | **unknown** |
+| 8 | `rules/exceptions.py` `bare_status` | EXC001, bare `except:`; untyped JavaScript `catch (e)`; inline untyped rejection handler: each provably binds every exception | unresolved | violation |
+| 9 | `rules/defaults.py` `fact_status` (facts from `ir/python_defaults.py`) | DEF002 `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)` on a receiver not proven a mapping (corpus `def_mapping_get.py:19,35`) | approximate | **unknown** |
+| 10 | same | DEF002 review `m.get(k)` on a receiver not proven a mapping (corpus `def_mapping_get.py:20,47`) | approximate | **unknown** |
+| 11 | `rules/exceptions.py` `_manager_match`, `ir/python_catches.py` `_resolve_callee` | unresolved manager callee matched by bare name | approximate | violation (no unknown: the manager is listed by name) |
+| 12 | `complexity/callgraph.py` (7 functions), `complexity/coupling.py` (4) | unresolved call and module edges | unresolved | no finding: metrics only; CPLX005 counts resolved targets and names the unresolved count |
+| 13 | `rules/exceptions.py` `_finding` (EXC002, EXC003), `rules/defaults.py` `_finding` (other DEF kinds, DEF005), `rules/magic_numbers.py`, `rules/complexity.py`, `suppressions.py` (SUPP001, SUPP002) | everything else, including approximate EXC003 (unattributable statement), DEF003/DEF004 (non-constant fallback) and DEF005 (static trace): the approximation is about intent, not about whether the shape is present | exact/approximate | violation |
+
+Not turned into unknown findings (they would add findings, which H1 must not
+do; recorded in `docs/limitations.md`): a capture manager with one readable
+type and further unreadable arguments (`suppress(OSError, *more)`, judged by
+the readable type alone; `ManagerCall.unreadable_arguments` is collected but
+not used by the rule), and a unit whose unresolved calls could push it over
+`fan_out_warn`.
+
+### Defaults chosen, and why
+
+| Key | Default | Why |
+|---|---|---|
+| `rules.exceptions.fail_on_unknown` | `true` | EXC001 already fails closed (spec 21.1 decision 3's example); rows 1, 3-7 are error findings that failed the gate in 0.3.0 and must keep doing so |
+| `rules.defaults.fail_on_unknown` | `true` | rows 9-10: DEF002 on an unproven receiver was an `error` that failed the gate in 0.3.0 (`def_mapping_get.py`); `false` would have turned that fixture's gate from fail to pass, against the "same verdicts as 0.3.0" requirement. The family therefore "already fails closed" in decision 3's sense |
+| `rules.magic_numbers.fail_on_unknown` | `false` | the spec's default; MAGIC001 is exact and produces no unknown findings, so either value gives 0.3.0's verdicts |
+| `complexity.fail_on_unknown` | `false` | the spec's default; CPLX findings are never unknown and are advisory under either value |
+| profiles | unchanged | no profile sets `fail_on_unknown`; `recommended`/`minimal` cap severities instead, which already keeps their unknown findings from gating where they were not gating before |
+| `file_roles.*` | as the brief | test, config (= the 0.3.0 `configuration_files` list), generated, vendor, docs exactly as specified; `examples/` stays production |
+
+Interpretations (mine; review these):
+
+1. **Where `fail_on_unknown` lives for complexity.** The brief says
+   `rules.<family>.fail_on_unknown`; the complexity family has no table under
+   `rules` (its settings are `[tool.shockharness.complexity]`), so the key is
+   `complexity.fail_on_unknown`, next to the family's other settings. The three
+   others are `rules.magic_numbers`, `rules.exceptions`, `rules.defaults`.
+2. **Unknown and non-gating means counted only in `gate.unknown`.** It adds to
+   none of `hard_violations`/`warnings`/`review`; a gating unknown finding is
+   counted by severity as before and also in `gate.unknown`. The diff summary's
+   `*_hard_violations` use the same predicate.
+3. **Mixed catches.** One resolved type that no boundary approves makes the
+   catch a violation whatever else it names (row 2); unknown only when nothing
+   but unresolved identities stands in the way.
+4. **`conftest.py` is config by default.** The default config list contains
+   `conftest.py` and config precedes test, so `**/conftest.py` in the test list
+   only applies when a project leaves `conftest.py` out of its config role. This
+   keeps the 0.3.0 MAGIC001 exemption of `conftest.py` unchanged. Consequence
+   for this repository: with `roles = ["test"]`, `tests/conftest.py` (role
+   config) lost its override and the self-gate failed on one MAGIC001
+   (`tests/conftest.py:103`, a literal `2`). Since that file is pytest fixtures
+   and helpers, not tooling configuration, `.shockharness.toml` now sets
+   `[tool.shockharness.file_roles] config = []` (the repository analyzes no
+   tooling configuration files; it already had `exclude_configuration_files =
+   false`), so `tests/conftest.py` is `test` by `tests/**`.
+5. **A generated/vendor file that a config glob also matches** (e.g.
+   `vendor/pkg/setup.py`) keeps the 0.3.0 MAGIC001 exemption even though its
+   role is vendor; "files whose role is config skip MAGIC001" taken literally
+   would have added findings for such files. The `rules_disabled` reason says
+   the role took precedence.
+6. **Legacy `configuration_files`.** Set alone it *replaces* the config role's
+   globs (as it replaced the exempt list in 0.3.0; merging it with the default
+   would have widened the exemption for such configurations); set together with
+   `file_roles.config` the two are merged. Only a user source counts as "set"
+   (origin `cli`/`dedicated`/`pyproject`), and a config note says which case
+   applied.
+7. **Rule-disable reason text changed** for the configuration-file exemption
+   (`file role is config (pattern 'conftest.py'; exclude_configuration_files =
+   true)`); its origin `configuration_file` is unchanged. Not a verdict change.
+8. **New schema properties are optional** in `schemas/report-v1.schema.json`
+   (as `summary` was in 0.2.0), so 0.3.0 reports still validate.
+
+### Regression against 0.3.0
+
+`tests/fixtures/profile_verdicts_0.3.0.json` was generated by running the new
+test module's snapshot function against the unmodified 0.3.0 code (68fa69a,
+before any H1 source change), then committed; the H1 code is compared against
+it (169 tests: 55 fixtures alone with their own settings and the corpus as one
+tree, under each of the three profiles, plus a coverage check; finding sets with rule, span,
+severity, confidence, message digest, suppression; gate status, exit code and
+counts). New fields are not compared.
+
+```text
+$ python -m tests.unit.test_profile_regression <scratch>/snap2     # at 68fa69a, before any src change
+$ pytest -q tests/unit/test_profile_regression.py                  # at 68fa69a
+169 passed in 1.22s
+```
+
+Corpus verdicts recorded there (unchanged by H1): strict `error` exit 3 (370
+hard, 7 warnings, 29 review, 2 parse failures), recommended `error` exit 3 (347
+hard), minimal `fail` exit 1 (5 hard: SUPP001).
+
+Self-gate per profile, 0.3.0 (68fa69a) vs H1, `check src tests scripts evals
+--profile P --no-cache`, gate `[status, exit, hard, warnings, review,
+suppressed, analysis_failures]`:
+
+```text
+strict      0.3.0 ['pass', 0, 0, 165, 10, 0, 0]   H1 ['pass', 0, 0, 165, 10, 0, 0]   same
+recommended 0.3.0 ['pass', 0, 0, 165, 10, 0, 0]   H1 ['pass', 0, 0, 165, 10, 0, 0]   same
+minimal     0.3.0 ['pass', 0, 0, 165, 10, 0, 0]   H1 ['pass', 0, 0, 165, 10, 0, 0]   same
+```
+
+The existing 619 tests pass unchanged except one expectation that lists the
+known keys of `rules.magic_numbers` (now including `fail_on_unknown`,
+`tests/unit/test_schema.py`).
+
+### Evidence (all run 2026-10-16 on macOS arm64)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+105 files already formatted
+
+$ pytest -q                      # CPython 3.11.11 (uv venv under the session scratchpad)
+896 passed in 43.24s
+$ pytest -q                      # CPython 3.12.8
+896 passed in 32.67s
+$ pytest -q                      # CPython 3.13.1
+896 passed in 33.13s
+$ pytest -q                      # CPython 3.14.7 (.venv)
+896 passed in 25.64s
+
+$ shockharness check src tests scripts evals           # self-gate, cache on: cold run, then warm run
+cold exit 0 (cache: 0 hits, 107 misses); warm exit 0 (107 hits, 0 misses)
+$ shockharness check src tests scripts evals --no-cache
+no-cache exit 0
+JSON reports with coverage.cache removed: cold == warm == no-cache (byte-identical)
+shockharness 0.3.0: 107 file(s), 107 analyzed, 0 failed; 175 finding(s), 0 suppressed
+  by severity: review=10, warning=165
+  policy deviation: overrides[1] disables MAGIC001, DEF001 for file role(s) test: Test code encodes literal expected outputs and pytest fixture signatures
+  analysis status: complete
+  unknown: 0 finding(s) the rules could not establish; fail_on_unknown families: exceptions, defaults
+gate: PASS (exit 0)
+coverage.roles: config 0, docs 0, generated 0, production 67, test 37, vendor 0
+
+$ shockharness check python/exc_unresolved.py python/def_mapping_get.py --no-cache   # copy of the golden corpus
+python/exc_unresolved.py:25:5: EXC001 error (unknown): except handler of 'MyError' is forbidden: 'MyError' could not be resolved to a known exception (...); strict mode fails closed  [except MyError as exc:]
+python/def_mapping_get.py:19:13: DEF002 error (unknown): payload["items"] falls back to [] when the key is missing; .get(key, fallback) substitutes the fallback for a missing key; the receiver's type is not established, so this is approximate  [items = payload.get("items", [])]
+  unknown: 8 finding(s) the rules could not establish; fail_on_unknown families: exceptions, defaults
+gate: FAIL (exit 1)
+# same file with rules.exceptions/defaults.fail_on_unknown = false:
+  policy deviation: rules.exceptions.fail_on_unknown is false (profile 'strict': true); EXC001-EXC003 findings whose status is unknown are reported and never fail the gate
+  unknown: 4 finding(s) the rules could not establish; fail_on_unknown families: none
+gate: FAIL (exit 1)        # the 7 resolved, unapproved catches in the fixture still fail it
+  4 unknown finding(s) (the rule could not establish the property) are reported only: their family's fail_on_unknown is false
+
+$ python -m build --outdir <scratch>/dist .
+Successfully built shockharness-0.3.0.tar.gz and shockharness-0.3.0-py3-none-any.whl
+$ python scripts/consumer_upgrade_check.py --dist <scratch>/dist --examples examples --wheelhouse <scratch>/wheelhouse
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+The wheel was built into the session scratchpad, not `dist/`, so the 0.3.0
+release artifacts there are untouched; the version is still 0.3.0 (not
+bumped). Determinism with unknown findings and several roles:
+`test_unknown_status.py::test_unknown_report_is_byte_identical_across_five_runs`
+(five `check --format json` runs, the first cold, byte-identical with
+`coverage.cache` removed).
+
+New tests: `test_profile_regression.py` (169), `test_unknown_inventory.py`
+(19), `test_unknown_status.py` (25), `test_file_roles.py` (64); 619 + 277 =
+896 (one existing expectation rewritten, none removed).
+
+### Failures observed during development (and what was done)
+
+* Migrating the repository's `tests/**` override to `roles = ["test"]` failed
+  the self-gate on `tests/conftest.py:103` (MAGIC001): that file's role is
+  config under the documented precedence. Resolved by classifying it as test in
+  this repository's own `file_roles` (interpretation 4), not by widening the
+  override.
+* `analysis.finish` grew past `max_lines_warn` (CPLX006) with the role fields;
+  the two `FileResult` constructions now share `_file_result`, and the
+  self-gate's warning count is back to 0.3.0's 165.
+* The first snapshot of the 0.3.0 verdicts was 730 KB (full messages, indented
+  arrays); messages are now compared by SHA-256 prefix and scalar arrays are
+  written on one line (258 KB).
+
+### Not run here
+
+* CI (nothing pushed): Windows, Linux and the wheel job run when the
+  maintainer pushes. Paths in the new tests are POSIX strings and no test
+  writes a filesystem path into TOML.
+* `ruff check .` (wider than CI's scope) reports one pre-existing import-order
+  issue in `examples/python/tests/test_example_service.py`; not touched.
+
+### Limitations and next tasks
+
+* H2 (verification integrity) can scope VERIFY rules by role (`test`) and
+  H3's STUB/ASSERT rules by `production`; both read `files[].role`.
+* The two shapes listed under the inventory that are not yet unknown findings
+  (unreadable extra manager arguments; fan-out with unresolved calls).

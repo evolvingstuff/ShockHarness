@@ -10,6 +10,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from shockharness.roles import CLASSIFIED_ROLES, ROLES
+
 
 @dataclass(frozen=True)
 class ConfigIssue:
@@ -183,13 +185,23 @@ BOUNDARY_SCHEMA = TableField(
     required=("path", "language", "reason"),
 )
 
+# An override scopes its rule IDs either by path globs (`paths`) or by file role
+# (`roles`, H1); exactly one of the two, checked in config.py.
 OVERRIDE_SCHEMA = TableField(
     fields={
         "paths": ListField(StrField(allow_empty=False)),
+        "roles": ListField(EnumField(ROLES)),
         "disable": ListField(StrField(allow_empty=False)),
         "reason": StrField(allow_empty=False),
     },
-    required=("paths", "disable", "reason"),
+    required=("disable", "reason"),
+)
+
+# `[tool.shockharness.file_roles]` (H1): one glob list per classified role; a file whose
+# path none of them matches is `production`.
+FILE_ROLES_SCHEMA = TableField(
+    fields={role: ListField(StrField(allow_empty=False)) for role in CLASSIFIED_ROLES},
+    required=(),
 )
 
 CONFIG_SCHEMA = TableField(
@@ -211,6 +223,7 @@ CONFIG_SCHEMA = TableField(
                         "named_constant_definitions": EnumField(NAMED_CONSTANT_MODES),
                         "exclude_configuration_files": BoolField(),
                         "configuration_files": ListField(StrField(allow_empty=False)),
+                        "fail_on_unknown": BoolField(),
                     },
                     required=(),
                 ),
@@ -227,6 +240,7 @@ CONFIG_SCHEMA = TableField(
                         "transparent_guards": ListField(StrField(allow_empty=False)),
                         "capture_managers": ListField(StrField(allow_empty=False)),
                         "boundaries": ListField(BOUNDARY_SCHEMA),
+                        "fail_on_unknown": BoolField(),
                     },
                     required=(),
                 ),
@@ -240,6 +254,7 @@ CONFIG_SCHEMA = TableField(
                         "truthiness_fallbacks": EnumField(SEVERITY_MODES),
                         "nullish_fallbacks": EnumField(SEVERITY_MODES),
                         "configuration_fallbacks": EnumField(SEVERITY_MODES),
+                        "fail_on_unknown": BoolField(),
                     },
                     required=(),
                 ),
@@ -260,6 +275,7 @@ CONFIG_SCHEMA = TableField(
                 "max_lines_warn": IntField(minimum=1),
                 "npath_only_without_cognitive": BoolField(),
                 "abstraction_displacement": BoolField(),
+                "fail_on_unknown": BoolField(),
             },
             required=(),
         ),
@@ -280,6 +296,7 @@ CONFIG_SCHEMA = TableField(
             required=(),
         ),
         "overrides": ListField(OVERRIDE_SCHEMA),
+        "file_roles": FILE_ROLES_SCHEMA,
         "cache": TableField(
             fields={"enabled": BoolField(), "directory": StrField(allow_empty=False)},
             required=(),

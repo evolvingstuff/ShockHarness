@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from shockharness.constants import NEGATIVE_ONE
-from shockharness.findings import CONFIDENCE_EXACT, Finding
+from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding
 from shockharness.ir.model import ModuleFacts, NumericLiteral
 from shockharness.rules.registry import MAGIC001
 from shockharness.rules.severity import section_severity
@@ -63,6 +63,7 @@ def run_magic001(
                 message=f"Numeric literal {literal.raw} has no permitted justification{where}",
                 evidence=source.excerpt(literal.span.line),
                 confidence=CONFIDENCE_EXACT,
+                status=STATUS_VIOLATION,
                 remediation=MAGIC001.remediation,
                 safe_autofix=False,
                 scope=literal.scope,

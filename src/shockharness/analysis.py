@@ -9,6 +9,10 @@ per-file rules and measures the file's units; :func:`analyze_files` then builds
 the cross-file call graph over every parsed file (``CPLX005`` needs it) and
 only after that applies suppressions and assigns fingerprints, so a graph
 finding can be suppressed and baselined like any other.
+
+Every file, analyzed or failed, carries its role (H1, :mod:`shockharness.roles`).
+The role scopes ``[[overrides]]`` entries written with ``roles = [...]`` and the
+MAGIC001 configuration-file exemption; it never decides whether a file is analyzed.
 """
 
 from collections.abc import Mapping, Sequence
@@ -29,6 +33,7 @@ from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts
 from shockharness.ir.model import ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
+from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
 from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
@@ -87,6 +92,8 @@ class RuleDisable:
 class FileResult:
     path: str
     language: str
+    role: str
+    role_pattern: str | None
     parser: str | None
     status: str
     line_count: int
@@ -104,6 +111,8 @@ class FileResult:
         return {
             "path": self.path,
             "language": self.language,
+            "role": self.role,
+            "role_pattern": self.role_pattern,
             "parser": self.parser,
             "status": self.status,
             "line_count": self.line_count,
@@ -128,6 +137,8 @@ class PendingFile:
 
     path: str
     language: str
+    role: str
+    role_pattern: str | None
     parser: str | None
     status: str
     line_count: int
@@ -154,8 +165,38 @@ class AnalysisOutcome:
     metrics: Mapping[str, Any]  # ``complexity`` and ``graph`` sections of metrics
 
 
+def file_role(relative_path: str, config: EffectiveConfig) -> FileRole:
+    """The role of a file: the first role whose ``file_roles`` globs match, else production."""
+    return role_classifier(config.values[FILE_ROLES_KEY]).classify(relative_path)
+
+
+def _configuration_exemption(relative_path: str, role: FileRole, config: EffectiveConfig) -> str:
+    """The MAGIC001 exemption reason, or ``""`` when the config role's globs do not match.
+
+    A file whose role is config is exempt. So is a generated or vendor file that a config
+    glob also matches: it was exempt in 0.3.0, before roles existed, and stays exempt.
+    """
+    if role.role == ROLE_CONFIG:
+        assert role.pattern is not None
+        return f"file role is config (pattern {role.pattern!r}; exclude_configuration_files = true)"
+    classifier = role_classifier(config.values[FILE_ROLES_KEY])
+    matched = classifier.pattern_of(ROLE_CONFIG, relative_path)
+    if matched is None:
+        return ""
+    return (
+        f"file matches config role pattern {matched!r} (its role is {role.role}, which takes "
+        "precedence; exclude_configuration_files = true)"
+    )
+
+
+def _override_applies(override: Mapping[str, Any], relative_path: str, role: FileRole) -> bool:
+    if "roles" in override:
+        return role.role in override["roles"]
+    return compile_globset(list(override["paths"])).matches(relative_path)
+
+
 def _disabled_rules(
-    relative_path: str, language: str, config: EffectiveConfig
+    relative_path: str, role: FileRole, config: EffectiveConfig
 ) -> tuple[RuleDisable, ...]:
     disabled: dict[str, RuleDisable] = {}
     rules_config: Mapping[str, Any] = config.values["rules"]
@@ -169,17 +210,13 @@ def _disabled_rules(
             )
     magic = rules_config["magic_numbers"]
     if magic["exclude_configuration_files"] is True and registry.MAGIC001.rule_id not in disabled:
-        patterns = compile_globset(list(magic["configuration_files"]))
-        matched = patterns.first_match(relative_path)
-        if matched is not None:
+        reason = _configuration_exemption(relative_path, role, config)
+        if reason != "":
             disabled[registry.MAGIC001.rule_id] = RuleDisable(
-                registry.MAGIC001.rule_id,
-                f"file matches configuration_files pattern {matched!r}",
-                ORIGIN_CONFIGURATION_FILE,
+                registry.MAGIC001.rule_id, reason, ORIGIN_CONFIGURATION_FILE
             )
     for index, override in enumerate(config.values["overrides"]):
-        paths = compile_globset(list(override["paths"]))
-        if not paths.matches(relative_path):
+        if not _override_applies(override, relative_path, role):
             continue
         for rule_id in override["disable"]:
             if rule_id in disabled:
@@ -199,6 +236,7 @@ def _extract(language: str, source: SourceText, filename: str) -> ModuleFacts:
 def _failed(
     relative_path: str,
     language: str,
+    role: FileRole,
     parser: str | None,
     status: str,
     line_count: int,
@@ -209,6 +247,8 @@ def _failed(
     return PendingFile(
         path=relative_path,
         language=language,
+        role=role.role,
+        role_pattern=role.pattern,
         parser=parser,
         status=status,
         line_count=line_count,
@@ -229,13 +269,15 @@ def prepare_text(
     """Phase one: parse, run the per-file rules, measure the units."""
     source = SourceText.from_text(text)
     facts = _extract(language, source, relative_path)
-    disabled = _disabled_rules(relative_path, language, config)
+    role = file_role(relative_path, config)
+    disabled = _disabled_rules(relative_path, role, config)
     disabled_ids = {d.rule_id for d in disabled}
 
     if facts.parse_failure is not None:
         return _failed(
             relative_path,
             language,
+            role,
             facts.parser,
             STATUS_PARSE_ERROR,
             source.line_count,
@@ -306,6 +348,8 @@ def prepare_text(
     return PendingFile(
         path=relative_path,
         language=language,
+        role=role.role,
+        role_pattern=role.pattern,
         parser=facts.parser,
         status=STATUS_ANALYZED,
         line_count=source.line_count,
@@ -354,13 +398,15 @@ def prepare_file(
     raw, text, status, error = _read_source(file.path)
     if text is None:
         assert status is not None
+        role = file_role(file.relative, config)
         return _failed(
             file.relative,
             file.language,
+            role,
             None,
             status,
             0,
-            _disabled_rules(file.relative, file.language, config),
+            _disabled_rules(file.relative, role, config),
             None,
             error,
         )
@@ -378,22 +424,32 @@ def prepare_file(
     return pending
 
 
+def _file_result(
+    pending: PendingFile, rules_applied: tuple[str, ...], findings: tuple[Finding, ...]
+) -> FileResult:
+    """``pending`` as a final result with its applied rules and finished findings."""
+    return FileResult(
+        path=pending.path,
+        language=pending.language,
+        role=pending.role,
+        role_pattern=pending.role_pattern,
+        parser=pending.parser,
+        status=pending.status,
+        line_count=pending.line_count,
+        rules_applied=rules_applied,
+        rules_disabled=pending.rules_disabled,
+        parse_failure=pending.parse_failure,
+        error=pending.error,
+        findings=findings,
+    )
+
+
 def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOptions) -> FileResult:
     """Phase three: suppressions (SUPP001/SUPP002), ordering, fingerprints."""
     if pending.failed:
-        return FileResult(
-            path=pending.path,
-            language=pending.language,
-            parser=pending.parser,
-            status=pending.status,
-            line_count=pending.line_count,
-            rules_applied=(),
-            rules_disabled=pending.rules_disabled,
-            parse_failure=pending.parse_failure,
-            error=pending.error,
-            findings=(),
-        )
+        return _file_result(pending, (), ())
     assert pending.source is not None and pending.facts is not None
+    assert pending.status == STATUS_ANALYZED and pending.parse_failure is None
     disabled_ids = pending.disabled_ids()
     applied = list(pending.rules_applied)
     supp001_enabled = registry.SUPP001.rule_id not in disabled_ids
@@ -413,18 +469,7 @@ def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOpti
     )
     findings.sort(key=lambda f: f.sort_key())
     findings = assign_fingerprints(findings)
-    return FileResult(
-        path=pending.path,
-        language=pending.language,
-        parser=pending.parser,
-        status=STATUS_ANALYZED,
-        line_count=pending.line_count,
-        rules_applied=tuple(sorted(applied)),
-        rules_disabled=pending.rules_disabled,
-        parse_failure=None,
-        error=None,
-        findings=tuple(findings),
-    )
+    return _file_result(pending, tuple(sorted(applied)), tuple(findings))
 
 
 def cross_file(pendings: Sequence[PendingFile], config: EffectiveConfig) -> ComplexityOutcome:
@@ -466,12 +511,15 @@ def complete(
     )
 
 
-def unsupported_source_result(relative: str, reason: str) -> FileResult:
+def unsupported_source_result(relative: str, reason: str, config: EffectiveConfig) -> FileResult:
     """The failed result an included-but-unparseable file becomes under
     ``unsupported_sources = "fail"``: it counts as an analysis failure, never as clean."""
+    role = file_role(relative, config)
     return FileResult(
         path=relative,
         language=LANGUAGE_UNSUPPORTED,
+        role=role.role,
+        role_pattern=role.pattern,
         parser=None,
         status=STATUS_UNSUPPORTED,
         line_count=0,
@@ -491,7 +539,7 @@ def with_unsupported_sources(
     ``coverage`` only."""
     if config.values[UNSUPPORTED_SOURCES_KEY] != UNSUPPORTED_FAIL:
         return tuple(files)
-    extra = [unsupported_source_result(s.relative, s.reason) for s in discovery.unsupported]
+    extra = [unsupported_source_result(s.relative, s.reason, config) for s in discovery.unsupported]
     return tuple(sorted([*files, *extra], key=lambda f: f.path))
 
 

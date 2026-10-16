@@ -105,6 +105,7 @@ def _result(
         "properties": {
             "severity": finding.severity,
             "confidence": finding.confidence,
+            "status": finding.status,
             "evidence": finding.evidence,
             "remediation": finding.remediation,
             "safe_autofix": finding.safe_autofix,

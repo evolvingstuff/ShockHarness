@@ -5,6 +5,85 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H1 of specification section 21: the `unknown` finding status with
+per-family `fail_on_unknown`, and file roles. Every existing test, the golden
+corpus under all three profiles and the self-gate keep their 0.3.0 verdicts
+and exit codes (pinned by `tests/unit/test_profile_regression.py`).
+
+### Added
+- Every finding has a `status`: `violation` (the rule established the property
+  and it does not hold) or `unknown` (the rule could not establish it).
+  Severity is unchanged and orthogonal. Unknown today: `EXC001` on a catch
+  whose only obstacles are exception types that do not resolve, on a promise
+  rejection handler that references a function the module does not define, on
+  a `with` whose capture-manager binding cannot be established and on a capture
+  manager with no readable exception type; `DEF002` on `m.get(k, v)`,
+  `m.setdefault(k, v)`, `m.pop(k, v)` and `m.get(k)` whose receiver is not
+  proven a mapping. A bare `except`, an untyped JavaScript `catch` and an
+  inline untyped rejection handler stay `violation`, as does a catch naming
+  one resolved type that no boundary approves. The inventory is in
+  `docs/rules.md` (Finding status) and kept as a test
+  (`tests/unit/test_unknown_inventory.py`) that fails when a new place
+  produces an unresolved state or a finding without a recorded decision.
+- `fail_on_unknown` (boolean) per rule family, in the family's own table:
+  `rules.exceptions` and `rules.defaults` default to `true` (both families
+  have always failed closed on these findings), `rules.magic_numbers` and
+  `complexity` to `false` (they produce no unknown findings). `true`: unknown
+  findings gate by severity exactly as before. `false`: they are reported,
+  counted in `gate.unknown`, add to no other count, never fail the gate, and a
+  gate reason says how many were reported only. Setting a family to `false`
+  where its profile says `true` is a policy deviation.
+- File roles: every file gets exactly one of `generated`, `vendor`,
+  `config`, `test`, `docs` (the first whose `[tool.shockharness.file_roles]`
+  globs match, in that order) or `production`. Documented defaults: test =
+  `tests/**`, `test/**`, `**/__tests__/**`, `**/test_*.py`, `**/*_test.py`,
+  `**/*.test.js`, `**/*.spec.js`, `**/*.test.mjs`, `**/*.spec.mjs`,
+  `**/conftest.py`; config = the 0.3.0 `configuration_files` list; generated =
+  `**/generated/**`, `**/*_pb2.py`, `**/*.min.js`; vendor = `**/vendor/**`,
+  `**/third_party/**`; docs = `docs/**`. Roles never change which files are
+  discovered or analyzed.
+- `[[tool.shockharness.overrides]]` accepts `roles = ["test"]` instead of
+  `paths` (exactly one of the two per entry, validated), reported as a policy
+  deviation (`... for file role(s) test: <reason>`) and with origin
+  `overrides[i]` like a path override.
+- The text report marks unknown findings (`EXC001 error (unknown): ...`) and
+  prints an `unknown:` trailer line with the count and the families that gate
+  on it.
+
+### Changed
+- The MAGIC001 configuration-file exemption is expressed on the config role:
+  `exclude_configuration_files = true` exempts files whose role is `config`
+  (and a `generated`/`vendor` file a config glob also matches, which was exempt
+  in 0.3.0). The `rules_disabled` reason now names the config role pattern;
+  the origin is still `configuration_file`. `rules.magic_numbers.configuration_files`
+  is the legacy spelling of `file_roles.config` (kept through 0.x): set alone
+  it replaces the config role's globs as it replaced the exempt list before;
+  set together with `file_roles.config` the lists are merged. A config note
+  says which.
+- The cache schema is `"2"` (entries carry finding status and file role); a
+  0.3.0 cache directory is invalidated and rebuilt on the first run.
+- This repository's own `tests/**` override is now `roles = ["test"]`, and its
+  `file_roles.config` is empty (its one `conftest.py` is test code).
+
+### Schema
+All additive under report `schema_version` "1" (the new properties are
+optional in `schemas/report-v1.schema.json`, so 0.3.0 reports still validate):
+- `findings[].status` (`violation` | `unknown`).
+- `files[].role` and `files[].role_pattern` (the deciding glob, `null` for
+  production).
+- `coverage.roles`: files per role, every role listed.
+- `summary.by_status` (both statuses listed) and `summary.by_role` (findings
+  per role of their file, every role listed).
+- `gate.unknown` and `gate.unknown_gating_families`.
+- SARIF results: `properties.status`; `level` still comes from the severity.
+- Diff reports (`schemas/diff-v1.schema.json`): `findings[].finding_status`
+  (a diff finding's `status` keeps meaning new/fixed/unchanged), and
+  `gate.unknown` / `gate.unknown_gating_families`.
+- Configuration: `file_roles` table; `fail_on_unknown` in
+  `rules.magic_numbers`, `rules.exceptions`, `rules.defaults` and
+  `complexity`; `overrides[].roles`; `overrides[].paths` is no longer required
+  (one of `paths`/`roles` is).
+
 ## [0.3.0] - 2026-10-15
 
 The third feedback round, from `docs/shockharness-suggestions-3.md`

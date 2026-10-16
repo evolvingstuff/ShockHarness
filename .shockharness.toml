@@ -7,6 +7,12 @@ include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "evals/*.py"]
 exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**"]
 parse_errors = "fail"
 
+# File roles: the bundled defaults, except that this repository has no tooling
+# configuration among the analyzed files. Its one conftest.py (tests/conftest.py) holds
+# pytest fixtures and test helpers, so it is test code (tests/**), not config.
+[tool.shockharness.file_roles]
+config = []
+
 [tool.shockharness.rules.magic_numbers]
 enabled = true
 allowed_values = [0, 1]
@@ -193,7 +199,7 @@ disable = ["MAGIC001"]
 reason = "Single designated module holding every numeric constant the tool needs (exit codes, schema version, caps)"
 
 [[tool.shockharness.overrides]]
-paths = ["tests/**"]
+roles = ["test"]
 disable = ["MAGIC001", "DEF001"]
 reason = "Test code encodes literal expected outputs and pytest fixture signatures"
 

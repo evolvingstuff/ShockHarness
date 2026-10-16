@@ -19,7 +19,7 @@ from shockharness.complexity.callgraph import ModuleEdge
 from shockharness.complexity.coupling import Cycle, GraphMetrics
 from shockharness.complexity.metrics import UnitMetrics
 from shockharness.constants import CYCLE_MEMBERS_LISTED
-from shockharness.findings import CONFIDENCE_EXACT, Finding
+from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding
 from shockharness.ir.model import MODULE_SCOPE, UNIT_MODULE, Span
 from shockharness.rules.registry import (
     CPLX001,
@@ -94,6 +94,7 @@ def _finding_at(
         message=message,
         evidence=source.excerpt(span.line),
         confidence=CONFIDENCE_EXACT,
+        status=STATUS_VIOLATION,
         remediation=rule.remediation,
         safe_autofix=False,
         scope=scope,

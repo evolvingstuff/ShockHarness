@@ -41,9 +41,12 @@ shockharness check . --format json --output report.json
 shockharness rules explain EXC003                     # guarantees, limitations, remediation for one rule
 ```
 
-Each finding line is `path:line:col: RULE severity: message  [evidence]`. The
-message names the construct, the confidence (`exact`, `approximate`,
-`unresolved`) and, for `EXC001`, why no boundary applies. Also read the
+Each finding line is `path:line:col: RULE severity: message  [evidence]`; an
+*unknown* finding reads `RULE severity (unknown): ...` (JSON: `"status":
+"unknown"`). The message names the construct, the confidence (`exact`,
+`approximate`, `unresolved`) and, for `EXC001`, why no boundary applies.
+The `unknown:` trailer line counts unknown findings and names the families
+whose `fail_on_unknown` makes them gate. Also read the
 `config:` line (profile, deviations) and the `rules not implemented (not
 analyzed)` line, so you know what was not checked.
 
@@ -60,6 +63,23 @@ Ask what the code promises when the value is absent or the operation fails.
 | `EXC001`, `EXC003` | Is this really an external boundary? | External (file, network, subprocess, decoding external input): declare a boundary with `path`, `language`, qualified `exception`, `reason`; keep one operation inside the `try`; re-raise a typed error with `from exc`. Internal: remove the catch and fix the cause or let it propagate. |
 | `EXC002`, `DEF005` | What should the caller see when this fails? | A typed error. Not `None`, not `[]`, not a logged line and a continue. |
 | `SUPP001`, `SUPP002` | Is the suppression still justified? | Fix the comment syntax, or delete a suppression that no longer silences anything. |
+
+An **unknown** finding means the rule could not establish the property, not
+that the code is fine or that it is wrong. Treat it as a request for the
+missing information, and supply it:
+
+| Unknown finding | What could not be determined | Supply it by |
+|---|---|---|
+| `EXC001`, an exception type that does not resolve | which class the handler catches | Import the exception class by name (`from pkg.errors import FetchError`), or catch the class directly instead of a variable, call or subscript; then declare the boundary for that qualified name if the catch is a real boundary |
+| `EXC001`, an opaque promise rejection handler | whether the handler checks the error class and rethrows the rest | Write the handler inline, or define it at the top level of the same module, with the `instanceof` guard and rethrow |
+| `EXC001`, a `with` whose capture manager cannot be established, or a manager with no readable exception type | which exceptions the block captures | Construct the manager in the `with` itself (`with Manager(TimeoutError):`), pass the exception classes as plain arguments, and list the manager in `rules.exceptions.capture_managers` |
+| `DEF002` on a receiver not proven a mapping | whether `.get(k, v)` is a mapping fallback at all | Annotate or construct the receiver as a mapping (`table: dict[str, int] = {}`), after which the finding is a plain violation to fix as above; if the receiver is not a mapping (an HTTP client), restructure the call (keyword arguments) or suppress with a reason naming the receiver's real type |
+
+Never suppress an unknown finding without stating what could not be
+determined and why it is acceptable: the reason must name the missing fact
+(`reason="session is requests.Session; .get(url, params) is an HTTP call, not a
+mapping fallback"`). Never set `fail_on_unknown = false` to get green; it is a
+policy deviation like any other loosening.
 
 ### 3. Add a characterization test first
 
@@ -235,6 +255,7 @@ is part of the report, and reviewers read it.
 
 - [ ] The full report was read, including `config:` deviations and the rules not analyzed.
 - [ ] Each finding has a stated contract (required value, typed error, optional branch, cited constant).
+- [ ] Each unknown finding was answered by supplying the missing information (resolvable import, inline or module-level handler, configured manager, typed receiver), or suppressed with a reason that names what could not be determined.
 - [ ] A characterization test exists for each changed contract and runs green.
 - [ ] No `try`/`except` was deleted, no `.get` replaced with indexing, no suppression added without the contract decision written in the commit or review.
 - [ ] Any new boundary has `path`, `language`, qualified `exception` and a `reason`, and its `try` wraps one operation.

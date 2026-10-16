@@ -81,6 +81,14 @@
           },
           "fingerprint": {
             "type": "string"
+          },
+          "finding_status": {
+            "type": "string",
+            "enum": [
+              "violation",
+              "unknown"
+            ],
+            "description": "H1, additive: the finding's own status (violation or unknown). A diff finding's 'status' keeps its 0.1.0 meaning (new, fixed, unchanged)."
           }
         }
       }
@@ -623,6 +631,23 @@
         },
         "complexity_regressions": {
           "type": "integer"
+        },
+        "unknown": {
+          "type": "integer",
+          "description": "H1, additive: findings with status unknown that are neither suppressed nor ignored by a baseline, whether or not they gate."
+        },
+        "unknown_gating_families": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "magic_numbers",
+              "exceptions",
+              "defaults",
+              "complexity"
+            ]
+          },
+          "description": "H1, additive: the rule families whose fail_on_unknown is true; their unknown findings gate by severity, the others are reported only."
         }
       }
     }

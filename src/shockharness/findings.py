@@ -14,9 +14,21 @@ __all__ = [
     "CONFIDENCE_APPROXIMATE",
     "CONFIDENCE_EXACT",
     "CONFIDENCE_UNRESOLVED",
+    "FINDING_STATUSES",
+    "STATUS_UNKNOWN",
+    "STATUS_VIOLATION",
     "Finding",
     "SuppressionRecord",
 ]
+
+# A finding's status (H1), orthogonal to its severity. ``violation``: the rule established
+# the property it checks and it does not hold. ``unknown``: the rule could not establish
+# the property (an unresolved exception identity, an opaque handler, a receiver whose type
+# is not established) and says so instead of passing; ``fail_on_unknown`` of the rule's
+# family decides whether an unknown finding gates (see gate.py).
+STATUS_VIOLATION = "violation"
+STATUS_UNKNOWN = "unknown"
+FINDING_STATUSES = (STATUS_VIOLATION, STATUS_UNKNOWN)
 
 
 @dataclass(frozen=True)
@@ -35,6 +47,7 @@ class Finding:
     ``fingerprint`` is assigned once every finding of the file is known (it carries an
     occurrence index); ``baseline`` is ``None`` until a baseline or base revision is
     applied, then ``"matched"`` (counted, not gating) or ``"ignored"`` (not counted).
+    ``status`` is one of :data:`FINDING_STATUSES`; every rule decides it explicitly.
     """
 
     rule_id: str
@@ -45,12 +58,20 @@ class Finding:
     message: str
     evidence: str
     confidence: str
+    status: str
     remediation: str
     safe_autofix: bool
     scope: str | None
     suppression: SuppressionRecord | None
     fingerprint: str | None
     baseline: str | None
+
+    def __post_init__(self) -> None:
+        assert self.status in FINDING_STATUSES, f"unknown finding status {self.status!r}"
+
+    @property
+    def is_unknown(self) -> bool:
+        return self.status == STATUS_UNKNOWN
 
     @property
     def is_suppressed(self) -> bool:
@@ -78,6 +99,7 @@ class Finding:
             "message": self.message,
             "evidence": self.evidence,
             "confidence": self.confidence,
+            "status": self.status,
             "remediation": self.remediation,
             "safe_autofix": self.safe_autofix,
             "scope": self.scope,

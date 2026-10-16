@@ -133,6 +133,7 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `schema.py` | Field descriptors and shape validation with key paths; profile names and section severities |
 | `config.py` | Source discovery (both dedicated filenames), layers (defaults < profile < source < CLI overrides) with origins, semantic checks, deviations, digest |
 | `globs.py` | Glob validation and compilation |
+| `roles.py` | File roles (H1): the six roles, their precedence, and the classifier over `file_roles` globs |
 | `discovery.py` | Target resolution, walking, pruning, language routing |
 | `source.py` | Line splitting, byte-to-character columns, evidence excerpts |
 | `ir/model.py` | `Span`, `NumericLiteral`, `Comment`, `CatchFact`, `ExceptionIdentity`, `HandlerBody`, `TryStatement`, `DefaultFact`, `ControlNode`, `CallSite`, `FunctionFact`, `ImportFact`, `ModuleBinding`, `ParseFailure`, `ModuleFacts` |
@@ -157,14 +158,14 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
 | `rules/complexity.py` | CPLX001-CPLX004 and CPLX006 per unit, CPLX005 from the graph (one finding per cycle); messages carry value, threshold and convention |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
-| `findings.py` | `Finding` (with `fingerprint` and `baseline` marker), `SuppressionRecord` |
+| `findings.py` | `Finding` (with `status` violation/unknown, `fingerprint` and `baseline` marker), `SuppressionRecord` |
 | `gating/baseline.py` | Fingerprints, baseline file model and validation, legacy marking under `gates.legacy` |
 | `gating/diff.py` | Revision export and analysis, new / fixed / unchanged classification, `DiffReport` |
 | `history/git.py` | The git subprocess wrapper (the only `subprocess` user) and log parsing |
 | `history/hotspots.py` | `metrics.history`: per-file churn, horizon, explicit statuses, the hotspot score |
 | `history/cochange.py` | Co-change pairs with support and directional confidence |
-| `analysis.py` | Per-file phase, cross-file phase, suppressions/fingerprints phase; rule-disable resolution |
-| `gate.py` | Verdict and exit code |
+| `analysis.py` | Per-file phase, cross-file phase, suppressions/fingerprints phase; file roles, rule-disable resolution (config, overrides by path or role, the config-role exemption) |
+| `gate.py` | Verdict and exit code; `gate.unknown` and per-family `fail_on_unknown` |
 | `report.py` | Report assembly, coverage, sorting |
 | `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (check reports and diff reports) |
 | `api.py` | `analyze_source`, `analyze_paths`, `apply_baseline`, `evaluate_gate`, `with_history` |

@@ -27,6 +27,7 @@ from typing import Any
 
 from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
+from shockharness.roles import CLASSIFIED_ROLES, FILE_ROLES_KEY, ROLE_CONFIG
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
 from shockharness.schema import (
@@ -56,6 +57,18 @@ SEVERITY_SECTIONS: Mapping[str, str] = {
     "exceptions": "EXC001-EXC003",
     "defaults": "DEF001-DEF006",
 }
+# The rule families with a `fail_on_unknown` switch (H1): the dotted section that holds
+# it, and the rules it covers. A family is named after the last part of its section.
+FAIL_ON_UNKNOWN_KEY = "fail_on_unknown"
+FAIL_ON_UNKNOWN_SECTIONS: Mapping[str, str] = {
+    "rules.magic_numbers": "MAGIC001",
+    "rules.exceptions": "EXC001-EXC003",
+    "rules.defaults": "DEF001-DEF006",
+    "complexity": "CPLX001-CPLX006",
+}
+# The legacy spelling of the config role's globs (H1): merged into file_roles.config.
+LEGACY_CONFIGURATION_FILES = "rules.magic_numbers.configuration_files"
+FILE_ROLES_CONFIG = f"{FILE_ROLES_KEY}.{ROLE_CONFIG}"
 
 # A boundary names one exception class: a dotted identifier path, never a wildcard.
 EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
@@ -285,14 +298,9 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
             )
     for index, override in enumerate(values["overrides"]):
         key = f"overrides[{index}]"
-        if len(override["paths"]) == 0:
-            issues.append(ConfigIssue(f"{key}.paths", "must list at least one path"))
+        issues.extend(_override_scope_issues(override, key))
         if len(override["disable"]) == 0:
             issues.append(ConfigIssue(f"{key}.disable", "must list at least one rule ID"))
-        for p_index, pattern in enumerate(override["paths"]):
-            problem = validate_glob(pattern)
-            if problem is not None:
-                issues.append(ConfigIssue(f"{key}.paths[{p_index}]", problem))
         for r_index, rule_id in enumerate(override["disable"]):
             if not registry.is_known_rule(rule_id):
                 known = ", ".join(registry.rule_ids())
@@ -331,7 +339,45 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
         problem = validate_glob(pattern)
         if problem is not None:
             issues.append(ConfigIssue(f"rules.magic_numbers.configuration_files[{index}]", problem))
+    for role in CLASSIFIED_ROLES:
+        for index, pattern in enumerate(values[FILE_ROLES_KEY][role]):
+            problem = validate_glob(pattern)
+            if problem is not None:
+                issues.append(ConfigIssue(f"{FILE_ROLES_KEY}.{role}[{index}]", problem))
     return issues
+
+
+def _override_scope_issues(override: Mapping[str, Any], key: str) -> list[ConfigIssue]:
+    """Exactly one of ``paths`` (globs) / ``roles`` (file roles), non-empty, valid."""
+    has_paths = "paths" in override
+    has_roles = "roles" in override
+    if has_paths == has_roles:
+        return [
+            ConfigIssue(
+                key,
+                "needs exactly one of 'paths' (glob patterns) or 'roles' (file roles such as "
+                "'test'; see file_roles)",
+            )
+        ]
+    if has_roles:
+        if len(override["roles"]) == 0:
+            return [ConfigIssue(f"{key}.roles", "must list at least one file role")]
+        return []
+    if len(override["paths"]) == 0:
+        return [ConfigIssue(f"{key}.paths", "must list at least one path")]
+    issues: list[ConfigIssue] = []
+    for p_index, pattern in enumerate(override["paths"]):
+        problem = validate_glob(pattern)
+        if problem is not None:
+            issues.append(ConfigIssue(f"{key}.paths[{p_index}]", problem))
+    return issues
+
+
+def override_scope(override: Mapping[str, Any]) -> str:
+    """How a validated override names its files, for deviation lines and messages."""
+    if "roles" in override:
+        return "file role(s) " + ", ".join(override["roles"])
+    return ", ".join(override["paths"])
 
 
 def _boundary_exception_issues(boundary: Mapping[str, Any], key: str) -> list[ConfigIssue]:
@@ -378,8 +424,34 @@ def _literal_extension(pattern: str) -> str | None:
     return "." + extension
 
 
-def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
-    """Explicit departures from the strict profile, always surfaced in reports."""
+def _section(values: Mapping[str, Any], dotted: str) -> Mapping[str, Any]:
+    node: Any = values
+    for key in dotted.split("."):
+        node = node[key]
+    return node
+
+
+def _unknown_deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) -> list[str]:
+    """A family whose ``fail_on_unknown`` is below its profile's value (true -> false)."""
+    found: list[str] = []
+    profile = values[PROFILE_KEY]
+    for section, rules in FAIL_ON_UNKNOWN_SECTIONS.items():
+        configured = _section(values, section)[FAIL_ON_UNKNOWN_KEY]
+        expected = _section(profile_values, section)[FAIL_ON_UNKNOWN_KEY]
+        if expected is True and configured is False:
+            found.append(
+                f"{section}.{FAIL_ON_UNKNOWN_KEY} is false (profile {profile!r}: true); "
+                f"{rules} findings whose status is unknown are reported and never fail the gate"
+            )
+    return found
+
+
+def _deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) -> tuple[str, ...]:
+    """Explicit departures from the strict profile, always surfaced in reports.
+
+    ``profile_values`` are the bundled defaults with the selected profile applied: the
+    reference for keys whose deviation is relative to the profile (``fail_on_unknown``).
+    """
     found: list[str] = []
     profile = values[PROFILE_KEY]
     if profile != PROFILE_STRICT:
@@ -451,11 +523,47 @@ def _deviations(values: Mapping[str, Any]) -> tuple[str, ...]:
             f"in {boundary['path']} ({boundary['language']}): {boundary['reason']}"
         )
     found.extend(loosened_modes(rules["defaults"]))
+    found.extend(_unknown_deviations(values, profile_values))
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])
-        paths = ", ".join(override["paths"])
-        found.append(f"overrides[{index}] disables {disabled} for {paths}: {override['reason']}")
+        scope = override_scope(override)
+        found.append(f"overrides[{index}] disables {disabled} for {scope}: {override['reason']}")
     return tuple(found)
+
+
+USER_TIERS = frozenset({TIER_CLI, TIER_DEDICATED, TIER_PYPROJECT})
+
+
+def _merge_legacy_configuration_files(
+    values: dict[str, Any], origins: dict[str, str], notes: list[str]
+) -> None:
+    """Fold ``rules.magic_numbers.configuration_files`` into ``file_roles.config`` (H1).
+
+    Only a configuration that sets the legacy key changes anything (its bundled default
+    equals the default config role). Set alone, it replaces the config role's globs, as
+    it replaced the exempt list in 0.3.0; set together with ``file_roles.config``, the
+    two lists are merged (``file_roles.config`` first, duplicates dropped).
+    """
+    legacy_origin = origins[LEGACY_CONFIGURATION_FILES]
+    if legacy_origin not in USER_TIERS:
+        return
+    legacy = list(values["rules"]["magic_numbers"]["configuration_files"])
+    roles = values[FILE_ROLES_KEY]
+    if origins[FILE_ROLES_CONFIG] in USER_TIERS:
+        merged = list(roles[ROLE_CONFIG])
+        merged.extend(pattern for pattern in legacy if pattern not in merged)
+        notes.append(
+            f"{LEGACY_CONFIGURATION_FILES} (legacy spelling) is merged into "
+            f"{FILE_ROLES_CONFIG}; the config role has {len(merged)} glob(s)"
+        )
+    else:
+        merged = legacy
+        notes.append(
+            f"{LEGACY_CONFIGURATION_FILES} (legacy spelling) sets the config role's globs "
+            f"({FILE_ROLES_CONFIG}); prefer {FILE_ROLES_CONFIG}"
+        )
+    roles[ROLE_CONFIG] = merged
+    origins[FILE_ROLES_CONFIG] = legacy_origin
 
 
 CACHE_KEY = "cache"
@@ -528,6 +636,7 @@ def load_config_with_overrides(
     _record_origins(origins, defaults, TIER_BUNDLED)
     overlay = load_profile_overlay(profile_name)
     merged = _deep_merge(defaults, overlay, origins, ORIGIN_PROFILE_PREFIX + profile_name, "")
+    profile_values = copy.deepcopy(merged)
     merged = _deep_merge(merged, user_table, origins, source.tier, "")
 
     cli_layer: dict[str, Any] = {}
@@ -548,13 +657,14 @@ def load_config_with_overrides(
             "configuration is invalid:\n  " + "\n  ".join(issue.render() for issue in semantic),
             source.path,
         )
+    _merge_legacy_configuration_files(merged, origins, notes)
 
     return EffectiveConfig(
         values=merged,
         source=source,
         origins=origins,
         notes=tuple(notes),
-        deviations=_deviations(merged),
+        deviations=_deviations(merged, profile_values),
         digest=config_digest(merged),
     )
 

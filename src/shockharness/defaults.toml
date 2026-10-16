@@ -13,7 +13,53 @@ parse_errors = "fail"
 # `include` does not match or `exclude` drops are never affected.
 unsupported_sources = "warn"
 follow_symlinks = false
+# Each entry disables rules either for path globs (`paths = [...]`) or for file roles
+# (`roles = ["test"]`): exactly one of the two, a non-empty `disable` list and a `reason`.
+# Every entry is reported as a policy deviation.
 overrides = []
+
+# File roles (H1). Every analyzed file gets exactly one role: the first of generated,
+# vendor, config, test, docs whose globs match its path (same glob rules as include),
+# else production. Roles never change which files are discovered or analyzed; they label
+# files in the report (files[].role, coverage.roles, summary.by_role) and scope
+# [[overrides]] (`roles = [...]`) and the MAGIC001 configuration-file exemption. A list
+# set here replaces the default list for that role.
+[tool.shockharness.file_roles]
+generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
+vendor = ["**/vendor/**", "**/third_party/**"]
+# Tooling configuration rather than application source. The default is the list that
+# rules.magic_numbers.configuration_files had in 0.3.0; that key is the legacy spelling
+# and, when a configuration sets it, its globs are merged into this role.
+config = [
+  "conftest.py",
+  "setup.py",
+  "*.config.js",
+  "*.config.mjs",
+  "*.config.cjs",
+  "*.conf.js",
+  "*.conf.cjs",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  "gulpfile.js",
+  "Gruntfile.js",
+]
+# conftest.py is config by default (config precedes test); **/conftest.py below applies
+# when the config list leaves it out.
+test = [
+  "tests/**",
+  "test/**",
+  "**/__tests__/**",
+  "**/test_*.py",
+  "**/*_test.py",
+  "**/*.test.js",
+  "**/*.spec.js",
+  "**/*.test.mjs",
+  "**/*.spec.mjs",
+  "**/conftest.py",
+]
+docs = ["docs/**"]
 
 [tool.shockharness.rules.magic_numbers]
 enabled = true
@@ -27,9 +73,18 @@ allow_unary_negative_one = false
 # name is the remedy MAGIC001 asks for; the recommended and minimal profiles). Literals
 # inside containers, expressions, functions and class bodies are reported either way.
 named_constant_definitions = "report"
+# A finding with status "unknown" is one where the rule could not establish the property
+# (an unresolved identity, an unproven receiver type). false: unknown findings are
+# reported and counted (gate.unknown) but never fail the gate; true: they gate by their
+# severity like any other finding. Setting a family below its profile's value is a policy
+# deviation. MAGIC001 never produces unknown findings today.
+fail_on_unknown = false
+# true: files that the config role's globs match are exempt from MAGIC001 and the
+# exemption is listed in the report (files[].rules_disabled).
 exclude_configuration_files = true
-# Basenames (or path globs) that are tooling configuration rather than application
-# source. Matching files are exempt from MAGIC001 and listed in the report.
+# Legacy spelling of file_roles.config (kept through 0.x). Its default equals the default
+# config role; a configuration that sets it replaces this list as in 0.3.0 and its globs
+# join the config role (merged with file_roles.config when that is set too).
 configuration_files = [
   "conftest.py",
   "setup.py",
@@ -55,6 +110,10 @@ enabled = true
 # "error": EXC001-EXC003 findings fail the gate. "review": reported, never gating.
 severity = "error"
 mode = "boundary_whitelist"
+# EXC001 has always failed closed: an exception type, handler or manager binding that
+# cannot be resolved is reported as an error that fails the gate. Unknown findings keep
+# doing so unless this is set to false (a policy deviation).
+fail_on_unknown = true
 # When true, a handler that only re-raises the caught exception (bare `raise`,
 # `raise err`, `throw err`) passes EXC001 outside any boundary. Off in strict:
 # wrapping and re-raising is not the same as no catch.
@@ -91,6 +150,10 @@ truthiness_fallbacks = "review"     # DEF003: x or v, x || v (also replace legit
 nullish_fallbacks = "forbid"        # DEF004: x ?? v, x if x is not None else v
 configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X || v
 # DEF005 (a handler that returns a default) has no mode: it is always an error.
+# DEF002 on m.get(k, v), m.setdefault(k, v), m.pop(k, v) whose receiver is not proven a
+# mapping is an unknown finding (the verdict depends on the receiver's type); it has
+# always failed the gate, and keeps doing so unless this is false (a policy deviation).
+fail_on_unknown = true
 
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
@@ -114,6 +177,8 @@ npath_only_without_cognitive = true
 # decision burden reachable through resolved calls grew. Every result is marked
 # approximate and experimental; there is no rule ID for it.
 abstraction_displacement = false
+# CPLX001-CPLX006 never produce unknown findings today, and are advisory either way.
+fail_on_unknown = false
 
 # Local git history (file-level granularity, never gating). Read with `git log` on the
 # analyzed root; no remote is contacted. When git is missing or the root is not inside a

@@ -23,14 +23,24 @@ reports ``return_fallback`` as before.
 Findings are suggestions: ``safe_autofix`` is always false. Removing a default
 changes the function's contract; only the author knows whether the value was
 optional.
+
+Status (H1): a DEF002 finding on ``m.get(k, v)``, ``m.setdefault(k, v)``,
+``m.pop(k, v)`` or ``m.get(k)`` whose receiver is not proven a mapping (approximate
+confidence for these kinds means exactly that) is ``unknown``: whether the call
+substitutes a fallback for a missing key depends on the receiver's type, which the
+analyzer could not establish (``session.get(url, params)``). Every other DEF finding
+is ``violation``: an approximate one there is about intent (a non-constant fallback, a
+static trace), not about whether the shape is present. ``rules.defaults.fail_on_unknown``
+(default true: these findings have always failed the gate) decides whether they gate.
 """
 
 from collections.abc import Mapping
 from typing import Any
 
-from shockharness.findings import Finding
+from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
 from shockharness.ir.model import (
     BODY_RETURN_FALLBACK,
+    CONFIDENCE_APPROXIMATE,
     CONFIDENCE_EXACT,
     FAMILY_CONFIGURATION,
     FAMILY_EXCEPTION,
@@ -45,6 +55,7 @@ from shockharness.ir.model import (
     KIND_ENV_DESTRUCTURING,
     KIND_ENV_GET_IMPLICIT,
     KIND_GETATTR,
+    KIND_MAPPING_GET,
     KIND_MAPPING_GET_IMPLICIT,
     KIND_MEMBER_NULLISH,
     KIND_MEMBERSHIP_TERNARY,
@@ -105,6 +116,9 @@ FAMILY_RULES: Mapping[str, RuleSpec] = {
 }
 DATACLASS_KINDS = frozenset({KIND_DATACLASS_FIELD, KIND_DATACLASS_FACTORY})
 IMPLICIT_KINDS = frozenset({KIND_MAPPING_GET_IMPLICIT, KIND_ENV_GET_IMPLICIT})
+# Kinds whose verdict depends on the receiver being a mapping; for them, approximate
+# confidence means the receiver's type was not established (ir/python_defaults.py).
+RECEIVER_TYPED_KINDS = frozenset({KIND_MAPPING_GET, KIND_MAPPING_GET_IMPLICIT})
 DECLARATION_KINDS = frozenset(
     {
         KIND_PARAMETER,
@@ -191,6 +205,14 @@ def _message(fact: DefaultFact, language: str) -> str:
     return fact.detail
 
 
+def fact_status(fact: DefaultFact) -> str:
+    """``unknown`` for a mapping lookup on a receiver not proven a mapping, else
+    ``violation`` (see the module docstring)."""
+    if fact.kind in RECEIVER_TYPED_KINDS and fact.confidence == CONFIDENCE_APPROXIMATE:
+        return STATUS_UNKNOWN
+    return STATUS_VIOLATION
+
+
 def _finding(
     rule: RuleSpec,
     severity: str,
@@ -199,6 +221,7 @@ def _finding(
     message: str,
     source: SourceText,
     confidence: str,
+    status: str,
     scope: str,
 ) -> Finding:
     return Finding(
@@ -210,6 +233,7 @@ def _finding(
         message=message,
         evidence=source.excerpt(span.line),
         confidence=confidence,
+        status=status,
         remediation=rule.remediation,
         safe_autofix=False,
         scope=scope,
@@ -245,6 +269,7 @@ def run_default_rules(
                 _message(fact, language),
                 source,
                 fact.confidence,
+                fact_status(fact),
                 fact.scope,
             )
         )
@@ -263,6 +288,7 @@ def run_default_rules(
                     "reported once, here)",
                     source,
                     CONFIDENCE_EXACT,
+                    STATUS_VIOLATION,
                     catch.scope,
                 )
             )

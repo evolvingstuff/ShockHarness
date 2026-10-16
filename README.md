@@ -332,10 +332,22 @@ allowed_values = [0, 1]
 allow_unary_negative_one = false
 
 [[tool.shockharness.overrides]]
-paths = ["tests/**"]
+roles = ["test"]          # or paths = ["tests/**"]; exactly one of the two
 disable = ["MAGIC001"]
 reason = "Fixtures encode literal expected outputs"
 ```
+
+Every file gets one **role** (`generated`, `vendor`, `config`, `test`, `docs`,
+else `production`) from the `[tool.shockharness.file_roles]` globs, first match
+in that order; the defaults cover `tests/**`, `**/test_*.py`, `**/*.test.js`,
+`docs/**`, `**/vendor/**` and the like. Roles label files in the report and
+scope overrides and the MAGIC001 configuration-file exemption; they never
+change what is analyzed. Every finding has a `status`: `violation`, or
+`unknown` when the rule could not establish the property (an exception type
+that does not resolve, a `.get(k, v)` on a receiver not proven a mapping).
+`fail_on_unknown` per rule family decides whether unknown findings gate; the
+exceptions and defaults families keep failing closed by default. See
+[docs/configuration.md](docs/configuration.md#file-roles).
 
 Inline suppressions need an exact rule ID and a reason, on the same line:
 

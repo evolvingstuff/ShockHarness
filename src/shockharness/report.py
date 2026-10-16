@@ -9,6 +9,11 @@ timestamps are included for the same reason; the one run-dependent field is
 findings by rule and top-level directory and by severity, the files with the
 most policy findings, complexity counts, parse failures and the elapsed time.
 Its totals equal ``execution_summary``.
+
+H1 adds, all additive under schema "1": ``files[].role`` / ``role_pattern``,
+``coverage.roles`` (files per role, every role listed), ``summary.by_status``
+(findings per status, both statuses listed) and ``summary.by_role`` (findings per
+role of the file they are in, every role listed).
 """
 
 import platform
@@ -22,9 +27,10 @@ from shockharness.complexity.regressions import exceeds_threshold
 from shockharness.config import UNSUPPORTED_IGNORE, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
 from shockharness.constants import ELAPSED_DECIMALS, REPORT_SCHEMA_VERSION, SUMMARY_TOP_FILES
 from shockharness.discovery import DiscoveryResult
-from shockharness.findings import Finding
+from shockharness.findings import FINDING_STATUSES, Finding
 from shockharness.gate import GateResult
 from shockharness.history.hotspots import HOTSPOTS_FORMULA
+from shockharness.roles import empty_role_counts
 from shockharness.rules import registry
 from shockharness.rules.complexity import SETTING_FAN_OUT_WARN, THRESHOLD_OF_RULE
 from shockharness.version import __version__
@@ -128,6 +134,9 @@ def _coverage(
         ]
         if policy != UNSUPPORTED_IGNORE:
             unsupported = [{"path": s.relative, "reason": s.reason} for s in discovery.unsupported]
+    roles = empty_role_counts()
+    for file in files:
+        roles[file.role] += 1
     disabled_globally: list[str] = []
     for rule in registry.implemented_rules():
         if (
@@ -144,6 +153,7 @@ def _coverage(
         "rules_disabled_globally": disabled_globally,
         "files_analyzed": sum(1 for f in files if not f.failed),
         "files_failed": sum(1 for f in files if f.failed),
+        "roles": roles,
         "discovery": discovery_counts,
         "explicit_targets_excluded": explicit_excluded,
         "unsupported_sources_policy": policy,
@@ -210,12 +220,17 @@ def build_summary(
     """The first-contact overview: every count derives from the same findings and files
     as ``execution_summary``, so the totals agree by construction."""
     by_severity: dict[str, int] = {}
+    by_status = {status: 0 for status in FINDING_STATUSES}
+    by_role = empty_role_counts()
+    role_of = {file.path: file.role for file in files}
     by_rule: dict[str, int] = {}
     by_directory: dict[str, int] = {}
     by_rule_and_directory: dict[str, dict[str, int]] = {}
     policy_per_file: dict[str, int] = {}
     for finding in findings:
         directory = top_level_directory(finding.path)
+        by_status[finding.status] += 1
+        by_role[role_of[finding.path]] += 1
         if finding.severity not in by_severity:
             by_severity[finding.severity] = 0
         by_severity[finding.severity] += 1
@@ -242,6 +257,8 @@ def build_summary(
         "findings": len(findings),
         "suppressed": sum(1 for f in findings if f.is_suppressed),
         "by_severity": dict(sorted(by_severity.items())),
+        "by_status": by_status,
+        "by_role": by_role,
         "by_rule": dict(sorted(by_rule.items())),
         "by_directory": dict(sorted(by_directory.items())),
         "by_rule_and_directory": {

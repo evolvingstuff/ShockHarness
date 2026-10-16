@@ -28,6 +28,9 @@ bundled defaults  <  built-in profile  <  the source above  <  command-line over
 * The command-line overrides are exactly `--profile NAME` and
   `--parse-errors fail|warn` (see below); nothing else can be changed from the
   command line.
+* After the layers are merged, a `rules.magic_numbers.configuration_files` list
+  set by the source is folded into `file_roles.config` (see File roles). No
+  other key is derived from another.
 
 `<root>` is `--root` (default: the current directory). Targets outside the root
 are a usage error, so relative paths in reports are always root-relative.
@@ -109,16 +112,28 @@ follow_symlinks = false                 # never leave the root through a link un
 enabled = true                          # the content-hash cache of per-file results (0.3.0); see Cache below
 directory = ".shockharness-cache"       # relative to the root; belongs in .gitignore; not part of the config digest
 
+[tool.shockharness.file_roles]          # H1: one role per file, first match wins in this order; see File roles
+generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
+vendor = ["**/vendor/**", "**/third_party/**"]
+config = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
+          "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",
+          ".prettierrc.js", ".prettierrc.cjs", "gulpfile.js", "Gruntfile.js"]
+test = ["tests/**", "test/**", "**/__tests__/**", "**/test_*.py", "**/*_test.py",
+        "**/*.test.js", "**/*.spec.js", "**/*.test.mjs", "**/*.spec.mjs", "**/conftest.py"]
+docs = ["docs/**"]                      # anything else is production (examples/ included)
+
 [tool.shockharness.rules.magic_numbers]
 enabled = true
 severity = "error"                      # "review" caps MAGIC001 at review (reported, never gating; a deviation)
+fail_on_unknown = false                 # H1: whether unknown findings gate (MAGIC001 produces none today); see Unknown findings
 allowed_values = [0, 1]                 # value-based; extra values are reported as deviations
 allow_unary_negative_one = false        # -1 fails unless true; -0 always fails (true in recommended)
 named_constant_definitions = "report"   # MAX_PAGES = 8 / CHUNK_BYTES = 64 * 1024 / const SETTLE_MS = 400 at module scope: "report" (strict) or "allow" (recommended, minimal)
-exclude_configuration_files = true      # files matching configuration_files skip MAGIC001 (reported per file)
+exclude_configuration_files = true      # files the config role's globs match skip MAGIC001 (reported per file)
 configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
                        "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",
                        ".prettierrc.js", ".prettierrc.cjs", "gulpfile.js", "Gruntfile.js"]
+                                        # legacy spelling of file_roles.config (kept through 0.x); see File roles
 
 [tool.shockharness.rules.magic_strings]   # MAGIC002: registered, not implemented
 enabled = true
@@ -128,6 +143,7 @@ mode = "review"
 enabled = true
 severity = "error"                        # "review" caps EXC001-EXC003 at review
 mode = "boundary_whitelist"               # the only mode
+fail_on_unknown = true                    # H1: unresolved identities, opaque handlers fail closed as always (false: a deviation)
 transparent_rethrow = false               # true: handlers that only re-raise pass EXC001 (reported as a deviation)
 transparent_guards = []                   # guard callees ("rethrowUnexpectedError"): a handler opening with guard(<caught>) is narrowed by it (each a deviation)
 capture_managers = []                     # qualified names of the project's exception-capturing context managers; `with M(T):` is then a catch of T (each a deviation)
@@ -136,6 +152,7 @@ boundaries = []                           # see below
 [tool.shockharness.rules.defaults]        # DEF001-DEF006; each mode: "forbid" -> error, "review" -> review, "allow" -> off
 enabled = true
 severity = "error"                        # "review" caps every DEF finding (DEF005 included) at review
+fail_on_unknown = true                    # H1: DEF002 on a receiver not proven a mapping keeps gating (false: a deviation)
 function_parameters = "forbid"            # DEF001: parameter defaults, destructured parameter defaults
 dataclass_fields = "forbid"               # DEF001: dataclass field defaults and default_factory
 missing_value_fallbacks = "forbid"        # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
@@ -157,6 +174,7 @@ fan_out_severity = "warning"              # CPLX005 fan-out findings: "warning" 
 max_lines_warn = 50                       # CPLX006: size/1 logical lines of one unit above this value; module bodies exempt
 npath_only_without_cognitive = true       # a unit above cognitive_warn and npath_warn is one CPLX002 finding naming both; false: CPLX002 and CPLX004
 abstraction_displacement = false          # experimental, diff mode only; see docs/complexity.md
+fail_on_unknown = false                   # H1: CPLX findings are never unknown today, and advisory either way
 
 [tool.shockharness.history]               # local `git log`, file granularity, never gating
 enabled = true
@@ -168,8 +186,8 @@ new_hard_violations = "fail"              # "fail" -> exit 1 on any new unsuppre
 legacy = "baseline"                       # what a finding matched by a baseline or base revision means; see below
 complexity_regressions = "warn"           # diff/gate only: "warn" lists per-unit regressions, "fail" fails the gate, "ignore" says nothing
 
-[[tool.shockharness.overrides]]           # per-path rule disables; every one is a reported deviation
-paths = ["tests/**"]
+[[tool.shockharness.overrides]]           # per-path or per-role rule disables; every one is a reported deviation
+roles = ["test"]                          # H1: by file role; or paths = ["tests/**"]; exactly one of the two
 disable = ["MAGIC001"]
 reason = "Fixtures encode literal expected outputs"
 
@@ -185,6 +203,93 @@ language = "python"
 exceptions = ["OSError", "ProcessLookupError"]      # exactly one of `exception` / `exceptions` per entry
 reason = "The child process may already be gone"
 ```
+
+## File roles
+
+Every analyzed file (and every failed one) gets exactly one **role**:
+`generated`, `vendor`, `config`, `test`, `docs` or `production`. The role is
+the first of `generated`, `vendor`, `config`, `test`, `docs` whose
+`[tool.shockharness.file_roles]` globs match the file's path, in that order;
+a file nothing matches is `production`. The globs follow the
+[glob semantics](#glob-semantics) below, root anchors included (`/manual.py`).
+A list set in your configuration replaces the default list for that role;
+the other roles keep theirs.
+
+| Role | Default globs |
+|---|---|
+| `generated` | `**/generated/**`, `**/*_pb2.py`, `**/*.min.js` |
+| `vendor` | `**/vendor/**`, `**/third_party/**` |
+| `config` | `conftest.py`, `setup.py`, `*.config.js`, `*.config.mjs`, `*.config.cjs`, `*.conf.js`, `*.conf.cjs`, `.eslintrc.js`, `.eslintrc.cjs`, `.prettierrc.js`, `.prettierrc.cjs`, `gulpfile.js`, `Gruntfile.js` |
+| `test` | `tests/**`, `test/**`, `**/__tests__/**`, `**/test_*.py`, `**/*_test.py`, `**/*.test.js`, `**/*.spec.js`, `**/*.test.mjs`, `**/*.spec.mjs`, `**/conftest.py` |
+| `docs` | `docs/**` |
+| `production` | everything else, `examples/` included |
+
+Precedence decides overlaps: `third_party/setup.py` is `vendor`,
+`tests/conftest.py` is `config` (the config role lists `conftest.py`, and
+config precedes test; `**/conftest.py` in the test role applies when you leave
+`conftest.py` out of the config role), `docs/test_x.py` is `test`. The default
+`exclude` already drops `**/generated/**`, so that glob only matters if you
+include generated directories.
+
+Roles **never change which files are discovered or analyzed**: a `docs/` or
+`vendor/` file that `include` matches is analyzed under every rule like any
+other. They do three things:
+
+* **Label.** Each file in the report carries `role` and `role_pattern` (the
+  glob that decided it, `null` for production); `coverage.roles` counts files
+  per role and `summary.by_role` counts findings per role (every role listed).
+* **Scope overrides.** An `[[tool.shockharness.overrides]]` entry may name
+  `roles = ["test"]` instead of `paths = [...]` (exactly one of the two, each
+  a non-empty list; `roles` takes any of the six roles). It disables its rules
+  for every file of those roles, is reported as a policy deviation
+  (`overrides[i] disables MAGIC001, DEF001 for file role(s) test: <reason>`)
+  and appears in `files[].rules_disabled` with origin `overrides[i]`, exactly
+  like a path override.
+* **The MAGIC001 configuration-file exemption.** With
+  `rules.magic_numbers.exclude_configuration_files = true` (the default), a
+  file whose role is `config` skips MAGIC001, recorded in
+  `files[].rules_disabled` with origin `configuration_file`. A `generated` or
+  `vendor` file that a config glob also matches keeps the exemption it had in
+  0.3.0 (the reason says its role took precedence).
+
+`rules.magic_numbers.configuration_files` is the **legacy spelling** of
+`file_roles.config` and stays supported through 0.x. Its default equals the
+config role's default. When your configuration sets it and not
+`file_roles.config`, it replaces the config role's globs, exactly as it
+replaced the exempt list in 0.3.0; when you set both, the two lists are merged
+(`file_roles.config` first, duplicates dropped). Either way a `config note`
+line says so, and `config effective` shows the resulting `file_roles.config`
+with the origin of the legacy key.
+
+## Unknown findings
+
+Every finding has a `status`: `violation` (the rule established the property
+it checks, and it does not hold) or `unknown` (the rule could not establish it:
+an exception type that does not resolve, a promise rejection handler or a
+capture-manager binding whose behaviour cannot be read, a `.get(k, v)` whose
+receiver is not proven a mapping). Status is orthogonal to severity, which keeps
+its meaning; the inventory of what is unknown is in [rules.md](rules.md#finding-status).
+
+`fail_on_unknown` (boolean) decides per rule family whether unknown findings
+gate. It lives in the family's own table: `rules.magic_numbers`,
+`rules.exceptions`, `rules.defaults` and `complexity`.
+
+| Family | Default | Why |
+|---|---|---|
+| `rules.exceptions` | `true` | EXC001 has always failed closed on unresolved types and opaque handlers |
+| `rules.defaults` | `true` | DEF002 on a receiver not proven a mapping has always failed the gate |
+| `rules.magic_numbers` | `false` | MAGIC001 is exact; it produces no unknown findings |
+| `complexity` | `false` | CPLX001-CPLX006 measure what was resolved; advisory either way |
+
+With `true`, an unknown finding gates by its severity exactly like a
+violation. With `false`, it is reported and counted in `gate.unknown`, adds to
+no other gate count and never fails the gate; a gate reason says how many were
+reported only. `gate.unknown` counts every unsuppressed, non-ignored unknown
+finding either way, `gate.unknown_gating_families` lists the families set to
+`true`, and the text trailer prints both (`unknown: N finding(s) the rules could
+not establish; fail_on_unknown families: exceptions, defaults`). No built-in
+profile changes these values; setting a family to `false` where its profile
+says `true` is a policy deviation, and setting one to `true` is not.
 
 ## Exception boundaries
 
@@ -509,7 +614,7 @@ phase; a cache from another interpreter or tool version is simply invalidated.
 * A leading `/` or `./` **anchors the pattern to the root** (0.3.0): `/main.py` and
   `./main.py` match only the root-level `main.py`; `/src/*.py` matches `src/a.py` but
   not `src/sub/a.py` or `other/src/a.py`. The anchor applies wherever a glob is
-  accepted: `include`, `exclude`, `overrides[].paths`,
+  accepted: `include`, `exclude`, `overrides[].paths`, `file_roles.*`,
   `rules.magic_numbers.configuration_files` and boundary `path`s. Before 0.3.0 a
   leading `/` was a configuration error and `./` was stripped (`./main.py` meant
   `main.py`); a configuration that relied on `./pattern` matching nested files
@@ -555,7 +660,8 @@ Everything that loosens the strict profile is surfaced, never silent:
   `unsupported_sources = "ignore"`, `transparent_rethrow`, every transparent
   guard, every capture manager, every exception boundary
   (once, listing every class it approves), every `rules.defaults` mode looser
-  than the strict profile, and every override, each with its reason. The same list is in the text report, SARIF
+  than the strict profile, every `fail_on_unknown = false` where the profile
+  says `true`, and every override (path or role), each with its reason. The same list is in the text report, SARIF
   run properties, and `config validate`.
 * `effective_profile` (top level, next to `tool_version` and `schema_version`)
   names the profile in force, including one selected with `--profile`.

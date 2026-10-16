@@ -5,6 +5,9 @@ into temporary directories, and analyzed completely (not just changed files) so
 that cross-file effects are never missed. The working tree is not analyzed:
 uncommitted changes are not part of ``HEAD``. The configuration is the working
 tree's, applied to both sides, so the diff compares code under one policy.
+
+A diff finding's ``status`` has meant ``new``/``fixed``/``unchanged`` since 0.1.0, so
+the finding's own status (H1: ``violation`` or ``unknown``) is ``finding_status`` there.
 """
 
 import tempfile
@@ -72,6 +75,7 @@ class DiffFinding:
 
     def to_json_dict(self) -> dict[str, Any]:
         data = self.finding.to_json_dict()
+        data["finding_status"] = self.finding.status
         data["status"] = self.status
         return data
 
@@ -90,10 +94,15 @@ class DiffReport:
     def summary(self) -> dict[str, Any]:
         counts = {STATUS_NEW: 0, STATUS_FIXED: 0, STATUS_UNCHANGED: 0}
         hard = {STATUS_NEW: 0, STATUS_FIXED: 0, STATUS_UNCHANGED: 0}
+        gating = gate_module.unknown_gating_sections(self.config)
         for entry in self.findings:
             counts[entry.status] += 1
             finding = entry.finding
-            if finding.severity == SEVERITY_ERROR and not finding.is_suppressed:
+            if (
+                finding.severity == SEVERITY_ERROR
+                and not finding.is_suppressed
+                and gate_module.gates_by_severity(finding, gating)
+            ):
                 hard[entry.status] += 1
         return {
             "new": counts[STATUS_NEW],
