@@ -579,7 +579,7 @@ class _Resolver:
         return _Resolution(Target(TARGET_UNRESOLVED, name), CONFIDENCE_UNRESOLVED, "unbound name")
 
     def resolve_attribute(
-        self, path: str, unit: UnitMetrics, dotted: str, receiver_self: bool
+        self, path: str, unit: UnitMetrics, dotted: str, *, receiver_self: bool
     ) -> _Resolution:
         scope = self.scopes[path]
         parts = dotted.split(".")
@@ -659,10 +659,14 @@ def _classify(
         assert resolution is not None
         return resolution, EDGE_CALL
     if call.shape == CALL_ATTRIBUTE:
-        return resolver.resolve_attribute(path, unit, call.callee, call.receiver_self), EDGE_CALL
+        return resolver.resolve_attribute(
+            path, unit, call.callee, receiver_self=call.receiver_self
+        ), EDGE_CALL
     if call.shape == CALL_NEW:
         if "." in call.callee:
-            return resolver.resolve_attribute(path, unit, call.callee, False), EDGE_NEW
+            return resolver.resolve_attribute(
+                path, unit, call.callee, receiver_self=False
+            ), EDGE_NEW
         resolution = resolver.resolve_name(path, unit, call.callee)
         assert resolution is not None
         return resolution, EDGE_NEW

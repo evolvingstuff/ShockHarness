@@ -471,7 +471,7 @@ def _parameter_name(parameter: Node | None) -> str | None:
 def _identities(klass: str | None) -> tuple[ExceptionIdentity, ...]:
     if klass is None:
         return ()
-    return (ExceptionIdentity(klass, klass, CONFIDENCE_APPROXIMATE, False),)
+    return (ExceptionIdentity(klass, klass, CONFIDENCE_APPROXIMATE, broad=False),)
 
 
 def _catch_clause(source: SourceText, scope: str, try_node: Node, clause: Node) -> CatchFact:

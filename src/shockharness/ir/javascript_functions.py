@@ -156,7 +156,7 @@ class _Builder:
 
 
 def _builder(kind: str, label: str) -> _Builder:
-    return _Builder(kind, label, [], 0, 0, False, None)
+    return _Builder(kind, label, [], 0, 0, labeled=False, frozen=None)
 
 
 @dataclass(frozen=True)
@@ -648,13 +648,13 @@ class _UnitCollector:
             name = node_text(callee)
             if name == REQUIRE:
                 return  # CommonJS import: an import fact, not a call
-            self.calls.append(CallSite(span, name, CALL_NAME, False))
+            self.calls.append(CallSite(span, name, CALL_NAME, receiver_self=False))
             if name == self.own_name:
                 self._new(CK_RECURSION, "", parent)
         elif callee.type == "member_expression":
             self._member_call(callee, span, arguments, parent)
         else:
-            self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, False))
+            self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, receiver_self=False))
         self._arguments(arguments)
 
     def _new_call(self, node: Node, span: Span) -> None:
@@ -663,16 +663,18 @@ class _UnitCollector:
             return
         dotted = _dotted(_unwrap(constructor))
         if dotted is None:
-            self.calls.append(CallSite(span, _excerpt(constructor), CALL_DYNAMIC, False))
+            self.calls.append(
+                CallSite(span, _excerpt(constructor), CALL_DYNAMIC, receiver_self=False)
+            )
         else:
-            self.calls.append(CallSite(span, dotted, CALL_NEW, False))
+            self.calls.append(CallSite(span, dotted, CALL_NEW, receiver_self=False))
 
     def _member_call(
         self, callee: Node, span: Span, arguments: Node | None, parent: _Builder
     ) -> None:
         dotted = _dotted(callee)
         if dotted is None:
-            self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, False))
+            self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, receiver_self=False))
             return
         receiver = dotted.split(".")[0] == RECEIVER
         self.calls.append(CallSite(span, dotted, CALL_ATTRIBUTE, receiver))
@@ -700,7 +702,10 @@ class _UnitCollector:
             if argument.type == "identifier":
                 self.calls.append(
                     CallSite(
-                        node_span(self.source, argument), node_text(argument), CALL_ARGUMENT, False
+                        node_span(self.source, argument),
+                        node_text(argument),
+                        CALL_ARGUMENT,
+                        receiver_self=False,
                     )
                 )
             elif argument.type == "spread_element":
@@ -711,7 +716,7 @@ class _UnitCollector:
                             node_span(self.source, inner[0]),
                             node_text(inner[0]),
                             CALL_ARGUMENT,
-                            False,
+                            receiver_self=False,
                         )
                     )
 
@@ -1081,14 +1086,14 @@ def _declarator_bindings(declarator: Node, reassignable: bool, span: Span) -> li
         _module, is_import = _require_target(value)
         if is_import:
             return [
-                ModuleBinding(local, BINDING_IMPORT, False, span)
+                ModuleBinding(local, BINDING_IMPORT, mutable=False, span=span)
                 for _imported, local in _require_names(value)
             ]
     if name.type == "identifier" and value is not None:
         if value.type in FUNCTION_TYPES:
-            return [ModuleBinding(node_text(name), BINDING_FUNCTION, False, span)]
+            return [ModuleBinding(node_text(name), BINDING_FUNCTION, mutable=False, span=span)]
         if value.type in CLASS_TYPES:
-            return [ModuleBinding(node_text(name), BINDING_CLASS, False, span)]
+            return [ModuleBinding(node_text(name), BINDING_CLASS, mutable=False, span=span)]
     mutable = reassignable or _is_mutable_value(value)
     return [ModuleBinding(bound, BINDING_VARIABLE, mutable, span) for bound in pattern_names(name)]
 
@@ -1111,10 +1116,11 @@ def _statement_bindings(node: Node, span: Span) -> list[ModuleBinding]:
         if name is None:
             return []
         kind = BINDING_CLASS if node.type == "class_declaration" else BINDING_FUNCTION
-        return [ModuleBinding(node_text(name), kind, False, span)]
+        return [ModuleBinding(node_text(name), kind, mutable=False, span=span)]
     if node.type == "import_statement":
         return [
-            ModuleBinding(local, BINDING_IMPORT, False, span) for local in _import_bound_names(node)
+            ModuleBinding(local, BINDING_IMPORT, mutable=False, span=span)
+            for local in _import_bound_names(node)
         ]
     if node.type in DECLARATION_TYPES:
         return _declaration_bindings(node, span)

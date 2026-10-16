@@ -196,7 +196,11 @@ def bare_status(catch: CatchFact) -> str:
 def evaluate_approval(catch: CatchFact, applicable: tuple[Boundary, ...]) -> Approval:
     if catch.bare:
         return Approval(
-            False, (), (_bare_problem(catch),), CONFIDENCE_UNRESOLVED, bare_status(catch)
+            approved=False,
+            boundaries=(),
+            problems=(_bare_problem(catch),),
+            confidence=CONFIDENCE_UNRESOLVED,
+            status=bare_status(catch),
         )
     matched: list[Boundary] = []
     problems: list[str] = []

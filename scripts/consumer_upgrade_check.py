@@ -152,9 +152,9 @@ def check_example(
     for args in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-q", "-m", "clean")):
         result = git(repo, *args)
         if result.exit_code != 0:
-            steps.append(Step(name, "git " + args[0], False, tail(result.output)))
+            steps.append(Step(name, "git " + args[0], ok=False, detail=tail(result.output)))
             return steps
-    steps.append(Step(name, "git init + commit", True, "clean example committed"))
+    steps.append(Step(name, "git init + commit", ok=True, detail="clean example committed"))
 
     env_dir = workspace / f"venv-{name}"
     venv.EnvBuilder(with_pip=True).create(env_dir)
@@ -198,7 +198,7 @@ def check_example(
     changed = introduce_violation(repo, name)
     result = git(repo, "commit", "-q", "-a", "-m", "introduce a violation")
     if result.exit_code != 0:
-        steps.append(Step(name, "git commit violation", False, tail(result.output)))
+        steps.append(Step(name, "git commit violation", ok=False, detail=tail(result.output)))
         return steps
     result = shockharness(python, repo, "check", ".", "--format", "text")
     steps.append(

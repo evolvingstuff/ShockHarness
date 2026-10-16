@@ -132,7 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     diff = commands.add_parser(
         "diff", help="compare findings between two committed revisions (reporting only)"
     )
-    _add_revision_arguments(diff, True)
+    _add_revision_arguments(diff, required=True)
     _add_config_arguments(diff)
     _add_analysis_arguments(diff)
     _add_output_arguments(diff)
@@ -145,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     gate.add_argument("paths", nargs="*", type=Path, help="files or directories to analyze")
-    _add_revision_arguments(gate, False)
+    _add_revision_arguments(gate, required=False)
     _add_config_arguments(gate)
     _add_analysis_arguments(gate)
     _add_cache_argument(gate)
@@ -336,7 +336,7 @@ def _add_baseline_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_revision_arguments(parser: argparse.ArgumentParser, required: bool) -> None:
+def _add_revision_arguments(parser: argparse.ArgumentParser, *, required: bool) -> None:
     parser.add_argument(
         "--base", default=None, required=required, help="base revision (any local git ref)"
     )

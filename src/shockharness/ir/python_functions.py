@@ -574,12 +574,20 @@ class _UnitCollector:
         for argument in node.args:
             if isinstance(argument, ast.Name):
                 self.calls.append(
-                    CallSite(node_span(self.source, argument), argument.id, CALL_ARGUMENT, False)
+                    CallSite(
+                        node_span(self.source, argument),
+                        argument.id,
+                        CALL_ARGUMENT,
+                        receiver_self=False,
+                    )
                 )
             elif isinstance(argument, ast.Starred) and isinstance(argument.value, ast.Name):
                 self.calls.append(
                     CallSite(
-                        node_span(self.source, argument), argument.value.id, CALL_ARGUMENT, False
+                        node_span(self.source, argument),
+                        argument.value.id,
+                        CALL_ARGUMENT,
+                        receiver_self=False,
                     )
                 )
         for keyword in node.keywords:
@@ -589,7 +597,7 @@ class _UnitCollector:
                         node_span(self.source, keyword.value),
                         keyword.value.id,
                         CALL_ARGUMENT,
-                        False,
+                        receiver_self=False,
                     )
                 )
         if self.own_name is None:
@@ -606,7 +614,7 @@ class _UnitCollector:
     def _record_call(self, func: ast.expr, whole: ast.expr) -> None:
         span = node_span(self.source, whole)
         if isinstance(func, ast.Name):
-            self.calls.append(CallSite(span, func.id, CALL_NAME, False))
+            self.calls.append(CallSite(span, func.id, CALL_NAME, receiver_self=False))
             return
         dotted = _dotted(func)
         if dotted is not None:
@@ -614,7 +622,9 @@ class _UnitCollector:
             receiver = root in RECEIVER_NAMES and self.unit.kind == UNIT_METHOD
             self.calls.append(CallSite(span, dotted, CALL_ATTRIBUTE, receiver))
             return
-        self.calls.append(CallSite(span, _excerpt(self.source, func), CALL_DYNAMIC, False))
+        self.calls.append(
+            CallSite(span, _excerpt(self.source, func), CALL_DYNAMIC, receiver_self=False)
+        )
 
     # -- driver -------------------------------------------------------------
 
@@ -656,7 +666,12 @@ class _UnitCollector:
             if builder.kind == CK_BLOCK or builder.kind in _STATEMENT_BLOCKS:
                 children = tuple(c for c in children if not _trivial_expr(c))
             builder.frozen = ControlNode(
-                builder.kind, children, builder.operators, builder.sequences, builder.label, False
+                builder.kind,
+                children,
+                builder.operators,
+                builder.sequences,
+                builder.label,
+                labeled=False,
             )
         assert self.root.frozen is not None
         return self.root.frozen
@@ -837,9 +852,13 @@ def collect_python_bindings(source: SourceText, module: ast.Module) -> tuple[Mod
         statement = stack.pop()
         span = node_span(source, statement)
         if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
-            bindings[statement.name] = ModuleBinding(statement.name, BINDING_FUNCTION, False, span)
+            bindings[statement.name] = ModuleBinding(
+                statement.name, BINDING_FUNCTION, mutable=False, span=span
+            )
         elif isinstance(statement, ast.ClassDef):
-            bindings[statement.name] = ModuleBinding(statement.name, BINDING_CLASS, False, span)
+            bindings[statement.name] = ModuleBinding(
+                statement.name, BINDING_CLASS, mutable=False, span=span
+            )
         elif isinstance(statement, ast.Import | ast.ImportFrom):
             for alias in statement.names:
                 if alias.name == "*":
@@ -847,7 +866,7 @@ def collect_python_bindings(source: SourceText, module: ast.Module) -> tuple[Mod
                 bound = import_binding(alias)
                 if isinstance(statement, ast.ImportFrom):
                     bound = bound_name(alias)
-                bindings[bound] = ModuleBinding(bound, BINDING_IMPORT, False, span)
+                bindings[bound] = ModuleBinding(bound, BINDING_IMPORT, mutable=False, span=span)
         elif isinstance(statement, ast.Assign | ast.AnnAssign):
             targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
             mutable = _is_mutable_value(statement.value)

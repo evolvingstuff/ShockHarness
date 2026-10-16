@@ -123,6 +123,38 @@ def _shockharness(comment: Comment) -> list[SuppressionDirective]:
     return found
 
 
+def _pylint(text: str, span: Span) -> list[SuppressionDirective]:
+    found: list[SuppressionDirective] = []
+    for match in PYLINT.finditer(text):
+        verb = match.group("verb")
+        if verb == "skip-file":
+            found.append(
+                _directive(
+                    TOOL_PYLINT,
+                    DIRECTIVE_SCOPE_FILE,
+                    (),
+                    narrow=False,
+                    text=match.group(0),
+                    span=span,
+                )
+            )
+            continue
+        codes = _codes(match.group("codes"))
+        scope = DIRECTIVE_SCOPE_NEXT_LINE if verb == "disable-next" else DIRECTIVE_SCOPE_LINE
+        found.append(_directive(TOOL_PYLINT, scope, codes, _narrow(codes), match.group(0), span))
+    return found
+
+
+def _codeless(
+    pattern: re.Pattern[str], tool: str, scope: str, text: str, span: Span
+) -> list[SuppressionDirective]:
+    """Directives that never name codes (``pragma: no cover``, ``mypy: ignore-errors``)."""
+    return [
+        _directive(tool, scope, (), narrow=False, text=match.group(0), span=span)
+        for match in pattern.finditer(text)
+    ]
+
+
 def _python_comment(comment: Comment) -> list[SuppressionDirective]:
     text = comment.text
     span = comment.span
@@ -150,20 +182,9 @@ def _python_comment(comment: Comment) -> list[SuppressionDirective]:
                 TOOL_TYPE_IGNORE, DIRECTIVE_SCOPE_LINE, codes, _narrow(codes), match.group(0), span
             )
         )
-    for match in PYLINT.finditer(text):
-        verb = match.group("verb")
-        if verb == "skip-file":
-            found.append(
-                _directive(TOOL_PYLINT, DIRECTIVE_SCOPE_FILE, (), False, match.group(0), span)
-            )
-            continue
-        codes = _codes(match.group("codes"))
-        scope = DIRECTIVE_SCOPE_NEXT_LINE if verb == "disable-next" else DIRECTIVE_SCOPE_LINE
-        found.append(_directive(TOOL_PYLINT, scope, codes, _narrow(codes), match.group(0), span))
-    for match in PRAGMA.finditer(text):
-        found.append(_directive(TOOL_PRAGMA, DIRECTIVE_SCOPE_LINE, (), False, match.group(0), span))
-    for match in MYPY.finditer(text):
-        found.append(_directive(TOOL_MYPY, DIRECTIVE_SCOPE_FILE, (), False, match.group(0), span))
+    found.extend(_pylint(text, span))
+    found.extend(_codeless(PRAGMA, TOOL_PRAGMA, DIRECTIVE_SCOPE_LINE, text, span))
+    found.extend(_codeless(MYPY, TOOL_MYPY, DIRECTIVE_SCOPE_FILE, text, span))
     found.extend(_shockharness(comment))
     return found
 
@@ -206,13 +227,15 @@ def _javascript_comment(comment: Comment) -> list[SuppressionDirective]:
             tool, scope = TOOL_TS_EXPECT_ERROR, DIRECTIVE_SCOPE_NEXT_LINE
         else:
             tool, scope = TOOL_TS_IGNORE, DIRECTIVE_SCOPE_NEXT_LINE
-        found.append(_directive(tool, scope, (), False, match.group(0), span))
+        found.append(_directive(tool, scope, (), narrow=False, text=match.group(0), span=span))
     for match in ISTANBUL.finditer(text):
         scope = DIRECTIVE_SCOPE_FILE if match.group("kind") == "file" else DIRECTIVE_SCOPE_REGION
-        found.append(_directive(TOOL_ISTANBUL, scope, (), False, match.group(0), span))
+        found.append(
+            _directive(TOOL_ISTANBUL, scope, (), narrow=False, text=match.group(0), span=span)
+        )
     for match in C8.finditer(text):
         scope = DIRECTIVE_SCOPE_FILE if match.group("kind") == "file" else DIRECTIVE_SCOPE_REGION
-        found.append(_directive(TOOL_C8, scope, (), False, match.group(0), span))
+        found.append(_directive(TOOL_C8, scope, (), narrow=False, text=match.group(0), span=span))
     found.extend(_shockharness(comment))
     return found
 

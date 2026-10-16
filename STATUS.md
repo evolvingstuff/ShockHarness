@@ -2991,6 +2991,18 @@ They do not gate; converting them to keyword arguments is a mechanical cleanup
 proposed as its own session. The H3 code itself passes its own rules: its flags
 are keyword-only.
 
+**Follow-up done (2026-10-16):** all 49 sites now pass the flag by keyword (the
+callee's own parameter or field name, from the first Boolean argument onward),
+and the function flags are keyword-only (`analyze_revision(..., *, is_head)`,
+`_add_revision_arguments(parser, *, required)`, `SymbolTable._bind_statement`
+/ `_bind_import(..., *, top_level)`, `resolve_attribute(..., *, receiver_self)`).
+The tool's own code has no BOOL001 finding; the suite (1056), Ruff and the
+self-gate pass. A self-diff against 650eab3 fixes 51 findings and adds one
+CPLX002 on `SymbolTable._bind_import` with the same cognitive complexity (17)
+as before: its signature changed, so its fingerprint did. `_python_comment`
+grew past 50 lines as the keyword calls wrapped, so its pylint and code-free
+directive loops moved into `_pylint` and `_codeless`.
+
 ### Regression against 0.5.0
 
 `pip install shockharness==0.5.0` against this tree, same inputs, all three

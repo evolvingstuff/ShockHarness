@@ -143,14 +143,14 @@ class SymbolTable:
         self.bindings: dict[str, _Binding] = {}
         self.module_name = module_name
         for stmt in module.body:
-            self._bind_statement(stmt, True)
+            self._bind_statement(stmt, top_level=True)
         for node in ast.walk(module):
             if isinstance(node, ast.Import | ast.ImportFrom) and node not in module.body:
-                self._bind_import(node, False)
+                self._bind_import(node, top_level=False)
 
-    def _bind_statement(self, stmt: ast.stmt, top_level: bool) -> None:
+    def _bind_statement(self, stmt: ast.stmt, *, top_level: bool) -> None:
         if isinstance(stmt, ast.Import | ast.ImportFrom):
-            self._bind_import(stmt, top_level)
+            self._bind_import(stmt, top_level=top_level)
         elif isinstance(stmt, ast.ClassDef):
             self.bindings[stmt.name] = _Binding(
                 f"{self.module_name}.{stmt.name}", CONFIDENCE_APPROXIMATE
@@ -160,13 +160,13 @@ class SymbolTable:
             # at module level; the bodies are scanned as approximate bindings.
             for child in ast.iter_child_nodes(stmt):
                 if isinstance(child, ast.stmt):
-                    self._bind_statement(child, False)
+                    self._bind_statement(child, top_level=False)
         else:
             for name in _assigned_names(stmt):
                 # A rebinding (``MyError = ValueError``) is dynamic: unresolved.
                 self.bindings[name] = _Binding(None, CONFIDENCE_UNRESOLVED)
 
-    def _bind_import(self, node: ast.Import | ast.ImportFrom, top_level: bool) -> None:
+    def _bind_import(self, node: ast.Import | ast.ImportFrom, *, top_level: bool) -> None:
         confidence = CONFIDENCE_EXACT if top_level else CONFIDENCE_APPROXIMATE
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -246,11 +246,11 @@ def resolve_identity(expr: ast.expr, table: SymbolTable, source: SourceText) -> 
         written = ""
     dotted = dotted_name(expr)
     if dotted is None:
-        return ExceptionIdentity(written, None, CONFIDENCE_UNRESOLVED, False)
+        return ExceptionIdentity(written, None, CONFIDENCE_UNRESOLVED, broad=False)
     parts = dotted.split(".")
     root = table.resolve_name(parts[0])
     if root.qualified is None:
-        return ExceptionIdentity(written, None, CONFIDENCE_UNRESOLVED, False)
+        return ExceptionIdentity(written, None, CONFIDENCE_UNRESOLVED, broad=False)
     rest = parts[1:]
     qualified = _normalize(".".join([root.qualified, *rest]))
     broad = qualified in BROAD_IDENTITIES

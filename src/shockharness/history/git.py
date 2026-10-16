@@ -39,10 +39,12 @@ def run_git(cwd: Path, args: Sequence[str]) -> GitResult:
         completed = subprocess.run(command, cwd=directory, capture_output=True, check=True)
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode("utf-8", errors="replace").strip()
-        return GitResult(False, b"", f"git {args[0]} failed (exit {exc.returncode}): {stderr}")
+        return GitResult(
+            ok=False, stdout=b"", error=f"git {args[0]} failed (exit {exc.returncode}): {stderr}"
+        )
     except OSError as exc:
-        return GitResult(False, b"", f"git could not be run: {exc}")
-    return GitResult(True, completed.stdout, None)
+        return GitResult(ok=False, stdout=b"", error=f"git could not be run: {exc}")
+    return GitResult(ok=True, stdout=completed.stdout, error=None)
 
 
 def decode_output(result: GitResult, what: str) -> tuple[str | None, str | None]:

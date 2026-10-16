@@ -198,6 +198,7 @@ def analyze_revision(
     config: EffectiveConfig,
     options: AnalysisOptions,
     base_config: EffectiveConfig | None,
+    *,
     is_head: bool,
 ) -> Revision:
     """Export the tree at ``ref`` and analyze the part that corresponds to ``root``.
@@ -338,8 +339,10 @@ def diff_revisions(
     ``metrics.graph.abstraction_displacement``.
     """
     location = _require_repository(root)
-    base = analyze_revision(root, location, base_ref, config, options, None, False)
-    head = analyze_revision(root, location, head_ref, config, options, base.policy.config, True)
+    base = analyze_revision(root, location, base_ref, config, options, None, is_head=False)
+    head = analyze_revision(
+        root, location, head_ref, config, options, base.policy.config, is_head=True
+    )
     combined = _verify(root, location, config, base, head)
     head = replace(head, report=with_verification(head.report, combined))
     base_by_fp = _by_fingerprint(base.report.findings)
