@@ -5,6 +5,8 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
 Feedback round F4 (`docs/shockharness-suggestions-4.md`, from agents running
 ShockHarness on a real project; spec 21.1 decisions 12, 13 and 18). Verdicts are
 unchanged except where listed under Changed; `tests/unit/test_profile_regression.py`
