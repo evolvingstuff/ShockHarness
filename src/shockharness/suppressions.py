@@ -73,6 +73,17 @@ def parse_suppressions(
                     SuppressionProblem(comment.span, f"suppression names unknown rule {rule_id!r}")
                 )
                 valid = False
+            elif registry.needs_base_revision(registry.get_rule(rule_id)):
+                # Spec 21.1 decision 5: a change cannot excuse its own weakening of the
+                # checks with a comment it adds itself; exceptions are central policy.
+                problems.append(
+                    SuppressionProblem(
+                        comment.span,
+                        f"{rule_id} cannot be suppressed inline; record an exception in "
+                        "rules.verification or an [[overrides]] entry instead",
+                    )
+                )
+                valid = False
         if reason == "":
             problems.append(SuppressionProblem(comment.span, "suppression has an empty reason"))
             valid = False

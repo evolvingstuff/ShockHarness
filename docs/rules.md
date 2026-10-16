@@ -58,6 +58,23 @@ A file that could not be analyzed is never `pass`: its `status` is
 `parse_error`/`decode_error`/`read_error`/`unsupported_source` and its
 `rules_applied` is empty.
 
+## Categories
+
+Every finding carries a `category`, the category of its rule's family (spec
+section 21.1 decision 2). It tells "the code is wrong" from "the checks were
+weakened" without a separate exit code: a gating finding of any category exits
+1.
+
+| Category | Families | Meaning |
+|---|---|---|
+| `policy_integrity` | `VERIFY*` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
+| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*` | the code hides a failure, a missing value or an unexplained number |
+| `structural` | `CPLX*` | complexity and coupling (advisory) |
+
+The JSON report counts findings per category in `summary.by_category`; SARIF
+results carry it in `properties.category`; the text output of `diff` and `gate`
+lists policy-integrity findings first, under their own heading.
+
 ## Implemented
 
 ### MAGIC001: numeric literal outside 0/1 (error, Python and JavaScript)
@@ -542,6 +559,82 @@ early return, a catch or a default; the graph records the delegation and the
 numbers stay advisory either way. The `refactor-complexity` skill walks
 through it.
 
+### VERIFY001, VERIFY002, VERIFY004: verification integrity (warning, Python and JavaScript; need a base revision)
+
+These rules ask what a change did to its **own verification**. They compare a
+head revision with a base revision, so they run only under
+`shockharness diff --base B --head H` and `shockharness gate --base B --head H`.
+A plain `check` reports them as not applicable (`coverage.verification.status =
+"not_applicable"` and a line in the text output), never as passing.
+
+Only what the change **added** is reported. A skip, suppression or weak test
+that already existed at the base revision is debt, not a finding. A head file is
+compared with its base version: the same path, or the path git reports it was
+renamed from. A file with no base version is new, and everything in it counts
+as added. When the base version could not be analyzed (a parse failure at
+base), or rename detection failed and the file has no base version under its
+own path, the findings are `unknown` (confidence `unresolved`): the rule cannot
+tell what this change added. `rules.verification.fail_on_unknown` (default
+`false`) decides whether those gate.
+
+| Rule | What a change added | Files (role) |
+|---|---|---|
+| `VERIFY001` | a skip, expected-failure or focus marker on a test | test |
+| `VERIFY002` | a blanket suppression comment (names no rule codes, names `all`, or covers a file); narrow ones too with `report_narrow_suppressions = true` | every role except generated and vendor |
+| `VERIFY004` | an assertion that can never fail; a test whose assertions all disappeared; a test whose body became empty | test |
+
+**VERIFY001 markers.** Python: `pytest.mark.skip` / `skipif` / `xfail` (also
+through `from pytest import mark`), `unittest.skip` / `skipIf` / `skipUnless` /
+`expectedFailure` (also imported by name) on a test function or test class; a
+`pytestmark = ...` assignment at module or class level; `pytest.skip(...)`,
+`pytest.xfail(...)` or `self.skipTest(...)` called directly in a test body.
+JavaScript: `describe` / `it` / `test` with `.skip` or `.only`, and `xdescribe`
+/ `xit` / `xtest` / `fdescribe` / `fit`. A marker is identified by its test's
+qualified name, its kind and its text, so moving it does not make it new. A
+Python skip whose reason is listed in `rules.verification.allowed_skip_reasons`
+is not reported (each listed reason is a policy deviation).
+
+**VERIFY002 directives.** Python: `# noqa`, `# ruff: noqa`, `# flake8: noqa`,
+`# type: ignore`, `# pylint: disable` / `disable-next` / `skip-file`,
+`# pragma: no cover` / `no branch`, `# mypy: ignore-errors`. JavaScript:
+`eslint-disable`, `eslint-disable-line`, `eslint-disable-next-line`,
+`@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `istanbul ignore`,
+`c8` / `v8 ignore`. Both: `shockharness: ignore[...]`. A directive that names at
+least one code (`# noqa: E501`, `// eslint-disable-next-line no-console`) is
+*narrow*; one that names none, names `all`, or covers a whole file is
+*blanket*. A directive's identity is its tool and the codes it names, not its
+free-text description or a ShockHarness reason, so rewording a reason is not a
+new suppression. `@ts-expect-error` names no code and is therefore blanket.
+
+**VERIFY004 patterns.** Tautologies: `assert <truthy constant>`, `assert c == c`
+or `assert c is c` on equal constants, `self.assertTrue` / `assertEqual` /
+`assertIs` on constants, `expect(L).toBe(L)` / `toEqual` / `toStrictEqual`,
+`expect(L).toBeTruthy()` / `toBeFalsy()` on a literal of that truthiness,
+`assert(L)` / `assert.ok(L)` on a truthy literal, `assert.equal` /
+`strictEqual` / `deepEqual` / `deepStrictEqual(L, L)`. Emptied tests: a test
+(matched by qualified name) that had at least one assertion at base and has
+none at head, reported with both counts; when its body became only `pass` /
+`...` / a docstring / an empty block, the message says so. Assertions are
+counted syntactically: `assert` statements, calls whose name starts with
+`assert` or `expect`, `assert.*` methods, and `pytest.raises` / `warns` /
+`deprecated_call` blocks.
+
+**Severity and gating.** Every VERIFY finding carries
+`rules.verification.severity`: `"warning"` by default in every profile
+(specification section 21.1 decision 9: a new rule does not gate by default
+until its precision has been measured on a reviewed corpus), `"error"` to make
+them gate like any hard violation (exit 1), or `"review"` (a policy deviation).
+Their category is `policy_integrity`; see Categories above.
+
+**Not suppressible inline.** A change cannot excuse its own weakening of the
+checks with a comment it adds itself (spec section 21.1 decision 5). A
+`shockharness: ignore[VERIFY00x]` comment is a `SUPP001` error. Record
+exceptions centrally: `rules.verification.*`, or an `[[overrides]]` entry by
+path or role, both of which are visible policy changes in review.
+
+`VERIFY003` (a semantic diff of policy files, workflows and baselines) is
+registered for part 2 of the milestone and produces no findings yet.
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are
@@ -550,6 +643,7 @@ listed in every report under `coverage.rules_not_implemented`.
 | ID | Name | Planned milestone |
 |---|---|---|
 | MAGIC002 | suspicious string literal (advisory) | post-B |
+| VERIFY003 | weakened policy, workflow or baseline (semantic diff of protected paths) | H2 part 2 |
 
 ## Rule metadata contract
 

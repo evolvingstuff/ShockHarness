@@ -36,7 +36,7 @@ def test_severities_are_valid() -> None:
         assert rule.default_severity in registry.SEVERITIES, rule.rule_id
 
 
-def test_implemented_rules_are_exactly_the_milestone_e_set() -> None:
+def test_implemented_rules_are_exactly_the_h2_part_1_set() -> None:
     assert {r.rule_id for r in registry.implemented_rules()} == {
         "MAGIC001",
         "EXC001",
@@ -56,8 +56,34 @@ def test_implemented_rules_are_exactly_the_milestone_e_set() -> None:
         "CPLX006",
         "SUPP001",
         "SUPP002",
+        "VERIFY001",
+        "VERIFY002",
+        "VERIFY004",
     }
-    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
+    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002", "VERIFY003"}
+
+
+def test_verification_rules_need_a_base_revision_and_are_policy_integrity() -> None:
+    assert [r.rule_id for r in registry.base_revision_rules()] == [
+        "VERIFY001",
+        "VERIFY002",
+        "VERIFY004",
+    ]
+    for rule in registry.RULES:
+        assert rule.family in registry.FAMILY_CATEGORIES, rule.rule_id
+        expected = (
+            registry.CATEGORY_POLICY
+            if rule.family == registry.VERIFICATION_FAMILY
+            else registry.FAMILY_CATEGORIES[rule.family]
+        )
+        assert registry.category_of(rule.rule_id) == expected
+        if rule.family == registry.VERIFICATION_FAMILY:
+            assert rule.config_section == registry.VERIFICATION_SECTION
+            # Spec 21.1 decision 9: new rules ship at warning until precision is measured.
+            assert rule.default_severity == registry.SEVERITY_WARNING
+            assert registry.needs_base_revision(rule)
+        else:
+            assert not registry.needs_base_revision(rule)
 
 
 def test_complexity_rules_are_warnings_with_the_complexity_section() -> None:

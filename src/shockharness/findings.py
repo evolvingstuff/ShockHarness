@@ -9,6 +9,7 @@ from shockharness.ir.model import (
     CONFIDENCE_UNRESOLVED,
     Span,
 )
+from shockharness.rules.registry import category_of
 
 __all__ = [
     "CONFIDENCE_APPROXIMATE",
@@ -100,6 +101,7 @@ class Finding:
             "evidence": self.evidence,
             "confidence": self.confidence,
             "status": self.status,
+            "category": category_of(self.rule_id),
             "remediation": self.remediation,
             "safe_autofix": self.safe_autofix,
             "scope": self.scope,

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from shockharness.constants import GIT_CHANGE_RECORD_TOKENS, GIT_RENAME_RECORD_TOKENS
+
 GIT = "git"
 RECORD_SEPARATOR = "\x1e"
 FIELD_SEPARATOR = "\x1f"
@@ -77,6 +79,42 @@ def locate_repository(root: Path) -> tuple[RepositoryLocation | None, str | None
     toplevel = Path(lines[0])
     prefix = lines[1] if len(lines) > 1 else ""
     return RepositoryLocation(toplevel=toplevel, prefix=prefix), None
+
+
+RENAME_STATUS_PREFIX = "R"
+COPY_STATUS_PREFIX = "C"
+NUL = "\0"
+
+
+def renamed_files(
+    location: RepositoryLocation, base: str, head: str
+) -> tuple[dict[str, str] | None, str | None]:
+    """Files git considers renamed between two commits, as root-relative POSIX paths
+    ``{head path: base path}`` (H2: VERIFY rules follow a renamed file to its base
+    version). Returns (renames, error); exactly one is set. Only files under the
+    analysis root (``location.prefix``) are reported."""
+    pathspec = location.prefix if location.prefix != "" else "."
+    text, error = run_git_text(
+        location.toplevel,
+        ["diff", "-M", "--name-status", "-z", base, head, "--", pathspec],
+    )
+    if text is None:
+        return None, error
+    tokens = [token for token in text.split(NUL) if token != ""]
+    renames: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        status = tokens[index]
+        if not status.startswith((RENAME_STATUS_PREFIX, COPY_STATUS_PREFIX)):
+            index += GIT_CHANGE_RECORD_TOKENS
+            continue
+        _, old, new = tokens[index : index + GIT_RENAME_RECORD_TOKENS]
+        index += GIT_RENAME_RECORD_TOKENS
+        if not status.startswith(RENAME_STATUS_PREFIX):
+            continue
+        if old.startswith(location.prefix) and new.startswith(location.prefix):
+            renames[new[len(location.prefix) :]] = old[len(location.prefix) :]
+    return renames, None
 
 
 def resolve_commit(root: Path, ref: str) -> tuple[str | None, str | None]:

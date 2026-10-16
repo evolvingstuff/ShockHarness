@@ -33,6 +33,8 @@ from shockharness.history.hotspots import HOTSPOTS_FORMULA
 from shockharness.roles import empty_role_counts
 from shockharness.rules import registry
 from shockharness.rules.complexity import SETTING_FAN_OUT_WARN, THRESHOLD_OF_RULE
+from shockharness.rules.registry import CATEGORIES, VERIFICATION_SECTION, category_of
+from shockharness.rules.verification import not_applicable_coverage
 from shockharness.version import __version__
 
 STATUS_COMPLETE = "complete"
@@ -54,6 +56,11 @@ STATUS_FAILED = "failed"
 # Rule families whose findings are policy (gating or review) rather than advisory metrics.
 POLICY_FAMILIES = ("MAGIC", "EXC", "DEF", "SUPP")
 ROOT_DIRECTORY = "."
+
+
+# coverage.verification (H2): "not_applicable" in a plain check, "analyzed" in a
+# revision diff (see gating/diff.py), "disabled" when rules.verification.enabled is false.
+VERIFICATION_COVERAGE = "verification"
 
 
 @dataclass(frozen=True)
@@ -151,6 +158,8 @@ def _coverage(
         "rules_implemented": [r.rule_id for r in registry.implemented_rules()],
         "rules_not_implemented": [r.rule_id for r in registry.RULES if not r.implemented],
         "rules_disabled_globally": disabled_globally,
+        "rules_needing_base_revision": [r.rule_id for r in registry.base_revision_rules()],
+        VERIFICATION_COVERAGE: not_applicable_coverage(config.section(VERIFICATION_SECTION)),
         "files_analyzed": sum(1 for f in files if not f.failed),
         "files_failed": sum(1 for f in files if f.failed),
         "roles": roles,
@@ -221,6 +230,7 @@ def build_summary(
     as ``execution_summary``, so the totals agree by construction."""
     by_severity: dict[str, int] = {}
     by_status = {status: 0 for status in FINDING_STATUSES}
+    by_category = {category: 0 for category in CATEGORIES}
     by_role = empty_role_counts()
     role_of = {file.path: file.role for file in files}
     by_rule: dict[str, int] = {}
@@ -230,6 +240,7 @@ def build_summary(
     for finding in findings:
         directory = top_level_directory(finding.path)
         by_status[finding.status] += 1
+        by_category[category_of(finding.rule_id)] += 1
         by_role[role_of[finding.path]] += 1
         if finding.severity not in by_severity:
             by_severity[finding.severity] = 0
@@ -258,6 +269,7 @@ def build_summary(
         "suppressed": sum(1 for f in findings if f.is_suppressed),
         "by_severity": dict(sorted(by_severity.items())),
         "by_status": by_status,
+        "by_category": by_category,
         "by_role": by_role,
         "by_rule": dict(sorted(by_rule.items())),
         "by_directory": dict(sorted(by_directory.items())),
@@ -271,6 +283,22 @@ def build_summary(
             {"path": path, "policy_findings": count} for path, count in ranked[:SUMMARY_TOP_FILES]
         ],
         "complexity": _complexity_summary(metrics),
+    }
+
+
+def execution_summary(files: Sequence[FileResult], findings: Sequence[Finding]) -> dict[str, Any]:
+    """Totals of a report before any baseline is applied (``baselined`` starts at 0)."""
+    severity_counts: dict[str, int] = {}
+    for finding in findings:
+        if finding.severity not in severity_counts:
+            severity_counts[finding.severity] = 0
+        severity_counts[finding.severity] += 1
+    return {
+        "files": len(files),
+        "findings": len(findings),
+        "findings_by_severity": dict(sorted(severity_counts.items())),
+        "suppressed": sum(1 for f in findings if f.is_suppressed),
+        "baselined": 0,
     }
 
 
@@ -291,11 +319,6 @@ def build_report(
     findings = tuple(
         sorted((f for file in ordered_files for f in file.findings), key=lambda f: f.sort_key())
     )
-    severity_counts: dict[str, int] = {}
-    for finding in findings:
-        if finding.severity not in severity_counts:
-            severity_counts[finding.severity] = 0
-        severity_counts[finding.severity] += 1
     return Report(
         schema_version=REPORT_SCHEMA_VERSION,
         tool_version=__version__,
@@ -306,13 +329,7 @@ def build_report(
         findings=findings,
         metrics={**dict(metrics), "history": dict(HISTORY_NOT_COLLECTED)},
         gate=gate,
-        execution_summary={
-            "files": len(ordered_files),
-            "findings": len(findings),
-            "findings_by_severity": dict(sorted(severity_counts.items())),
-            "suppressed": sum(1 for f in findings if f.is_suppressed),
-            "baselined": 0,
-        },
+        execution_summary=execution_summary(ordered_files, findings),
         summary=build_summary(ordered_files, findings, metrics),
         elapsed_seconds=round(elapsed_seconds, ELAPSED_DECIMALS),
     )

@@ -95,7 +95,9 @@ def test_hard_violations_warn_mode(
 def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: EffectiveConfig) -> None:
     write(empty_root, "src/a.py", "x = 1\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
-    assert report.coverage["rules_not_implemented"] == ["MAGIC002"]
+    assert report.coverage["rules_not_implemented"] == ["MAGIC002", "VERIFY003"]
+    assert report.coverage["rules_needing_base_revision"] == ["VERIFY001", "VERIFY002", "VERIFY004"]
+    assert report.coverage["verification"]["status"] == "not_applicable"
     assert "DEF001" not in report.coverage["rules_not_implemented"]
     assert "EXC001" not in report.coverage["rules_not_implemented"]
     assert report.coverage["rules_implemented"] == [
@@ -117,6 +119,9 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "CPLX006",
         "SUPP001",
         "SUPP002",
+        "VERIFY001",
+        "VERIFY002",
+        "VERIFY004",
     ]
     assert report.coverage["languages"]["python"]["parser"] == "python-ast"
 

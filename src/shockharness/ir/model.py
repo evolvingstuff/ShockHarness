@@ -492,6 +492,90 @@ class ModuleBinding:
     span: Span
 
 
+# --- Verification facts (H2) -------------------------------------------------------------
+# What VERIFY001, VERIFY002 and VERIFY004 compare between a base and a head revision.
+# The facts are syntax only; the rules (rules/verification.py) decide what counts as added.
+
+MARKER_SKIP = "skip"  # the test does not run (pytest.mark.skip, it.skip, xit, ...)
+MARKER_XFAIL = "xfail"  # the test runs but its failure is expected (xfail, expectedFailure)
+MARKER_FOCUS = "focus"  # only this test or suite runs (it.only, fit, fdescribe, ...)
+MARKER_KINDS = (MARKER_SKIP, MARKER_XFAIL, MARKER_FOCUS)
+
+DIRECTIVE_SCOPE_LINE = "line"
+DIRECTIVE_SCOPE_NEXT_LINE = "next-line"
+DIRECTIVE_SCOPE_REGION = "region"  # an eslint-disable or coverage region until re-enabled
+DIRECTIVE_SCOPE_FILE = "file"
+
+
+@dataclass(frozen=True)
+class SkipMarker:
+    """A marker that takes a test, class or suite out of the run or excuses its failure.
+
+    ``test`` is the qualified name it applies to (``"test_add"``, ``"TestMath.test_add"``,
+    ``"math > adds"`` for JavaScript suites, ``"<module>"`` for a module-wide
+    ``pytestmark``); ``text`` is the marker as written with whitespace collapsed;
+    ``reason`` is its reason argument when that is a string literal.
+    """
+
+    kind: str
+    test: str
+    text: str
+    reason: str | None
+    span: Span
+
+
+@dataclass(frozen=True)
+class SuppressionDirective:
+    """A comment that silences a linter, type checker, coverage tool or ShockHarness.
+
+    ``tool`` names the directive family (``noqa``, ``type-ignore``, ``eslint-disable``,
+    ...); ``codes`` are the rule codes it names; ``narrow`` is true when it names at
+    least one code (and, for ShockHarness, carries a reason). ``text`` is the directive
+    as written with whitespace collapsed.
+    """
+
+    tool: str
+    scope: str
+    codes: tuple[str, ...]
+    narrow: bool
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class Tautology:
+    """An assertion that cannot fail (``assert True``, ``expect(1).toBe(1)``)."""
+
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class CaseFact:
+    """One test case: a ``test*`` function or method, or an ``it``/``test`` call.
+
+    ``assertions`` counts assert statements, ``assert*``/``expect*`` calls and
+    assertion contexts (``pytest.raises``) anywhere in its body; ``body_empty`` is true
+    when the body is only ``pass``/``...``/a docstring, or an empty block.
+    """
+
+    name: str
+    span: Span
+    assertions: int
+    tautologies: tuple[Tautology, ...]
+    body_empty: bool
+
+
+@dataclass(frozen=True)
+class VerificationFacts:
+    markers: tuple[SkipMarker, ...]
+    suppressions: tuple[SuppressionDirective, ...]
+    cases: tuple[CaseFact, ...]
+
+
+NO_VERIFICATION = VerificationFacts(markers=(), suppressions=(), cases=())
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -504,6 +588,7 @@ class ModuleFacts:
     functions: tuple[FunctionFact, ...]
     imports: tuple[ImportFact, ...]
     bindings: tuple[ModuleBinding, ...]
+    verification: VerificationFacts
     parse_failure: ParseFailure | None
 
 
@@ -520,5 +605,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         functions=(),
         imports=(),
         bindings=(),
+        verification=NO_VERIFICATION,
         parse_failure=failure,
     )

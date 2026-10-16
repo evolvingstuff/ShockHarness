@@ -155,6 +155,27 @@ configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X |
 # always failed the gate, and keeps doing so unless this is false (a policy deviation).
 fail_on_unknown = true
 
+# Verification integrity (VERIFY001, VERIFY002, VERIFY004; H2): compares a head revision
+# with a base revision, so it runs only under `diff` / `gate --base --head`; a plain
+# `check` reports it as not applicable. Findings are policy_integrity and cannot be
+# suppressed inline.
+[tool.shockharness.rules.verification]
+enabled = true
+# Severity of every VERIFY finding: "warning" (default: reported, never gating, per
+# spec 21.1 decision 9), "error" (gates like any hard violation), "review" (a
+# policy deviation).
+severity = "warning"
+# A finding whose base revision could not be analyzed, or whose file's rename could
+# not be determined, is unknown; with this false it is reported and never gates.
+fail_on_unknown = false
+# Reasons (exact strings of a skip marker's reason argument) that make an added skip
+# acceptable; each listed reason is a policy deviation. Python markers only:
+# JavaScript skips carry no reason.
+allowed_skip_reasons = []
+# VERIFY002 reports blanket suppressions always; narrow ones (naming rule codes) only
+# when this is true.
+report_narrow_suppressions = false
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

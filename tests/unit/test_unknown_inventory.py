@@ -111,6 +111,13 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "CPLX001-CPLX006 measure what was resolved: violation (unresolved calls are listed "
         "in the CPLX005 message and never counted)",
     ),
+    # VERIFY001, VERIFY002, VERIFY004 (H2).
+    ("rules/verification.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),
+        "violation when the base version of the file is known; unknown (confidence "
+        "unresolved) when the base version could not be analyzed, or when rename detection "
+        "failed and the file has no base version under its own path",
+    ),
     ("suppressions.py", "_problem_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "SUPP001 is exact: violation",

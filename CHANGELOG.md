@@ -5,12 +5,42 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H2 part 1 of specification section 21: verification integrity.
+`VERIFY001`, `VERIFY002` and `VERIFY004` compare a head revision with its base
+in `diff` and `gate --base/--head` and report what the change added to weaken
+its own checks. They ship at `warning` (spec 21.1 decision 9) and change no
+existing verdict: a plain `check` reports them as not applicable.
+
 Milestone H1 of specification section 21: the `unknown` finding status with
 per-family `fail_on_unknown`, and file roles. Every existing test, the golden
 corpus under all three profiles and the self-gate keep their 0.3.0 verdicts
 and exit codes (pinned by `tests/unit/test_profile_regression.py`).
 
 ### Added
+- `VERIFY001` (added test skip, expected-failure or focus marker: pytest and
+  unittest markers, `pytestmark`, `pytest.skip` / `self.skipTest` in a test
+  body; `describe` / `it` / `test` with `.skip` / `.only`, `x*` and `f*`
+  spellings), `VERIFY002` (added blanket suppression comment: `noqa`,
+  `type: ignore`, `pylint: disable`, `pragma: no cover`, `mypy:
+  ignore-errors`, `eslint-disable*`, `@ts-ignore` / `@ts-expect-error` /
+  `@ts-nocheck`, `istanbul` / `c8` / `v8 ignore`, `shockharness: ignore`;
+  narrow ones on request), `VERIFY004` (added tautological assertion, a test
+  whose assertions all disappeared, a test whose body became empty). Only
+  additions are reported; what existed at base is debt. Renames detected by
+  git are followed. A file whose base version could not be analyzed, or whose
+  rename status could not be established, yields `unknown` findings. Test-role
+  files for VERIFY001/004; every role except generated and vendor for VERIFY002.
+- `[tool.shockharness.rules.verification]`: `enabled`, `severity`
+  (`"warning"` default in every profile, `"error"`, `"review"`),
+  `fail_on_unknown` (default `false`), `allowed_skip_reasons`,
+  `report_narrow_suppressions`. `severity = "review"` and each allowed skip
+  reason are policy deviations; `severity = "error"` tightens and is not.
+- Finding categories: `policy_integrity` (VERIFY), `contract_integrity`
+  (MAGIC, EXC, DEF, SUPP), `structural` (CPLX). The text output of `diff` and
+  `gate` lists policy-integrity findings first under their own heading and
+  prints a `verification:` line; `check` lists the rules that need a base
+  revision on their own line instead of under "rules applied".
+- `VERIFY003` is registered (not implemented) for H2 part 2.
 - Every finding has a `status`: `violation` (the rule established the property
   and it does not hold) or `unknown` (the rule could not establish it).
   Severity is unchanged and orthogonal. Unknown today: `EXC001` on a catch
@@ -51,6 +81,11 @@ and exit codes (pinned by `tests/unit/test_profile_regression.py`).
   on it.
 
 ### Changed
+- A `shockharness: ignore[...]` comment naming a VERIFY rule is a `SUPP001`
+  error and suppresses nothing: a change cannot excuse its own weakening of
+  the checks inline (spec 21.1 decision 5).
+- The content-hash cache schema is "3" (verification facts are cached with the
+  other per-file facts); caches written by earlier builds are invalidated.
 - The MAGIC001 configuration-file exemption is expressed on the config role:
   `exclude_configuration_files = true` exempts files whose role is `config`
   (and a `generated`/`vendor` file a config glob also matches, which was exempt
@@ -68,6 +103,14 @@ and exit codes (pinned by `tests/unit/test_profile_regression.py`).
 ### Schema
 All additive under report `schema_version` "1" (the new properties are
 optional in `schemas/report-v1.schema.json`, so 0.3.0 reports still validate):
+- H2: `findings[].category` (`policy_integrity` | `contract_integrity` |
+  `structural`), in reports, diff reports and SARIF `properties.category`;
+  `coverage.rules_needing_base_revision`; `coverage.verification`
+  (`status` `not_applicable` | `analyzed` | `disabled`, and in a diff the base
+  commit, files compared, new, renamed and unanalyzable-base counts, rename
+  detection state, severity and settings); `summary.by_category`; diff
+  `summary.new_policy_integrity`; SARIF rule `properties.category` and
+  `properties.needs_base_revision`.
 - `findings[].status` (`violation` | `unknown`).
 - `files[].role` and `files[].role_pattern` (the deciding glob, `null` for
   production).
@@ -79,7 +122,7 @@ optional in `schemas/report-v1.schema.json`, so 0.3.0 reports still validate):
 - Diff reports (`schemas/diff-v1.schema.json`): `findings[].finding_status`
   (a diff finding's `status` keeps meaning new/fixed/unchanged), and
   `gate.unknown` / `gate.unknown_gating_families`.
-- Configuration: `file_roles` table; `fail_on_unknown` in
+- Configuration: `rules.verification` table (H2); `file_roles` table; `fail_on_unknown` in
   `rules.magic_numbers`, `rules.exceptions`, `rules.defaults` and
   `complexity`; `overrides[].roles`; `overrides[].paths` is no longer required
   (one of `paths`/`roles` is).

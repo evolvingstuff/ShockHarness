@@ -488,6 +488,7 @@ def test_gate_between_two_commits(empty_root: Path, capsys: pytest.CaptureFixtur
         "fixed_hard_violations": 2,
         "unchanged_hard_violations": 1,
         "complexity_regressions": 0,
+        "new_policy_integrity": 0,
     }
     assert data["gate"]["status"] == "fail"
     assert data["gate"]["new_hard_violations"] == 1
@@ -954,7 +955,7 @@ def test_check_reports_complexity_as_warnings_in_every_format(
     assert "gate: PASS (exit 0)" in out
     code, out, _ = run(["check", str(empty_root / "src"), "--format", "json", *root], capsys)
     data = json.loads(out)
-    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002"]
+    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002", "VERIFY003"]
     assert "CPLX005" in data["coverage"]["rules_implemented"]
     assert data["metrics"]["complexity"]["status"] == "available"
     assert data["metrics"]["graph"]["summary"]["units"] == 4

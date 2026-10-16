@@ -39,8 +39,12 @@ two consumer examples) and G (four bundled agent skills, `skills install` /
 (per-unit complexity metrics with versioned conventions, a call graph whose
 edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
 shared-mutable-state notes, hotspots from churn and cognitive complexity, and
-per-unit regressions in revision diffs) are implemented. `MAGIC002` is **not
-yet implemented**; every report lists unimplemented rules under
+per-unit regressions in revision diffs) are implemented, as are the first two
+milestones of the advanced guardrails: H1 (an explicit `unknown` finding status
+and file roles) and H2 part 1 (verification integrity: in a revision diff,
+report test skips and focus markers, blanket suppressions and neutralized
+assertions that a change adds). `MAGIC002` and `VERIFY003` are **not yet
+implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
 
@@ -62,6 +66,9 @@ Implemented rules:
 | `CPLX001`-`CPLX004` | a unit's cyclomatic, cognitive, nesting or NPath number above its threshold (`docs/complexity.md`) | warning |
 | `CPLX005` | module import cycle (one finding per cycle), or fan-out above `fan_out_warn` | warning (fan-out `review` in `recommended`) |
 | `CPLX006` | a unit longer than `max_lines_warn` logical lines; module bodies exempt | warning |
+| `VERIFY001` | a test skip, xfail or focus marker the change adds (needs `diff`/`gate --base`) | warning |
+| `VERIFY002` | a blanket suppression comment the change adds (`# noqa`, `// eslint-disable`, `@ts-ignore`, ...) | warning |
+| `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
 
 ## Install
 

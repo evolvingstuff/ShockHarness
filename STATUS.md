@@ -2465,3 +2465,110 @@ New tests: `test_profile_regression.py` (169), `test_unknown_inventory.py`
   H3's STUB/ASSERT rules by `production`; both read `files[].role`.
 * The two shapes listed under the inventory that are not yet unknown findings
   (unreadable extra manager arguments; fan-out with unresolved calls).
+
+## Milestone H2 part 1: VERIFY001, VERIFY002, VERIFY004 — DONE (2026-10-16)
+
+Implemented in the lead session (the maintainer chose "do it here"). Spec section
+21.2, H2 row: diff-based detection of a change weakening its own verification.
+VERIFY003 (semantic diff of policy files, workflows and baselines), the
+`--policy FILE` tier, the `verification-integrity` skill and adversarial policy
+PR fixtures are part 2 and are not built here.
+
+### What was built
+
+* **Facts** (`ir/model.py`: `SkipMarker`, `SuppressionDirective`, `CaseFact`,
+  `Tautology`, `VerificationFacts`; `ModuleFacts.verification`), extracted with
+  every other fact and cached with them (cache schema "3"):
+  `ir/python_verification.py`, `ir/javascript_verification.py`,
+  `ir/suppression_directives.py`.
+* **Rules** (`rules/verification.py`): `compare_revisions` compares each head
+  file with its base version (same path, or the path `git diff -M` reports it
+  was renamed from: `history/git.py:renamed_files`) and reports only what was
+  added, as a multiset difference keyed on (test, kind, text) for markers,
+  (tool, text) for directives, (test, text) for tautologies, and test name for
+  assertion counts.
+* **Diff integration** (`gating/diff.py`): the VERIFY findings join the head
+  revision before fingerprint classification, so they flow through `new`,
+  legacy handling, the gate, `--exit-zero`, JSON, text and SARIF unchanged.
+* **Registry**: VERIFY001, VERIFY002, VERIFY004 implemented with full metadata;
+  VERIFY003 registered as planned; finding categories (`policy_integrity`,
+  `contract_integrity`, `structural`) per family; `needs_base_revision`.
+* **Config**: `[tool.shockharness.rules.verification]` (`enabled`, `severity`,
+  `fail_on_unknown`, `allowed_skip_reasons`, `report_narrow_suppressions`).
+* **Reports**: `findings[].category`, `coverage.verification`,
+  `coverage.rules_needing_base_revision`, `summary.by_category`, diff
+  `summary.new_policy_integrity`, SARIF `properties.category` and rule
+  `properties.needs_base_revision`; both schema files updated (additive).
+* **Suppressions**: `shockharness: ignore[VERIFY...]` is SUPP001.
+
+### Decisions (beyond the brief)
+
+1. **Severity semantics.** `rules.verification.severity` *is* the severity of
+   every VERIFY finding (`warning` | `error` | `review`), not a cap like the
+   other families' `severity` key: the documented default is `warning`
+   (decision 9) and the knob has to be able to *raise* it. `error` tightens
+   and is not a deviation; `review` is.
+2. **Not suppressible inline** (decision 5): a change could otherwise excuse
+   its own skip with a comment it adds itself. Exceptions are
+   `allowed_skip_reasons` or `[[overrides]]` by path or role.
+3. **Role scopes.** VERIFY001/004: test role only. VERIFY002: every role except
+   `generated` and `vendor` (regenerated code legitimately carries blanket
+   `eslint-disable` headers).
+4. **Unknown, not guessed.** Base version unanalyzable, or rename detection
+   failed and the file has no base under its own path: findings are `unknown`
+   (confidence `unresolved`); `fail_on_unknown` defaults to `false`.
+5. **Identity ignores free text.** An eslint `-- description` and a
+   ShockHarness `reason="..."` are not part of a directive's identity, so
+   rewording them is not a new suppression.
+6. **`@ts-expect-error` is blanket** (names no code), the strict reading.
+7. **Assertions** are counted syntactically, including calls whose name starts
+   with `assert`/`expect` (helpers such as `assert_frame_equal`) so that a test
+   delegating to such helpers is not reported as having lost its assertions.
+8. **Self-compliance caught two violations in the new code** before commit:
+   `m[k] if k in m else []` (DEF002) in `gating/diff.py` and
+   `"" if variant is None else variant` (DEF004) in
+   `ir/suppression_directives.py`; both rewritten as statements.
+
+### Evidence (2026-10-16, macOS, all commands from the repository root)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+110 files already formatted
+
+$ shockharness check src tests scripts                 # cold, warm, --no-cache
+gate: PASS (exit 0)    (three times)
+
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1 / 3.14.7
+969 passed         (on each)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+New tests: `tests/unit/test_verification_facts.py` (38),
+`tests/unit/test_verification_rules.py` (23), `tests/cli/test_verification_cli.py`
+(11), plus registry and inventory updates (`rules/verification.py:_finding` is
+inventoried: violation, or unknown with confidence unresolved).
+
+Verdicts against published 0.3.0 (`pip install shockharness==0.3.0`), same
+inputs, all three profiles: golden fixtures (410/400/402 findings, exits 3/3/1),
+both examples, and the self-scan (192 findings, exit 0; 0.3.0 run with the
+pre-H1 `.shockharness.toml`) are **identical**. VERIFY rules never run under a
+plain `check`, so no existing verdict can change.
+
+Determinism: five consecutive `check src tests --format json` runs are
+byte-identical with `coverage.cache` removed; two `diff` JSON runs on the same
+revisions are byte-identical (tested).
+
+Self-diff: the working tree committed in a scratch clone and gated against the
+H1 commit (`gate --base HEAD~1 --head HEAD`): 114 files compared (7 new, 0
+renamed, 0 with an unanalyzable base), **no VERIFY findings**, 0 new hard
+violations, `gate: PASS (exit 0)`.
+
+### Next
+
+H2 part 2: VERIFY003 (semantic diff of `.shockharness.toml`, workflows,
+baselines and tool configuration against the trusted base), the `--policy FILE`
+tier (spec 21.1 decision 6), the `verification-integrity` skill, and adversarial
+PR fixtures. The next release waits for it, per the maintainer.

@@ -65,6 +65,7 @@ FAIL_ON_UNKNOWN_SECTIONS: Mapping[str, str] = {
     "rules.exceptions": "EXC001-EXC003",
     "rules.defaults": "DEF001-DEF006",
     "complexity": "CPLX001-CPLX006",
+    "rules.verification": "VERIFY001, VERIFY002, VERIFY004",
 }
 # The legacy spelling of the config role's globs (H1): merged into file_roles.config.
 LEGACY_CONFIGURATION_FILES = "rules.magic_numbers.configuration_files"
@@ -74,6 +75,7 @@ FILE_ROLES_CONFIG = f"{FILE_ROLES_KEY}.{ROLE_CONFIG}"
 EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
 
 NAMED_CONSTANT_ALLOW = NAMED_CONSTANT_MODES[1]
+VERIFICATION_REVIEW = "review"
 
 TIER_CLI = "cli"
 TIER_DEDICATED = "dedicated"
@@ -446,6 +448,23 @@ def _unknown_deviations(values: Mapping[str, Any], profile_values: Mapping[str, 
     return found
 
 
+def _verification_deviations(verification: Mapping[str, Any]) -> list[str]:
+    """VERIFY findings lowered to review, and every allowed skip reason (H2). Raising the
+    severity to error tightens the policy and is not a deviation."""
+    found: list[str] = []
+    if verification["severity"] == VERIFICATION_REVIEW:
+        found.append(
+            "rules.verification.severity is 'review'; VERIFY001, VERIFY002 and VERIFY004 "
+            "findings are reported as review and never fail the gate"
+        )
+    for index, reason in enumerate(verification["allowed_skip_reasons"]):
+        found.append(
+            f"rules.verification.allowed_skip_reasons[{index}] accepts an added skip marker "
+            f"whose reason is {reason!r} (VERIFY001 does not report it)"
+        )
+    return found
+
+
 def _deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) -> tuple[str, ...]:
     """Explicit departures from the strict profile, always surfaced in reports.
 
@@ -523,6 +542,7 @@ def _deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) ->
             f"in {boundary['path']} ({boundary['language']}): {boundary['reason']}"
         )
     found.extend(loosened_modes(rules["defaults"]))
+    found.extend(_verification_deviations(rules["verification"]))
     found.extend(_unknown_deviations(values, profile_values))
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])

@@ -150,6 +150,9 @@ def type_name(value: Any) -> str:
 
 
 SEVERITY_MODES = ("forbid", "review", "allow")
+# The severity every VERIFY finding carries (H2). "warning" is the bundled default
+# (spec 21.1 decision 9); "error" makes them gate; "review" lowers them further.
+VERIFICATION_SEVERITIES = ("warning", "error", "review")
 # A file matched by `include` whose extension no adapter parses (a .ts file in a JavaScript
 # tree): "fail" is an analysis failure (exit 3), "warn" lists it under coverage, "ignore"
 # says nothing. Strictest first.
@@ -255,6 +258,16 @@ CONFIG_SCHEMA = TableField(
                         "nullish_fallbacks": EnumField(SEVERITY_MODES),
                         "configuration_fallbacks": EnumField(SEVERITY_MODES),
                         "fail_on_unknown": BoolField(),
+                    },
+                    required=(),
+                ),
+                "verification": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "fail_on_unknown": BoolField(),
+                        "allowed_skip_reasons": ListField(StrField(allow_empty=False)),
+                        "report_narrow_suppressions": BoolField(),
                     },
                     required=(),
                 ),

@@ -933,6 +933,179 @@ CPLX006 = RuleSpec(
     ),
 )
 
+# --- Verification integrity (H2) ----------------------------------------------------------
+# These rules compare two revisions, so they run only under `diff`/`gate --base --head`.
+# They ship at `warning` by default (spec 21.1 decision 9: no new rule gates by default
+# before its precision is measured); `rules.verification.severity` raises them to
+# `error`. Their findings are not suppressible inline (spec 21.1 decision 5).
+
+VERIFICATION_FAMILY = "verification"
+VERIFICATION_SECTION = "rules.verification"
+VERIFICATION_REMEDIATION_COMMON = (
+    "If the change is intended, say why in the review and record it centrally: "
+    "rules.verification settings or an [[overrides]] entry for the path or role, which "
+    "are visible policy changes. An inline shockharness suppression cannot excuse a "
+    "verification finding."
+)
+
+VERIFY001 = RuleSpec(
+    rule_id="VERIFY001",
+    version="1",
+    name="added test skip or focus marker",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A change adds a skip, expected-failure or focus marker to a test, taking tests "
+        "out of the run while the suite still passes."
+    ),
+    rationale=(
+        "The cheapest way to make a failing suite green is to stop running the failing "
+        "test. A skip, an xfail, or an it.only that silently drops every other test all "
+        "look like a passing build. Markers that already existed at the base revision are "
+        "debt, not findings; a marker this change adds is a decision someone should see."
+    ),
+    guarantees=(
+        "Exact on syntax, in files whose role is test. Python: pytest.mark.skip / skipif / "
+        "xfail (also through `from pytest import mark`), unittest.skip / skipIf / "
+        "skipUnless / expectedFailure (also imported by name) on a test or test class, a "
+        "pytestmark assignment at module or class level, and pytest.skip / pytest.xfail / "
+        "self.skipTest called directly in a test body. JavaScript: describe / it / test "
+        "with .skip or .only, xdescribe / xit / xtest, fdescribe / fit. A marker counts as "
+        "added when its test, kind and text do not occur at the base revision (renames "
+        "detected by git are followed)."
+    ),
+    limitations=(
+        "Needs a base revision: under a plain `check` the rule is reported as not "
+        "applicable. A skip inside a conditional branch of a test body, a skip applied "
+        "through a fixture or a conftest hook, and test-runner configuration that "
+        "deselects tests are not seen (VERIFY003, planned, covers configuration). Renaming "
+        "a test that already had a marker makes the marker look added. When the base "
+        "version of a file could not be analyzed, or rename detection failed, the finding "
+        "is unknown."
+    ),
+    remediation=(
+        "Fix or delete the test instead of hiding it. A focus marker (.only, fit) is "
+        "almost always a debugging leftover: remove it. For a legitimate platform skip, "
+        "give it a reason and list that reason in rules.verification.allowed_skip_reasons. "
+        + VERIFICATION_REMEDIATION_COMMON
+    ),
+    noncompliant_example=(
+        '@pytest.mark.skip(reason="flaky")\n'
+        "def test_parse(): ...\n"
+        'it.only("adds", () => { expect(add(1, 1)).toBe(2); });'
+    ),
+    compliant_example=(
+        '@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals only")\n'
+        "def test_sigterm(): ...  # with the reason listed in allowed_skip_reasons"
+    ),
+)
+
+VERIFY002 = RuleSpec(
+    rule_id="VERIFY002",
+    version="1",
+    name="added blanket suppression",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A change adds a suppression comment that names no rule codes or covers a whole "
+        "file, silencing every check of a linter, type checker or coverage tool there."
+    ),
+    rationale=(
+        "A bare # noqa, # type: ignore, // eslint-disable or // @ts-ignore turns off every "
+        "present and future check on that line or file, not just the one that fired. It "
+        "is how a check is made to pass without anyone deciding that its finding is wrong."
+    ),
+    guarantees=(
+        "Exact on comment syntax, in files of every role except generated and vendor. "
+        "Python: # noqa, # ruff: noqa, # flake8: noqa, # type: ignore, # pylint: "
+        "disable / disable-next / skip-file, # pragma: no cover / no branch, # mypy: "
+        "ignore-errors. JavaScript: eslint-disable, eslint-disable-line, "
+        "eslint-disable-next-line, @ts-ignore, @ts-expect-error, @ts-nocheck, istanbul "
+        "ignore, c8 / v8 ignore. Both: shockharness: ignore[...]. A directive that names at "
+        "least one code (and, for ShockHarness, has a reason) is narrow and is reported "
+        "only when rules.verification.report_narrow_suppressions is true; one that names "
+        "no codes, names `all`, or covers a file is blanket and always reported. A "
+        "directive counts as added when its tool and text do not occur at the base "
+        "revision of the file."
+    ),
+    limitations=(
+        "Needs a base revision. Ignore lists in tool configuration files (ruff, eslint, "
+        "coverage, pytest) are VERIFY003's, planned for part 2. @ts-expect-error is "
+        "classified blanket because it names no code, although TypeScript fails when it "
+        "suppresses nothing. A suppression moved to another file looks added."
+    ),
+    remediation=(
+        "Fix what the tool reports, or name the exact codes being silenced "
+        "(# noqa: E501, // eslint-disable-next-line no-console) so future problems on "
+        "the line still surface. " + VERIFICATION_REMEDIATION_COMMON
+    ),
+    noncompliant_example="result = compute()  # noqa\n// eslint-disable-next-line",
+    compliant_example=(
+        "result = compute()  # noqa: E501\n// eslint-disable-next-line no-console -- debug"
+    ),
+)
+
+VERIFY004 = RuleSpec(
+    rule_id="VERIFY004",
+    version="1",
+    name="neutralized assertions",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A change makes a test unable to fail: it adds an assertion that is always true, "
+        "removes every assertion from a test, or replaces a test's body with nothing."
+    ),
+    rationale=(
+        "A test that cannot fail reports success whatever the code does. Replacing "
+        "assertions with assert True, deleting them, or emptying the test keeps the test "
+        "count and the green build while removing the check."
+    ),
+    guarantees=(
+        "Exact on known patterns, in files whose role is test. Tautologies added: assert "
+        "<truthy constant>, assert c == c / c is c on equal constants, self.assertTrue / "
+        "assertEqual / assertIs on constants, expect(L).toBe(L) / toEqual / toStrictEqual, "
+        "expect(L).toBeTruthy() / toBeFalsy() on a literal of that truthiness, assert(L) / "
+        "assert.ok(L), assert.equal / strictEqual / deepEqual / deepStrictEqual(L, L). A "
+        "test (matched by qualified name, renames followed) whose assertion count was "
+        "above zero at the base revision and is zero at head; a test whose body is only "
+        "pass / ... / a docstring / an empty block at head and was not at base."
+    ),
+    limitations=(
+        "Needs a base revision. Known patterns only: an assertion weakened to something "
+        "that is merely unlikely to fail (assert len(x) >= 0, a loosened tolerance) is not "
+        "judged. Assertions are counted syntactically: assert statements, calls whose name "
+        "starts with assert or expect, assert.* methods and pytest.raises / warns blocks; "
+        "a test that moved its checks into a helper with another name looks as if it lost "
+        "them. A renamed test is not matched to its old name."
+    ),
+    remediation=(
+        "Restore the assertion that was removed or weakened, or delete the test if what it "
+        "checked is gone. " + VERIFICATION_REMEDIATION_COMMON
+    ),
+    noncompliant_example="def test_total():\n    assert True\nexpect(1).toBe(1);",
+    compliant_example="def test_total():\n    assert total([1, 2]) == expected_total",
+)
+
+VERIFY003 = _planned(
+    "VERIFY003",
+    "weakened policy, workflow or baseline",
+    VERIFICATION_FAMILY,
+    VERIFICATION_SECTION,
+    SEVERITY_WARNING,
+    "Semantic diff of protected paths: lowered thresholds, disabled rules, widened "
+    "allowlists, edited baselines, workflow pins and removed jobs (H2 part 2).",
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -960,6 +1133,10 @@ RULES: tuple[RuleSpec, ...] = (
     CPLX006,
     SUPP001,
     SUPP002,
+    VERIFY001,
+    VERIFY002,
+    VERIFY003,
+    VERIFY004,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -982,3 +1159,36 @@ def get_rule(rule_id: str) -> RuleSpec:
     if rule_id not in RULES_BY_ID:
         raise KeyError(f"unknown rule ID {rule_id!r}")
     return RULES_BY_ID[rule_id]
+
+
+# --- Categories (H2, spec 21.1 decision 2) -------------------------------------------------
+# Every finding carries the category of its rule's family. Policy-integrity findings are
+# hard violations like any other when they gate; the category lets CI and readers tell
+# "the code is wrong" from "the checks were weakened" without a separate exit code.
+CATEGORY_CONTRACT = "contract_integrity"
+CATEGORY_POLICY = "policy_integrity"
+CATEGORY_STRUCTURAL = "structural"
+CATEGORIES = (CATEGORY_POLICY, CATEGORY_CONTRACT, CATEGORY_STRUCTURAL)
+FAMILY_CATEGORIES: dict[str, str] = {
+    "magic_numbers": CATEGORY_CONTRACT,
+    "magic_strings": CATEGORY_CONTRACT,
+    "exceptions": CATEGORY_CONTRACT,
+    "defaults": CATEGORY_CONTRACT,
+    "suppressions": CATEGORY_CONTRACT,
+    "complexity": CATEGORY_STRUCTURAL,
+    VERIFICATION_FAMILY: CATEGORY_POLICY,
+}
+
+
+def category_of(rule_id: str) -> str:
+    return FAMILY_CATEGORIES[get_rule(rule_id).family]
+
+
+def needs_base_revision(rule: RuleSpec) -> bool:
+    """Rules that compare a head revision with a base revision (diff / gate --base)."""
+    return rule.family == VERIFICATION_FAMILY
+
+
+def base_revision_rules() -> tuple[RuleSpec, ...]:
+    """Implemented rules that only run in a revision comparison."""
+    return tuple(rule for rule in implemented_rules() if needs_base_revision(rule))

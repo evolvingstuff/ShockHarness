@@ -89,6 +89,15 @@
               "unknown"
             ],
             "description": "H1, additive: the finding's own status (violation or unknown). A diff finding's 'status' keeps its 0.1.0 meaning (new, fixed, unchanged)."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "policy_integrity",
+              "contract_integrity",
+              "structural"
+            ],
+            "description": "H2, additive: the category of the rule's family. policy_integrity (VERIFY*) means the change weakened its own verification; contract_integrity covers MAGIC, EXC, DEF and SUPP; structural covers CPLX. A gating policy_integrity finding exits 1 like any hard violation (spec 21.1 decision 2)."
           }
         }
       }
@@ -103,7 +112,13 @@
         "fixed_hard_violations",
         "unchanged_hard_violations",
         "complexity_regressions"
-      ]
+      ],
+      "properties": {
+        "new_policy_integrity": {
+          "type": "integer",
+          "description": "H2, additive: new findings whose category is policy_integrity (VERIFY001, VERIFY002, VERIFY004)."
+        }
+      }
     },
     "metrics": {
       "type": "object",

@@ -18,7 +18,10 @@ from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
 from shockharness.report import Report
 from shockharness.rules.complexity import is_cycle_finding
-from shockharness.rules.registry import PYTHON, RuleSpec
+from shockharness.rules.registry import CATEGORY_POLICY, PYTHON, RuleSpec, category_of
+from shockharness.rules.verification import COVERAGE_DISABLED as VERIFICATION_DISABLED
+from shockharness.rules.verification import COVERAGE_NOT_APPLICABLE as VERIFICATION_NOT_APPLICABLE
+from shockharness.rules.verification import RENAMES_AVAILABLE as VERIFICATION_RENAMES_AVAILABLE
 
 
 def _finding_line(finding: Finding) -> str:
@@ -156,6 +159,31 @@ def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _verification_line(verification: Mapping[str, Any], rules: Sequence[str]) -> str:
+    """The VERIFY rules' state for this run (H2): they need a base revision."""
+    listed = ", ".join(rules)
+    if verification["status"] == VERIFICATION_DISABLED:
+        return (
+            "  verification rules disabled by config (rules.verification.enabled = false): "
+            + listed
+        )
+    if verification["status"] == VERIFICATION_NOT_APPLICABLE:
+        return (
+            f"  rules needing a base revision (not analyzed in this run; use diff or gate "
+            f"--base/--head): {listed}"
+        )
+    renames = f"{verification['renamed']} renamed"
+    if verification["rename_detection"] != VERIFICATION_RENAMES_AVAILABLE:
+        renames = f"rename detection unavailable ({verification['rename_detection_error']})"
+    base = str(verification["base_commit"])[:COMMIT_SHORT_HEX]
+    return (
+        f"  verification: {', '.join(verification['rules'])} compared "
+        f"{verification['files_compared']} file(s) with base {base} "
+        f"({verification['files_new']} new, {renames}, {verification['base_unanalyzable']} "
+        f"with an unanalyzable base); severity {verification['severity']}"
+    )
+
+
 def _trailer_lines(report: Report) -> list[str]:
     """Everything after the findings: totals, rules, config, metrics, status, gate."""
     lines: list[str] = []
@@ -169,7 +197,10 @@ def _trailer_lines(report: Report) -> list[str]:
     by_severity = summary["findings_by_severity"]
     if len(by_severity) > 0:
         lines.append("  by severity: " + ", ".join(f"{k}={v}" for k, v in by_severity.items()))
-    lines.append("  rules applied: " + ", ".join(coverage["rules_implemented"]))
+    needing_base = coverage["rules_needing_base_revision"]
+    applied = [rule for rule in coverage["rules_implemented"] if rule not in needing_base]
+    lines.append("  rules applied: " + ", ".join(applied))
+    lines.append(_verification_line(coverage["verification"], needing_base))
     lines.append(
         "  rules not implemented (not analyzed): " + ", ".join(coverage["rules_not_implemented"])
     )
@@ -303,10 +334,15 @@ def render_summary(report: Report) -> str:
 def render_diff(diff: DiffReport) -> str:
     """New and fixed findings line by line; unchanged ones are counted, not listed."""
     lines: list[str] = []
-    for entry in diff.findings:
-        if entry.status == STATUS_UNCHANGED:
-            continue
-        lines.append(f"{entry.status}: {_finding_line(entry.finding)}")
+    listed = [entry for entry in diff.findings if entry.status != STATUS_UNCHANGED]
+    policy = [e for e in listed if category_of(e.finding.rule_id) == CATEGORY_POLICY]
+    others = [e for e in listed if category_of(e.finding.rule_id) != CATEGORY_POLICY]
+    if len(policy) > 0:
+        lines.append("policy integrity (the change weakened its own verification):")
+        lines.extend(f"  {entry.status}: {_finding_line(entry.finding)}" for entry in policy)
+        if len(others) > 0:
+            lines.append("")
+    lines.extend(f"{entry.status}: {_finding_line(entry.finding)}" for entry in others)
     for file in diff.head.report.files:
         if not file.failed:
             continue
@@ -342,6 +378,12 @@ def render_diff(diff: DiffReport) -> str:
         f"  config: {diff.config.source.tier} {diff.config.source.path} "
         f"(profile {diff.config.values['profile']}, "
         f"digest {diff.config.digest[:CONFIG_DIGEST_SHORT_HEX]})"
+    )
+    lines.append(
+        _verification_line(
+            head.report.coverage["verification"],
+            head.report.coverage["rules_needing_base_revision"],
+        )
     )
     lines.extend(_complexity_lines(diff.metrics))
     lines.extend(_history_lines(diff.metrics))

@@ -33,6 +33,7 @@ from shockharness.ir.python_functions import (
     collect_python_functions,
     collect_python_imports,
 )
+from shockharness.ir.python_verification import collect_python_verification
 from shockharness.source import SourceText
 
 PARSER_NAME = "python-ast"
@@ -274,5 +275,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         functions=collect_python_functions(source, parsed, comments),
         imports=collect_python_imports(source, parsed),
         bindings=collect_python_bindings(source, parsed),
+        verification=collect_python_verification(source, parsed, comments),
         parse_failure=None,
     )

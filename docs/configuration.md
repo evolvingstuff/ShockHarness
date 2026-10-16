@@ -513,6 +513,47 @@ verdict, and it never applies to a plain `check`. With
 `metrics.graph.abstraction_displacement` (experimental; see
 `docs/complexity.md`).
 
+## Verification integrity
+
+```toml
+[tool.shockharness.rules.verification]
+enabled = true
+severity = "warning"              # "warning" | "error" | "review"
+fail_on_unknown = false
+allowed_skip_reasons = []         # e.g. ["POSIX signals only"]
+report_narrow_suppressions = false
+```
+
+`VERIFY001`, `VERIFY002` and `VERIFY004` compare the head revision of a `diff`
+or `gate --base/--head` with its base revision and report what the change
+**added**: test skip and focus markers, blanket suppression comments, and
+assertions made unable to fail. A plain `check` has no base and reports them as
+not applicable. See `docs/rules.md` for every pattern.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | `false` turns the three rules off (a policy deviation) |
+| `severity` | `"warning"` | the severity of every VERIFY finding. `"error"` makes them gate like any hard violation; that tightens the policy and is not a deviation. `"review"` lowers them further and is a deviation |
+| `fail_on_unknown` | `false` | whether an `unknown` VERIFY finding (the base version could not be analyzed, or rename detection failed) gates according to its severity |
+| `allowed_skip_reasons` | `[]` | exact reason strings that make an added Python skip acceptable (JavaScript skips carry no reason). Each entry is listed as a policy deviation |
+| `report_narrow_suppressions` | `false` | `VERIFY002` always reports blanket suppressions; with `true` it also reports added suppressions that name specific rule codes |
+
+The bundled default is the same in all three profiles: specification section
+21.1 decision 9 keeps new rules at `warning` until their precision has been
+measured. A repository that wants agents stopped, not just told, sets
+`severity = "error"`.
+
+VERIFY findings cannot be suppressed inline: `shockharness: ignore[VERIFY001]`
+is a `SUPP001` error. Exceptions belong in this table or in an `[[overrides]]`
+entry by path or role, where review sees them.
+
+**Trust model.** A local CLI cannot stop someone with write access from editing
+the configuration that would report them, or from not running the tool.
+Verification integrity is enforceable when the gate runs in CI as a required
+check on protected branches, and changes to `.shockharness.toml`, workflow
+files and baselines need review (CODEOWNERS). `VERIFY003`, planned for part 2
+of the milestone, reports such policy changes themselves.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

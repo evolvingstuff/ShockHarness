@@ -259,9 +259,37 @@ Stated so that a clean report is never read as more than it is.
   package version of the skill's own release, so an installed skill may name
   an older version than the latest on PyPI until `skills update` is run.
 
+## VERIFY001, VERIFY002, VERIFY004
+
+* They need a base revision. A plain `check` reports them as not applicable;
+  only `diff` and `gate --base/--head` run them.
+* Syntax, not intent. A skip inside a conditional branch of a test body, a
+  skip applied by a fixture or a conftest hook, a test deselected by runner
+  configuration (`-k`, `addopts`, `testPathIgnorePatterns`) and an ignore list
+  in a tool's configuration file are not seen. Configuration changes are
+  `VERIFY003`'s, planned for H2 part 2.
+* `VERIFY004` knows patterns, not semantics: an assertion weakened to one that
+  is merely unlikely to fail (`assert len(x) >= 0`, a loosened tolerance) is
+  not judged. Assertions are counted syntactically; a test that moved its
+  checks into a helper whose name does not start with `assert` or `expect`
+  looks as if it lost them.
+* Matching is by file (following git's rename detection) and by test name. A
+  renamed test function or a file git does not recognise as renamed makes its
+  existing markers and suppressions look added. A file whose base version could
+  not be analyzed yields `unknown` findings.
+* JavaScript skips carry no reason, so `allowed_skip_reasons` applies to Python
+  markers only. `@ts-expect-error` is classified as a blanket suppression
+  because it names no code.
+* A local CLI cannot stop someone with write access from editing the
+  configuration that would report them, or from not running the tool. The
+  rules are enforceable when `gate` runs in CI as a required check on protected
+  branches and policy files need review (spec section 21.1 decision 5).
+
 ## Not yet built (see the specification)
 
-`MAGIC002`, per-function churn and rename following, change-impact radius,
+`MAGIC002`, `VERIFY003` and the `--policy FILE` tier (H2 part 2), the
+remaining advanced-guardrail rules of specification section 21, per-function
+churn and rename following, change-impact radius,
 data flow, and `.gitignore` awareness. Unknown CLI commands are argparse
 errors (exit 2). Profiles exist but are limited to the three built-in
 ones (no user-defined or remote profiles), and the only command-line overrides

@@ -12,8 +12,8 @@ the finding's own status (H1: ``violation`` or ``unknown``) is ``finding_status`
 
 import tempfile
 import time
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -33,10 +33,33 @@ from shockharness.errors import UsageError
 from shockharness.findings import Finding
 from shockharness.gate import NO_REGRESSIONS, GateResult
 from shockharness.gating.baseline import SOURCE_BASE_REVISION, apply_fingerprints
-from shockharness.history.git import RepositoryLocation, export_tree, locate_repository
+from shockharness.history.git import (
+    RepositoryLocation,
+    export_tree,
+    locate_repository,
+    renamed_files,
+)
 from shockharness.history.git import resolve_commit as git_resolve_commit
-from shockharness.report import Report, build_report, rebuild_with_findings
-from shockharness.rules.registry import SEVERITY_ERROR
+from shockharness.report import (
+    VERIFICATION_COVERAGE,
+    Report,
+    build_report,
+    build_summary,
+    execution_summary,
+    rebuild_with_findings,
+)
+from shockharness.rules.registry import (
+    CATEGORY_POLICY,
+    SEVERITY_ERROR,
+    VERIFICATION_SECTION,
+    category_of,
+)
+from shockharness.rules.verification import (
+    FileVerification,
+    Renames,
+    VerificationResult,
+    compare_revisions,
+)
 from shockharness.version import __version__
 
 COMPLEXITY_SECTION = "complexity"
@@ -51,6 +74,8 @@ class Revision:
     ref: str
     commit: str
     report: Report
+    # Per-file verification facts (H2); compared between base and head, never serialized.
+    verification: Mapping[str, FileVerification]
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +137,12 @@ class DiffReport:
             "fixed_hard_violations": hard[STATUS_FIXED],
             "unchanged_hard_violations": hard[STATUS_UNCHANGED],
             "complexity_regressions": self.gate.complexity_regressions,
+            "new_policy_integrity": sum(
+                1
+                for entry in self.findings
+                if entry.status == STATUS_NEW
+                and category_of(entry.finding.rule_id) == CATEGORY_POLICY
+            ),
         }
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -179,7 +210,45 @@ def analyze_revision(
         STATUS_BYPASSED, str(cache_settings(config)["directory"]), REASON_REVISION
     )
     report = build_report(files, discovery, config, verdict, outcome.metrics, elapsed, cache)
-    return Revision(ref=ref, commit=commit, report=report)
+    return Revision(ref=ref, commit=commit, report=report, verification=outcome.verification)
+
+
+def _renames(location: RepositoryLocation, base: str, head: str) -> Renames:
+    found, error = renamed_files(location, base, head)
+    if found is None:
+        return Renames(available=False, error=error, head_to_base={})
+    return Renames(available=True, error=None, head_to_base=found)
+
+
+def with_verification(report: Report, result: VerificationResult) -> Report:
+    """``report`` (a head revision) with the VERIFY findings added to its files, the
+    rules they applied recorded per file, and ``coverage.verification`` filled in."""
+    by_path: dict[str, list[Finding]] = {}
+    for finding in result.findings:
+        if finding.path not in by_path:
+            by_path[finding.path] = []
+        by_path[finding.path].append(finding)
+    files = []
+    for file in report.files:
+        added: list[Finding] = []
+        if file.path in by_path:
+            added = by_path[file.path]
+        applied = file.rules_applied
+        if file.path in result.applied:
+            applied = tuple(sorted({*file.rules_applied, *result.applied[file.path]}))
+        findings = tuple(sorted([*file.findings, *added], key=lambda f: f.sort_key()))
+        files.append(replace(file, rules_applied=applied, findings=findings))
+    findings = tuple(sorted([*report.findings, *result.findings], key=lambda f: f.sort_key()))
+    coverage = dict(report.coverage)
+    coverage[VERIFICATION_COVERAGE] = result.coverage
+    return replace(
+        report,
+        files=tuple(files),
+        findings=findings,
+        coverage=coverage,
+        execution_summary=execution_summary(files, findings),
+        summary=build_summary(files, findings, report.metrics),
+    )
 
 
 def diff_revisions(
@@ -201,6 +270,14 @@ def diff_revisions(
     location = _require_repository(root)
     base = analyze_revision(root, location, base_ref, config, options)
     head = analyze_revision(root, location, head_ref, config, options)
+    verification = compare_revisions(
+        base.verification,
+        head.verification,
+        _renames(location, base.commit, head.commit),
+        config.section(VERIFICATION_SECTION),
+        base.commit,
+    )
+    head = replace(head, report=with_verification(head.report, verification))
     base_by_fp = {f.fingerprint: f for f in base.report.findings if f.fingerprint is not None}
     head_by_fp = {f.fingerprint: f for f in head.report.findings if f.fingerprint is not None}
     assert len(base_by_fp) == len(base.report.findings), "fingerprints must be unique"
@@ -232,9 +309,7 @@ def diff_revisions(
         complexity_settings,
     )
     verdict = gate_module.evaluate(marked, head.report.files, config, application, len(regressions))
-    head_marked = Revision(
-        head.ref, head.commit, rebuild_with_findings(head.report, marked, verdict)
-    )
+    head_marked = replace(head, report=rebuild_with_findings(head.report, marked, verdict))
     by_fp = {f.fingerprint: f for f in marked}
     relabelled: list[DiffFinding] = []
     for entry in entries:

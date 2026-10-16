@@ -54,6 +54,8 @@ def _rule(rule: RuleSpec) -> dict[str, Any]:
         "defaultConfiguration": {"level": level_for(rule.default_severity)},
         "properties": {
             "family": rule.family,
+            "category": registry.FAMILY_CATEGORIES[rule.family],
+            "needs_base_revision": registry.needs_base_revision(rule),
             "implemented": rule.implemented,
             "languages": list(rule.languages),
             "rule_version": rule.version,
@@ -106,6 +108,7 @@ def _result(
             "severity": finding.severity,
             "confidence": finding.confidence,
             "status": finding.status,
+            "category": registry.category_of(finding.rule_id),
             "evidence": finding.evidence,
             "remediation": finding.remediation,
             "safe_autofix": finding.safe_autofix,

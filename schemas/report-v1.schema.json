@@ -239,6 +239,85 @@
               "type": "integer"
             }
           }
+        },
+        "rules_needing_base_revision": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "H2, additive: implemented rules that compare a head revision with a base revision (VERIFY001, VERIFY002, VERIFY004); they produce findings only under diff or gate --base/--head."
+        },
+        "verification": {
+          "type": "object",
+          "description": "H2, additive: the VERIFY rules' state for this run. 'not_applicable' in a plain check (they compare two revisions), 'analyzed' in a revision diff or gate, 'disabled' when rules.verification.enabled is false. In a diff the counts describe the comparison with the base revision.",
+          "required": [
+            "status",
+            "rules"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "not_applicable",
+                "analyzed",
+                "disabled"
+              ]
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reason": {
+              "type": "string"
+            },
+            "base_commit": {
+              "type": "string"
+            },
+            "files_compared": {
+              "type": "integer"
+            },
+            "files_new": {
+              "type": "integer"
+            },
+            "renamed": {
+              "type": "integer"
+            },
+            "base_unanalyzable": {
+              "type": "integer"
+            },
+            "rename_detection": {
+              "type": "string",
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "rename_detection_error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "severity": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "error",
+                "review"
+              ]
+            },
+            "allowed_skip_reasons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "report_narrow_suppressions": {
+              "type": "boolean"
+            }
+          }
         }
       }
     },
@@ -436,6 +515,15 @@
               "unknown"
             ],
             "description": "H1, additive: 'violation' when the rule established the property and it does not hold; 'unknown' when the rule could not establish it (an unresolved exception identity, an opaque handler, a receiver whose type is not established). Orthogonal to severity; rules.<family>.fail_on_unknown (complexity.fail_on_unknown) decides whether an unknown finding gates."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "policy_integrity",
+              "contract_integrity",
+              "structural"
+            ],
+            "description": "H2, additive: the category of the rule's family. policy_integrity (VERIFY*) means the change weakened its own verification; contract_integrity covers MAGIC, EXC, DEF and SUPP; structural covers CPLX. A gating policy_integrity finding exits 1 like any hard violation (spec 21.1 decision 2)."
           }
         }
       }
@@ -1278,6 +1366,26 @@
               "type": "integer"
             },
             "production": {
+              "type": "integer"
+            }
+          }
+        },
+        "by_category": {
+          "type": "object",
+          "description": "H2, additive: findings per category; every category is listed.",
+          "required": [
+            "policy_integrity",
+            "contract_integrity",
+            "structural"
+          ],
+          "properties": {
+            "policy_integrity": {
+              "type": "integer"
+            },
+            "contract_integrity": {
+              "type": "integer"
+            },
+            "structural": {
               "type": "integer"
             }
           }

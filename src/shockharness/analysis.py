@@ -31,7 +31,7 @@ from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts
-from shockharness.ir.model import ModuleFacts, ParseFailure
+from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
@@ -39,6 +39,7 @@ from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.magic_numbers import run_magic001
+from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import apply_suppressions
 
@@ -163,6 +164,9 @@ class PendingFile:
 class AnalysisOutcome:
     files: tuple[FileResult, ...]
     metrics: Mapping[str, Any]  # ``complexity`` and ``graph`` sections of metrics
+    # Per-file verification facts (H2), for a revision diff to compare; a plain check
+    # does not use them.
+    verification: Mapping[str, FileVerification]
 
 
 def file_role(relative_path: str, config: EffectiveConfig) -> FileRole:
@@ -472,6 +476,26 @@ def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOpti
     return _file_result(pending, tuple(sorted(applied)), tuple(findings))
 
 
+def verification_input(pending: PendingFile) -> FileVerification:
+    """What the VERIFY rules need from a prepared file (H2)."""
+    failure: str | None = None
+    facts = NO_VERIFICATION
+    if pending.failed:
+        failure = pending.status
+        if pending.error is not None:
+            failure = f"{pending.status}: {pending.error}"
+    else:
+        assert pending.facts is not None
+        facts = pending.facts.verification
+    return FileVerification(
+        path=pending.path,
+        role=pending.role,
+        failure=failure,
+        disabled=pending.disabled_ids(),
+        facts=facts,
+    )
+
+
 def cross_file(pendings: Sequence[PendingFile], config: EffectiveConfig) -> ComplexityOutcome:
     """Phase two: the call graph over every parsed file, and the CPLX005 findings."""
     modules: list[ModuleInput] = []
@@ -508,6 +532,7 @@ def complete(
     return AnalysisOutcome(
         files=tuple(results),
         metrics={"complexity": outcome.complexity, "graph": outcome.graph},
+        verification={pending.path: verification_input(pending) for pending in pendings},
     )
 
 
