@@ -69,13 +69,14 @@ def section(text: str, heading: str) -> str:
 # ----------------------------------------------------------------- shipped files
 
 
-def test_five_skills_ship_with_valid_frontmatter() -> None:
+def test_six_skills_ship_with_valid_frontmatter() -> None:
     assert skill_names() == (
         "write-compliant-code",
         "fix-violations",
         "refactor-complexity",
         "pre-commit-review",
         "verification-integrity",
+        "async-lifecycle",
     )
     for name in SKILL_NAMES:
         text = skill_text(name)

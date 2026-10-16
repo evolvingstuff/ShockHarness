@@ -23,7 +23,7 @@ from typing import Any
 from shockharness.cache.codec import from_plain, to_plain
 from shockharness.cache.store import FileCache
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
-from shockharness.complexity.callgraph import ModuleInput
+from shockharness.complexity.callgraph import CallGraph, ModuleInput, build_call_graph
 from shockharness.complexity.metrics import UnitMetrics, measure_units
 from shockharness.config import UNSUPPORTED_FAIL, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
@@ -35,6 +35,7 @@ from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
+from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
@@ -255,6 +256,27 @@ def _active_guardrails(
     )
 
 
+def _units(
+    relative_path: str, facts: ModuleFacts, complexity: Mapping[str, Any], applied: list[str]
+) -> tuple[UnitMetrics, ...]:
+    """ASYNC001 resolves callees through the call graph, which is built from the units, so
+    they are measured for it even when complexity is disabled (and then not reported)."""
+    if complexity["enabled"] is True or registry.ASYNC001.rule_id in applied:
+        return measure_units(relative_path, facts.functions, complexity)
+    return ()
+
+
+def _active_async(
+    language: str, role: FileRole, config: EffectiveConfig, disabled_ids: set[str]
+) -> frozenset[str]:
+    roles = config.section(registry.ASYNC_SECTION)["roles"]
+    return frozenset(
+        rule.rule_id
+        for rule in ASYNC_RULES
+        if rule.rule_id not in disabled_ids and language in rule.languages and role.role in roles
+    )
+
+
 def _extract(language: str, source: SourceText, filename: str) -> ModuleFacts:
     if language == registry.PYTHON:
         return extract_python_facts(source, filename)
@@ -362,6 +384,9 @@ def prepare_text(
 
     active_guardrails = _active_guardrails(language, role, config, disabled_ids)
     applied.extend(sorted(active_guardrails))
+    # ASYNC001-ASYNC003 run in the cross-file phase (ASYNC001 needs the call graph); the
+    # per-file phase only decides whether they apply to this file.
+    applied.extend(sorted(_active_async(language, role, config, disabled_ids)))
     findings.extend(
         run_guardrail_rules(
             facts, source, config.values["rules"], relative_path, language, active_guardrails
@@ -369,9 +394,8 @@ def prepare_text(
     )
 
     complexity = config.section(COMPLEXITY_SECTION)
-    units: tuple[UnitMetrics, ...] = ()
+    units = _units(relative_path, facts, complexity, applied)
     if complexity["enabled"] is True:
-        units = measure_units(relative_path, facts.functions, complexity)
         active_unit_rules = frozenset(
             rule.rule_id for rule in UNIT_RULES if rule.rule_id not in disabled_ids
         )
@@ -536,38 +560,78 @@ def verification_input(pending: PendingFile) -> FileVerification:
     )
 
 
+def _module_inputs(pendings: Sequence[PendingFile]) -> list[ModuleInput]:
+    return [
+        ModuleInput(
+            path=pending.path,
+            language=pending.language,
+            units=pending.units,
+            imports=pending.facts.imports,
+            bindings=pending.facts.bindings,
+        )
+        for pending in pendings
+        if not pending.failed and pending.facts is not None and pending.source is not None
+    ]
+
+
 def cross_file(pendings: Sequence[PendingFile], config: EffectiveConfig) -> ComplexityOutcome:
     """Phase two: the call graph over every parsed file, and the CPLX005 findings."""
-    modules: list[ModuleInput] = []
     sources: dict[str, SourceText] = {}
     cplx005_paths: set[str] = set()
     for pending in pendings:
         if pending.failed or pending.facts is None or pending.source is None:
             continue
-        modules.append(
-            ModuleInput(
-                path=pending.path,
-                language=pending.language,
-                units=pending.units,
-                imports=pending.facts.imports,
-                bindings=pending.facts.bindings,
-            )
-        )
         sources[pending.path] = pending.source
         if registry.CPLX005.rule_id in pending.rules_applied:
             cplx005_paths.add(pending.path)
-    return assemble(modules, sources, config, frozenset(cplx005_paths))
+    return assemble(_module_inputs(pendings), sources, config, frozenset(cplx005_paths))
+
+
+def async_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """ASYNC001-ASYNC003 for every file that applies them (H4). ASYNC001 resolves project
+    callees through the call graph, built here when complexity did not build it."""
+    applying = [
+        p
+        for p in pendings
+        if not p.failed and any(rule.rule_id in p.rules_applied for rule in ASYNC_RULES)
+    ]
+    if len(applying) == 0:
+        return {}
+    if graph is None:
+        graph = build_call_graph(_module_inputs(pendings))
+    async_units = frozenset(
+        unit.key for pending in pendings for unit in pending.units if unit.fact.is_async
+    )
+    found: dict[str, list[Finding]] = {}
+    for pending in applying:
+        assert pending.facts is not None and pending.source is not None
+        found[pending.path] = run_async_rules(
+            pending.facts,
+            pending.source,
+            config.section(registry.ASYNC_SECTION),
+            pending.path,
+            pending.language,
+            frozenset(r.rule_id for r in ASYNC_RULES if r.rule_id in pending.rules_applied),
+            graph.sites,
+            async_units,
+        )
+    return found
 
 
 def complete(
     pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
+    asynchrony = async_findings(pendings, config, outcome.call_graph)
     results: list[FileResult] = []
     for pending in pendings:
-        extra: Sequence[Finding] = ()
+        extra: list[Finding] = []
         if pending.path in outcome.graph_findings:
-            extra = outcome.graph_findings[pending.path]
+            extra.extend(outcome.graph_findings[pending.path])
+        if pending.path in asynchrony:
+            extra.extend(asynchrony[pending.path])
         results.append(finish(pending, extra, options))
     return AnalysisOutcome(
         files=tuple(results),

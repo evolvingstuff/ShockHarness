@@ -38,6 +38,7 @@ What is unknown today (the inventory, kept as a test in
 | EXC001 | capture manager whose positional arguments name no readable exception type (`suppress(*errors)`), or whose type does not resolve | `unknown` |
 | EXC001 | bare `except:`, untyped JavaScript `catch (e)`, inline untyped rejection handler: each provably binds every exception | `violation` |
 | DEF002 | `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)`, `m.get(k)` on a receiver not proven a mapping (`approximate` confidence): whether it is a fallback depends on the receiver's type | `unknown` |
+| ASYNC001 | a dropped call whose async callee the call graph matched by name only (a `probable` edge) | `unknown` |
 | every other finding | MAGIC001, EXC002, EXC003, EXC004, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002, STUB001, STUB002, ASSERT001, BOOL001, STATE001 (its `approximate` confidence is about aliasing, not about whether the binding is written), IMPORT001 | `violation` |
 
 Unresolved call-graph edges never become findings: CPLX005 counts resolved
@@ -68,7 +69,7 @@ weakened" without a separate exit code: a gating finding of any category exits
 | Category | Families | Meaning |
 |---|---|---|
 | `policy_integrity` | `VERIFY*` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
-| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
+| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001`, `ASYNC*` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
 | `structural` | `CPLX*`, `BOOL001`, `STATE001` | complexity, coupling, unreadable call sites and shared state (advisory) |
 
 The JSON report counts findings per category in `summary.by_category`; SARIF
@@ -814,6 +815,41 @@ and static field initializers), not under `if __name__ == "__main__":` or
 `rules.import_effects.python_operations` / `javascript_operations`. An
 unresolved framework call (`app.run()`, `server.listen()`) is not reported;
 calls reached through a function called at import time are not followed.
+
+### ASYNC001-ASYNC003: async lifecycle (H4; warning)
+
+Milestone H4 of specification section 21. Every coroutine, task and Promise
+needs an owner that waits for it and sees its failure. Section
+`rules.async_lifecycle`; default roles production and test (an unawaited
+coroutine makes a test pass without checking anything); `warning` until the
+precision is measured (decision 9).
+
+| Rule | Reports | Languages | Status |
+|---|---|---|---|
+| `ASYNC001` | a call that is a whole statement (or a JavaScript `void` call) whose callee is a configured coroutine/Promise API or a project function declared `async` | Python, JavaScript | `violation`; `unknown` when the call graph matched the async callee by name only (`probable`) |
+| `ASYNC002` | `create_task(...)` / `ensure_future(...)` as a statement, unless the receiver was bound by a configured supervisor (`async with asyncio.TaskGroup() as group`) | Python | `violation` (exact for `asyncio.*`, approximate otherwise) |
+| `ASYNC003` | `gather(..., return_exceptions=True)` / `Promise.allSettled(...)` whose result is thrown away, or whose enclosing function neither returns the batch nor checks a result for failure | Python, JavaScript | `violation` (exact when thrown away, approximate otherwise) |
+
+**ASYNC001.** The catalog (`python_coroutine_apis`, `javascript_promise_apis`:
+`asyncio.sleep`, `asyncio.wait_for`, ... `fetch`, `fs/promises` functions,
+`timers/promises.setTimeout`) is matched after resolving the callee through
+the file's own imports. Project callees are resolved by the cross-file call
+graph, the same resolution `metrics.graph` reports: `await save(r)` in one file
+and `save(r)` as a statement in another, where `save` is `async def` in a third,
+reports the second. `void` is not treated as handling a rejection. The call
+graph is built for ASYNC001 even when `complexity.enabled = false`.
+
+**ASYNC002.** A supervisor is a `with`/`async with` manager listed in
+`rules.async_lifecycle.supervisors` (`asyncio.TaskGroup`,
+`anyio.create_task_group`, `trio.open_nursery`), matched in full or by its last
+segment, that bound the receiver in the same function. A task whose handle is
+kept (assigned, added to a set, awaited) is not reported.
+
+**ASYNC003.** Python inspection is an `isinstance` check against a type whose
+name contains `Exception` or `Error`; JavaScript inspection is a `.status` or
+`.reason` access or a `"rejected"` string, anywhere in the enclosing function.
+Returning the batch (or a concise arrow that evaluates to it) hands the check to
+the caller.
 
 ## Registered, not implemented
 

@@ -18,6 +18,7 @@ from shockharness.constants import (
     RADIX_HEX,
     RADIX_OCTAL,
 )
+from shockharness.ir.javascript_async import collect_javascript_async
 from shockharness.ir.javascript_catches import (
     collect_javascript_catches,
     node_span,
@@ -300,5 +301,6 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         bindings=collect_javascript_bindings(source, root),
         verification=collect_javascript_verification(source, root, tuple(comments)),
         guardrails=collect_javascript_guardrails(source, root),
+        asynchrony=collect_javascript_async(source, root),
         parse_failure=None,
     )

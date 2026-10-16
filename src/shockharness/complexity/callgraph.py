@@ -686,11 +686,37 @@ def _classify(
 
 
 @dataclass(frozen=True)
+class SiteResolution:
+    """Where one call site (path, call span) resolved to (H4, ASYNC001)."""
+
+    target: Target
+    confidence: str
+
+
+@dataclass(frozen=True)
 class CallGraph:
     edges: tuple[CallEdge, ...]
     module_edges: tuple[ModuleEdge, ...]
     unit_keys: tuple[str, ...]
     paths: tuple[str, ...]
+    # Every call, attribute-call and construction site, keyed by (path, call span);
+    # arguments passed as values are not sites. Not serialized.
+    sites: Mapping[tuple[str, Span], SiteResolution]
+
+
+def _edges(
+    aggregated: Mapping[tuple[str, str, str, str, str], tuple[int, Span, str]],
+) -> tuple[CallEdge, ...]:
+    edges = [
+        CallEdge(source, Target(kind, identifier), confidence, edge_kind, count, span, reason)
+        for (source, kind, identifier, confidence, edge_kind), (
+            count,
+            span,
+            reason,
+        ) in aggregated.items()
+    ]
+    edges.sort(key=lambda e: (e.source, e.span, e.target.kind, e.target.identifier, e.kind))
+    return tuple(edges)
 
 
 def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
@@ -705,6 +731,7 @@ def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
     scopes = {m.path: _scope_for(m, per_module_edges[m.path]) for m in ordered}
     resolver = _Resolver(ordered, scopes)
     aggregated: dict[tuple[str, str, str, str, str], tuple[int, Span, str]] = {}
+    sites: dict[tuple[str, Span], SiteResolution] = {}
     unit_keys: list[str] = []
     for module in ordered:
         for unit in module.units:
@@ -714,6 +741,10 @@ def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
                 if classified is None:
                     continue
                 resolution, edge_kind = classified
+                if edge_kind != EDGE_ARGUMENT:
+                    sites[(module.path, call.span)] = SiteResolution(
+                        resolution.target, resolution.confidence
+                    )
                 key = (
                     unit.key,
                     resolution.target.kind,
@@ -726,21 +757,12 @@ def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
                     aggregated[key] = (count + 1, min(first, call.span), reason)
                 else:
                     aggregated[key] = (1, call.span, resolution.reason)
-    edges: list[CallEdge] = []
-    for (source, kind, identifier, confidence, edge_kind), (
-        count,
-        span,
-        reason,
-    ) in aggregated.items():
-        edges.append(
-            CallEdge(source, Target(kind, identifier), confidence, edge_kind, count, span, reason)
-        )
-    edges.sort(key=lambda e: (e.source, e.span, e.target.kind, e.target.identifier, e.kind))
     return CallGraph(
-        edges=tuple(edges),
+        edges=_edges(aggregated),
         module_edges=tuple(module_edges),
         unit_keys=tuple(unit_keys),
         paths=tuple(m.path for m in ordered),
+        sites=sites,
     )
 
 
@@ -754,6 +776,7 @@ __all__ = [
     "CallGraph",
     "ModuleEdge",
     "ModuleInput",
+    "SiteResolution",
     "Target",
     "build_call_graph",
 ]

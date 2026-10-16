@@ -44,6 +44,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.boolean_arguments.severity": ("error", "warning", "review"),
     "rules.module_state.severity": ("error", "warning", "review"),
     "rules.import_effects.severity": ("error", "warning", "review"),
+    "rules.async_lifecycle.severity": ("error", "warning", "review"),
 }
 # A higher value reports less.
 THRESHOLDS = (

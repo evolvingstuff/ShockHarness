@@ -333,6 +333,7 @@ gate. It lives in the family's own table: `rules.magic_numbers`,
 | Family | Default | Why |
 |---|---|---|
 | `rules.exceptions` | `true` | EXC001 has always failed closed on unresolved types and opaque handlers |
+| `rules.async_lifecycle` | `false` | ASYNC001 through a probable call-graph edge (the async callee matched by name only) |
 | `rules.defaults` | `true` (`false` in `recommended`) | DEF002 on a receiver not proven a mapping has always failed the gate under `strict`; `recommended` reports it without gating, so a guess about a receiver's type cannot fail that gate |
 | `rules.magic_numbers` | `false` | MAGIC001 is exact; it produces no unknown findings |
 | `complexity` | `false` | CPLX001-CPLX006 measure what was resolved; advisory either way |
@@ -684,6 +685,31 @@ The same loosenings are what `VERIFY003` reports in a revision diff and what a
 path = "src/app/cache.py"
 name = "_MEMO"
 reason = "process-wide memo; read-mostly, guarded by _LOCK"
+```
+
+## Async lifecycle (H4)
+
+```toml
+[tool.shockharness.rules.async_lifecycle]   # ASYNC001-ASYNC003
+enabled = true
+severity = "warning"                        # "warning" | "error" | "review"
+roles = ["production", "test"]
+fail_on_unknown = false                     # ASYNC001 through a probable call-graph edge
+python_coroutine_apis = ["asyncio.sleep", "asyncio.wait_for", "asyncio.gather", ...]
+javascript_promise_apis = ["fetch", "fs/promises.readFile", ...]
+supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
+```
+
+`severity` and `roles` work as in the H3 tables. Removing a role or a catalog
+entry, adding a supervisor, or lowering the severity to `review` is a policy
+deviation (and therefore reported by `VERIFY003` and protected by `--policy`).
+`fail_on_unknown = true` makes `unknown` ASYNC001 findings gate by their
+severity. A custom supervisor (a long-lived object that keeps its tasks and logs
+their failures) is declared in `supervisors`:
+
+```toml
+[tool.shockharness.rules.async_lifecycle]
+supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery", "app.jobs.Supervisor"]
 ```
 
 ## History

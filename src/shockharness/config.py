@@ -74,6 +74,7 @@ FAIL_ON_UNKNOWN_SECTIONS: Mapping[str, str] = {
     "rules.defaults": "DEF001-DEF006",
     "complexity": "CPLX001-CPLX006",
     "rules.verification": "VERIFY001, VERIFY002, VERIFY004",
+    "rules.async_lifecycle": "ASYNC001-ASYNC003",
 }
 # The legacy spelling of the config role's globs (H1): merged into file_roles.config.
 LEGACY_CONFIGURATION_FILES = "rules.magic_numbers.configuration_files"
@@ -507,6 +508,7 @@ GUARDRAIL_RULES = {
     "boolean_arguments": "BOOL001",
     "module_state": "STATE001",
     "import_effects": "IMPORT001",
+    "async_lifecycle": "ASYNC001-ASYNC003",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -518,8 +520,14 @@ GUARDRAIL_CATALOGS = (
     ("import_effects", "roles"),
     ("import_effects", "python_operations"),
     ("import_effects", "javascript_operations"),
+    ("async_lifecycle", "roles"),
+    ("async_lifecycle", "python_coroutine_apis"),
+    ("async_lifecycle", "javascript_promise_apis"),
 )
-GUARDRAIL_PERMISSIONS = (("boolean_arguments", "allowed_callees"),)
+GUARDRAIL_PERMISSIONS = (
+    ("boolean_arguments", "allowed_callees"),
+    ("async_lifecycle", "supervisors"),
+)
 REVIEW = "review"
 
 
@@ -558,7 +566,7 @@ def _guardrail_list_deviations(rules: Mapping[str, Any], strict: Mapping[str, An
             found.append(
                 f"rules.{section}.{key} also permits "
                 + ", ".join(repr(v) for v in added)
-                + f"; {GUARDRAIL_RULES[section]} does not report those calls"
+                + f"; {GUARDRAIL_RULES[section]} no longer report what they cover"
             )
     return found
 

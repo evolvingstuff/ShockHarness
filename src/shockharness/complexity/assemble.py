@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from shockharness.complexity.callgraph import ModuleInput, build_call_graph
+from shockharness.complexity.callgraph import CallGraph, ModuleInput, build_call_graph
 from shockharness.complexity.coupling import (
     STATUS_AVAILABLE,
     STATUS_DISABLED,
@@ -44,6 +44,9 @@ class ComplexityOutcome:
     complexity: dict[str, Any]
     graph: dict[str, Any]
     graph_findings: Mapping[str, Sequence[Finding]]
+    # The call graph itself, for rules that resolve call sites (ASYNC001, H4); None when
+    # complexity is disabled and the graph was not built.
+    call_graph: CallGraph | None
 
 
 def thresholds_json(settings: Mapping[str, Any]) -> dict[str, int]:
@@ -83,6 +86,7 @@ def disabled_outcome(config: EffectiveConfig) -> ComplexityOutcome:
         },
         graph=graph,
         graph_findings={},
+        call_graph=None,
     )
 
 
@@ -120,4 +124,5 @@ def assemble(
         graph_findings=run_graph_rules(
             metrics, sources, {m.path: m.language for m in ordered}, settings, cplx005_paths
         ),
+        call_graph=graph,
     )

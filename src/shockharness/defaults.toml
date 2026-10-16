@@ -291,6 +291,45 @@ javascript_operations = [
   "setInterval",
 ]
 
+# H4 async lifecycle (ASYNC001-ASYNC003): discarded coroutines and Promises, tasks started
+# without an owner, settled batches whose failures nobody checks. `severity` and `roles`
+# work as in the H3 tables; tests are included because an unawaited coroutine makes a test
+# pass without running its check.
+[tool.shockharness.rules.async_lifecycle]
+enabled = true
+severity = "warning"
+roles = ["production", "test"]
+# A probable call-graph edge (matched by name only) makes an ASYNC001 finding unknown.
+fail_on_unknown = false
+# ASYNC001: coroutine / Promise APIs whose result must not be thrown away (removing one is a
+# policy deviation). Project functions declared async are found through the call graph.
+python_coroutine_apis = [
+  "asyncio.sleep",
+  "asyncio.wait_for",
+  "asyncio.wait",
+  "asyncio.gather",
+  "asyncio.shield",
+  "asyncio.to_thread",
+  "asyncio.open_connection",
+  "asyncio.create_subprocess_exec",
+  "asyncio.create_subprocess_shell",
+]
+javascript_promise_apis = [
+  "fetch",
+  "fs/promises.readFile",
+  "fs/promises.writeFile",
+  "fs/promises.appendFile",
+  "fs/promises.rm",
+  "fs/promises.unlink",
+  "fs/promises.mkdir",
+  "fs/promises.rename",
+  "fs/promises.copyFile",
+  "timers/promises.setTimeout",
+]
+# ASYNC002: context managers whose bound name owns the tasks it creates (`async with
+# asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
+supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

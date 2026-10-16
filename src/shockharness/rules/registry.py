@@ -1482,6 +1482,140 @@ IMPORT001 = RuleSpec(
 )
 
 
+# --- H4: async lifecycle (spec 21.2) --------------------------------------------------------
+
+ASYNC_SECTION = "rules.async_lifecycle"
+
+ASYNC001 = RuleSpec(
+    rule_id="ASYNC001",
+    version="1",
+    name="discarded coroutine or Promise",
+    family="async_lifecycle",
+    config_section=ASYNC_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A coroutine or Promise is created and thrown away: the work may never run (Python) "
+        "or finish after the caller has reported success, and its failure is never observed."
+    ),
+    rationale=(
+        "save(record) without await returns before anything is saved, and a rejection "
+        "becomes an unhandled-rejection warning in a log, if anything. The caller reports "
+        "success for work that did not happen. This is a swallowed exception with no catch."
+    ),
+    guarantees=(
+        "A call that is a whole expression statement (and a JavaScript void call) whose "
+        "callee is (a) in rules.async_lifecycle.python_coroutine_apis or "
+        "javascript_promise_apis, resolved through the file's own imports (asyncio.sleep, "
+        "asyncio.wait_for, fetch, fs/promises functions), or (b) a function or method of the "
+        "analyzed project that the call graph resolves to an async def / async function, "
+        "across files. A resolved edge is a violation; a probable edge (matched by name "
+        "only) is unknown. void is not treated as handling the Promise."
+    ),
+    limitations=(
+        "Without type information an arbitrary call is not assumed to return a Promise: a "
+        "library call not in the catalog, a callback, or a method on an object of unknown "
+        "type is not reported. A Promise stored in a variable and never awaited is not "
+        "tracked."
+    ),
+    remediation=(
+        "await it, return it, or hand it to an owner that observes its failure (a TaskGroup, "
+        "Promise.all whose result is awaited). A JavaScript entry point that must not "
+        "await (main() at the top level) handles the rejection explicitly: "
+        "main().catch((error) => { console.error(error); process.exitCode = 1; })."
+    ),
+    noncompliant_example=(
+        "async def handler(record):\n    save(record)  # save is async\n    return OK"
+    ),
+    compliant_example="async def handler(record):\n    await save(record)\n    return OK",
+)
+
+ASYNC002 = RuleSpec(
+    rule_id="ASYNC002",
+    version="1",
+    name="task started without an owner",
+    family="async_lifecycle",
+    config_section=ASYNC_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "asyncio.create_task(...) or ensure_future(...) as a statement drops the task's "
+        "handle: nothing awaits it, keeps it alive or retrieves its exception."
+    ),
+    rationale=(
+        "The event loop keeps only a weak reference to a task: a dropped task can be "
+        "garbage-collected mid-flight, and an exception in it surfaces, if ever, as 'Task "
+        "exception was never retrieved' long after the request that started it returned."
+    ),
+    guarantees=(
+        "A call statement whose last callee segment is create_task or ensure_future "
+        "(asyncio.create_task, loop.create_task, ...), unless its receiver was bound in the "
+        "same function by a with/async with whose manager is in "
+        "rules.async_lifecycle.supervisors (asyncio.TaskGroup, anyio.create_task_group, "
+        "trio.open_nursery). Exact for asyncio.*, approximate for other receivers."
+    ),
+    limitations=(
+        "A task kept elsewhere (added to a set, given a done-callback) is not reported, "
+        "because its handle is not dropped; whether that owner observes failures is not "
+        "checked. Framework background-job queues are not modeled."
+    ),
+    remediation=(
+        "Start the task inside a TaskGroup (async with asyncio.TaskGroup() as group: "
+        "group.create_task(...)), or keep the handle and await it, or keep it in an owner "
+        "that awaits or cancels it and logs its exception."
+    ),
+    noncompliant_example="asyncio.create_task(notify(user))\nreturn OK",
+    compliant_example=(
+        "async with asyncio.TaskGroup() as group:\n    group.create_task(notify(user))"
+    ),
+)
+
+ASYNC003 = RuleSpec(
+    rule_id="ASYNC003",
+    version="1",
+    name="settled batch whose failures are not inspected",
+    family="async_lifecycle",
+    config_section=ASYNC_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "asyncio.gather(..., return_exceptions=True) and Promise.allSettled turn failures "
+        "into values; thrown away or never checked, every failure in the batch disappears."
+    ),
+    rationale=(
+        "These APIs exist so that one failure does not hide the others. Used without looking "
+        "at the results, they hide all of them, and the batch reports success."
+    ),
+    guarantees=(
+        "Python: a call whose last callee segment is gather with return_exceptions=True; "
+        "JavaScript: Promise.allSettled(...). Reported when the result is thrown away (an "
+        "expression statement, awaited or not; exact), or when the enclosing function "
+        "neither returns the batch nor inspects a result for failure (Python: an isinstance "
+        "check against a type whose name contains Exception or Error; JavaScript: .status, "
+        ".reason or a 'rejected' string; approximate)."
+    ),
+    limitations=(
+        "Inspection is recognized anywhere in the enclosing function, not traced to the "
+        "batch's own results; a helper that inspects the results in another function is not "
+        "followed."
+    ),
+    remediation=(
+        "Check every result: raise or report the failures (isinstance(result, Exception); "
+        "result.status === 'rejected'), or use gather / Promise.all without the setting if "
+        "the first failure should fail the batch."
+    ),
+    noncompliant_example="await asyncio.gather(*jobs, return_exceptions=True)",
+    compliant_example=(
+        "results = await asyncio.gather(*jobs, return_exceptions=True)\n"
+        "failures = [r for r in results if isinstance(r, Exception)]\n"
+        "if failures:\n    raise ExceptionGroup('jobs failed', failures)"
+    ),
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -1520,6 +1654,9 @@ RULES: tuple[RuleSpec, ...] = (
     BOOL001,
     STATE001,
     IMPORT001,
+    ASYNC001,
+    ASYNC002,
+    ASYNC003,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -1565,6 +1702,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "import_effects": CATEGORY_CONTRACT,
     "boolean_arguments": CATEGORY_STRUCTURAL,
     "module_state": CATEGORY_STRUCTURAL,
+    "async_lifecycle": CATEGORY_CONTRACT,
 }
 
 

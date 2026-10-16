@@ -1219,7 +1219,7 @@ In order:
    EXC004 (`return`/`break`/`continue` in `finally`). Done 2026-10-16 (see its
    entry below); released as 0.6.0.
 3. **H4** (async lifecycle, including uninspected `gather(return_exceptions=True)`
-   and `Promise.allSettled` results), **H5** (API catalog, PROCESS001 naming
+   and `Promise.allSettled` results; done 2026-10-16, not released), **H5** (API catalog, PROCESS001 naming
    `check=False`), **H-TS** (TypeScript; `tree-sitter-typescript` approved),
    then H6 and H7.
 - Declined: Python 3.10 support (decision 17). Recorded, not scheduled: a rule
@@ -3076,4 +3076,105 @@ registry, report, analysis, exception and inventory expectations.
   binding fact marks mutable containers, and the `global` declaration is on the
   function fact. It now combines both, as `complexity/coupling.py` does.
 * Two expected line numbers in the new tests were miscounted by hand.
+
+## Milestone H4: async lifecycle — DONE (2026-10-16)
+
+ASYNC001, ASYNC002 and ASYNC003 and the `async-lifecycle` skill, as recorded in
+spec 21.2 (H4 row) and decisions 15 and 22. Implemented in the lead session; not
+released.
+
+### What was built
+
+* **Facts** (`ir/model.py`: `DiscardedCall`, `SettledBatch`, `AsyncFacts`;
+  `ModuleFacts.asynchrony`) from `ir/python_async.py` and
+  `ir/javascript_async.py`, cached (cache schema "5").
+* **Call graph**: `CallGraph.sites` keeps each call site's resolution (path, call
+  span -> target and confidence); edges are unchanged.
+* **Rules** (`rules/async_lifecycle.py`), run in the cross-file phase
+  (`analysis.async_findings`): the per-file phase only records whether they
+  apply to the file (`rules_applied`), so cached files stay correct. ASYNC001
+  combines a configured API catalog resolved through the file's imports with
+  project functions declared `async`, resolved by the call graph.
+* **Config**: `rules.async_lifecycle` (enabled, severity, roles default
+  production and test, fail_on_unknown, two catalogs, supervisors), deviations
+  through the H3 machinery, the severity in the loosening order, and the
+  section in `FAIL_ON_UNKNOWN_SECTIONS`.
+* **Skill**: `async-lifecycle` (sixth skill), with the shared adoption section;
+  its compliant examples pass `shockharness check`.
+
+### Decisions (mine; review these)
+
+1. **Roles default to production and test.** An unawaited coroutine in a test
+   makes the test pass without checking anything; that is the case the rule most
+   wants to catch.
+2. **Only whole-statement calls and `void`.** A coroutine stored in a variable
+   and never awaited is not tracked; the statement form is where agents drop
+   async work, and it needs no data flow.
+3. **No type inference for JavaScript.** A call is a Promise only when its callee
+   is in the catalog or is a project function declared `async`; an arbitrary
+   library call is never assumed to return one (the brief's warning).
+4. **Graph confidence decides the status.** A resolved edge is a violation; a
+   probable edge (including `self.method()`, which a subclass may override) is
+   `unknown`, gated only with `fail_on_unknown = true`.
+5. **The graph is built for ASYNC001 even with complexity disabled**, and the
+   units it needs are measured then; neither is reported.
+6. **Supervisors are recognized by the binding `with`/`async with`** in the same
+   function; a `TaskGroup` passed in as a parameter is not recognized
+   (documented; the finding is approximate).
+7. **ASYNC003 inspection is function-wide**, not traced to the batch's results;
+   returning the batch, or a concise arrow evaluating to it, counts as handing
+   the check to the caller.
+
+### Regression against 0.6.0
+
+`shockharness==0.6.0` against this tree, same inputs, all three profiles: the
+self-scan, the golden fixtures (exits 3/3/1) and both examples are identical,
+and no target has an ASYNC finding (the tool and the corpus have no dropped
+async calls). The 0.3.0 regression runs with the H4 section off.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+130 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  190 findings  (cache hits 0 / misses 133, then 133 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1065 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1
+1064 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+Self-diff in a scratch clone against 265f18f (the 0.6.0 STATUS commit): 134
+files compared (4 new), `gate: PASS (exit 0)`, **no new findings**. The first
+self-diff flagged complexity in `prepare_text`, `build_call_graph`,
+`javascript_async._settled` and `_async001`; each was split into named steps.
+
+New tests: `tests/unit/test_async_lifecycle.py` (7: cross-file and catalog
+ASYNC001, JavaScript `void` and entry points, the probable-edge unknown,
+complexity disabled, supervisors, settled batches, roles and deviations), plus
+the updated rule lists, skill list, inventory and regression.
+
+### Failures observed during development (and what was done)
+
+* With `complexity.enabled = false` ASYNC001 found nothing: no units were
+  measured, so the graph had nothing to resolve to. Units are now measured
+  whenever ASYNC001 applies.
+* A concise arrow `(ps) => Promise.allSettled(ps)` was not seen as returning the
+  batch: tree-sitter returns a fresh wrapper per access, so `is` never matched;
+  nodes are compared by `id`.
+* A `len((ISINSTANCE, GATHER))` trick to avoid a literal was replaced by the
+  named constant `ISINSTANCE_ARGUMENTS`; the self-gate also caught a `[2]` index
+  and a conditional fallback in the new extractors.
 

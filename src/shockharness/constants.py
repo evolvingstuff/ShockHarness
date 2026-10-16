@@ -88,7 +88,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # The content-hash cache (0.3.0): the shape version of index.json and of each entry.
 # Bumped on an incompatible change; a cache written by another version is invalidated.
 # "2": finding status and file role (H1); "3": verification facts (H2).
-CACHE_SCHEMA_VERSION: Final[str] = "4"
+CACHE_SCHEMA_VERSION: Final[str] = "5"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.
@@ -97,6 +97,8 @@ CACHE_CONTROL_FIELDS: Final[int] = 6
 # Verification (H2): an equality assertion compares exactly two operands
 # (assertEqual(a, b), expect(a).toBe(b) has one each side, assert.equal(a, b)).
 EQUALITY_OPERANDS: Final[int] = 2
+# isinstance(value, types): the value and the types (H4, ASYNC003).
+ISINSTANCE_ARGUMENTS: Final[int] = 2
 
 # `git diff --name-status -z` records (H2 rename detection): a rename or copy is
 # "status, old path, new path"; every other change is "status, path".

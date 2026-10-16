@@ -118,6 +118,17 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "unresolved) when the base version could not be analyzed, or when rename detection "
         "failed and the file has no base version under its own path",
     ),
+    # H4: ASYNC001 through a probable call-graph edge (the callee matched by name only)
+    # is unknown; every other ASYNC finding is a violation.
+    ("rules/async_lifecycle.py", "_async_callee"): (
+        frozenset({"STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),
+        "violation for a catalog API or a resolved async callee; unknown (confidence "
+        "unresolved) when the call graph matched the async callee by name only",
+    ),
+    ("rules/async_lifecycle.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "the status is decided by the caller (_async001, _async002, _async003)",
+    ),
     # H3: every guardrail finding is a violation (the facts are exact syntax; STATE001's
     # approximate confidence concerns aliasing, not whether the binding is written).
     ("rules/guardrails.py", "_finding"): (

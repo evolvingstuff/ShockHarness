@@ -442,6 +442,9 @@ def test_single_exception_rule_can_be_disabled_by_override(
     assert [f.rule_id for f in result.findings] == ["EXC001"]
     assert result.rules_applied == (
         "ASSERT001",
+        "ASYNC001",
+        "ASYNC002",
+        "ASYNC003",
         "BOOL001",
         "CPLX001",
         "CPLX002",

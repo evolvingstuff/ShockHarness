@@ -346,7 +346,7 @@ def _target(fact: ImportFact, module: str, name: str, local: str, language: str)
     return f"{module}.{name}"
 
 
-def _aliases(imports: Sequence[ImportFact], language: str) -> dict[str, str]:
+def import_aliases(imports: Sequence[ImportFact], language: str) -> dict[str, str]:
     """Local name -> the qualified name it refers to, from the file's own imports."""
     aliases: dict[str, str] = {}
     for fact in imports:
@@ -360,7 +360,7 @@ def _aliases(imports: Sequence[ImportFact], language: str) -> dict[str, str]:
     return aliases
 
 
-def _qualified(callee: str, aliases: Mapping[str, str]) -> str:
+def qualified_callee(callee: str, aliases: Mapping[str, str]) -> str:
     head, _dot, rest = callee.partition(".")
     if head not in aliases:
         return callee
@@ -374,10 +374,10 @@ def _import001(
 ) -> list[Finding]:
     key = "python_operations" if language == PYTHON else "javascript_operations"
     operations = {str(o) for o in settings[key]}
-    aliases = _aliases(facts.imports, language)
+    aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for call in facts.guardrails.import_time_calls:
-        qualified = _qualified(call.callee, aliases)
+        qualified = qualified_callee(call.callee, aliases)
         if qualified not in operations:
             continue
         found.append(

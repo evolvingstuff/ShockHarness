@@ -39,16 +39,19 @@ two consumer examples) and G (bundled agent skills, `skills install` /
 (per-unit complexity metrics with versioned conventions, a call graph whose
 edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
 shared-mutable-state notes, hotspots from churn and cognitive complexity, and
-per-unit regressions in revision diffs) are implemented, as are the first three
+per-unit regressions in revision diffs) are implemented, as are the first four
 milestones of the advanced guardrails: H1 (an explicit `unknown` finding status
-and file roles) and H2 (verification integrity: in a revision diff, report test
+and file roles), H2 (verification integrity: in a revision diff, report test
 skips and focus markers, blanket suppressions, neutralized assertions and
 looser policy, baselines, workflows or tool settings that a change adds; an
 organization `--policy` file the repository cannot loosen; and a fifth agent
-skill, `verification-integrity`) and H3 (syntax-level guardrails: `return` in
+skill, `verification-integrity`), H3 (syntax-level guardrails: `return` in
 `finally`, stubs and production imports of test doubles, removable asserts,
 positional Boolean flags, module state written from functions, side effects at
-import time; advisory until their precision is measured). `MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
+import time; advisory until their precision is measured) and H4 (async lifecycle:
+coroutines and Promises created and dropped, tasks started without an owner,
+settled batches whose failures nobody checks; a sixth skill, `async-lifecycle`).
+`MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
 
@@ -81,6 +84,9 @@ Implemented rules:
 | `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
 | `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
 | `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |
+| `ASYNC001` | a coroutine or Promise created and dropped (an async call as a statement, `void`), across files | warning |
+| `ASYNC002` | `asyncio.create_task(...)` with its handle dropped, outside a `TaskGroup` | warning |
+| `ASYNC003` | `gather(return_exceptions=True)` / `Promise.allSettled` whose results are not checked for failure | warning |
 
 ## Install
 
@@ -123,7 +129,7 @@ shockharness gate --base main --head HEAD                      # exit 1 only on 
 shockharness exceptions src/                                   # every suppression, boundary, override, exclusion and baseline entry, with its source (exit 0)
 shockharness rules list
 shockharness rules explain MAGIC001
-shockharness skills list                                       # the five bundled agent skills
+shockharness skills list                                       # the six bundled agent skills
 shockharness skills install --agent claude                     # .claude/skills/<name>/SKILL.md + manifest
 shockharness skills update --agent claude --check              # exit 1 when a skill is stale or edited
 ```

@@ -313,6 +313,16 @@ CONFIG_SCHEMA = TableField(
                     },
                     required=(),
                 ),
+                "async_lifecycle": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "fail_on_unknown": BoolField(),
+                        "python_coroutine_apis": ListField(StrField(allow_empty=False)),
+                        "javascript_promise_apis": ListField(StrField(allow_empty=False)),
+                        "supervisors": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
                 "verification": TableField(
                     fields={
                         "enabled": BoolField(),

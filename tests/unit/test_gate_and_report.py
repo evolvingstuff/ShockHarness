@@ -135,6 +135,9 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "BOOL001",
         "STATE001",
         "IMPORT001",
+        "ASYNC001",
+        "ASYNC002",
+        "ASYNC003",
     ]
     assert report.coverage["languages"]["python"]["parser"] == "python-ast"
 

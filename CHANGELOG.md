@@ -5,6 +5,40 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H4 of specification section 21: async lifecycle. Three new rules ship
+at `warning` (decision 9), so no gate verdict changes; the golden corpus has no
+async findings, and the 0.3.0 regression runs with them off.
+
+### Added
+- `ASYNC001` (Python, JavaScript): a coroutine or Promise created and dropped:
+  a call that is a whole statement, or a JavaScript `void` call, whose callee is
+  a configured coroutine/Promise API (`asyncio.sleep`, `fetch`, `fs/promises`
+  ...) resolved through the file's imports, or a project function declared
+  `async`, resolved across files by the call graph (a probable edge is
+  `unknown`).
+- `ASYNC002` (Python): `create_task(...)` / `ensure_future(...)` with the task's
+  handle dropped, unless a configured supervisor (`asyncio.TaskGroup`,
+  `anyio.create_task_group`, `trio.open_nursery`) bound the receiver.
+- `ASYNC003` (Python, JavaScript): `gather(..., return_exceptions=True)` and
+  `Promise.allSettled` whose results are thrown away or never checked for
+  failure in the enclosing function.
+- `[tool.shockharness.rules.async_lifecycle]`: `enabled`, `severity`, `roles`
+  (production and test), `fail_on_unknown`, `python_coroutine_apis`,
+  `javascript_promise_apis`, `supervisors`; every loosening is a policy
+  deviation.
+- A sixth bundled skill, `async-lifecycle`.
+
+### Changed
+- The cache schema is "5" (async facts are cached).
+- With ASYNC001 active, units are measured and the call graph is built even
+  when `complexity.enabled = false` (neither is reported then).
+
+### Schema
+- Report shapes are unchanged (`schema_version` "1"): the new rule IDs appear in
+  `coverage.rules_implemented`, findings and SARIF rules, in category
+  `contract_integrity`; `gate.unknown_gating_families` can name
+  `async_lifecycle`.
+
 ## [0.6.0] - 2026-10-16
 
 Milestone H3 of specification section 21: syntax-level guardrails. Seven new

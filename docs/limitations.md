@@ -325,6 +325,29 @@ Stated so that a clean report is never read as more than it is.
 * JavaScript has no removable `assert`, so `ASSERT001` is Python only; empty
   JavaScript functions are not `STUB001` findings.
 
+## ASYNC001-ASYNC003 (H4)
+
+* They ship at `warning` and never gate by default (decision 9). An `ASYNC001`
+  finding through a `probable` call-graph edge is `unknown` and gates only with
+  `rules.async_lifecycle.fail_on_unknown = true`.
+* `ASYNC001` sees a call that is a whole statement (or `void`). A coroutine or
+  Promise stored in a variable and never awaited, passed to a function that
+  drops it, or created inside an expression is not tracked. Without type
+  information an arbitrary library call is not assumed to return a Promise:
+  only the configured catalog and project functions declared `async` count.
+  A function that returns a Promise without being declared `async` is not
+  recognized.
+* `ASYNC002` recognizes a supervisor only by the `with`/`async with` that bound
+  the receiver in the same function; a `TaskGroup` passed in as a parameter is
+  not recognized, so `group.create_task(...)` there is reported (approximate).
+  A task kept in a set or given a done-callback is not reported, and whether
+  that owner retrieves its exception is not checked.
+* `ASYNC003` recognizes inspection anywhere in the enclosing function, not
+  traced to the batch's own results; a helper in another function that inspects
+  them is not followed.
+* Framework background-job queues, event emitters and callback APIs are not
+  modeled.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
@@ -335,11 +358,12 @@ Stated so that a clean report is never read as more than it is.
   `EXC002`), JavaScript `.catch(...)` rejection handlers (`EXC001`, `EXC002`,
   `DEF005`), every `except`/`catch` outside a declared boundary, and since H3
   `return`/`break`/`continue` in a `finally` block (`EXC004`, at `warning`
-  until measured). Planned and not yet reported: `subprocess` calls with
-  `check=False` or without `check=True`
-  (`PROCESS001`, H5); `asyncio.gather(..., return_exceptions=True)` and
-  `Promise.allSettled` whose results are never inspected (H4); TypeScript
-  (H-TS). Keep those in the layered checker until the milestone lands.
+  until measured), and since H4 `asyncio.gather(..., return_exceptions=True)`
+  and `Promise.allSettled` whose results are never inspected (`ASYNC003`),
+  dropped coroutines and Promises (`ASYNC001`) and tasks started without an
+  owner (`ASYNC002`). Planned and not yet reported: `subprocess` calls with
+  `check=False` or without `check=True` (`PROCESS001`, H5); TypeScript (H-TS).
+  Keep those in the layered checker until the milestone lands.
 
 ## Not yet built (see the specification)
 

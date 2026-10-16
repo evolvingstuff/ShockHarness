@@ -1,13 +1,13 @@
 # Agent skills
 
-ShockHarness ships five vendor-neutral agent skills as package data
+ShockHarness ships six vendor-neutral agent skills as package data
 (`src/shockharness/skills/<name>/SKILL.md`), in the open Agent Skills format:
 YAML frontmatter with `name` and `description`, then a Markdown body. The
 files mention no agent's internals; the `skills` command knows where each
 supported agent expects them. Installing is opt-in and never touches a file
 outside the chosen destination.
 
-## The five skills
+## The six skills
 
 | Skill | Use it when | What it enforces |
 |---|---|---|
@@ -16,6 +16,7 @@ outside the chosen destination.
 | `refactor-complexity` | Simplifying or untangling code | Address repeated cognitive work and coupling rather than a metric; record call structure and behavior tests before and after. Quotes the real rules `CPLX001`-`CPLX006`, their thresholds, the report fields and the commands |
 | `pre-commit-review` | Before a commit or pull request | Run `shockharness gate --base <default branch> --head HEAD` (or `check .`), report unsupported analysis, policy deviations, suppressions and remaining warnings, run the tests; never claim a pass without the quoted output |
 | `verification-integrity` | A test, linter or gate fails and it is tempting to skip, suppress or loosen instead of fixing; editing `.shockharness.toml`, a baseline, a CI workflow or another tool's settings; a `VERIFY00x` finding | Fix the cause or stop and say what could not be fixed; never make a check pass by weakening it. Explains each of `VERIFY001`-`VERIFY004`, why they cannot be suppressed inline, the `--policy` floor and the strictest-of-base rule, and how to propose a policy change as its own reviewed change |
+| `async-lifecycle` | Writing or changing async Python or JavaScript; an unawaited call, a background task, `gather(return_exceptions=True)` or `Promise.allSettled`; an `ASYNC00x` finding | Every coroutine, task and Promise has an owner that waits for it and sees its failure: await, return, a `TaskGroup`, or `Promise.all` whose result is awaited; settled batches are checked for failures; no `void`; entry points end in a reporting `.catch` |
 
 Since 0.5.0, `fix-violations` and `pre-commit-review` also ask for a written
 rule proposal whenever a bug turns up that ShockHarness did not report (the
@@ -60,7 +61,7 @@ with `generic`, an unknown agent) exit 2 and write nothing.
 shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force]
 ```
 
-Writes `<destination>/<name>/SKILL.md` for each of the five skills, byte for
+Writes `<destination>/<name>/SKILL.md` for each of the six skills, byte for
 byte as shipped, then `<destination>/.shockharness-skills.json`. If any of
 those files already exists the command refuses (exit 2) and writes nothing;
 `--force` replaces them all. The command never creates, edits or deletes any
@@ -69,7 +70,7 @@ agent configuration. For `generic` it prints the line to add by hand:
 
 ```text
 Add this line to the agent's instruction file (for example AGENTS.md):
-  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review, verification-integrity).
+  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review, verification-integrity, async-lifecycle).
 ```
 
 ## The manifest

@@ -657,6 +657,51 @@ NO_GUARDRAILS = GuardrailFacts(
 )
 
 
+# --- Async lifecycle facts (H4) ----------------------------------------------------------
+# What ASYNC001-ASYNC003 need (rules/async_lifecycle.py). ASYNC001 also needs the call
+# graph's per-site resolution, which the cross-file phase supplies.
+
+
+@dataclass(frozen=True)
+class DiscardedCall:
+    """A call whose result is thrown away: an expression statement (Python ``f()``,
+    JavaScript ``f();``) or a JavaScript ``void f()``. ``callee`` is the dotted callee as
+    written; ``span`` is the call's span (the same as its ``CallSite``). ``bound_by`` is,
+    for ``name.method(...)``, the dotted callee of the ``with``/``async with`` that bound
+    ``name`` in the enclosing function (``asyncio.TaskGroup`` for ``tg.create_task``)."""
+
+    callee: str
+    text: str
+    void: bool
+    in_async: bool
+    bound_by: str | None
+    span: Span
+
+
+@dataclass(frozen=True)
+class SettledBatch:
+    """``asyncio.gather(..., return_exceptions=True)`` or ``Promise.allSettled(...)``:
+    failures come back as values. ``discarded`` when the result is thrown away;
+    ``inspected`` when the enclosing function checks a result for failure
+    (``isinstance(r, ...Exception)``, ``.status``, ``.reason``, ``"rejected"``) or returns
+    the batch to its caller."""
+
+    callee: str
+    text: str
+    discarded: bool
+    inspected: bool
+    span: Span
+
+
+@dataclass(frozen=True)
+class AsyncFacts:
+    discarded_calls: tuple[DiscardedCall, ...]
+    settled_batches: tuple[SettledBatch, ...]
+
+
+NO_ASYNC = AsyncFacts(discarded_calls=(), settled_batches=())
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -671,6 +716,7 @@ class ModuleFacts:
     bindings: tuple[ModuleBinding, ...]
     verification: VerificationFacts
     guardrails: GuardrailFacts
+    asynchrony: AsyncFacts
     parse_failure: ParseFailure | None
 
 
@@ -689,5 +735,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         bindings=(),
         verification=NO_VERIFICATION,
         guardrails=NO_GUARDRAILS,
+        asynchrony=NO_ASYNC,
         parse_failure=failure,
     )

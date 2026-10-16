@@ -70,6 +70,7 @@ Ask what the code promises when the value is absent or the operation fails.
 | `BOOL001` | What does the flag switch? | Pass it by keyword (`escape=True`) or in an options object; a flag that selects behavior may be two functions. |
 | `STATE001` | Who owns this state? Does it need to change at all? | A fixed table becomes a `tuple`/`frozenset`/`Object.freeze`d value (`write-compliant-code`, principle 8). Otherwise an object the caller creates and passes in, or a new value returned. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
 | `IMPORT001` | Who asked for this effect? | Move it into a function the entry point calls (`main()`, a factory, `start()`). |
+| `ASYNC001`-`ASYNC003` | Who waits for this work and sees it fail? | `await` or return it; start tasks in a `TaskGroup`; check every settled result for failure. See the `async-lifecycle` skill. |
 
 An **unknown** finding means the rule could not establish the property, not
 that the code is fine or that it is wrong. Treat it as a request for the

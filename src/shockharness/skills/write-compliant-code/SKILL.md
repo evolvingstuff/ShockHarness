@@ -36,6 +36,7 @@ the full detection guarantees.
 | `ASSERT001` | a Python `assert` used as a runtime check (removed under `-O`) | warning |
 | `BOOL001` | `f(x, True, False)`: pass flags by keyword or an options object | review |
 | `STATE001` / `IMPORT001` | module state written from functions / a side effect at import time | warning |
+| `ASYNC001`-`ASYNC003` | a coroutine or Promise dropped, a task started without an owner, a settled batch never checked for failures (see `async-lifecycle`) | warning |
 
 A clean report says `gate: PASS (exit 0)`. Exit `1` is a policy violation, `2`
 an invalid configuration or invocation, `3` a tool failure or, under

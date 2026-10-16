@@ -216,7 +216,7 @@ The four onboarding paths (baseline, `gates.new_hard_violations = "warn"`,
 
 ## 7. Agent skills
 
-If coding agents work in the repository, install the five bundled skills
+If coding agents work in the repository, install the six bundled skills
 next to the code so they are versioned with it, and let CI detect drift
 after an analyzer upgrade:
 
@@ -250,7 +250,7 @@ over HTTP; every skill carries the same section.
 * The example workflows call the reusable workflow pinned to a tag, with a
   pinned analyzer version, and the two pins of the Python example agree
   (`tests/unit/test_consumer_script.py`, `tests/unit/test_workflows.py`).
-* The five skills install for `claude`, `codex` and `generic` in a fresh
+* The six skills install for `claude`, `codex` and `generic` in a fresh
   directory, `skills update --check` then exits 0, and every reference
   solution of the eval corpus scores clean (`skill-evals` job,
   `evals/run_evals.py --reference`).
