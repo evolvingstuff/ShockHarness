@@ -280,6 +280,7 @@ KIND_DEFAULTDICT = (
 )
 KIND_MAPPING_GET = "mapping_get"  # m.get(k, v) / m.setdefault(k, v) / m.pop(k, v)
 KIND_MAPPING_GET_IMPLICIT = "mapping_get_implicit"  # m.get(k): None when the key is missing
+KIND_DISCARDED_REMOVAL = "discarded_removal"  # m.pop(k, None) as a statement: remove if present
 KIND_GETATTR = "getattr"  # getattr(o, name, v)
 KIND_MEMBERSHIP_TERNARY = "membership_ternary"  # m[k] if k in m else v / k in o ? o[k] : v
 KIND_DESTRUCTURING = "destructuring"  # const {x = v} = o / const [x = v] = a

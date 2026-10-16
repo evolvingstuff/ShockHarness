@@ -17,6 +17,14 @@ outside the chosen destination.
 | `pre-commit-review` | Before a commit or pull request | Run `shockharness gate --base <default branch> --head HEAD` (or `check .`), report unsupported analysis, policy deviations, suppressions and remaining warnings, run the tests; never claim a pass without the quoted output |
 | `verification-integrity` | A test, linter or gate fails and it is tempting to skip, suppress or loosen instead of fixing; editing `.shockharness.toml`, a baseline, a CI workflow or another tool's settings; a `VERIFY00x` finding | Fix the cause or stop and say what could not be fixed; never make a check pass by weakening it. Explains each of `VERIFY001`-`VERIFY004`, why they cannot be suppressed inline, the `--policy` floor and the strictest-of-base rule, and how to propose a policy change as its own reviewed change |
 
+Since 0.5.0, `fix-violations` and `pre-commit-review` also ask for a written
+rule proposal whenever a bug turns up that ShockHarness did not report (the
+pattern, why it is a bug, the rule, the expected false positives), and
+`write-compliant-code` asks for a check of a function's result where the
+contract promises something about it. `pre-commit-review` reads `shockharness
+exceptions .` as the reviewer's list of everything the code and configuration
+exempt.
+
 Every skill contains compliant and non-compliant Python and JavaScript
 examples (the worked examples are `examples/python` and `examples/js`), exact
 CLI invocations, a corrective workflow, a checklist, and an "Adopting

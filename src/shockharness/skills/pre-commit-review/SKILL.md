@@ -18,6 +18,7 @@ Run from the repository root, in this order.
 git status --short                                   # what is about to be committed
 shockharness config validate                         # exit 0; profile and every policy deviation
 shockharness check .                                 # working tree, full configured scope
+shockharness exceptions .                            # every suppression, boundary, override and exclusion in one list
 shockharness gate --base origin/main --head HEAD     # committed revisions only: exit 1 on NEW hard violations
 pytest -q                                            # or the project's test command: node --test, npm test
 ```
@@ -53,7 +54,10 @@ mean nothing was verified.
    ID exists (`shockharness rules list`), the reason cites a source, and the
    finding it silences is the one intended (`--no-inline-suppressions` shows
    every finding including suppressed ones). An unused suppression is a
-   `SUPP002` warning and should be deleted.
+   `SUPP002` warning and should be deleted. `shockharness exceptions .` lists
+   every inline suppression with its reason and whether it silences anything,
+   and every configuration exception with the file and line it comes from:
+   the reviewer's view of what the code and the configuration exempt.
 4. **Remaining findings and warnings.** List every `error`, `warning` and
    `review` finding in the changed files with its line, including the `review`
    findings that do not gate (`DEF003`, the implicit `None` of `.get(k)`,
@@ -80,6 +84,13 @@ mean nothing was verified.
 6. **Verdict.** `PASS` only when `check .` (and `gate`, when run) exited `0`,
    the tests passed, and items 1-4 contain nothing unresolved. Otherwise
    `BLOCKED` with the first blocking item.
+
+**Bugs the analyzer missed.** If the review finds a bug that ShockHarness did
+not report, add a rule proposal to it: the pattern as a minimal example, why it
+is a bug, the proposed rule (a syntactic rule rather than a heuristic), and the
+false positives you expect. It goes wherever the project collects tooling
+feedback; the review never edits the analyzer, its configuration or a baseline
+to act on it.
 
 ## Review template
 
@@ -164,6 +175,8 @@ NOT_FOUND = 404  # shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.
 - [ ] Every unknown finding in changed files answered by supplying the missing information, or suppressed with a reason that names what could not be determined.
 - [ ] Characterization tests named for every removed default, catch or fallback.
 - [ ] Verdict is `PASS` only with `gate: PASS (exit 0)` and a green test summary in the quoted output.
+- [ ] `shockharness exceptions .` read; any exception the change adds is listed above with its reason.
+- [ ] Any bug the review found that the analyzer missed has a rule proposal attached.
 
 ## Adopting ShockHarness
 

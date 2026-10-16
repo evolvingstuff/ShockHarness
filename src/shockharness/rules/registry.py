@@ -440,7 +440,15 @@ DEF002 = RuleSpec(
         "Python: m.get(k, v), m.setdefault(k, v), m.pop(k, v) on any receiver, getattr(o, a, v), "
         "'m[k] if k in m else v', next(iterator, v), and collections.defaultdict(factory) "
         "through any import spelling (import collections as c; c.defaultdict(list)); "
-        "d.pop(k), next(it) and defaultdict() with no default are not findings. The receiver "
+        "d.pop(k), next(it) and defaultdict() with no default are not findings. Not fallbacks "
+        "either: a .get(...) call that is itself a decorator (@router.get('/x')); a lookup "
+        "with a None fallback (m.get(k), m.get(k, None), m.pop(k, None), getattr(o, a, None)) "
+        "assigned to a name whose very next statement is an if without else that only raises "
+        "when the name is None, falsy, not callable or not an instance; and "
+        "m.setdefault(k, <empty container>) whose result is immediately mutated (.append, "
+        ".add, .extend, .update, .insert, .setdefault, or a subscript assignment). "
+        "m.pop(k, None) as a statement (its result discarded) is a review finding of kind "
+        "discarded_removal: use del if the key is always present. The receiver "
         "is proven a mapping (exact confidence) when it "
         "is a dict display, a name bound to a dict display or dict/defaultdict/OrderedDict/"
         "Counter/ChainMap call, or a name annotated as dict/Dict/Mapping/MutableMapping (and "
@@ -463,9 +471,14 @@ DEF002 = RuleSpec(
         "expressions are."
     ),
     remediation=(
-        "Index the mapping (m[k], o.x) so a missing key fails where it is missing, or validate "
-        "the data once at its boundary and carry a typed, explicitly optional value from there. "
-        "Never add a fallback to make a KeyError go away."
+        "Decide which case this is. (1) The key must exist: index the mapping (m[k], o.x) so a "
+        "missing key fails where it is missing, or validate the data once at its boundary. "
+        "(2) Absence is a normal state (an empty view has no root entry, an unused tag has no "
+        "posting): say so with an explicit 'if k in m:' branch and a comment, or a small named "
+        "helper whose name says what absence means (_posting_or_empty). Do not force an index "
+        "here; that turns a normal state into a crash. (3) The value comes from outside "
+        "(configuration, a request): validate it where it enters and carry a typed, explicitly "
+        "optional value from there. Never add a fallback to make a KeyError go away."
     ),
     noncompliant_example=(
         'timeout = config.get("timeout", 30)\nretries = getattr(opts, "retries", 3)'

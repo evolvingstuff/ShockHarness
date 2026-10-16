@@ -15,6 +15,13 @@ Recognized shapes:
   ``getattr(o, a, v)``, ``m[k] if k in m else v``, ``next(it, v)``,
   ``collections.defaultdict(factory)`` (through any import spelling), and
   ``m.get(k)`` with no fallback (an implicit ``None``);
+* not mapping fallbacks (0.5.0, docs/shockharness-suggestions-4.md items 1-4): a
+  ``.get(...)`` call that is itself a decorator (``@router.get("/x")``); a lookup
+  whose fallback is ``None`` assigned to a name and checked by the very next
+  statement, an ``if`` that only raises (``x = m.get(k)`` then ``if x is None:
+  raise ...``); and ``m.setdefault(k, <empty container>)`` whose result is
+  immediately mutated (the grouping idiom). ``m.pop(k, None)`` whose result is
+  discarded is its own kind, ``discarded_removal``;
 * pydantic model fields (``class M(BaseModel)`` with ``BaseModel`` resolved through
   the imports): ``x: int = 1``, ``Field(default=...)``, ``Field(1)``,
   ``Field(default_factory=...)``, reported with the dataclass kinds;
@@ -29,6 +36,7 @@ Recognized shapes:
 """
 
 import ast
+import itertools
 import re
 from dataclasses import dataclass
 
@@ -55,6 +63,7 @@ from shockharness.ir.model import (
     KIND_DATACLASS_FACTORY,
     KIND_DATACLASS_FIELD,
     KIND_DEFAULTDICT,
+    KIND_DISCARDED_REMOVAL,
     KIND_ENV_GET,
     KIND_ENV_GET_IMPLICIT,
     KIND_ENV_NULLISH,
@@ -112,6 +121,11 @@ NEXT_WITH_DEFAULT_ARITY = LOOKUP_WITH_FALLBACK_ARITY  # next(iterator, default)
 OVERLOAD_DECORATORS = frozenset({"overload"})
 FIELD_FUNCTIONS = frozenset({"field"})
 GET_METHODS = frozenset({"get", "setdefault", "pop"})
+# Methods that mutate the container ``m.setdefault(k, <empty>)`` returns (the grouping idiom).
+ACCUMULATOR_MUTATORS = frozenset({"append", "add", "extend", "update", "insert", "setdefault"})
+EMPTY_CONTAINER_CALLS = frozenset({"list", "dict", "set", "tuple", "frozenset"})
+# Tests that make a ``None``-fallback lookup raise instead of substituting a value.
+CHECKING_CALLS = frozenset({"callable", "isinstance"})
 NONE_COMPARISONS = (ast.Is, ast.IsNot, ast.Eq, ast.NotEq)
 MISSING_WHEN_TRUE = (ast.Is, ast.Eq)
 VALUE_EXPRESSIONS = (ast.Name, ast.Attribute, ast.Subscript, ast.Call)
@@ -327,14 +341,215 @@ def _resolved_dotted(table: SymbolTable, expr: ast.expr) -> str | None:
     return ".".join([root.qualified, *parts[1:]])
 
 
+def _is_empty_container(expr: ast.expr) -> bool:
+    if isinstance(expr, ast.List | ast.Tuple | ast.Set):
+        return len(expr.elts) == 0
+    if isinstance(expr, ast.Dict):
+        return len(expr.keys) == 0
+    return (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id in EMPTY_CONTAINER_CALLS
+        and len(expr.args) == 0
+        and len(expr.keywords) == 0
+    )
+
+
+def _method_call(expr: ast.expr, method: str) -> ast.Call | None:
+    """``expr`` when it is a keyword-free call of ``.method(...)``."""
+    if not isinstance(expr, ast.Call) or len(expr.keywords) != 0:
+        return None
+    if not isinstance(expr.func, ast.Attribute) or expr.func.attr != method:
+        return None
+    return expr
+
+
+def _accumulator_setdefault(expr: ast.expr) -> ast.Call | None:
+    """``m.setdefault(k, <empty container>)`` (the call), else None."""
+    call = _method_call(expr, "setdefault")
+    if call is None or len(call.args) != LOOKUP_WITH_FALLBACK_ARITY:
+        return None
+    if not _is_empty_container(call.args[1]):
+        return None
+    return call
+
+
+def _none_fallback_lookup(expr: ast.expr) -> bool:
+    """``m.get(k)``, ``m.get(k, None)``, ``m.pop(k, None)`` or ``getattr(o, a, None)``."""
+    if not isinstance(expr, ast.Call) or len(expr.keywords) != 0:
+        return False
+    arity = len(expr.args)
+    if dotted_name(expr.func) == "getattr":
+        return arity == GETATTR_WITH_FALLBACK_ARITY and _is_none(expr.args[arity - 1])
+    if _method_call(expr, "get") is not None:
+        return arity == 1 or (arity == LOOKUP_WITH_FALLBACK_ARITY and _is_none(expr.args[1]))
+    if _method_call(expr, "pop") is not None:
+        return arity == LOOKUP_WITH_FALLBACK_ARITY and _is_none(expr.args[1])
+    return False
+
+
+def _is_name(expr: ast.expr, name: str) -> bool:
+    return isinstance(expr, ast.Name) and expr.id == name
+
+
+def _is_none_test(test: ast.expr, name: str) -> bool:
+    """``name is None`` / ``name == None``."""
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+        return False
+    return (
+        _is_name(test.left, name)
+        and isinstance(test.ops[0], MISSING_WHEN_TRUE)
+        and _is_none(test.comparators[0])
+    )
+
+
+def _is_negated_check(test: ast.expr, name: str) -> bool:
+    """``not name``, ``not callable(name)``, ``not isinstance(name, T)``."""
+    if not isinstance(test, ast.UnaryOp) or not isinstance(test.op, ast.Not):
+        return False
+    operand = test.operand
+    if _is_name(operand, name):
+        return True
+    if not isinstance(operand, ast.Call) or not isinstance(operand.func, ast.Name):
+        return False
+    if operand.func.id not in CHECKING_CALLS or len(operand.args) == 0:
+        return False
+    return _is_name(operand.args[0], name)
+
+
+def _tests_absence(test: ast.expr, name: str) -> bool:
+    """One of the tests above, or an ``or`` whose first operand is one of them."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or):
+        return _tests_absence(test.values[0], name)
+    if _is_none_test(test, name):
+        return True
+    return _is_negated_check(test, name)
+
+
+def _assigned(statement: ast.stmt) -> tuple[str, ast.expr] | None:
+    """(name, value) of ``name = value`` or ``name: T = value``."""
+    target: ast.expr | None = None
+    if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+        target = statement.targets[0]
+    elif isinstance(statement, ast.AnnAssign):
+        target = statement.target
+    value = statement.value if isinstance(statement, ast.Assign | ast.AnnAssign) else None
+    if not isinstance(target, ast.Name) or value is None:
+        return None
+    return target.id, value
+
+
+def _raises_only(statement: ast.stmt) -> ast.If | None:
+    """``statement`` when it is an ``if`` without ``else`` whose body only raises."""
+    if not isinstance(statement, ast.If) or len(statement.orelse) != 0:
+        return None
+    if not all(isinstance(inner, ast.Raise) for inner in statement.body):
+        return None
+    return statement
+
+
+def _checked_then_raised(statement: ast.stmt, following: ast.stmt) -> ast.expr | None:
+    """The lookup in ``statement`` when ``following`` raises on every absent path."""
+    assigned = _assigned(statement)
+    check = _raises_only(following)
+    if assigned is None or check is None:
+        return None
+    name, value = assigned
+    if not _none_fallback_lookup(value) or not _tests_absence(check.test, name):
+        return None
+    return value
+
+
+def _statement_lists(node: ast.AST) -> list[list[ast.stmt]]:
+    lists: list[list[ast.stmt]] = []
+    for field in ("body", "orelse", "finalbody"):
+        if field in node._fields:
+            value = getattr(node, field)
+            if isinstance(value, list) and all(isinstance(item, ast.stmt) for item in value):
+                lists.append(value)
+    return lists
+
+
+@dataclass(frozen=True)
+class _Exemptions:
+    """Calls that are not fallbacks (``claimed``) and discarded removals (``discarded``)."""
+
+    claimed: frozenset[int]
+    discarded: frozenset[int]
+
+
+def _decorator_gets(node: ast.AST) -> list[ast.expr]:
+    """``.get(...)`` / ``.pop(...)`` / ``.setdefault(...)`` calls that are decorators."""
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return []
+    return [
+        decorator
+        for decorator in node.decorator_list
+        if isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr in GET_METHODS
+    ]
+
+
+def _checked_lookups(node: ast.AST) -> list[ast.expr]:
+    found: list[ast.expr] = []
+    for statements in _statement_lists(node):
+        for statement, following in itertools.pairwise(statements):
+            checked = _checked_then_raised(statement, following)
+            if checked is not None:
+                found.append(checked)
+    return found
+
+
+def _mutated_accumulator(node: ast.AST) -> ast.Call | None:
+    """``m.setdefault(k, <empty>)`` mutated in place: ``.add(v)`` or ``[x] = v``."""
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+        func = node.value.func
+        if isinstance(func, ast.Attribute) and func.attr in ACCUMULATOR_MUTATORS:
+            return _accumulator_setdefault(func.value)
+    if isinstance(node, ast.Assign) and len(node.targets) == 1:
+        target = node.targets[0]
+        if isinstance(target, ast.Subscript):
+            return _accumulator_setdefault(target.value)
+    return None
+
+
+def _discarded_pop(node: ast.AST) -> ast.Call | None:
+    """``m.pop(k, None)`` as an expression statement."""
+    if not isinstance(node, ast.Expr):
+        return None
+    pop = _method_call(node.value, "pop")
+    if pop is None or not _none_fallback_lookup(pop):
+        return None
+    return pop
+
+
+def _exemptions(module: ast.Module) -> _Exemptions:
+    claimed: set[int] = set()
+    discarded: set[int] = set()
+    for node in ast.walk(module):
+        claimed.update(id(call) for call in _decorator_gets(node))
+        claimed.update(id(lookup) for lookup in _checked_lookups(node))
+        accumulator = _mutated_accumulator(node)
+        if accumulator is not None:
+            claimed.add(id(accumulator))
+        pop = _discarded_pop(node)
+        if pop is not None:
+            discarded.add(id(pop))
+    return _Exemptions(claimed=frozenset(claimed), discarded=frozenset(discarded))
+
+
 class _Collector:
     def __init__(self, source: SourceText, module: ast.Module) -> None:
         self.source = source
         self.index = _index_module(module)
         self.facts: list[DefaultFact] = []
+        exemptions = _exemptions(module)
         # Nodes already explained by an enclosing fact (e.g. the ``.get`` inside
-        # ``os.environ.get("X") or v``); they produce no fact of their own.
-        self.claimed: set[int] = set()
+        # ``os.environ.get("X") or v``), or not fallbacks at all (_exemptions); they
+        # produce no fact of their own.
+        self.claimed: set[int] = set(exemptions.claimed)
+        self.discarded = exemptions.discarded
 
     # -- helpers -------------------------------------------------------------------
 
@@ -623,6 +838,22 @@ class _Collector:
         subject = _text(self.source, receiver)
         if len(positional) >= 1:
             subject = f"{subject}[{_text(self.source, positional[0])}]"
+        if id(node) in self.discarded:
+            self._add(
+                node,
+                scope,
+                FAMILY_MAPPING,
+                KIND_DISCARDED_REMOVAL,
+                subject,
+                positional[1],
+                context,
+                confidence,
+                f"{_text(self.source, node)} discards its result: it removes the key if it is "
+                f"there. If the key is always present, use del {subject} so a missing key fails; "
+                "if absence is a normal state, say so with an explicit 'if key in mapping:'"
+                + receiver_note,
+            )
+            return
         if len(positional) == LOOKUP_WITH_FALLBACK_ARITY:
             self._add(
                 node,

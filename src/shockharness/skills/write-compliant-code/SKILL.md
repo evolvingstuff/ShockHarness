@@ -77,6 +77,32 @@ a plain `check`; see the `refactor-complexity` skill.
    configuration files (`conftest.py`, `*.config.js`, `.eslintrc.js`, listed
    under `rules.magic_numbers.configuration_files`) are exempt from `MAGIC001`
    and the report says so per file.
+7. **Validate what you return, not only what you receive.** When a function's
+   contract promises something about its result (non-empty, sorted, within a
+   range, exactly the expected keys), check it before returning and raise on
+   violation. The check states the promise in code, and a broken promise fails
+   where it is broken instead of in a caller. Never turn the check into a
+   fallback (`return result or []`).
+
+   ```python
+   def page_of(items: list[str], page: int, size: int) -> list[str]:
+       if page < FIRST_PAGE or size < 1:
+           raise ValueError(f"page {page} of size {size} is not a valid page")
+       result = items[(page - FIRST_PAGE) * size : page * size]
+       if len(result) > size:
+           raise AssertionError(f"page holds {len(result)} items, more than {size}")
+       return result
+   ```
+
+   ```javascript
+   export function sortedIds(records) {
+     const ids = records.map((record) => record.id).sort();
+     if (new Set(ids).size !== ids.length) {
+       throw new Error("record ids are not unique");
+     }
+     return ids;
+   }
+   ```
 
 ## Examples
 
@@ -247,6 +273,7 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] Data, configuration and specification live in data files or a declared constants module, not in executable source.
 - [ ] `shockharness check .` ends in `gate: PASS (exit 0)` and the tests pass.
 - [ ] Any suppression has an exact rule ID and a reason that cites a source.
+- [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 
 ## Adopting ShockHarness
 

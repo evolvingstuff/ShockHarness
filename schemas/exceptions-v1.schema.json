@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/evolvingstuff/ShockHarness/schemas/exceptions-v1.schema.json",
+  "title": "ShockHarness exceptions inventory (shockharness exceptions --format json), schema_version 1",
+  "description": "0.5.0: every exception the analyzed code and the effective configuration make. Read-only; the command never gates.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_version",
+    "report_kind",
+    "effective_profile",
+    "config_digest",
+    "config_source",
+    "summary",
+    "suppressions",
+    "invalid_suppressions",
+    "configuration",
+    "policy_attempts",
+    "baseline"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "report_kind": {
+      "type": "string",
+      "enum": [
+        "exceptions"
+      ]
+    },
+    "effective_profile": {
+      "type": "string"
+    },
+    "config_digest": {
+      "type": "string"
+    },
+    "config_source": {
+      "type": "object",
+      "required": [
+        "tier",
+        "path"
+      ],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": [
+            "cli",
+            "dedicated",
+            "pyproject",
+            "bundled"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "suppressions",
+        "unused_suppressions",
+        "invalid_suppressions",
+        "configuration",
+        "policy_attempts",
+        "baseline_entries"
+      ],
+      "properties": {
+        "suppressions": {
+          "type": "integer"
+        },
+        "unused_suppressions": {
+          "type": "integer"
+        },
+        "invalid_suppressions": {
+          "type": "integer"
+        },
+        "configuration": {
+          "type": "integer"
+        },
+        "policy_attempts": {
+          "type": "integer"
+        },
+        "baseline_entries": {
+          "type": "integer"
+        }
+      }
+    },
+    "suppressions": {
+      "type": "array",
+      "description": "Well-formed inline suppression comments; used lists the rules each one silences, unused the rules it names that silence nothing (SUPP002).",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "line",
+          "rules",
+          "reason",
+          "used",
+          "unused"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          },
+          "used": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unused": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "invalid_suppressions": {
+      "type": "array",
+      "description": "Malformed suppression comments (SUPP001).",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "line",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "configuration": {
+      "type": "array",
+      "description": "Every policy deviation of the effective configuration, plus every exclude pattern the configuration sets. origin is a configuration tier, profile:<name>, policy or 'command line'; path and line locate it in a file, null otherwise.",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "text",
+          "origin",
+          "path",
+          "line"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "policy_attempts": {
+      "type": "array",
+      "description": "Repository keys that would loosen a --policy key (reported as VERIFY003).",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "text",
+          "origin",
+          "path",
+          "line"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "The --baseline file's entries per rule and per file; null without --baseline.",
+      "required": [
+        "path",
+        "entries",
+        "by_rule",
+        "by_path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "integer"
+        },
+        "by_rule": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "by_path": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

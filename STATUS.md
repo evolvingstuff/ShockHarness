@@ -1168,7 +1168,8 @@ Updated 2026-10-16, after the fourth suggestions batch
 (`docs/shockharness-suggestions-4.md`; spec 21.1 decisions 12-18, 21.2 table).
 In order:
 
-1. **F4, the 0.5.0 feedback round** (suggestions-4 items 1-9): DEF002
+1. **F4, the 0.5.0 feedback round** (done 2026-10-16, see its entry below; the
+   0.5.0 release waits for the maintainer) (suggestions-4 items 1-9): DEF002
    precision (decorator `.get`, checked-then-raise, discarded `pop(k, None)`,
    the `setdefault` grouping idiom, "absence is normal" remediation);
    `recommended` stops gating on unknown `DEF*` findings; the `shockharness
@@ -2768,3 +2769,126 @@ are exactly the eight VERIFY003 boundary additions (warning); `gate: PASS
 * Release 0.4.0 (H1 + H2) when the maintainer asks: bump, changelog date, pins
   in the examples and docs (`docs/configuration.md` already shows `@v0.4.0` for
   the policy inputs), tag after CI.
+
+## Feedback round F4 (planned 0.5.0) — DONE (2026-10-16)
+
+Input: `docs/shockharness-suggestions-4.md` (notes from agents running
+ShockHarness on MetaList; spec 21.1 decisions 12, 13 and 18). Implemented in
+the lead session; Milestone H3 follows.
+
+### What changed, per item
+
+1. **Decorator `.get`** (`ir/python_defaults.py:_decorator_gets`): a
+   `.get`/`.pop`/`.setdefault` call that is itself a decorator is claimed
+   before the fact pass and produces nothing.
+2. **Checked then raised** (`_checked_lookups`, `_checked_then_raised`): a
+   `None`-fallback lookup assigned to a name, followed immediately by an `if`
+   without `else` whose body only raises and whose test is `x is None`, `not x`,
+   `not callable(x)`, `not isinstance(x, ...)` or an `or` starting with one.
+3. **Discarded removal**: `m.pop(k, None)` as an expression statement is fact
+   kind `discarded_removal`, reported at `review` in every mode but `allow`,
+   status by receiver as before.
+4. **Grouping idiom** (`_mutated_accumulator`): `m.setdefault(k, <empty
+   container>)` whose result is mutated in place.
+5. **Remediation**: DEF002's registry remediation and guarantees, `docs/rules.md`
+   and the `fix-violations` skill name the three cases.
+6. **`recommended`** sets `rules.defaults.fail_on_unknown = false`. The
+   `fail_on_unknown` deviation is now measured against `strict` (the bundled
+   defaults) rather than the selected profile, so the profile's own setting is
+   listed as a deviation like its other changes.
+7. **`shockharness exceptions`** (`inventory.py`, `schemas/exceptions-v1.schema.json`).
+   Each `FileResult` now carries its parsed suppression comments
+   (`suppressions`), taken from the cached facts; it is not serialized, so check
+   reports and the cache are unchanged.
+8. **Skills**: propose-a-rule steps (`fix-violations`, `pre-commit-review`),
+   output validation (`write-compliant-code` principle 7), the "absence is
+   normal" worked example; all examples pass `shockharness check` themselves.
+9. **Docs**: Python 3.10 projects and empty trees (`docs/integration.md`),
+   covered-versus-planned checks (`docs/limitations.md`), the inventory
+   (`docs/configuration.md`), README links outside the adoption section (which
+   stays byte-identical to the skills'), and the architecture table (it was
+   also missing the H2 modules; added).
+
+### Decisions (mine; review these)
+
+1. **Exemptions are claimed in a pre-pass**, not decided in the rule: the
+   facts never exist, so DEF002 cannot be configured back on for them. They
+   are documented as "not fallbacks" in the rule's guarantees.
+2. **Checked-then-raised is strictly the next statement**, in the same block,
+   with a raise-only body and no `else`. Anything looser (a statement between,
+   a `return` instead of a `raise`) stays reported; the brief's acceptance
+   cases pin both sides.
+3. **`fail_on_unknown` deviation reference.** Measuring against the selected
+   profile would have hidden `recommended`'s new value. Measuring against
+   `strict` keeps every looser-than-strict setting visible, as the brief asks;
+   the deviation text is unchanged ("(profile 'strict': true)").
+4. **`exceptions` lists repository and policy `exclude` patterns only.** The
+   bundled excludes (`.git`, `node_modules`, ...) are defaults, not exceptions,
+   and would bury the list.
+5. **No new configuration keys.** Every item is either a precision fix or a
+   profile value, so VERIFY003 and the `--policy` tier need no change.
+
+### Regression against 0.4.0
+
+`pip install shockharness==0.4.0` against this tree, same inputs, all three
+profiles: the self-scan (198 findings) and both examples are identical. The
+golden fixtures differ by exactly one finding in every profile:
+`python/def_mapping_get.py:47` (`raw = table.get("raw")` followed by
+`if raw is None: raise KeyError`), removed by item 2; exit codes are unchanged
+(3/3/1). Under `recommended`, item 6 moves two unknown DEF002 findings in that
+fixture out of the gate counts (hard 12 -> 10, review 3 -> 1; the corpus 347 ->
+345 and 42 -> 40). `tests/unit/test_profile_regression.py` now applies these
+listed differences to the 0.3.0 snapshot before comparing, so any other change
+still fails it.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+122 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  191 findings  (cache hits 0 / misses 125, then 125 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1034 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1
+1033 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed; two `exceptions --format json`
+runs (cached and `--no-cache`) are byte-identical (tested).
+
+Self-diff in a scratch clone against 899c5e5 (the plan commit): 126 files
+compared (3 new), `gate: PASS (exit 0)`, no VERIFY finding. The only new
+findings are three CPLX warnings on `config.py:_deviations`, which carries the
+same numbers in 0.4.0; they are "new" because its signature changed
+(`profile_values` -> `strict_values`). The first self-diff also flagged new
+complexity in `_exemptions` (cognitive 50), `_tests_absence`,
+`_checked_then_raised`, `inventory._suppressions` and one test; each was split
+into named steps, and a DEF003 review on a boolean `or` return was rewritten.
+
+New tests: `tests/unit/test_def002_precision.py` (7: each acceptance case of
+items 1-6), `tests/cli/test_exceptions_cli.py` (4: every item with its source,
+JSON schema and byte identity, profile/policy origins, exit codes), plus the
+updated golden, inventory, profile and regression expectations.
+
+### Failures observed during development (and what was done)
+
+* Two hand-counted line numbers in the new tests were off by one; corrected
+  against the analyzer's output.
+* A handmade baseline in a test lacked `schema_version`; the test now builds it
+  from the module's version constants.
+* Rewriting `tests/fixtures/expected.json` with the wrong indentation produced a
+  6,000-line diff; it was rewritten with its original two-space indent, so the
+  diff is the one removed finding.
+* macOS `sed` has no `\b`; a rename done with it silently did nothing and was
+  redone with Python.
+

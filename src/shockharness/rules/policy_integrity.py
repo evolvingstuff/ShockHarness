@@ -100,7 +100,7 @@ class PolicyResult:
     coverage: dict[str, Any]
 
 
-def _read_text(path: Path) -> tuple[str | None, str | None]:
+def read_text(path: Path) -> tuple[str | None, str | None]:
     """(text, error); exactly one is set."""
     # Boundary (declared in .shockharness.toml): reading a file of an exported revision.
     try:
@@ -192,7 +192,7 @@ def _baselines(root: Path) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
                 continue
             path = Path(current) / name
             relative = path.relative_to(root).as_posix()
-            text, error = _read_text(path)
+            text, error = read_text(path)
             if text is None:
                 assert error is not None
                 errors[relative] = error
@@ -204,7 +204,7 @@ def _baselines(root: Path) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
 
 
 def _read_into(path: Path, relative: str, texts: dict[str, str], errors: dict[str, str]) -> None:
-    text, error = _read_text(path)
+    text, error = read_text(path)
     if text is None:
         assert error is not None
         errors[relative] = error
@@ -386,7 +386,7 @@ def policy_attempt_findings(
     path = source.name
     if source.resolve().is_relative_to(root.resolve()):
         path = source.resolve().relative_to(root.resolve()).as_posix()
-    text, _ = _read_text(source)
+    text, _ = read_text(source)
     policy_name = Path(config.policy.path).name
     findings: list[Finding] = []
     for attempt in config.policy_attempts:

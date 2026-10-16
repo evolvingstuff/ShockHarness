@@ -89,6 +89,7 @@ def test_recommended_profile_values_and_deviations(
     assert changed == {
         "profile",
         "rules.defaults.nullish_fallbacks",
+        "rules.defaults.fail_on_unknown",
         "rules.magic_numbers.allow_unary_negative_one",
         "rules.magic_numbers.named_constant_definitions",
         "complexity.fan_out_warn",
@@ -108,6 +109,13 @@ def test_recommended_profile_values_and_deviations(
         "EXC001": "error",
         "DEF004": "review",
     }
+
+
+def test_recommended_profile_deviations(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    config = make_config('profile = "recommended"\n')
+    strict = load_bundled_defaults()
     # the threshold and the advisory severity of fan-out are not loosenings; the rest are
     assert config.deviations == (
         "profile is 'recommended', below 'strict'; the lines that follow are what it changes "
@@ -117,7 +125,11 @@ def test_recommended_profile_values_and_deviations(
         "the whole value of a module-level named constant definition is not reported",
         "rules.defaults.nullish_fallbacks is 'review' (strict profile: 'forbid'); DEF004 "
         "findings of that kind are reported as review",
+        "rules.defaults.fail_on_unknown is false (profile 'strict': true); DEF001-DEF006 "
+        "findings whose status is unknown are reported and never fail the gate",
     )
+    assert config.values["rules"]["defaults"]["fail_on_unknown"] is False
+    assert strict["rules"]["defaults"]["fail_on_unknown"] is True
 
 
 def test_recommended_fan_out_is_review_above_thirty(

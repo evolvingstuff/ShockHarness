@@ -1823,13 +1823,6 @@
         13,
         "table[key] falls back to \"missing\" when ",
         false
-      ],
-      [
-        "DEF002",
-        47,
-        11,
-        ".get(key) yields None for a missing key;",
-        false
       ]
     ]
   },

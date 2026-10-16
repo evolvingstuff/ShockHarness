@@ -5,6 +5,48 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Feedback round F4 (`docs/shockharness-suggestions-4.md`, from agents running
+ShockHarness on a real project; spec 21.1 decisions 12, 13 and 18). Verdicts are
+unchanged except where listed under Changed; `tests/unit/test_profile_regression.py`
+pins each intended difference against the 0.3.0 snapshot.
+
+### Added
+- `shockharness exceptions PATH...`: one read-only list of every inline
+  suppression (rules, reason, used or unused), every malformed one, every policy
+  deviation and `exclude` pattern with the file and line (or profile, policy
+  file or command line) it comes from, the `--policy` attempts, and with
+  `--baseline` the baseline's entries per rule and per file. Text or JSON
+  (`schemas/exceptions-v1.schema.json`, `report_kind = "exceptions"`); exit 0,
+  or 2 on an invalid configuration; never gates.
+- `DEF002` kind `discarded_removal`: `m.pop(k, None)` as a statement is a
+  `review` finding in every profile whose message asks whether `del` is right.
+- Skills: a "propose a rule" step in `fix-violations` and `pre-commit-review`;
+  output validation (principle 7) in `write-compliant-code`; a worked
+  "absence is a normal state" example in Python and JavaScript.
+- Docs: Python 3.10 projects (run the gate as its own job on 3.11+), empty
+  trees, and the checks a layered checker should keep until H3-H-TS land.
+
+### Changed
+- `DEF002` no longer reports a `.get(...)` call that is itself a decorator
+  (`@router.get("/x")`); a `None`-fallback lookup assigned to a name whose next
+  statement is an `if` without `else` that only raises when the name is `None`,
+  falsy, not callable or not an instance; or `m.setdefault(k, <empty
+  container>)` whose result is immediately mutated (the grouping idiom). In the
+  golden corpus this removes one review finding (`def_mapping_get.py:47`).
+- `DEF002` remediation names three cases: the key must exist (index it), absence
+  is a normal state (explicit `if k in m:` or a named helper), or the value comes
+  from outside (validate where it enters).
+- The `recommended` profile sets `rules.defaults.fail_on_unknown = false`:
+  `DEF*` findings the analyzer could not establish are reported and do not gate.
+  `strict` is unchanged. A `fail_on_unknown = false` is now a policy deviation
+  whenever `strict` says `true`, whether a profile or the repository sets it.
+
+### Schema
+- New `schemas/exceptions-v1.schema.json` for `shockharness exceptions --format json`.
+- Check, diff and baseline report shapes are unchanged (`schema_version` "1").
+  The new `discarded_removal` kind is a fact kind; findings show it only through
+  their message.
+
 ## [0.4.0] - 2026-10-16
 
 Milestone H2 part 2 of specification section 21: `VERIFY003` reports a change

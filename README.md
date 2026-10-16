@@ -110,6 +110,7 @@ shockharness baseline create src/ --output .shockharness-baseline.json
 shockharness check src/ --baseline .shockharness-baseline.json # legacy findings do not gate
 shockharness diff --base main --head HEAD                      # new / fixed / unchanged, exit 0
 shockharness gate --base main --head HEAD                      # exit 1 only on new hard violations
+shockharness exceptions src/                                   # every suppression, boundary, override, exclusion and baseline entry, with its source (exit 0)
 shockharness rules list
 shockharness rules explain MAGIC001
 shockharness skills list                                       # the five bundled agent skills
@@ -158,8 +159,10 @@ Three built-in profiles ship with the package and are selected with
 `profile = "..."` (or `--profile`): **`strict`** (default: every rule at its
 documented severity, unparseable files fail), **`recommended`** (strict, but
 `DEF003`/`DEF004` fallbacks are `review`, `-1` and module-level named constant
-definitions such as `MAX_PAGES = 8` pass `MAGIC001`, and fan-out is `review`
-above 30; included files no adapter parses are warned about, as in strict),
+definitions such as `MAX_PAGES = 8` pass `MAGIC001`, fan-out is `review`
+above 30, and `DEF*` findings the analyzer could not establish (`unknown`) are
+reported without gating; included files no adapter parses are warned about, as
+in strict),
 **`minimal`** (`MAGIC001`, `EXC*` and `DEF*` all capped at `review`,
 syntax failures warn, complexity off: everything is reported, nothing but
 malformed suppressions fails). Precedence
@@ -393,6 +396,14 @@ a Dependabot snippet, and `examples/python` and `examples/js` are complete
 consumers exercised by CI. Restoring `.shockharness-cache/` between jobs is
 optional and safe: an entry from another tool version, configuration or
 interpreter is invalidated, never used.
+
+A project tested on Python 3.10 runs the gate as its own job on 3.11+
+([integration.md, section 4](docs/integration.md#4-ci)); an empty tree passes
+with `0 file(s)` ([integration.md, section 3](docs/integration.md#3-run-it));
+and [limitations.md](docs/limitations.md#empty-trees-and-checks-a-layered-checker-may-still-need)
+lists the checks a layered checker should keep until the planned milestones
+land. `shockharness exceptions` is the reviewer's view of every exception the
+code and configuration make ([configuration.md](docs/configuration.md#reporting-of-policy-changes)).
 
 See `docs/` for configuration, rules, complexity conventions, architecture,
 integration, skills, releasing, and limitations; `evals/` holds the skill

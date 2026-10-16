@@ -303,6 +303,21 @@ Stated so that a clean report is never read as more than it is.
   repository's to change. Command-line `--profile` and `--parse-errors` are not
   bound by the policy; a workflow that adds them is reported instead.
 
+## Empty trees, and checks a layered checker may still need
+
+* A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
+  `0`. `unsupported_sources` is about files that are present but unsupported,
+  not about the absence of files.
+* For projects that run their own checker alongside ShockHarness, what is
+  covered today: `contextlib.suppress` (a catch that swallows: `EXC001`,
+  `EXC002`), JavaScript `.catch(...)` rejection handlers (`EXC001`, `EXC002`,
+  `DEF005`), every `except`/`catch` outside a declared boundary. Planned and not
+  yet reported: `return`/`break`/`continue` in a `finally` block (`EXC004`,
+  H3); `subprocess` calls with `check=False` or without `check=True`
+  (`PROCESS001`, H5); `asyncio.gather(..., return_exceptions=True)` and
+  `Promise.allSettled` whose results are never inspected (H4); TypeScript
+  (H-TS). Keep those in the layered checker until the milestone lands.
+
 ## Not yet built (see the specification)
 
 `MAGIC002`, the

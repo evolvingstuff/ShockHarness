@@ -480,16 +480,16 @@ def _section(values: Mapping[str, Any], dotted: str) -> Mapping[str, Any]:
     return node
 
 
-def _unknown_deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) -> list[str]:
-    """A family whose ``fail_on_unknown`` is below its profile's value (true -> false)."""
+def _unknown_deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> list[str]:
+    """A family whose ``fail_on_unknown`` is below the strict profile's value (true -> false),
+    whether a profile or the repository set it (``recommended`` does for ``rules.defaults``)."""
     found: list[str] = []
-    profile = values[PROFILE_KEY]
     for section, rules in FAIL_ON_UNKNOWN_SECTIONS.items():
         configured = _section(values, section)[FAIL_ON_UNKNOWN_KEY]
-        expected = _section(profile_values, section)[FAIL_ON_UNKNOWN_KEY]
+        expected = _section(strict_values, section)[FAIL_ON_UNKNOWN_KEY]
         if expected is True and configured is False:
             found.append(
-                f"{section}.{FAIL_ON_UNKNOWN_KEY} is false (profile {profile!r}: true); "
+                f"{section}.{FAIL_ON_UNKNOWN_KEY} is false (profile {PROFILE_STRICT!r}: true); "
                 f"{rules} findings whose status is unknown are reported and never fail the gate"
             )
     return found
@@ -512,11 +512,11 @@ def _verification_deviations(verification: Mapping[str, Any]) -> list[str]:
     return found
 
 
-def _deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) -> tuple[str, ...]:
+def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> tuple[str, ...]:
     """Explicit departures from the strict profile, always surfaced in reports.
 
-    ``profile_values`` are the bundled defaults with the selected profile applied: the
-    reference for keys whose deviation is relative to the profile (``fail_on_unknown``).
+    ``strict_values`` are the bundled defaults (the strict profile): the reference for
+    keys whose deviation is a value below strict's (``fail_on_unknown``).
     """
     found: list[str] = []
     profile = values[PROFILE_KEY]
@@ -590,7 +590,7 @@ def _deviations(values: Mapping[str, Any], profile_values: Mapping[str, Any]) ->
         )
     found.extend(loosened_modes(rules["defaults"]))
     found.extend(_verification_deviations(rules["verification"]))
-    found.extend(_unknown_deviations(values, profile_values))
+    found.extend(_unknown_deviations(values, strict_values))
     for index, override in enumerate(values["overrides"]):
         disabled = ", ".join(override["disable"])
         scope = override_scope(override)
@@ -708,14 +708,14 @@ def _load_policy(root: Path, path: Path) -> tuple[PolicyFile, dict[str, Any]]:
 
 def _protect(
     policy_values: dict[str, Any],
-    profile_values: Mapping[str, Any],
+    strict_values: Mapping[str, Any],
     policy_keys: frozenset[str],
     user_table: Mapping[str, Any],
 ) -> tuple[dict[str, Any], list[PolicyAttempt]]:
     """The user table minus every key that would loosen a key the policy sets."""
     kept = copy.deepcopy(dict(user_table))
     attempts: list[PolicyAttempt] = []
-    reference = _deviations(policy_values, profile_values)
+    reference = _deviations(policy_values, strict_values)
     for dotted, value in sorted(_leaves(user_table, "").items()):
         if dotted not in policy_keys:
             continue
@@ -723,7 +723,7 @@ def _protect(
         if value == policy_value:
             continue
         trial = _deep_merge(policy_values, _nested(dotted, value), {}, ORIGIN_POLICY, "")
-        found = loosenings(policy_values, reference, trial, _deviations(trial, profile_values))
+        found = loosenings(policy_values, reference, trial, _deviations(trial, strict_values))
         if len(found) == 0:
             continue  # a tightening (or a neutral change) of a policy key is allowed
         attempts.append(
@@ -790,7 +790,7 @@ def _note_cli_profile(
 
 def _apply_policy(
     merged: dict[str, Any],
-    profile_values: Mapping[str, Any],
+    strict_values: Mapping[str, Any],
     policy: PolicyFile,
     policy_table: Mapping[str, Any],
     user_table: dict[str, Any],
@@ -803,7 +803,7 @@ def _apply_policy(
     merged = _deep_merge(merged, policy_layer, origins, ORIGIN_POLICY, "")
     if PROFILE_KEY in policy_table:
         origins[PROFILE_KEY] = ORIGIN_POLICY
-    user_table, protected = _protect(merged, profile_values, frozenset(policy.keys), user_table)
+    user_table, protected = _protect(merged, strict_values, frozenset(policy.keys), user_table)
     attempts.extend(protected)
     return merged, user_table
 
@@ -886,12 +886,12 @@ def load_config_with_overrides(
 
     origins: dict[str, str] = {}
     _record_origins(origins, defaults, TIER_BUNDLED)
+    strict_values = copy.deepcopy(defaults)
     overlay = load_profile_overlay(profile_name)
     merged = _deep_merge(defaults, overlay, origins, ORIGIN_PROFILE_PREFIX + profile_name, "")
-    profile_values = copy.deepcopy(merged)
     if policy is not None:
         merged, user_table = _apply_policy(
-            merged, profile_values, policy, policy_table, user_table, origins, attempts
+            merged, strict_values, policy, policy_table, user_table, origins, attempts
         )
         for attempt in attempts:
             notes.append(
@@ -915,7 +915,7 @@ def load_config_with_overrides(
         source=source,
         origins=origins,
         notes=tuple(notes),
-        deviations=_deviations(merged, profile_values),
+        deviations=_deviations(merged, strict_values),
         digest=config_digest(merged),
         policy=policy,
         policy_attempts=tuple(attempts),

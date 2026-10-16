@@ -435,7 +435,6 @@ CORPUS_UNKNOWN = [
     ("python/def_mapping_get.py", "DEF002", 19, 13),
     ("python/def_mapping_get.py", "DEF002", 20, 12),
     ("python/def_mapping_get.py", "DEF002", 35, 13),
-    ("python/def_mapping_get.py", "DEF002", 47, 11),
     ("python/exc_unresolved.py", "EXC001", 18, 5),
     ("python/exc_unresolved.py", "EXC001", 25, 5),
     ("python/exc_unresolved.py", "EXC001", 32, 5),

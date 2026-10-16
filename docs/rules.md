@@ -416,11 +416,43 @@ pydantic and NamedTuple defaults are not recognized.
 | JavaScript `o?.x ?? v`, `o.x ?? v`, `o[k] ?? v`, `m.get(k) ?? v`, and their `??=` forms | by the fallback |
 | JavaScript ternaries on a null/undefined check of a property (`o.x == null ? v : o.x`) and membership ternaries (`k in o ? o[k] : v`, `o.hasOwnProperty(k) ? ...`, `Object.hasOwn(o, k) ? ...`) | by the fallback |
 
+**Not reported (0.5.0, `docs/shockharness-suggestions-4.md` items 1-4):**
+
+- a `.get(...)` call that is itself a decorator (`@router.get("/notes/{id}")`,
+  `@app.get(...)`): a route registration, not a lookup. A `.get` inside the
+  decorator's arguments is judged as usual;
+- a lookup whose fallback is `None` (`m.get(k)`, `m.get(k, None)`,
+  `m.pop(k, None)`, `getattr(o, a, None)`) that is the whole value of an
+  assignment to a name, when the very next statement is an `if` with no `else`
+  whose body only raises and whose test is `x is None`, `not x`,
+  `not callable(x)`, `not isinstance(x, ...)`, or an `or` that starts with one
+  of those. Every absent path raises, so nothing is substituted. A non-`None`
+  fallback is still reported;
+- `m.setdefault(k, <empty container>)` (`[]`, `{}`, `()`, `set()`, `list()`,
+  `dict()`, `tuple()`, `frozenset()`) whose result is immediately mutated by
+  `.append`, `.add`, `.extend`, `.update`, `.insert`, `.setdefault` or a
+  subscript assignment: the grouping idiom. A non-empty fallback, or a result
+  that is read, is reported.
+
+**Discarded removal.** `m.pop(k, None)` as an expression statement removes the
+key if it is there. It is a `review` finding of kind `discarded_removal` in
+every profile, with the receiver's status as above. Its message asks the real
+question: if the key is always present, `del m[k]`; if absence is normal, say so
+with `if k in m:`.
+
+**Remediation**, in this order. (1) The key must exist: index it so a missing
+key fails where it is missing, or validate once at the boundary. (2) Absence
+is a normal state: an explicit `if k in m:` branch with a comment, or a small
+named helper whose name says what absence means (`posting_or_empty`). Forcing
+an index there turns a normal state into a crash. (3) The value comes from
+outside: validate it where it enters.
+
 Method names are matched, not types: `client.get(url, params)` is an
 approximate error and `client.get("path")` an approximate review finding. Both
 have status `unknown` (H1): the verdict depends on the receiver's type, which
-was not established. `rules.defaults.fail_on_unknown = true` (the default)
-keeps them gating by severity as before. A
+was not established. `rules.defaults.fail_on_unknown = true` (the default in
+`strict`) keeps them gating by severity as before; `recommended` sets it to
+`false`, so they are reported and do not gate. A
 bare JavaScript property read (`o.x`, `map.get(k)`) is never a finding: every
 absent property yields `undefined` and nothing in the syntax singles it out.
 Object spread merging and `Object.assign` are not recognized.

@@ -58,7 +58,7 @@ Ask what the code promises when the value is absent or the operation fails.
 |---|---|---|
 | `MAGIC001` | Why this number? Who decides it? | Variable policy: a required, validated configuration parameter. Invariant or protocol value: a named constant with a cited source, in a designated constants module or with an inline suppression quoting the source. |
 | `DEF001` | May the caller really omit this argument? | Usually no: make it required and update the callers. If yes: the type is `T \| None`, and the body branches on `None` by name. |
-| `DEF002`, `DEF004`, `DEF003` | Is the key or value required? | Required: index it, let `KeyError`/`TypeError` surface at load time. Optional: branch explicitly (`if "x" in raw:`) and name what happens in each branch. |
+| `DEF002`, `DEF004`, `DEF003` | Is the key or value required? Is absence a normal state? | Required: index it, let `KeyError`/`TypeError` surface at load time, or validate once at the boundary. Absence is a normal state (an empty view has no root entry, an unused tag has no posting): branch explicitly (`if "x" in raw:`) with a comment, or call a small named helper whose name says what absence means (`posting_or_empty`); do not force an index there, that turns a normal state into a crash. From outside (configuration, a request): validate where it enters. |
 | `DEF006` | Where is configuration validated? | In one load function that reads required keys, validates them and raises on a missing or invalid value. Nothing downstream reads the environment. |
 | `EXC001`, `EXC003` | Is this really an external boundary? | External (file, network, subprocess, decoding external input): declare a boundary with `path`, `language`, qualified `exception`, `reason`; keep one operation inside the `try`; re-raise a typed error with `from exc`. Internal: remove the catch and fix the cause or let it propagate. |
 | `EXC002`, `DEF005` | What should the caller see when this fails? | A typed error. Not `None`, not `[]`, not a logged line and a continue. |
@@ -232,6 +232,51 @@ test("config is required", () => {
 });
 ```
 
+### Python and JavaScript: `DEF002` where absence is a normal state
+
+A tag that no note carries has no posting. Indexing would raise for a
+legitimate state; a fallback would hide a typo in the tag. Say what absence
+means, once, in a helper:
+
+```python
+def posting_or_empty(index: dict[str, list[str]], tag: str) -> list[str]:
+    # A tag that no note carries has no posting; absence is a normal state here.
+    if tag in index:
+        return index[tag]
+    return []
+```
+
+```javascript
+export function postingOrEmpty(index, tag) {
+  // A tag that no note carries has no posting; absence is a normal state here.
+  if (index.has(tag)) {
+    return index.get(tag);
+  }
+  return [];
+}
+```
+
+Removing an entry that may be absent reads the same way: `cache.pop(key, None)`
+as a statement is a `DEF002` review finding of kind `discarded_removal`. If the
+key is always present, write `del cache[key]` so a missing key fails; if absence
+is normal, write `if key in cache: del cache[key]` and say why.
+
+## Propose a rule
+
+When you find a bug that ShockHarness did not report, write down the rule
+that would have caught it, even if you fix the bug right away. A rule over a
+syntactic pattern is better than a heuristic. Note:
+
+- the pattern, as a minimal triggering example in the language it occurred in;
+- why it is a bug (what the program did instead of failing);
+- the proposed rule, and how it decides (which call, which argument, which
+  missing check);
+- the false positives you expect, and what would keep the rule quiet on them.
+
+Put the note wherever the project collects tooling feedback (an issue, a
+notes file the maintainers read). Do not edit the analyzer, its configuration
+or a baseline to act on it.
+
 ## When a suppression is the right fix
 
 Only for a value whose meaning comes from an authority outside the codebase
@@ -261,6 +306,7 @@ is part of the report, and reviewers read it.
 - [ ] Any new boundary has `path`, `language`, qualified `exception` and a `reason`, and its `try` wraps one operation.
 - [ ] Every suppression has an exact rule ID and a reason that cites a source.
 - [ ] Tests and `shockharness check .` both pass; `gate --base <default branch> --head HEAD` passes after committing.
+- [ ] Any bug found along the way that ShockHarness did not report has a written rule proposal (pattern, why it is a bug, the rule, expected false positives).
 
 ## Adopting ShockHarness
 

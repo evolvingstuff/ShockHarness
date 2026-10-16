@@ -41,7 +41,7 @@ from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.magic_numbers import run_magic001
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
-from shockharness.suppressions import apply_suppressions
+from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
 
 STATUS_ANALYZED = "analyzed"
 STATUS_PARSE_ERROR = "parse_error"
@@ -103,6 +103,9 @@ class FileResult:
     parse_failure: ParseFailure | None
     error: str | None
     findings: tuple[Finding, ...]
+    # The file's inline suppression comments (well-formed ones), for `shockharness
+    # exceptions`; not part of the JSON report, which lists suppressions on findings.
+    suppressions: tuple[Suppression, ...]
 
     @property
     def failed(self) -> bool:
@@ -429,7 +432,10 @@ def prepare_file(
 
 
 def _file_result(
-    pending: PendingFile, rules_applied: tuple[str, ...], findings: tuple[Finding, ...]
+    pending: PendingFile,
+    rules_applied: tuple[str, ...],
+    findings: tuple[Finding, ...],
+    suppressions: tuple[Suppression, ...],
 ) -> FileResult:
     """``pending`` as a final result with its applied rules and finished findings."""
     return FileResult(
@@ -445,13 +451,14 @@ def _file_result(
         parse_failure=pending.parse_failure,
         error=pending.error,
         findings=findings,
+        suppressions=suppressions,
     )
 
 
 def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOptions) -> FileResult:
     """Phase three: suppressions (SUPP001/SUPP002), ordering, fingerprints."""
     if pending.failed:
-        return _file_result(pending, (), ())
+        return _file_result(pending, (), (), ())
     assert pending.source is not None and pending.facts is not None
     assert pending.status == STATUS_ANALYZED and pending.parse_failure is None
     disabled_ids = pending.disabled_ids()
@@ -473,7 +480,8 @@ def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOpti
     )
     findings.sort(key=lambda f: f.sort_key())
     findings = assign_fingerprints(findings)
-    return _file_result(pending, tuple(sorted(applied)), tuple(findings))
+    suppressions, _problems = parse_suppressions(pending.facts.comments)
+    return _file_result(pending, tuple(sorted(applied)), tuple(findings), suppressions)
 
 
 def verification_input(pending: PendingFile) -> FileVerification:
@@ -553,6 +561,7 @@ def unsupported_source_result(relative: str, reason: str, config: EffectiveConfi
         parse_failure=None,
         error=f'{reason} and unsupported_sources = "fail"',
         findings=(),
+        suppressions=(),
     )
 
 

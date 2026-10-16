@@ -8,6 +8,12 @@ built-in profile. The finding sets (rule, span, severity, confidence, a digest o
 message, suppression) and the gate verdict, exit code and counts must be unchanged; fields
 added after 0.3.0 (``status``, ``role``, ``gate.unknown`` ...) are deliberately not
 compared, so the defaults of ``fail_on_unknown`` are what this test pins down.
+
+Intended differences since 0.3.0 are listed below and applied to the snapshot before
+comparing, so every other change still fails. 0.5.0 (docs/shockharness-suggestions-4.md):
+item 2 removes the checked-then-raised ``table.get("raw")`` finding in every profile, and
+item 6 (``recommended`` sets ``rules.defaults.fail_on_unknown = false``) moves two unknown
+DEF002 findings out of the gate's hard and review counts under ``recommended``.
 """
 
 import functools
@@ -31,6 +37,18 @@ from shockharness.schema import PROFILES
 from tests.conftest import FIXTURES, exceptions_config_toml, language_for_fixture
 
 SNAPSHOT = FIXTURES / "profile_verdicts_0.3.0.json"
+CORPUS = "corpus"
+# (fixture path, rule, line, column) of findings removed on purpose since 0.3.0.
+REMOVED_SINCE_0_3_0 = frozenset({("python/def_mapping_get.py", "DEF002", 47, 11)})
+# (profile, fixture path or CORPUS) -> gate counts changed on purpose since 0.3.0.
+GATE_SINCE_0_3_0: dict[tuple[str, str], dict[str, int]] = {
+    ("strict", "python/def_mapping_get.py"): {"review": 2},
+    ("strict", CORPUS): {"review": 28},
+    ("recommended", "python/def_mapping_get.py"): {"hard_violations": 10, "review": 1},
+    ("recommended", CORPUS): {"hard_violations": 345, "review": 40},
+    ("minimal", "python/def_mapping_get.py"): {"review": 14},
+    ("minimal", CORPUS): {"review": 389},
+}
 EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED)
 CORPUS_DIRECTORIES = ("python", "javascript")
@@ -121,6 +139,25 @@ def snapshot_document() -> dict[str, Any]:
     return loaded
 
 
+def _removed(path: str, finding: list[Any]) -> bool:
+    rule, line, column = finding[0], finding[1], finding[2]
+    return (path, rule, line, column) in REMOVED_SINCE_0_3_0
+
+
+def expected_outcome(profile: str, name: str) -> dict[str, Any]:
+    """The 0.3.0 snapshot for ``name`` (a fixture or CORPUS) with the intended changes."""
+    document = snapshot_document()[profile]
+    if name == CORPUS:
+        outcome = json.loads(json.dumps(document["corpus"]))
+        outcome["findings"] = [f for f in outcome["findings"] if not _removed(f[0], f[1:])]
+    else:
+        outcome = json.loads(json.dumps(document["fixtures"][name]))
+        outcome["findings"] = [f for f in outcome["findings"] if not _removed(name, f)]
+    if (profile, name) in GATE_SINCE_0_3_0:
+        outcome["gate"].update(GATE_SINCE_0_3_0[(profile, name)])
+    return outcome
+
+
 def test_snapshot_covers_every_profile_and_fixture() -> None:
     assert sorted(snapshot_document()) == sorted(PROFILES)
     for profile in PROFILES:
@@ -130,13 +167,12 @@ def test_snapshot_covers_every_profile_and_fixture() -> None:
 @pytest.mark.parametrize("profile", PROFILES)
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_fixture_verdict_unchanged_since_0_3_0(name: str, profile: str, tmp_path: Path) -> None:
-    expected = snapshot_document()[profile]["fixtures"][name]
-    assert fixture_outcome(name, profile, tmp_path) == expected
+    assert fixture_outcome(name, profile, tmp_path) == expected_outcome(profile, name)
 
 
 @pytest.mark.parametrize("profile", PROFILES)
 def test_corpus_verdict_unchanged_since_0_3_0(profile: str, tmp_path: Path) -> None:
-    assert corpus_outcome(profile, tmp_path) == snapshot_document()[profile]["corpus"]
+    assert corpus_outcome(profile, tmp_path) == expected_outcome(profile, CORPUS)
 
 
 if __name__ == "__main__":

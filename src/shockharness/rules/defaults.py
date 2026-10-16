@@ -52,6 +52,7 @@ from shockharness.ir.model import (
     KIND_DATACLASS_FIELD,
     KIND_DEFAULTDICT,
     KIND_DESTRUCTURING,
+    KIND_DISCARDED_REMOVAL,
     KIND_ENV_DESTRUCTURING,
     KIND_ENV_GET_IMPLICIT,
     KIND_GETATTR,
@@ -115,10 +116,16 @@ FAMILY_RULES: Mapping[str, RuleSpec] = {
     FAMILY_CONFIGURATION: DEF006,
 }
 DATACLASS_KINDS = frozenset({KIND_DATACLASS_FIELD, KIND_DATACLASS_FACTORY})
-IMPLICIT_KINDS = frozenset({KIND_MAPPING_GET_IMPLICIT, KIND_ENV_GET_IMPLICIT})
+# Kinds reported at review in every mode but allow, with the fact's own message: the
+# implicit None of a lookup without a fallback, and a removal whose result is discarded.
+IMPLICIT_KINDS = frozenset(
+    {KIND_MAPPING_GET_IMPLICIT, KIND_ENV_GET_IMPLICIT, KIND_DISCARDED_REMOVAL}
+)
 # Kinds whose verdict depends on the receiver being a mapping; for them, approximate
 # confidence means the receiver's type was not established (ir/python_defaults.py).
-RECEIVER_TYPED_KINDS = frozenset({KIND_MAPPING_GET, KIND_MAPPING_GET_IMPLICIT})
+RECEIVER_TYPED_KINDS = frozenset(
+    {KIND_MAPPING_GET, KIND_MAPPING_GET_IMPLICIT, KIND_DISCARDED_REMOVAL}
+)
 DECLARATION_KINDS = frozenset(
     {
         KIND_PARAMETER,

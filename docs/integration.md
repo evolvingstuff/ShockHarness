@@ -50,7 +50,38 @@ shockharness check . --format sarif --output shockharness.sarif
 shockharness gate --base origin/main --head HEAD      # exit 1 only on NEW hard violations
 ```
 
+An empty tree (a freshly scaffolded repository with no `.py`/`.js` files yet)
+passes: `check` reports `0 file(s)` and exits `0`. `unsupported_sources`
+covers files that are present but unsupported, not the absence of files.
+
 ## 4. CI
+
+**Python 3.10 projects.** ShockHarness runs on Python 3.11+ (its configuration
+reader is the standard library's `tomllib`, and the runtime stays
+dependency-free apart from tree-sitter), but it reads 3.10 code. Static
+analysis does not depend on the interpreter the tests run on, so run the gate
+as one job of its own on 3.12 rather than on every leg of a 3.10-3.13 matrix:
+
+```yaml
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    # ... the project's tests, unchanged
+  shockharness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-lint.txt   # pins shockharness==0.4.0
+      - run: shockharness check . --format sarif --output shockharness.sarif
+```
+
+The reusable workflow (B below) does the same: its `python-version` input
+defaults to 3.12 independently of the project's matrix.
 
 ### A. Direct invocation (any CI system)
 

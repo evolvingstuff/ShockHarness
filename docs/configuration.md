@@ -54,7 +54,7 @@ versioned with the tool; no profile is ever fetched remotely). Select one with
 | Profile | What it is | Gate behaviour |
 |---|---|---|
 | `strict` (default) | The bundled defaults: every rule at its documented severity, `parse_errors = "fail"`, complexity enabled | Hard violations and unparseable files fail |
-| `recommended` | `strict`, except: `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review`; `MAGIC001` permits the unary literal `-1` (`allow_unary_negative_one = true`: `indexOf(...) === -1`, `[-1]`, `.at(-1)`) and does not report module-level named constant definitions (`named_constant_definitions = "allow"`); `CPLX005` fan-out fires above 30 distinct call targets instead of 20 (`fan_out_warn = 30`) and as a `review` finding instead of a warning (`fan_out_severity = "review"`), because the units over 20 on real codebases are orchestrators (login, streaming, restore) | As strict minus `DEF004` |
+| `recommended` | `strict`, except: `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review`; `MAGIC001` permits the unary literal `-1` (`allow_unary_negative_one = true`: `indexOf(...) === -1`, `[-1]`, `.at(-1)`) and does not report module-level named constant definitions (`named_constant_definitions = "allow"`); `CPLX005` fan-out fires above 30 distinct call targets instead of 20 (`fan_out_warn = 30`) and as a `review` finding instead of a warning (`fan_out_severity = "review"`), because the units over 20 on real codebases are orchestrators (login, streaming, restore); `DEF001`-`DEF006` findings whose status is `unknown` do not gate (`rules.defaults.fail_on_unknown = false`, 0.5.0) | As strict minus `DEF004` and unknown `DEF*` findings |
 | `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `named_constant_definitions = "allow"`, `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
 
 Any profile below `strict` prints a `policy deviation` line in every report
@@ -333,7 +333,7 @@ gate. It lives in the family's own table: `rules.magic_numbers`,
 | Family | Default | Why |
 |---|---|---|
 | `rules.exceptions` | `true` | EXC001 has always failed closed on unresolved types and opaque handlers |
-| `rules.defaults` | `true` | DEF002 on a receiver not proven a mapping has always failed the gate |
+| `rules.defaults` | `true` (`false` in `recommended`) | DEF002 on a receiver not proven a mapping has always failed the gate under `strict`; `recommended` reports it without gating, so a guess about a receiver's type cannot fail that gate |
 | `rules.magic_numbers` | `false` | MAGIC001 is exact; it produces no unknown findings |
 | `complexity` | `false` | CPLX001-CPLX006 measure what was resolved; advisory either way |
 
@@ -343,9 +343,10 @@ no other gate count and never fails the gate; a gate reason says how many were
 reported only. `gate.unknown` counts every unsuppressed, non-ignored unknown
 finding either way, `gate.unknown_gating_families` lists the families set to
 `true`, and the text trailer prints both (`unknown: N finding(s) the rules could
-not establish; fail_on_unknown families: exceptions, defaults`). No built-in
-profile changes these values; setting a family to `false` where its profile
-says `true` is a policy deviation, and setting one to `true` is not.
+not establish; fail_on_unknown families: exceptions, defaults`). Of the
+built-in profiles only `recommended` changes one (`rules.defaults`, 0.5.0).
+Setting a family to `false` where `strict` says `true` is a policy deviation,
+whether a profile or the repository sets it; setting one to `true` is not.
 
 ## Exception boundaries
 
@@ -776,6 +777,14 @@ Everything that loosens the strict profile is surfaced, never silent:
 * `files[].rules_disabled` lists, per file, which rules did not run and why
   (`config`, `overrides[i]`, or `configuration_file`).
 * `coverage.rules_not_implemented` lists rules that exist in the registry but produce nothing yet.
+* `shockharness exceptions PATH...` (0.5.0) lists all of it in one place for a
+  human reader: every inline suppression with its reason and whether it silences
+  anything, every malformed one, every line above with the configuration file
+  and line (or the profile, policy file or command line) it comes from, every
+  `exclude` pattern the configuration sets, the `--policy` attempts and, with
+  `--baseline`, the baseline's entries per rule and per file. Text or JSON
+  (`schemas/exceptions-v1.schema.json`); read-only, exit `0` (or `2` on an
+  invalid configuration), never gating.
 * `config_digest` is a SHA-256 of the effective configuration so two reports can be compared.
 * `config.policy` and `config.policy_attempts` name the `--policy` file and
   every repository key that tried to loosen it; each attempt is also a

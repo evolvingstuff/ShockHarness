@@ -157,6 +157,11 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/exceptions.py` | EXC001-EXC003: boundary matching and the three verdicts |
 | `rules/defaults.py` | DEF001-DEF006: mode-to-severity mapping, messages, DEF005/EXC002 hand-off, mode deviations |
 | `rules/complexity.py` | CPLX001-CPLX004 and CPLX006 per unit, CPLX005 from the graph (one finding per cycle); messages carry value, threshold and convention |
+| `rules/verification.py` | VERIFY001, VERIFY002, VERIFY004: what a change added to its tests and suppression comments, against the base revision |
+| `rules/policy_integrity.py` | VERIFY003: snapshots of each revision's configuration, tool configurations, workflows and baselines, and their comparison; `--policy` attempt findings |
+| `rules/tool_configs.py`, `rules/workflows.py` | ruff/flake8/pytest/coverage/ESLint settings and GitHub Actions jobs, read with the standard library, and what got looser between two versions |
+| `loosening.py` | What makes one configuration looser than another (shared by `--policy` and VERIFY003) |
+| `inventory.py` | `shockharness exceptions`: inline suppressions, configuration exceptions with their source, policy attempts, baseline contents |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |
 | `findings.py` | `Finding` (with `status` violation/unknown, `fingerprint` and `baseline` marker), `SuppressionRecord` |
 | `gating/baseline.py` | Fingerprints, baseline file model and validation, legacy marking under `gates.legacy` |
@@ -169,4 +174,4 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `report.py` | Report assembly, coverage, sorting |
 | `output/text.py`, `output/json.py`, `output/sarif.py` | Renderers (check reports and diff reports) |
 | `api.py` | `analyze_source`, `analyze_paths`, `apply_baseline`, `evaluate_gate`, `with_history` |
-| `cli.py` | Argument parsing (`check`, hidden `scan`, `version`, `--profile`/`--parse-errors`), dispatch, process boundary |
+| `cli.py` | Argument parsing (`check`, hidden `scan`, `version`, `exceptions`, `--profile`/`--parse-errors`/`--policy`), dispatch, process boundary |

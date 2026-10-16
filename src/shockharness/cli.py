@@ -18,6 +18,7 @@ from shockharness.analysis import CACHE_BYPASSED, CACHE_CONFIGURED, AnalysisOpti
 from shockharness.api import analyze_paths, apply_baseline, with_history
 from shockharness.config import (
     DEDICATED_FILENAME,
+    USER_TIERS,
     CliOverrides,
     EffectiveConfig,
     load_config_with_overrides,
@@ -31,14 +32,17 @@ from shockharness.constants import (
 )
 from shockharness.errors import ShockHarnessError, UsageError
 from shockharness.gate import GATE_ERROR, as_advisory, process_exit_code
-from shockharness.gating.baseline import build_baseline, load_baseline, render_baseline
+from shockharness.gating.baseline import Baseline, build_baseline, load_baseline, render_baseline
 from shockharness.gating.diff import DiffReport, diff_revisions, head_paths, with_metrics
 from shockharness.history.hotspots import collect_history
+from shockharness.inventory import build_inventory
+from shockharness.inventory import render_text as render_inventory
 from shockharness.output import json as json_output
 from shockharness.output import sarif as sarif_output
 from shockharness.output import text as text_output
 from shockharness.report import Report
 from shockharness.rules import registry
+from shockharness.rules.policy_integrity import read_text
 from shockharness.schema import PROFILE_STRICT, PROFILES
 from shockharness.skills import SKILL_NAMES, shipped_frontmatter, skill_text
 from shockharness.skills.adapters import (
@@ -70,6 +74,8 @@ COMMAND_CHECK = "check"
 COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
 COMMAND_VERSION = "version"
 COMMAND_SKILLS = "skills"
+COMMAND_EXCEPTIONS = "exceptions"
+INVENTORY_FORMATS = (FORMAT_TEXT, FORMAT_JSON)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -94,6 +100,21 @@ def build_parser() -> argparse.ArgumentParser:
     _add_check_arguments(scan)
 
     commands.add_parser(COMMAND_VERSION, help="print the tool version (same as --version)")
+
+    exceptions = commands.add_parser(
+        COMMAND_EXCEPTIONS,
+        help="list every exception the code and configuration make: inline suppressions, "
+        "configuration exceptions with their source, policy attempts, baseline contents "
+        "(read-only; exit 0)",
+    )
+    exceptions.add_argument("paths", nargs="+", type=Path, help="files or directories to analyze")
+    _add_config_arguments(exceptions)
+    _add_cache_argument(exceptions)
+    _add_baseline_argument(exceptions)
+    exceptions.add_argument("--format", choices=INVENTORY_FORMATS, default=FORMAT_TEXT)
+    exceptions.add_argument(
+        "--output", type=Path, default=None, help="write the list here instead of stdout"
+    )
 
     baseline = commands.add_parser("baseline", help="create a reviewed baseline of findings")
     baseline_commands = baseline.add_subparsers(
@@ -397,6 +418,37 @@ def _run_scan(args: argparse.Namespace) -> int:
     return process_exit_code(report.gate)
 
 
+def _configuration_texts(config: EffectiveConfig) -> dict[str, str | None]:
+    """The text of the configuration file and the policy file the inventory points into."""
+    texts: dict[str, str | None] = {}
+    paths: list[str] = []
+    if config.source.tier in USER_TIERS:
+        paths.append(config.source.path)
+    if config.policy is not None:
+        paths.append(config.policy.path)
+    for path in paths:
+        text, _error = read_text(Path(path))
+        texts[path] = text
+    return texts
+
+
+def _run_exceptions(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    cache = CACHE_BYPASSED if args.no_cache else CACHE_CONFIGURED
+    options = AnalysisOptions(inline_suppressions=True, cache=cache)
+    report = analyze_paths(list(args.paths), args.root, config, options)
+    baseline: tuple[Baseline, str] | None = None
+    if args.baseline is not None:
+        baseline = (load_baseline(args.baseline), str(args.baseline))
+    inventory = build_inventory(report, config, args.root, _configuration_texts(config), baseline)
+    if args.format == FORMAT_JSON:
+        text = json.dumps(inventory.to_json_dict(), indent=JSON_INDENT, sort_keys=True) + "\n"
+    else:
+        text = render_inventory(inventory, args.root)
+    _write_output(text, args.output)
+    return EXIT_OK
+
+
 def _run_baseline(args: argparse.Namespace) -> int:
     target: Path = args.output
     if target.exists() and not args.force:
@@ -595,6 +647,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _run_scan(args)
     if args.command == COMMAND_VERSION:
         return _run_version()
+    if args.command == COMMAND_EXCEPTIONS:
+        return _run_exceptions(args)
     if args.command == "baseline":
         return _run_baseline(args)
     if args.command == "diff":
