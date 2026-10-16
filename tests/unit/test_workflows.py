@@ -36,7 +36,7 @@ def test_ci_workflow_uses_check_and_is_callable() -> None:
     assert "shockharness skills install --agent generic --project agent-skills" in text
     assert "shockharness skills update --agent claude --check" in text
     assert "/tmp/clean/bin/shockharness skills list" in text
-    assert text.count("skill-evals:") == 1 and "actions/setup-node@v4" in text
+    assert text.count("skill-evals:") == 1 and "actions/setup-node@v7" in text
     assert "--wheelhouse wheelhouse" in text
     assert "pip download --dest wheelhouse dist/shockharness-*.whl" in text
     for python in ('"3.11"', '"3.12"', '"3.13"', '"3.14"'):
@@ -69,7 +69,7 @@ def test_reusable_check_workflow_inputs_and_permissions() -> None:
     assert "--format sarif --output shockharness.sarif" in text
     assert 'gate --base "${SHOCKHARNESS_BASE}" --head HEAD' in text
     assert "shockharness check ." in text
-    assert "github/codeql-action/upload-sarif@v3" in text
+    assert "github/codeql-action/upload-sarif@v4" in text
     assert "contents: read" in text and "security-events: write" in text
     assert "write-all" not in text and "id-token" not in text
     assert "fetch-depth: 0" in text
