@@ -261,6 +261,7 @@ documentation list.
 | TypeScript | H-TS, approved | `tree-sitter-typescript` is approved as a runtime dependency for H-TS, pinned like `tree-sitter-javascript` (decision 8, updated) |
 | Python 3.10 support | Declined | `tomllib` is 3.11+, and the runtime stays stdlib-only plus tree-sitter. Section 9 documents the separate CI job instead (decision 17) |
 | A made-up id passed where ids come from a registry: `run_id` filled from `agent_trace_store.start_run()` in one place and from `str(uuid4())` in another (a later note from the same project) | H6, recorded | Needs argument provenance across files; candidate rule alongside INPUT001-INPUT002, advisory until measured (decision 20) |
+| A strict operation guarded at most call sites and unguarded at others: `removeNoteHash(id)` preceded by `hasNoteHash(id)` in two places and not in a third (a later note) | H6, recorded | Majority guard inference across call sites; review-level, alongside the identifier-provenance rule (decision 21) |
 | "Would ShockHarness absolve this?" | — | The note's context did not survive the export, so there is nothing to act on |
 
 ## What worked well, and stays
