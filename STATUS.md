@@ -1164,15 +1164,28 @@ runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
 
 ## Next tasks
 
-- **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
-  cyclomatic/cognitive/nesting, approximate NPath, call graph with
-  unresolved-edge reports; separate advisory family, never averaged into the
-  gate.
-- Consider a flow-sensitive refinement for the implicit-`None` review finding
-  (a `.get(k)` whose result is checked against `None` on the next statement),
-  and scope-aware mapping knowledge, if the review noise proves costly.
-- Decide `.gitignore` handling (spec: only if configured) and `-0` policy wording in docs if challenged.
-- Milestone F part 2 (profiles, `check`, release automation) is recorded below; the first `v*` tag exercises `publish.yml` for real.
+Updated 2026-10-16, after the fourth suggestions batch
+(`docs/shockharness-suggestions-4.md`; spec 21.1 decisions 12-18, 21.2 table).
+In order:
+
+1. **F4, the 0.5.0 feedback round** (suggestions-4 items 1-9): DEF002
+   precision (decorator `.get`, checked-then-raise, discarded `pop(k, None)`,
+   the `setdefault` grouping idiom, "absence is normal" remediation);
+   `recommended` stops gating on unknown `DEF*` findings; the `shockharness
+   exceptions` command; skill guidance (propose a rule, validate outputs);
+   docs for Python 3.10 projects, empty trees, and covered-versus-planned
+   checks. The checked-then-raise item supersedes the earlier note here about a
+   flow-sensitive refinement for the implicit-`None` finding. Release 0.5.0.
+2. **H3**: STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001, plus
+   EXC004 (`return`/`break`/`continue` in `finally`).
+3. **H4** (async lifecycle, including uninspected `gather(return_exceptions=True)`
+   and `Promise.allSettled` results), **H5** (API catalog, PROCESS001 naming
+   `check=False`), **H-TS** (TypeScript; `tree-sitter-typescript` approved),
+   then H6 and H7.
+- Declined: Python 3.10 support (decision 17). Recorded, not scheduled: a rule
+  for `__qualname__`/`__name__` on values of unknown type (decision 16).
+- Still open from earlier: `.gitignore` handling (spec: only if configured) and
+  `-0` policy wording in docs if challenged.
 - CI verified 2026-10-14 on the first push (run 1 at https://github.com/evolvingstuff/ShockHarness/actions/runs/38646310534): all 13 jobs green, ubuntu/macos/windows x Python 3.11-3.14 plus the wheel build job.
 
 ## Milestone F part 1: baselines, diff gate, SARIF, git history — DONE (2026-10-14)
