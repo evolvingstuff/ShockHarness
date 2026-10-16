@@ -21,7 +21,7 @@ Since 0.5.0, `fix-violations` and `pre-commit-review` also ask for a written
 rule proposal whenever a bug turns up that ShockHarness did not report (the
 pattern, why it is a bug, the rule, the expected false positives), and
 `write-compliant-code` asks for a check of a function's result where the
-contract promises something about it, and (principle 8) for immutable values:
+contract promises something about it, and since 0.6.0 (principle 8) for immutable values:
 frozen records, tuples and frozensets, `Object.freeze`, and new values preferred
 over mutated inputs (discouraged, not forbidden; local mutation is fine). `pre-commit-review` reads `shockharness
 exceptions .` as the reviewer's list of everything the code and configuration
@@ -86,7 +86,7 @@ Add this line to the agent's instruction file (for example AGENTS.md):
       "sha256": "<hex SHA-256 of the file as written>"
     }
   },
-  "tool_version": "0.5.0"
+  "tool_version": "0.6.0"
 }
 ```
 

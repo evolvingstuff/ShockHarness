@@ -5,6 +5,8 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
 Milestone H3 of specification section 21: syntax-level guardrails. Seven new
 rules ship at `warning` (`BOOL001` at `review`) until their precision is measured
 (decision 9), so no gate verdict changes: with the new rules switched off, the
