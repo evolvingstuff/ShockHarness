@@ -1139,6 +1139,29 @@ tree; `check --profile recommended` accepts arithmetic constant definitions;
 runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
 0.25.0 only. PyPI lists `0.3.0` (latest), `0.2.0`, `0.1.0` and `0.1.0a1`.
 
+## Release 0.4.0 (2026-10-16)
+
+Tag `v0.4.0` at 79947b5. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/38944777102)
+after the maintainer's approval at the `pypi` environment. Contents: Milestone
+H1 (66f56fb: the `unknown` finding status, `fail_on_unknown`, file roles), H2
+part 1 (b608940: VERIFY001, VERIFY002, VERIFY004), H2 part 2 (2aa2da2:
+VERIFY003, `--policy`, the `verification-integrity` skill), a CI fix c21cc3b
+and the release commit 79947b5.
+
+The first CI run on the H2 commits (2aa2da2) failed in the build job only: the
+wheel smoke test expected exactly four `SKILL.md` files, and H2 part 2 ships
+five. Every test job was green. The smoke test now takes the expected count
+from `SKILL_NAMES` in the installed wheel (c21cc3b). Nothing had been tagged.
+The Dependabot `actions/checkout` branch was cut from 2aa2da2 and failed CI for
+the same reason; it passes once rebased onto main.
+
+Verified after publication: `uv pip install shockharness==0.4.0` into a fresh
+environment from PyPI; `shockharness --version` prints `shockharness 0.4.0`;
+`skills list` shows five skills; `rules list` shows `VERIFY003` implemented;
+runtime dependencies are `tree-sitter` 0.25.2 and `tree-sitter-javascript`
+0.25.0 only. PyPI lists `0.4.0` as the latest release, with a wheel and an sdist.
+
 ## Next tasks
 
 - **Milestone E (complexity + graph)**: `CPLX001`-`CPLX005` per-function
