@@ -63,7 +63,7 @@ jobs:
       POLICY_REF: ${{ inputs.policy-ref }}
       POLICY_PATH: ${{ inputs.policy-path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # `gate --base` needs the base commit; a shallow clone would not have it.
           fetch-depth: 0
