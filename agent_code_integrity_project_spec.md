@@ -512,6 +512,7 @@ The guardrails brief is a design input, as the distribution brief was. Where it 
 | 8 | TypeScript | A separate adapter milestone (H-TS) using `tree-sitter-typescript` (same pinning discipline as JavaScript; a new dependency requires the maintainer's explicit agreement). It is a prerequisite for TYPE001's TypeScript half; TYPE001's Python half (`Any`, `cast`, `# type: ignore`) does not wait for it |
 | 9 | Precision bar | The brief's >= 99 % precision target for hard gates is adopted as a release criterion for promoting any new rule from `warning` to `error` by default; until measured on a reviewed corpus, new rules ship at `warning` or `review` |
 | 10 | Mascot example | `rm -rf /` appears only in documentation and parse-only fixtures; nothing in tests, evals, demos or remediation text executes or suggests it |
+| 11 | Plugin API | **Declined (2026-10-16).** A configuration entry that makes ShockHarness import and run project code contradicts §8 (configuration never executes code) and would let an edit to the policy file run arbitrary code in CI. Project-specific rules stay in the project's own tooling. If integration is wanted later, the recorded alternative is data-only: ShockHarness reads an external findings file in a documented format (`--import-findings`) and routes those findings through suppressions, baselines, the revision gate and SARIF. Not scheduled |
 
 ### 21.2 Milestones (in order; one session each, after 0.1.0)
 

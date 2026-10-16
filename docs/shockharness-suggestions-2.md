@@ -73,6 +73,8 @@ It applies to files that match `include` but have an extension ShockHarness cann
 
 ## 5. Design note, not for this batch: project rules through a plugin API
 
+> **Declined 2026-10-16** (spec section 21.1, decision 11): ShockHarness will not execute project code named in configuration. The data-only alternative (importing an external findings file) is recorded there and not scheduled.
+
 The remaining checks in that project's linter are its own architecture: a decorator required on every route that writes, a file-immutability invariant for backups, a state-ownership rule for its JavaScript modules. None of these belongs in ShockHarness. What would be general is a way to run such checks inside ShockHarness so they share its report, baselines, diff gate and SARIF: a `[[tool.shockharness.plugins]]` entry naming an importable callable that receives the parsed unit (the IR already built for a file) and returns findings with a project rule ID (`PROJ001`-style, listed under a separate `rules_project` key so a clean run never implies the tool checked them). Design questions to settle before building it: which IR is exposed and how stable it is across versions, whether plugins may read other files, and how a plugin's failure is reported (as an analysis failure, never swallowed). Worth a short design document first.
 
 ## Non-goals
