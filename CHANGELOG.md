@@ -31,6 +31,11 @@ gate status, exit code or hard-violation count changes (both pinned in
 - `IMPORT001` (`rules.import_effects`): configured side-effecting calls
   (processes, network, sockets, threads, deletion, `fetch`, `setInterval`)
   executed at import time, resolved through the file's own imports.
+- `write-compliant-code` principle 8, "prefer immutable values": frozen
+  records, tuples and frozensets, `Object.freeze`, new values preferred over
+  mutated inputs (discouraged, not forbidden; local variables may be mutated
+  freely); STATE001's remediation
+  and `fix-violations` point at it.
 - Each new section has `enabled`, `severity` (`warning`/`error`/`review`, the
   findings' severity) and `roles` (default `["production"]`); every loosening
   of them is a policy deviation, reported by VERIFY003 and protected by

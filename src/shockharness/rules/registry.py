@@ -1429,9 +1429,12 @@ STATE001 = RuleSpec(
         "not a finding."
     ),
     remediation=(
-        "Give the state an owner: an object created by the caller and passed in, or a value "
-        "returned and threaded through. A deliberate process-wide cache is declared in "
-        "[[rules.module_state.allowed]] with its reason (thread safety, invalidation)."
+        "Prefer immutable values (the write-compliant-code skill, principle 8): if the "
+        "binding is a fixed table, make it a tuple, frozenset or frozen object that nothing "
+        "writes. Otherwise give the state an owner: an object created by the caller and "
+        "passed in, or a new value returned and threaded through. A deliberate process-wide "
+        "cache is declared in [[rules.module_state.allowed]] with its reason (thread safety, "
+        "invalidation)."
     ),
     noncompliant_example="_SEEN = set()\n\ndef mark(key):\n    _SEEN.add(key)",
     compliant_example="class Tracker:\n    def __init__(self):\n        self.seen = set()",

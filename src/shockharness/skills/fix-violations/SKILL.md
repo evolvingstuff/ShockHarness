@@ -68,7 +68,7 @@ Ask what the code promises when the value is absent or the operation fails.
 | `STUB002` | Why does production depend on a test double? | Invert it: production defines the interface, tests inject the double. A real production module under `tests/` moves. |
 | `ASSERT001` | Must this check survive `python -O`? | Yes for input, permissions and state: `if not ok: raise ValueError(...)`. A type-narrowing `assert x is not None` is allowed. |
 | `BOOL001` | What does the flag switch? | Pass it by keyword (`escape=True`) or in an options object; a flag that selects behavior may be two functions. |
-| `STATE001` | Who owns this state? | An object the caller creates and passes in, or a returned value. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
+| `STATE001` | Who owns this state? Does it need to change at all? | A fixed table becomes a `tuple`/`frozenset`/`Object.freeze`d value (`write-compliant-code`, principle 8). Otherwise an object the caller creates and passes in, or a new value returned. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
 | `IMPORT001` | Who asked for this effect? | Move it into a function the entry point calls (`main()`, a factory, `start()`). |
 
 An **unknown** finding means the rule could not establish the property, not

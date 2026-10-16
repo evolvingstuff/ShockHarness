@@ -800,7 +800,10 @@ function, method or arrow assigns or mutates; one finding per binding at its
 definition, naming the writers. `[[rules.module_state.allowed]]` declares a
 deliberate process-wide binding (`path` glob, `name`, `reason`); each entry is
 a policy deviation. Per file: writes through another module or an alias are not
-seen, hence `approximate`.
+seen, hence `approximate`. Local variables are never findings: mutating what a
+function creates is fine. The usual fix is an immutable value (a `tuple`,
+`frozenset` or frozen object nothing writes; `write-compliant-code`, principle
+8) or an owner passed in by the caller.
 
 **IMPORT001.** Calls executed when the module is imported (module body, class
 bodies, decorators, default values; JavaScript top level, class static blocks

@@ -108,6 +108,48 @@ a plain `check`; see the `refactor-complexity` skill.
      return ids;
    }
    ```
+8. **Prefer immutable values.** A value nobody can change needs no owner, cannot
+   be altered behind a caller's back, and makes the order of calls irrelevant.
+   Build data once and hand it on: `@dataclass(frozen=True)` for records,
+   `tuple` and `frozenset` (or a `Mapping` you never write to) for collections,
+   `Object.freeze` and `const` in JavaScript. When a function needs a changed
+   value, prefer returning a new one (`dataclasses.replace`, a new tuple,
+   `{...obj, x}`) over mutating its input. Mutating local variables, and objects
+   the function itself created, is fine: a list built up in a loop, a dict
+   filled before it is returned. Mutating what other code can also see (a
+   function's inputs, shared values, module-level state that functions write,
+   which is `STATE001`) is discouraged rather than forbidden: when it is the
+   clearer design, say so in the function's name or docstring.
+
+   ```python
+   from dataclasses import dataclass, replace
+
+
+   @dataclass(frozen=True)
+   class Order:
+       items: tuple[str, ...]
+       paid: bool
+
+
+   def with_item(order: Order, item: str) -> Order:
+       return replace(order, items=(*order.items, item))  # the caller's order is unchanged
+
+
+   ALLOWED_CURRENCIES = frozenset({"EUR", "USD"})
+   ```
+
+   ```javascript
+   export const ALLOWED_CURRENCIES = Object.freeze(["EUR", "USD"]);
+
+   export function withItem(order, item) {
+     return Object.freeze({ ...order, items: [...order.items, item] });
+   }
+   ```
+
+   Fine: `totals = {}` filled in a loop and returned. Discouraged: `def
+   add_item(order, item): order.items.append(item)`, which changes every holder
+   of `order`, and `function markPaid(order) { order.paid = true; }`, which a
+   caller cannot see coming from the call site.
 
 ## Examples
 
@@ -279,6 +321,7 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] `shockharness check .` ends in `gate: PASS (exit 0)` and the tests pass.
 - [ ] Any suppression has an exact rule ID and a reason that cites a source.
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
+- [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
 
 ## Adopting ShockHarness
 
