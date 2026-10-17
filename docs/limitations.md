@@ -96,10 +96,17 @@ Stated so that a clean report is never read as more than it is.
 
 ## DEF001-DEF006
 
-* The rules are syntactic. They report value-substituting *expressions*; a
-  default spelled as a statement (`if x is None: x = v`, `if k not in m:
-  m[k] = v`) is not inspected. Rewriting an expression into that form silences
-  the rule without changing behaviour; the policy relies on review for that.
+* The rules are syntactic. They report value-substituting *expressions* and,
+  since decision 34, the two `return` statement forms of a Python membership
+  fallback (`if k in m: return m[k]` then `return v`, and the `not in` order).
+  Other statement spellings (`if x is None: x = v`, `if k not in m: m[k] = v`,
+  an `else:` branch, a JavaScript `if (o.has(k)) return o.get(k);`) are not
+  inspected; rewriting an expression into one of them silences the rule without
+  changing behaviour, and the policy relies on review for that.
+* Fallback helpers are found by the shape of a module-level function and
+  followed only to calls by name in the same file: a helper imported from
+  another module, a method, or a helper whose default is computed from a
+  parameter (`default or []`) is not followed.
 * Types are not inferred. `.get`, `.setdefault` and `.pop` are matched by
   method name; the receiver is "known" only when the module binds or annotates
   it as a mapping, and then only by name, not by scope. An HTTP client's

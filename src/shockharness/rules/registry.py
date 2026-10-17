@@ -421,7 +421,7 @@ DEF001 = RuleSpec(
 
 DEF002 = RuleSpec(
     rule_id="DEF002",
-    version="1",
+    version="2",
     name="missing mapping/object fallback",
     family="defaults",
     config_section="rules.defaults",
@@ -440,7 +440,9 @@ DEF002 = RuleSpec(
     ),
     guarantees=(
         "Python: m.get(k, v), m.setdefault(k, v), m.pop(k, v) on any receiver, getattr(o, a, v), "
-        "'m[k] if k in m else v', next(iterator, v), and collections.defaultdict(factory) "
+        "'m[k] if k in m else v' and its statement form ('if k in m: return m[k]' followed by "
+        "'return v', or 'if k not in m: return v' followed by 'return m[k]'), next(iterator, v), "
+        "and collections.defaultdict(factory) "
         "through any import spelling (import collections as c; c.defaultdict(list)); "
         "d.pop(k), next(it) and defaultdict() with no default are not findings. Not fallbacks "
         "either: a .get(...) call that is itself a decorator (@router.get('/x')); a lookup "
@@ -454,7 +456,11 @@ DEF002 = RuleSpec(
         "is proven a mapping (exact confidence) when it "
         "is a dict display, a name bound to a dict display or dict/defaultdict/OrderedDict/"
         "Counter/ChainMap call, or a name annotated as dict/Dict/Mapping/MutableMapping (and "
-        "relatives) anywhere in the module; otherwise the finding is approximate. m.get(k) with "
+        "relatives) anywhere in the module; otherwise the finding is approximate. A call of a "
+        "module-level fallback helper of the same file (its body, after a docstring and "
+        "checks that only raise, is a lookup whose default is one of its parameters) is "
+        "reported at the call, with the argument as the fallback, under the "
+        "fallback_helpers mode (review in strict). m.get(k) with "
         "no fallback is a separate review finding (the implicit None) unless the result is "
         "awaited, compared with None, or the left operand of a reported 'or'. JavaScript: "
         "destructuring defaults in declarations (const {x = v} = o, const [x = v] = a), "
@@ -470,15 +476,19 @@ DEF002 = RuleSpec(
         "absent property yields undefined and nothing in the syntax singles it out. Object "
         "spread merging ({...defaults, ...options}) and Object.assign are not recognized. "
         "if-statement branches that assign a default are not inspected; only value-substituting "
-        "expressions are."
+        "expressions and the return statement forms are. Fallback helpers are followed within "
+        "their own file and by name only (not methods, not imports), and the statement form "
+        "is Python only."
     ),
     remediation=(
         "Decide which case this is. (1) The key must exist: index the mapping (m[k], o.x) so a "
         "missing key fails where it is missing, or validate the data once at its boundary. "
         "(2) Absence is a normal state (an empty view has no root entry, an unused tag has no "
-        "posting): say so with an explicit 'if k in m:' branch and a comment, or a small named "
-        "helper whose name says what absence means (_posting_or_empty). Do not force an index "
-        "here; that turns a normal state into a crash. (3) The value comes from outside "
+        "posting): branch where it matters and do the absent case's own work there ('if tag "
+        "not in index: continue'). A helper returning a stand-in is the fallback again, and "
+        "one taking the default as a parameter is .get under another name; a stand-in that "
+        "really is the meaning gets an inline suppression with the reason. Do not force an "
+        "index here; that turns a normal state into a crash. (3) The value comes from outside "
         "(configuration, a request): validate it where it enters and carry a typed, explicitly "
         "optional value from there. Never add a fallback to make a KeyError go away."
     ),

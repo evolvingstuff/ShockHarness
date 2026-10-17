@@ -429,7 +429,8 @@ class _Unit:
         return frozenset(found)
 
     def name(self, identifier: str) -> Origins:
-        if identifier in self.env:
+        """A tracked local's origins; a global, import or builtin has none."""
+        if identifier in self.env:  # shockharness: ignore[DEF002] reason="untracked: no origins"
             return self.env[identifier]
         return EMPTY
 

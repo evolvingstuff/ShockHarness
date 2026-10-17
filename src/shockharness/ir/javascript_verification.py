@@ -107,9 +107,7 @@ def _callee(call: Node) -> tuple[str, str | None] | None:
         name = node_text(function)
         if name in CALLEES:
             return name, None
-        if name in PREFIXED:
-            return PREFIXED[name]
-        return None
+        return PREFIXED.get(name)  # xit, fdescribe, ...; None: not a test call
     if function.type != MEMBER:
         return None
     target = function.child_by_field_name(Field.OBJECT)

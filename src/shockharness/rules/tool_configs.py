@@ -291,12 +291,10 @@ def _flake8(builder: _Builder, section: Mapping[str, str]) -> None:
         builder.add("flake8.per-file-ignores", _per_file(section["per-file-ignores"]))
 
 
-def _eslint_level(raw: Any) -> str | None:
+def _eslint_level_key(raw: Any) -> str:
+    """The severity word or number of a rule setting (``"warn"``, ``["error", {...}]``)."""
     value = raw[0] if isinstance(raw, list) and len(raw) > 0 else raw
-    key = str(value).strip().lower()
-    if key in ESLINT_LEVELS:
-        return ESLINT_LEVELS[key]
-    return None
+    return str(value).strip().lower()
 
 
 def _eslint(name: str, text: str) -> tuple[ToolSettings | None, str | None]:
@@ -311,9 +309,9 @@ def _eslint(name: str, text: str) -> tuple[ToolSettings | None, str | None]:
     rules = _table(document, "rules")
     if rules is not None:
         for rule, raw in rules.items():
-            level = _eslint_level(raw)
-            if level is not None:
-                builder.eslint_rules[str(rule)] = level
+            key = _eslint_level_key(raw)
+            if key in ESLINT_LEVELS:  # an unknown level is not comparable: left out
+                builder.eslint_rules[str(rule)] = ESLINT_LEVELS[key]
     if "ignorePatterns" in document:
         builder.add("eslint.ignorePatterns", _codes(document["ignorePatterns"]))
     return builder.build(), None
@@ -328,22 +326,22 @@ def read_tool_settings(name: str, text: str) -> tuple[ToolSettings | None, str |
     return _ini(name, text)
 
 
-def _items(settings: ToolSettings, category: str) -> frozenset[str]:
-    """The items a file configures for ``category``; none when it does not configure it."""
-    if category in settings.sets:
+def _difference(settings: ToolSettings, other: ToolSettings, category: str) -> frozenset[str]:
+    """The items ``settings`` configures for ``category`` that ``other`` does not."""
+    if category not in settings.sets:
+        return frozenset()  # configures nothing there, so nothing beyond other
+    if category not in other.sets:
         return settings.sets[category]
-    return frozenset()
+    return settings.sets[category] - other.sets[category]
 
 
 def _set_loosenings(before: ToolSettings, after: ToolSettings) -> list[ToolLoosening]:
     found: list[ToolLoosening] = []
     for category in ADDED_IS_LOOSER:
-        for item in sorted(_items(after, category) - _items(before, category)):
+        for item in sorted(_difference(after, before, category)):
             found.append(ToolLoosening(category, item, f"{category} now includes {item!r}"))
     for category in REMOVED_IS_LOOSER:
-        if category not in before.sets:
-            continue
-        for item in sorted(before.sets[category] - _items(after, category)):
+        for item in sorted(_difference(before, after, category)):
             found.append(ToolLoosening(category, item, f"{category} no longer includes {item!r}"))
     return found
 

@@ -8,7 +8,9 @@ configured mode to a severity:
   never fails), ``allow`` -> no finding. ``rules.defaults.function_parameters``
   drives DEF001 (``dataclass_fields`` drives its dataclass kinds),
   ``missing_value_fallbacks`` DEF002, ``truthiness_fallbacks`` DEF003,
-  ``nullish_fallbacks`` DEF004, ``configuration_fallbacks`` DEF006. DEF005 has no
+  ``nullish_fallbacks`` DEF004, ``configuration_fallbacks`` DEF006, and
+  ``fallback_helpers`` the calls of a helper that is ``m.get(k, v)`` under another
+  name (DEF002, review in the strict profile for now). DEF005 has no
   mode: a handler that turns a failure into a value is always an error.
 * The *implicit* shapes (``m.get(k)`` and ``os.getenv("X")`` with no fallback)
   are ``review`` findings whatever the mode (unless ``allow``): the code may
@@ -55,10 +57,12 @@ from shockharness.ir.model import (
     KIND_DISCARDED_REMOVAL,
     KIND_ENV_DESTRUCTURING,
     KIND_ENV_GET_IMPLICIT,
+    KIND_FALLBACK_HELPER,
     KIND_GETATTR,
     KIND_MAPPING_GET,
     KIND_MAPPING_GET_IMPLICIT,
     KIND_MEMBER_NULLISH,
+    KIND_MEMBERSHIP_RETURN,
     KIND_MEMBERSHIP_TERNARY,
     KIND_NEXT_DEFAULT,
     KIND_PARAMETER,
@@ -95,6 +99,7 @@ KEY_MISSING_VALUE = "missing_value_fallbacks"
 KEY_TRUTHINESS = "truthiness_fallbacks"
 KEY_NULLISH = "nullish_fallbacks"
 KEY_CONFIGURATION = "configuration_fallbacks"
+KEY_FALLBACK_HELPERS = "fallback_helpers"
 
 # The strict profile's value for every mode key (also what defaults.toml ships).
 STRICT_MODES: Mapping[str, str] = {
@@ -104,6 +109,8 @@ STRICT_MODES: Mapping[str, str] = {
     KEY_TRUTHINESS: MODE_REVIEW,
     KEY_NULLISH: MODE_FORBID,
     KEY_CONFIGURATION: MODE_FORBID,
+    # Review for one release (decision 34): a helper found by its shape, called by name.
+    KEY_FALLBACK_HELPERS: MODE_REVIEW,
 }
 
 DEFAULT_RULES: tuple[RuleSpec, ...] = (DEF001, DEF002, DEF003, DEF004, DEF005, DEF006)
@@ -136,7 +143,9 @@ DECLARATION_KINDS = frozenset(
         KIND_ENV_DESTRUCTURING,
     }
 )
-MISSING_KEY_KINDS = frozenset({KIND_MEMBERSHIP_TERNARY, KIND_GETATTR})
+MISSING_KEY_KINDS = frozenset(
+    {KIND_MEMBERSHIP_TERNARY, KIND_MEMBERSHIP_RETURN, KIND_FALLBACK_HELPER, KIND_GETATTR}
+)
 
 
 def severity_for_mode(mode: str) -> str | None:
@@ -152,6 +161,8 @@ def mode_key_for(fact: DefaultFact) -> str | None:
     """The ``rules.defaults`` key whose mode decides this fact's severity (None for DEF005)."""
     if fact.family == FAMILY_PARAMETER:
         return KEY_DATACLASS_FIELDS if fact.kind in DATACLASS_KINDS else KEY_FUNCTION_PARAMETERS
+    if fact.family == FAMILY_MAPPING and fact.kind == KIND_FALLBACK_HELPER:
+        return KEY_FALLBACK_HELPERS
     if fact.family == FAMILY_MAPPING:
         return KEY_MISSING_VALUE
     if fact.family == FAMILY_TRUTHINESS:
@@ -176,6 +187,15 @@ def _severity(fact: DefaultFact, settings: Mapping[str, Any]) -> str | None:
     if by_mode is None:
         return None
     return section_severity(settings, by_mode)
+
+
+def _missing_noun(kind: str) -> str:
+    """What is missing when the fallback applies: an attribute, a key, a value."""
+    if kind == KIND_GETATTR:
+        return "attribute"
+    if kind == KIND_FALLBACK_HELPER:
+        return "value"
+    return "key"
 
 
 def _message(fact: DefaultFact, language: str) -> str:
@@ -203,7 +223,7 @@ def _message(fact: DefaultFact, language: str) -> str:
         return (
             f"{fact.subject} falls back to {fact.fallback}() for every missing key; {fact.detail}"
         )
-    what = "attribute" if fact.kind == KIND_GETATTR else "key"
+    what = _missing_noun(fact.kind)
     if fact.kind in MISSING_KEY_KINDS or fact.family == FAMILY_MAPPING:
         return (
             f"{fact.subject} falls back to {fact.fallback} when the {what} is missing; "
@@ -320,7 +340,7 @@ def loosened_modes(settings: Mapping[str, Any]) -> list[str]:
 def _rule_for_key(key: str) -> RuleSpec:
     if key in (KEY_FUNCTION_PARAMETERS, KEY_DATACLASS_FIELDS):
         return DEF001
-    if key == KEY_MISSING_VALUE:
+    if key in (KEY_MISSING_VALUE, KEY_FALLBACK_HELPERS):
         return DEF002
     if key == KEY_TRUTHINESS:
         return DEF003

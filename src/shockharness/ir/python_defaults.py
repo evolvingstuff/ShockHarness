@@ -70,9 +70,11 @@ from shockharness.ir.model import (
     KIND_ENV_TRUTHINESS,
     KIND_EXCEPTION_CONSTANT,
     KIND_EXCEPTION_HELPER,
+    KIND_FALLBACK_HELPER,
     KIND_GETATTR,
     KIND_MAPPING_GET,
     KIND_MAPPING_GET_IMPLICIT,
+    KIND_MEMBERSHIP_RETURN,
     KIND_MEMBERSHIP_TERNARY,
     KIND_NEXT_DEFAULT,
     KIND_NULLISH_TERNARY,
@@ -92,6 +94,11 @@ from shockharness.ir.python_catches import (
     is_pass,
     node_span,
     scope_name,
+)
+from shockharness.ir.python_fallback_shapes import (
+    fallback_helpers,
+    helper_default,
+    membership_returns,
 )
 from shockharness.source import SourceText
 
@@ -550,6 +557,7 @@ class _Collector:
         # produce no fact of their own.
         self.claimed: set[int] = set(exemptions.claimed)
         self.discarded = exemptions.discarded
+        self.helpers = fallback_helpers(module)
 
     # -- helpers -------------------------------------------------------------------
 
@@ -1068,6 +1076,74 @@ class _Collector:
             return
         if not (_same(present.value, mapping) and _same(present.slice, key)):
             return
+        self._membership(
+            node,
+            key,
+            mapping,
+            missing,
+            scope,
+            context,
+            KIND_MEMBERSHIP_TERNARY,
+            "'m[k] if k in m else v' is m.get(k, v) spelled out; it substitutes a value for a "
+            "missing key",
+        )
+
+    def _membership_returns(self, node: ast.AST, scope: str) -> None:
+        """``if k in m: return m[k]`` then ``return v`` (and the ``not in`` order)."""
+        for block in _statement_lists(node):
+            for shape in membership_returns(block):
+                self._membership(
+                    shape.test,
+                    shape.key,
+                    shape.mapping,
+                    shape.missing,
+                    scope,
+                    CONTEXT_RETURN,
+                    KIND_MEMBERSHIP_RETURN,
+                    "'if k in m: return m[k]' followed by 'return v' is m.get(k, v) spelled "
+                    "out; it substitutes a value for a missing key",
+                )
+
+    def _helper_call(self, node: ast.Call, scope: str, context: str) -> None:
+        """A call of a module-level fallback helper: the default is chosen here."""
+        if not isinstance(node.func, ast.Name) or node.func.id not in self.helpers:
+            return
+        helper = self.helpers[node.func.id]
+        default = helper_default(node, helper)
+        if default is None:
+            return
+        others = [_text(self.source, a) for i, a in enumerate(node.args) if i != helper.index]
+        others.extend(
+            f"{k.arg}={_text(self.source, k.value)}"
+            for k in node.keywords
+            if k.arg is not None and k.arg != helper.parameter
+        )
+        shown = ", ".join(others)
+        self._add(
+            node,
+            scope,
+            FAMILY_MAPPING,
+            KIND_FALLBACK_HELPER,
+            f"{helper.name}({shown})",
+            default,
+            context,
+            CONFIDENCE_APPROXIMATE,
+            f"{helper.name} (line {helper.line}) returns its {helper.parameter} argument when "
+            f"the value is missing: it is m.get(k, {helper.parameter}) under another name, so "
+            "the default is chosen at each call",
+        )
+
+    def _membership(
+        self,
+        node: ast.expr,
+        key: ast.expr,
+        mapping: ast.expr,
+        missing: ast.expr,
+        scope: str,
+        context: str,
+        kind: str,
+        detail: str,
+    ) -> None:
         subject = f"{_text(self.source, mapping)}[{_text(self.source, key)}]"
         if dotted_name(mapping) in self.index.env.environ:
             self._add(
@@ -1086,13 +1162,12 @@ class _Collector:
             node,
             scope,
             FAMILY_MAPPING,
-            KIND_MEMBERSHIP_TERNARY,
+            kind,
             subject,
             missing,
             context,
             self._confidence_for(missing),
-            "'m[k] if k in m else v' is m.get(k, v) spelled out; it substitutes a value for a "
-            "missing key",
+            detail,
         )
 
     # -- exception-to-default traces --------------------------------------------------------
@@ -1167,12 +1242,14 @@ class _Collector:
             self._dataclass_fields(node, child_scope)
         elif isinstance(node, ast.Call):
             self._call(node, parent, scope, context)
+            self._helper_call(node, scope, context)
         elif isinstance(node, ast.BoolOp):
             self._bool_or(node, scope, context)
         elif isinstance(node, ast.IfExp):
             self._if_exp(node, scope, context)
         elif isinstance(node, ast.ExceptHandler):
             self._handler_trace(node, scope)
+        self._membership_returns(node, child_scope)
         return child_scope
 
 

@@ -214,6 +214,7 @@ fail_on_unknown = true                    # H1: DEF002 on a receiver not proven 
 function_parameters = "forbid"            # DEF001: parameter defaults, destructured parameter defaults
 dataclass_fields = "forbid"               # DEF001: dataclass field defaults and default_factory
 missing_value_fallbacks = "forbid"        # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
+fallback_helpers = "review"               # DEF002: calls of value_or(m, k, v), a helper that is m.get(k, v) (decision 34)
 truthiness_fallbacks = "review"           # DEF003: x or v, x || v (also replace legitimate falsy values)
 nullish_fallbacks = "forbid"              # DEF004: x ?? v, x if x is not None else v
 configuration_fallbacks = "forbid"        # DEF006: os.getenv("X", v), process.env.X || v

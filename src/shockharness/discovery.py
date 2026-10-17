@@ -59,11 +59,8 @@ def relative_posix(root: Path, path: Path) -> str:
     return resolved.relative_to(resolved_root).as_posix()
 
 
-def language_for(path: Path) -> str | None:
-    suffix = path.suffix
-    if suffix in SUPPORTED_EXTENSIONS:
-        return SUPPORTED_EXTENSIONS[suffix]
-    return None
+def is_supported(path: Path) -> bool:
+    return path.suffix in SUPPORTED_EXTENSIONS
 
 
 def _walk_directory(
@@ -100,8 +97,7 @@ def _walk_directory(
                 counts["symlinks_skipped"] += 1
                 continue
             relative = relative_posix(root, child)
-            language = language_for(child)
-            if language is None:
+            if not is_supported(child):
                 counts["unsupported_extension"] += 1
                 if include.matches(relative) and not exclude.matches(relative):
                     counts["unsupported_sources"] += 1
@@ -115,6 +111,7 @@ def _walk_directory(
             if exclude.matches(relative):
                 counts["excluded"] += 1
                 continue
+            language = SUPPORTED_EXTENSIONS[child.suffix]
             found[relative] = DiscoveredFile(path=child, relative=relative, language=language)
 
 
@@ -153,10 +150,10 @@ def discover(root: Path, targets: list[Path], config: EffectiveConfig) -> Discov
             )
             continue
         relative = relative_posix(root, target)
-        language = language_for(target)
-        if language is None:
+        if not is_supported(target):
             supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
             raise UsageError(f"unsupported file type (supported: {supported})", str(target))
+        language = SUPPORTED_EXTENSIONS[target.suffix]
         if exclude.matches(relative):
             pattern = exclude.first_match(relative)
             explicit_excluded.append(SkippedFile(relative, f"matches exclude pattern {pattern!r}"))

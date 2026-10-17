@@ -775,3 +775,88 @@ def test_pydantic_model_fields_are_dataclass_fields(
     assert all(f.severity == "error" for f in result.findings if f.rule_id == "DEF001")
     allowed = _defaults_config(make_config, 'dataclass_fields = "allow"\n')
     assert _rows(_run(allowed, PY, text), "DEF001") == []
+
+
+# --- DEF002: statement forms and fallback helpers (decision 34) --------------------------------
+
+STATEMENT_FORMS = (
+    "import os\n\n\n"
+    "def lookup(table, key):\n"
+    "    if key in table:\n"  # 5: the membership form, error
+    "        return table[key]\n"
+    "    return 0\n\n\n"
+    "def inverted(table, key):\n"
+    "    if key not in table:\n"  # 11: the inverted order
+    "        return None\n"
+    "    return table[key]\n\n\n"
+    "def setting(name):\n"
+    "    if name in os.environ:\n"  # 17: an environment variable: DEF006
+    "        return os.environ[name]\n"
+    "    return 'dev'\n\n\n"
+    "def distinct(table, key):\n"
+    "    if key in table:\n"  # the absent case does its own work: not a fallback
+    "        return table[key]\n"
+    "    raise KeyError(key)\n"
+)
+
+
+def test_def002_statement_forms(strict_config: EffectiveConfig) -> None:
+    result = _run(strict_config, PY, STATEMENT_FORMS)
+    assert _rows(result, "DEF002") == [(5, "error", "exact"), (11, "error", "exact")]
+    assert _rows(result, "DEF006") == [(17, "error", "exact")]
+    message = next(f.message for f in result.findings if f.rule_id == "DEF002")
+    assert message == (
+        "table[key] falls back to 0 when the key is missing; 'if k in m: return m[k]' followed "
+        "by 'return v' is m.get(k, v) spelled out; it substitutes a value for a missing key"
+    )
+
+
+HELPERS = (
+    "def value_or(mapping, key, default_value):\n"  # 1: MetaList's _mapping_value_or
+    '    """The value, or the default."""\n'
+    "    if not isinstance(key, str):\n"
+    "        raise TypeError(key)\n"
+    "    if key in mapping:\n"  # 5: the helper's own body
+    "        return mapping[key]\n"
+    "    return default_value\n\n\n"
+    "def attribute_or(obj, name, fallback):\n"
+    "    return getattr(obj, name, fallback)\n\n\n"  # 11
+    "def item_or(items, index, fallback):\n"
+    "    try:\n        return items[index]\n    except IndexError:\n        return fallback\n\n\n"
+    "def posting_or_empty(index, tag):\n"  # a fixed default: not a helper
+    "    if tag in index:\n"  # 22: still the fallback, whatever the helper is called
+    "        return index[tag]\n"
+    "    return ()\n\n\n"
+    "class Store:\n"
+    "    def value_or(self, key, default):\n"
+    "        return self.data.get(key, default)\n\n\n"  # 29: a method
+    "def edit(raw, rule, obj, items, store):\n"
+    "    count = value_or(raw, 'occurrence_count', 0)\n"  # 33
+    "    days = value_or(raw, key='weekdays', default_value=[])\n"  # 34
+    "    title = attribute_or(obj, 'title', '')\n"  # 35
+    "    first = item_or(items, 0, None)\n"  # 36
+    "    other = store.value_or('x', 1)\n"  # a method, not followed by name
+    "    return count, days, title, first, other, posting_or_empty(rule, 'a')\n"
+)
+
+
+def test_def002_fallback_helpers_at_review(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    result = _run(strict_config, PY, HELPERS)
+    rows = _rows(result, "DEF002")
+    helper_calls = [(line, severity) for line, severity, _c in rows if line > 30]
+    assert helper_calls == [(33, "review"), (34, "review"), (35, "review"), (36, "review")]
+    bodies = [line for line, severity, _c in rows if severity == "error"]
+    assert bodies == [5, 11, 22, 29]  # the lookups themselves; the try form is EXC001's
+    message = next(f.message for f in result.findings if f.span.line == 34)
+    assert message == (
+        "value_or(raw, key='weekdays') falls back to [] when the value is missing; value_or "
+        "(line 1) returns its default_value argument when the value is missing: it is "
+        "m.get(k, default_value) under another name, so the default is chosen at each call"
+    )
+    forbid = _defaults_config(make_config, 'fallback_helpers = "forbid"\n')
+    assert [r[1] for r in _rows(_run(forbid, PY, HELPERS), "DEF002") if r[0] > 30] == ["error"] * 4
+    allow = _defaults_config(make_config, 'fallback_helpers = "allow"\n')
+    assert [r for r in _rows(_run(allow, PY, HELPERS), "DEF002") if r[0] > 30] == []
+    assert any("rules.defaults.fallback_helpers is 'allow'" in d for d in allow.deviations)

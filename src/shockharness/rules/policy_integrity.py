@@ -174,14 +174,12 @@ def _baseline_fingerprints(text: str) -> dict[str, str] | None:
 
 def _text_at(texts: Mapping[str, str], path: str) -> str | None:
     """The text of ``path`` in a snapshot, ``None`` when the revision has no such file."""
-    if path in texts:
-        return texts[path]
-    return None
+    return texts.get(path)
 
 
 def _base_path(renames: Mapping[str, str], path: str) -> str:
     """The base revision's path of a head file (git rename detection)."""
-    if path in renames:
+    if path in renames:  # shockharness: ignore[DEF002] reason="not renamed: same path"
         return renames[path]
     return path
 

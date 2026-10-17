@@ -68,6 +68,7 @@ LOOKUP_WITH_FALLBACK_ARITY: Final[int] = (
     2  # m.get(k, v), m.pop(k, v), os.getenv("X", v), Object.hasOwn(o, k)
 )
 GETATTR_WITH_FALLBACK_ARITY: Final[int] = 3  # getattr(o, name, v)
+MEMBERSHIP_RETURN_STATEMENTS: Final[int] = 2  # if k in m: return m[k] / return v
 
 # Baseline files and finding fingerprints (Milestone F). Bumped on an incompatible change.
 BASELINE_SCHEMA_VERSION: Final[str] = "1"
@@ -110,7 +111,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # facts, and JavaScript parameters counted as a unit's locals (H-TS); "8": dataflow facts
 # (H6); "9": call guards (H6 part two); "10": sentinel facts (MAGIC003); "11": element
 # guards (DOM001); "12": cleanup and returned flags, computed-receiver callees.
-CACHE_SCHEMA_VERSION: Final[str] = "16"
+CACHE_SCHEMA_VERSION: Final[str] = "17"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

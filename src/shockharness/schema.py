@@ -318,6 +318,7 @@ CONFIG_SCHEMA = TableField(
                         "truthiness_fallbacks": EnumField(SEVERITY_MODES),
                         "nullish_fallbacks": EnumField(SEVERITY_MODES),
                         "configuration_fallbacks": EnumField(SEVERITY_MODES),
+                        "fallback_helpers": EnumField(SEVERITY_MODES),
                         "fail_on_unknown": BoolField(),
                     },
                     required=(),

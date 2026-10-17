@@ -4199,3 +4199,45 @@ switches the agent had made in `.shockharness.toml` without asking:
 
 Tom accepted both (2026-10-17), and the tag is set locally at the commit that adds the
 job. It is pushed only with the commits, on his go-ahead.
+
+## Decision 34: DEF002 statement forms and fallback helpers — DONE (2026-10-17)
+
+Tom's go-ahead: statement forms at error under forbid with an upgrade note,
+fallback helpers under a new review mode, ShockHarness's own instances fixed in
+the same change.
+
+* `ir/python_fallback_shapes.py`: `membership_return` (both orders of the
+  `return` statement form) and `fallback_helpers` (module-level functions whose
+  body, after a docstring and raise-only checks, is `m.get(k, p)`,
+  `getattr(o, a, p)`, either membership form, or `try: return m[k]` / `except
+  KeyError|LookupError|IndexError|AttributeError: return p`, with `p` a
+  positional parameter). New kinds `membership_return` and `fallback_helper`;
+  `rules.defaults.fallback_helpers` (review in strict; allow is a deviation).
+  DEF002 version 2. Cache schema "17".
+* ShockHarness's own `src` (8 statement forms and 3 calls of `_base_path`):
+  `discovery.language_for` became `is_supported` with the callers indexing
+  `SUPPORTED_EXTENSIONS`; ESLint levels and tool-setting differences branch
+  explicitly; `_text_at` and the prefixed test-call lookup use `.get(k)` (review,
+  the documented outlet); the dataflow environment (an untracked name has no
+  origins), `_base_path` (a file not renamed keeps its path) and
+  `floating._resolved` (a name not imported is the file's own) keep their
+  lookups with inline suppressions giving those reasons. The three `_base_path`
+  calls stay visible as review findings.
+* The `fix-violations` skill's worked example (`posting_or_empty`) was itself
+  the newly reported shape; it now branches where the absence matters and says
+  a real stand-in gets a reasoned suppression. DEF002's remediation and
+  docs/rules.md say the same.
+
+Measured (read-only, `--no-cache`, the previous commit against this one):
+corpus (pip, _pytest, hypothesis, build, hatchling, npm lib; 759 files) +2: one
+inverted form in distlib, one `_macos_arch` helper call in pkg_resources.
+MetaList today: +20 errors (statement forms) and +5 review (the 5 remaining
+calls of `_mapping_value_or`). MetaList before its fix (9ecc5992~1): +21 errors
+and +32 review, among them every server-kept field the edit reset
+(`occurrence_count`, `last_fired_at`, `last_seen_at`, `missed_count`,
+`snoozed_until`, `next_fire_at`, ...). No finding disappeared anywhere.
+
+Evidence: tests/unit/test_defaults.py (statement forms, both orders, the
+environment case, a branch that raises; helpers in all five shapes, positional
+and keyword defaults, a method not followed, a fixed-default helper, modes
+forbid / review / allow and the deviation); 1201 tests pass.

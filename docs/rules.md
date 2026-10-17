@@ -421,6 +421,8 @@ pydantic and NamedTuple defaults are not recognized.
 | Python `next(iterator, v)` (0.2.0) | `exact`; `next(iterator)` is not a finding |
 | Python `collections.defaultdict(factory)` (0.2.0) through any import spelling: `defaultdict(list)`, `collections.defaultdict(int)`, `c.defaultdict(set)` after `import collections as c`, `dd(set)` after `from collections import defaultdict as dd` | `exact`; every lookup creates `factory()` for a missing key, so a missing key is indistinguishable from an empty value; `defaultdict()` with no factory is not a finding |
 | Python `m[k] if k in m else v`, `v if k not in m else m[k]` | by the fallback |
+| Python statement forms (decision 34): `if k in m: return m[k]` followed by `return v`, and `if k not in m: return v` followed by `return m[k]` | by the fallback; on `os.environ` it is `DEF006` |
+| Python fallback helpers (decision 34): a call of a module-level function of the same file whose body, after a docstring and checks that only raise, is a lookup with a default that is one of its parameters (`m.get(k, default)`, `getattr(o, a, default)`, either membership form, `try: return m[k]` / `except KeyError: return default`) | `approximate`; mode `fallback_helpers` (`review` in strict); the helper's own lookup is reported as usual |
 | Python `m.get(k)` with no fallback | `review`; reported when the receiver is a known mapping, or when it is unknown and the key is a string literal; not when the result is awaited, compared with `None`, or the left operand of a reported `or` |
 | JavaScript `const {x = v} = o`, `const [x = v] = a`, `for (const {x = v} of rows)`, `({x = v} = o)` | `exact` |
 | JavaScript `o?.x ?? v`, `o.x ?? v`, `o[k] ?? v`, `m.get(k) ?? v`, and their `??=` forms | by the fallback |
@@ -452,10 +454,14 @@ with `if k in m:`.
 
 **Remediation**, in this order. (1) The key must exist: index it so a missing
 key fails where it is missing, or validate once at the boundary. (2) Absence
-is a normal state: an explicit `if k in m:` branch with a comment, or a small
-named helper whose name says what absence means (`posting_or_empty`). Forcing
-an index there turns a normal state into a crash. (3) The value comes from
-outside: validate it where it enters.
+is a normal state: branch where it matters and do the absent case's own work
+there (`if tag not in index: continue`). A helper that returns a stand-in is the
+fallback again, and one that takes the default as a parameter is `.get` under
+another name (MetaList's `_mapping_value_or` reset 11 server-kept fields on
+every edit through 26 literal defaults). A stand-in that really is the meaning
+gets an inline suppression with its reason. Forcing an index there turns a
+normal state into a crash. (3) The value comes from outside: validate it where
+it enters.
 
 Method names are matched, not types: `client.get(url, params)` is an
 approximate error and `client.get("path")` an approximate review finding. Both

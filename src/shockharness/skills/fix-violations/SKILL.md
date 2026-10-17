@@ -58,7 +58,7 @@ Ask what the code promises when the value is absent or the operation fails.
 |---|---|---|
 | `MAGIC001` | Why this number? Who decides it? | Variable policy: a required, validated configuration parameter. Invariant or protocol value: a named constant with a cited source, in a designated constants module or with an inline suppression quoting the source. |
 | `DEF001` | May the caller really omit this argument? | Usually no: make it required and update the callers. If yes: the type is `T \| None`, and the body branches on `None` by name. |
-| `DEF002`, `DEF004`, `DEF003` | Is the key or value required? Is absence a normal state? | Required: index it, let `KeyError`/`TypeError` surface at load time, or validate once at the boundary. Absence is a normal state (an empty view has no root entry, an unused tag has no posting): branch explicitly (`if "x" in raw:`) with a comment, or call a small named helper whose name says what absence means (`posting_or_empty`); do not force an index there, that turns a normal state into a crash. The helper fixes that meaning itself: one that takes the default as a parameter (`value_or(mapping, key, default)`) is `.get(key, default)` under another name, and every call site is the fallback again. From outside (configuration, a request): validate where it enters. |
+| `DEF002`, `DEF004`, `DEF003` | Is the key or value required? Is absence a normal state? | Required: index it, let `KeyError`/`TypeError` surface at load time, or validate once at the boundary. Absence is a normal state (an empty view has no root entry, an unused tag has no posting): branch where the absence matters and do the absent case's own work there (`if tag not in index: continue`); do not force an index there, that turns a normal state into a crash. A helper that returns a stand-in (`if k in m: return m[k]` then `return []`) is the fallback again, and one that takes the default as a parameter (`value_or(mapping, key, default)`) is `.get` under another name. A stand-in that really is the meaning gets a suppression with the reason, once. From outside (configuration, a request): validate where it enters. |
 | `DEF006` | Where is configuration validated? | In one load function that reads required keys, validates them and raises on a missing or invalid value. Nothing downstream reads the environment. |
 | `EXC001`, `EXC003` | Is this really an external boundary? | External (file, network, subprocess, decoding external input): declare a boundary with `path`, `language`, qualified `exception`, `reason`; keep one operation inside the `try`; re-raise a typed error with `from exc`. Internal: remove the catch and fix the cause or let it propagate. |
 | `EXC002`, `DEF005` | What should the caller see when this fails? | A typed error. Not `None`, not `[]`, not a logged line and a continue. |
@@ -258,26 +258,35 @@ test("config is required", () => {
 ### Python and JavaScript: `DEF002` where absence is a normal state
 
 A tag that no note carries has no posting. Indexing would raise for a
-legitimate state; a fallback would hide a typo in the tag. Say what absence
-means, once, in a helper:
+legitimate state; a fallback would hide a typo in the tag. Branch where the
+absence matters and do the absent case's own work there:
 
 ```python
-def posting_or_empty(index: dict[str, list[str]], tag: str) -> list[str]:
-    # A tag that no note carries has no posting; absence is a normal state here.
-    if tag in index:
-        return index[tag]
-    return []
+def matching_notes(index: dict[str, list[str]], tags: list[str]) -> set[str]:
+    found: set[str] = set()
+    for tag in tags:
+        if tag not in index:
+            continue  # a tag that no note carries matches nothing
+        found.update(index[tag])
+    return found
 ```
 
 ```javascript
-export function postingOrEmpty(index, tag) {
-  // A tag that no note carries has no posting; absence is a normal state here.
-  if (index.has(tag)) {
-    return index.get(tag);
+export function matchingNotes(index, tags) {
+  const found = new Set();
+  for (const tag of tags) {
+    if (!index.has(tag)) continue; // a tag that no note carries matches nothing
+    for (const id of index.get(tag)) found.add(id);
   }
-  return [];
+  return found;
 }
 ```
+
+A helper that returns a stand-in for the missing value (`if tag in index:
+return index[tag]` then `return []`) is the fallback again, whatever it is
+called; one that takes the stand-in as a parameter is `.get` under another name.
+If a stand-in really is the meaning, keep the lookup and record the decision
+once, on its line: `# shockharness: ignore[DEF002] reason="..."`.
 
 Removing an entry that may be absent reads the same way: `cache.pop(key, None)`
 as a statement is a `DEF002` review finding of kind `discarded_removal`. If the

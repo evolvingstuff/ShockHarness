@@ -5,7 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+**Upgrading.** `DEF002` (version 2) now recognizes the `return` statement form of
+the membership fallback in Python: `if k in m: return m[k]` followed by
+`return v`, and `if k not in m: return v` followed by `return m[k]`. It is an
+error under `missing_value_fallbacks = "forbid"`, like `m[k] if k in m else v`,
+so a gate that passed can fail. Measured: MetaList 20, ShockHarness's own `src`
+8 (fixed in the same change), pip, pytest, hypothesis, build, hatchling and npm
+together 1.
+
 ### Added
+- Spec 21.1 decision 34: `DEF002` follows fallback helpers. A call of a
+  module-level function of the same file whose body (after a docstring and
+  checks that only raise) is a lookup with a default that is one of its
+  parameters (`m.get(k, default)`, `getattr(o, a, default)`, either membership
+  form, `try: return m[k]` / `except KeyError: return default`) is reported at
+  the call, with the argument as the fallback. New mode
+  `rules.defaults.fallback_helpers`, `"review"` in strict for this release.
+  MetaList's `_mapping_value_or`, whose 26 literal defaults reset 11 server-kept
+  reminder fields on every edit, gives 32 such findings on its pre-fix tree.
+  The `fix-violations` skill and DEF002's remediation no longer recommend a
+  helper that returns a stand-in for a missing value. The cache schema is "17".
 - Spec 21.1 decision 35, from the under-the-gate experiment (round 2):
   - `shockharness init`, and `skills install` in a project with no
     configuration, write the test exemption ShockHarness's own configuration

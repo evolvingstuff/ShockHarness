@@ -283,6 +283,8 @@ KIND_MAPPING_GET_IMPLICIT = "mapping_get_implicit"  # m.get(k): None when the ke
 KIND_DISCARDED_REMOVAL = "discarded_removal"  # m.pop(k, None) as a statement: remove if present
 KIND_GETATTR = "getattr"  # getattr(o, name, v)
 KIND_MEMBERSHIP_TERNARY = "membership_ternary"  # m[k] if k in m else v / k in o ? o[k] : v
+KIND_MEMBERSHIP_RETURN = "membership_return"  # if k in m: return m[k] / return v (decision 34)
+KIND_FALLBACK_HELPER = "fallback_helper"  # value_or(m, k, v): a helper that is m.get(k, v)
 KIND_DESTRUCTURING = "destructuring"  # const {x = v} = o / const [x = v] = a
 KIND_MEMBER_NULLISH = "member_nullish"  # obj?.x ?? v / obj.x ?? v / m.get(k) ?? v
 KIND_TRUTHINESS_OR = "or"  # x or v / x || v (and chains ending in v)

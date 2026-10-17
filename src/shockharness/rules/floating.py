@@ -132,7 +132,7 @@ def _selectors(
 
 def _resolved(path: str, name: str, imported: Mapping[tuple[str, str], ClassKey]) -> ClassKey:
     """Where a name a file uses is defined: imported from an analyzed file, or its own."""
-    if (path, name) in imported:
+    if (path, name) in imported:  # shockharness: ignore[DEF002] reason="not imported: its own"
         return imported[(path, name)]
     return (path, name)
 

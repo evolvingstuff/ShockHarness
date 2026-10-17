@@ -211,6 +211,7 @@ missing_value_fallbacks = "forbid"  # DEF002: m.get(k, v), getattr(o, a, v), con
 truthiness_fallbacks = "review"     # DEF003: x or v, x || v (also replace legitimate falsy values)
 nullish_fallbacks = "forbid"        # DEF004: x ?? v, x if x is not None else v
 configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X || v
+fallback_helpers = "review"         # DEF002: value_or(m, k, v), a helper that is m.get(k, v) (decision 34)
 # DEF005 (a handler that returns a default) has no mode: it is always an error.
 # DEF002 on m.get(k, v), m.setdefault(k, v), m.pop(k, v) whose receiver is not proven a
 # mapping is an unknown finding (the verdict depends on the receiver's type); it has

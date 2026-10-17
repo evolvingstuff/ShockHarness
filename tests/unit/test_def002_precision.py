@@ -139,7 +139,8 @@ def test_remediation_names_the_three_cases() -> None:
     remediation = registry.DEF002.remediation
     assert "(1) The key must exist" in remediation
     assert "(2) Absence is a normal state" in remediation
-    assert "'if k in m:'" in remediation
+    assert "'if tag not in index: continue'" in remediation  # branch where it matters
+    assert ".get under another name" in remediation  # decision 34: fallback helpers
     assert "(3) The value comes from outside" in remediation
 
 
