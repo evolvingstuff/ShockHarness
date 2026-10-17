@@ -15,7 +15,9 @@ SEVERITIES = (SEVERITY_ERROR, SEVERITY_WARNING, SEVERITY_REVIEW, SEVERITY_NOTE)
 
 PYTHON = "python"
 JAVASCRIPT = "javascript"
-ALL_LANGUAGES = (PYTHON, JAVASCRIPT)
+TYPESCRIPT = "typescript"  # H-TS: parsed with tree-sitter-typescript, judged by the JS rules
+ALL_LANGUAGES = (PYTHON, JAVASCRIPT, TYPESCRIPT)
+JAVASCRIPT_FAMILY = frozenset({JAVASCRIPT, TYPESCRIPT})
 
 
 @dataclass(frozen=True)
@@ -1724,10 +1726,11 @@ TYPE001 = RuleSpec(
     config_section=TYPES_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=(PYTHON, TYPESCRIPT),
     summary=(
-        "Any, typing.cast and # type: ignore switch the type checker off for a value or a "
-        "line; each is a claim nobody checks."
+        "Any, typing.cast and # type: ignore (Python); any, as/<T> assertions, non-null ! and "
+        "@ts-ignore (TypeScript) switch the type checker off for a value or a line; each is a "
+        "claim nobody checks."
     ),
     rationale=(
         "An agent that cannot satisfy the type checker can make it stop looking. Each escape "
@@ -1737,12 +1740,15 @@ TYPE001 = RuleSpec(
     guarantees=(
         "Python: Any (bare or typing.Any) in a parameter, return or annotated-assignment "
         "annotation; cast(...) and typing.cast(...); every # type: ignore comment. Each "
-        "kind can be switched off (report_any, report_cast, report_type_ignore). Exact. The "
-        "TypeScript half (any, as any, @ts-ignore) comes with the TypeScript adapter."
+        "kind can be switched off (report_any, report_cast, report_type_ignore). TypeScript: "
+        "the any type anywhere; x as T and <T>x (not as const; x as unknown as T is reported "
+        "once); the non-null assertion x! (report_non_null); @ts-ignore, @ts-expect-error and "
+        "@ts-nocheck (report_type_ignore). Exact."
     ),
     limitations=(
-        "Type checking itself stays with mypy or pyright; ShockHarness only lists the "
-        "escapes. A deliberate boundary is excluded with an [[overrides]] entry."
+        "Type checking itself stays with mypy, pyright or tsc; ShockHarness only lists the "
+        "escapes. Plain JavaScript has no types, so TYPE001 does not apply to it. A "
+        "deliberate boundary is excluded with an [[overrides]] entry."
     ),
     remediation=(
         "Name the real type, validate at the boundary and return a typed value, or narrow "

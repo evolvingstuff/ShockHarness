@@ -30,6 +30,7 @@ from shockharness.rules.registry import (
     CPLX006,
     JAVASCRIPT,
     PYTHON,
+    TYPESCRIPT,
     RuleSpec,
 )
 from shockharness.source import SourceText
@@ -226,8 +227,15 @@ CYCLE_NOTES: Mapping[str, str] = {
     JAVASCRIPT: (
         "an ES-module cycle is usually resolved at call time, so it ranks after Python cycles"
     ),
+    TYPESCRIPT: (
+        "an ES-module cycle is usually resolved at call time, so it ranks after Python cycles"
+    ),
 }
-LANGUAGE_LABELS: Mapping[str, str] = {PYTHON: "Python", JAVASCRIPT: "JavaScript"}
+LANGUAGE_LABELS: Mapping[str, str] = {
+    PYTHON: "Python",
+    JAVASCRIPT: "JavaScript",
+    TYPESCRIPT: "TypeScript",
+}
 
 
 def is_cycle_finding(finding: Finding) -> bool:

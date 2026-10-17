@@ -8,6 +8,13 @@ Severities: `error` fails the gate (unless suppressed or the gate is set to
 `warn`); `warning` and `review` are reported and counted but never fail; `note`
 is informational.
 
+**TypeScript** (`.ts`, `.tsx`, `.mts`, `.cts`; H-TS) is read by the JavaScript
+extractors, so every rule this page lists for JavaScript applies to it with the
+same guarantees; TypeScript syntax is understood where it matters (typed and
+parameter-property defaults, `public` fields, abstract classes, `as`/`!`/
+`satisfies` seen through, literal types as annotations, type-only imports
+erased). `TYPE001` applies to Python and TypeScript, not to plain JavaScript.
+
 ## Finding status
 
 Every finding also has a **status** (H1), orthogonal to its severity:
@@ -395,7 +402,7 @@ value, and nothing proves the value was optional.
 | Python `def f(a, b=1, *, c=None)`, `lambda x, y=2`, async defs, methods, nested functions | `*args`, `**kwargs`, `...` defaults under `@overload` |
 | dataclass fields: `x: int = 0`, `field(default=...)`, `field(default_factory=list)` (own kinds, mode `dataclass_fields`) | `ClassVar` fields, `field()` without a default, attributes of classes without the `dataclass` decorator |
 | pydantic model fields (0.2.0; a class whose base resolves to `pydantic.BaseModel` through `from pydantic import BaseModel` or `import pydantic`): `x: int = 1`, `Field(default=3)`, `Field(7)`, `Field(default_factory=list)` (the dataclass kinds, mode `dataclass_fields`, messages say `pydantic field`) | `Field(...)`, `Field()`, `x: int = ...` (required), `ClassVar`, a class whose base cannot be resolved (`class M(SomethingElse)`) |
-| JavaScript `function f(a = 1)`, arrow, method, constructor, `static`, generator parameters | rest parameters, class field initializers (`class K { x = 1 }`) |
+| JavaScript `function f(a = 1)`, arrow, method, constructor, `static`, generator parameters; TypeScript `f(a: T = 1)` and `constructor(private a = 1)` | rest parameters, class field initializers (`class K { x = 1 }`), TypeScript optional parameters without a value (`a?: T`) |
 | destructuring defaults inside parameters: `function f({ retries = 3 }, [first = 0] = [])` (each default is a finding) | |
 
 The finding sits on the default value; the message names the parameter and its
@@ -862,7 +869,7 @@ where the pattern is often deliberate.
 |---|---|---|---|---|
 | `PROCESS001` | a shell command built from data; a process API whose exit status is returned and never checked | warning | Python, JavaScript | `rules.processes` (production) |
 | `RESULT001` | a must-use call used as a statement: `name.strip()`, `sorted(items)`, `items.map(f)` | warning | Python, JavaScript | `rules.results` (production, test) |
-| `TYPE001` | `Any` in annotations, `cast(...)`, `# type: ignore` | review | Python | `rules.types` (production) |
+| `TYPE001` | `Any` in annotations, `cast(...)`, `# type: ignore`; TypeScript `any`, `x as T` / `<T>x`, `x!`, `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck` | review | Python, TypeScript | `rules.types` (production) |
 | `SLEEP001` | a fixed sleep (`time.sleep`, `asyncio.sleep`, `new Promise((r) => setTimeout(r, ...))`), said to be polling inside a loop | review | Python, JavaScript | `rules.sleep` (production) |
 | `RETRY001` | an endless retry loop whose handler never gives up; `@tenacity.retry` / `@backoff.on_exception` without a stop | warning | Python, JavaScript (loops) | `rules.retry` (production) |
 | `BATCH001` | a loop whose per-item handler only passes, continues or logs | warning | Python, JavaScript | `rules.batches` (production) |
@@ -884,9 +891,12 @@ result is thrown away. Whether the data can contain shell syntax is not traced
 receiver (`.strip`, `.map`; approximate). A function of an imported module
 (`os.replace`) never matches a method entry.
 
-**TYPE001.** `report_any`, `report_cast` and `report_type_ignore` switch each
-kind off (a deviation). Type checking stays with mypy or pyright; the
-TypeScript half arrives with H-TS.
+**TYPE001.** `report_any`, `report_cast`, `report_non_null` (TypeScript `x!`)
+and `report_type_ignore` switch each kind off (a deviation). In TypeScript,
+`report_cast` covers `x as T` and `<T>x`; `as const` is not an assertion and is
+never reported, and `x as unknown as T` is one assertion, reported once.
+`report_type_ignore` covers `@ts-ignore`, `@ts-expect-error` and `@ts-nocheck`.
+Type checking stays with mypy, pyright or tsc.
 
 **RETRY001.** A loop is bounded when its handler raises, returns or breaks on
 some path (a counter that raises counts). Decorators are matched through

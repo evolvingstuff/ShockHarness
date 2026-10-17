@@ -26,13 +26,15 @@ classifiers = [
   "Topic :: Software Development :: Quality Assurance",
   "Typing :: Typed",
 ]
-# Runtime dependencies are the tree-sitter core and the JavaScript grammar only.
+# Runtime dependencies are the tree-sitter core and the JavaScript and TypeScript grammars
+# only (tree-sitter-typescript approved 2026-10-16, spec 21.1 decision 8).
 # Tested pair: tree-sitter 0.25.2 with tree-sitter-javascript 0.25.0 (language ABI 15).
 # tree-sitter 0.26.0 is excluded on purpose: on CPython 3.14 it segfaults while walking
 # trees nested deeper than about 200 levels (reproduced 2026-10-14; 3.13 is unaffected).
 dependencies = [
   "tree-sitter>=0.25.1,<0.26",
   "tree-sitter-javascript>=0.25,<0.26",
+  "tree-sitter-typescript>=0.23.2,<0.24",
 ]
 
 [project.optional-dependencies]

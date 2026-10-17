@@ -444,6 +444,7 @@
             "enum": [
               "python",
               "javascript",
+              "typescript",
               "unsupported"
             ]
           },

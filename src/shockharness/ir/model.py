@@ -713,6 +713,7 @@ RETRY_LOOP = "loop"
 RETRY_DECORATOR = "decorator"
 TYPE_ESCAPE_ANY = "any"
 TYPE_ESCAPE_CAST = "cast"
+TYPE_ESCAPE_NON_NULL = "non_null"
 
 
 @dataclass(frozen=True)
@@ -771,7 +772,8 @@ class BatchLoop:
 
 @dataclass(frozen=True)
 class TypeEscape:
-    """``Any`` in an annotation or a ``cast(...)`` call (Python)."""
+    """``Any`` in an annotation or a ``cast(...)`` call (Python); ``any``, a type assertion
+    (``x as T``, ``<T>x``) or a non-null assertion (``x!``) (TypeScript)."""
 
     kind: str
     text: str

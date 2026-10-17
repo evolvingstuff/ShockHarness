@@ -30,7 +30,7 @@ from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
-from shockharness.ir.javascript import extract_javascript_facts
+from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
 from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
@@ -319,6 +319,8 @@ def _extract(language: str, source: SourceText, filename: str) -> ModuleFacts:
         return extract_python_facts(source, filename)
     if language == registry.JAVASCRIPT:
         return extract_javascript_facts(source, filename)
+    if language == registry.TYPESCRIPT:
+        return extract_typescript_facts(source, filename)
     raise ValueError(f"no parser adapter for language {language!r}")
 
 

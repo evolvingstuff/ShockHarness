@@ -33,6 +33,9 @@ DEFAULT_GLOB_EXAMPLES: list[tuple[str, str, str]] = [
     ("config", "*.config.cjs", "jest.config.cjs"),
     ("config", "*.conf.js", "karma.conf.js"),
     ("config", "*.conf.cjs", "karma.conf.cjs"),
+    ("config", "*.config.ts", "vite.config.ts"),
+    ("config", "*.config.mts", "vitest.config.mts"),
+    ("config", "*.config.cts", "jest.config.cts"),
     ("config", ".eslintrc.js", ".eslintrc.js"),
     ("config", ".eslintrc.cjs", ".eslintrc.cjs"),
     ("config", ".prettierrc.js", ".prettierrc.js"),
@@ -48,6 +51,12 @@ DEFAULT_GLOB_EXAMPLES: list[tuple[str, str, str]] = [
     ("test", "**/*.spec.js", "src/a.spec.js"),
     ("test", "**/*.test.mjs", "src/a.test.mjs"),
     ("test", "**/*.spec.mjs", "src/a.spec.mjs"),
+    ("test", "**/*.test.ts", "src/a.test.ts"),
+    ("test", "**/*.spec.ts", "src/a.spec.ts"),
+    ("test", "**/*.test.tsx", "src/ui/a.test.tsx"),
+    ("test", "**/*.spec.tsx", "src/ui/a.spec.tsx"),
+    ("test", "**/*.test.mts", "src/a.test.mts"),
+    ("test", "**/*.spec.mts", "src/a.spec.mts"),
     ("docs", "docs/**", "docs/conf.py"),
 ]
 
@@ -180,7 +189,7 @@ def test_roles_do_not_change_what_is_analyzed(
 
 
 def test_unsupported_source_carries_its_role(strict_config: EffectiveConfig) -> None:
-    result = unsupported_source_result("tests/a.ts", "no adapter", strict_config)
+    result = unsupported_source_result("tests/a.rs", "no adapter", strict_config)
     assert (result.role, result.role_pattern) == ("test", "tests/**")
 
 

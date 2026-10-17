@@ -29,12 +29,16 @@ from shockharness.ir.javascript_guardrails import dotted_callee
 from shockharness.ir.model import (
     CHECK_ABSENT,
     RETRY_LOOP,
+    TYPE_ESCAPE_ANY,
+    TYPE_ESCAPE_CAST,
+    TYPE_ESCAPE_NON_NULL,
     BatchLoop,
     CatalogFacts,
     ConstantPredicate,
     ProcessCall,
     RetryFact,
     SleepCall,
+    TypeEscape,
 )
 from shockharness.source import SourceText
 
@@ -51,6 +55,28 @@ FUNCTIONS = frozenset(
     }
 )
 LOOPS = frozenset({"for_statement", "for_in_statement", "while_statement", "do_statement"})
+PREDEFINED_TYPE = "predefined_type"
+ANY = "any"
+AS_EXPRESSION = "as_expression"
+TYPE_ASSERTION = "type_assertion"
+NON_NULL = "non_null_expression"
+CONST = "const"
+TYPE_SUFFIX = "_type"
+TYPE_ANNOTATION = "type_annotation"
+TYPE_NODES = frozenset({TYPE_ANNOTATION, "type_arguments", "constraint", "default_type"})
+ANNOTATED = frozenset(
+    {
+        "required_parameter",
+        "optional_parameter",
+        "variable_declarator",
+        "public_field_definition",
+        "property_signature",
+        "type_parameter",
+    }
+)
+# Nodes around a type that are not the type itself: `: T` and a type parameter's `= T`.
+WRAPPING_TYPES = frozenset({TYPE_ANNOTATION, "default_type"})
+COMMENT_NODE = "comment"
 ITERATING = frozenset({"for_statement", "for_in_statement"})
 CALL = "call_expression"
 NEW = "new_expression"
@@ -297,6 +323,41 @@ def _batch_loop(source: SourceText, node: Node) -> list[BatchLoop]:
     return [BatchLoop(_excerpt(node).split("{")[0].strip(), node_span(source, node))]
 
 
+def _type_context(node: Node) -> Node:
+    """What an ``any`` annotates: the parameter, variable or member when the type annotates
+    one (``raw: any``), else the whole type (``Map<string, any>``)."""
+    current = node
+    while current.parent is not None and (
+        current.parent.type in TYPE_NODES or current.parent.type.endswith(TYPE_SUFFIX)
+    ):
+        current = current.parent
+    parent = current.parent
+    if current.type in WRAPPING_TYPES and parent is not None and parent.type in ANNOTATED:
+        return parent
+    if current.type in WRAPPING_TYPES:
+        named = [c for c in current.named_children if c.type != COMMENT_NODE]
+        return named[0] if len(named) == 1 else current
+    return current
+
+
+def _type_escape(source: SourceText, node: Node) -> list[TypeEscape]:
+    """TypeScript's escapes from the type checker (none exist in JavaScript's grammar)."""
+    if node.type == PREDEFINED_TYPE and node_text(node) == ANY:
+        return [TypeEscape(TYPE_ESCAPE_ANY, _excerpt(_type_context(node)), node_span(source, node))]
+    if node.type == AS_EXPRESSION:
+        asserted = node.children[len(node.children) - 1]
+        parent = node.parent
+        # `as const` asserts nothing; `x as unknown as T` is one assertion, reported once.
+        if node_text(asserted) == CONST or (parent is not None and parent.type == AS_EXPRESSION):
+            return []
+        return [TypeEscape(TYPE_ESCAPE_CAST, _excerpt(node), node_span(source, node))]
+    if node.type == TYPE_ASSERTION:
+        return [TypeEscape(TYPE_ESCAPE_CAST, _excerpt(node), node_span(source, node))]
+    if node.type == NON_NULL:
+        return [TypeEscape(TYPE_ESCAPE_NON_NULL, _excerpt(node), node_span(source, node))]
+    return []
+
+
 def _predicate(source: SourceText, node: Node) -> list[ConstantPredicate]:
     if node.type not in FUNCTIONS:
         return []
@@ -312,6 +373,7 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
     retries: list[RetryFact] = []
     batches: list[BatchLoop] = []
     predicates: list[ConstantPredicate] = []
+    escapes: list[TypeEscape] = []
     stack: list[Node] = [root]
     while len(stack) > 0:
         node = stack.pop()
@@ -325,11 +387,12 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
         retries.extend(_retry_loop(source, node))
         batches.extend(_batch_loop(source, node))
         predicates.extend(_predicate(source, node))
+        escapes.extend(_type_escape(source, node))
     return CatalogFacts(
         process_calls=tuple(sorted(processes, key=lambda p: (p.span, p.callee))),
         sleeps=tuple(sorted(sleeps, key=lambda s: (s.span, s.callee))),
         retries=tuple(sorted(retries, key=lambda r: (r.span, r.kind))),
         batch_loops=tuple(sorted(batches, key=lambda b: b.span)),
-        type_escapes=(),
+        type_escapes=tuple(sorted(escapes, key=lambda t: (t.span, t.kind))),
         constant_predicates=tuple(sorted(predicates, key=lambda c: c.span)),
     )

@@ -15,13 +15,16 @@ Stated so that a clean report is never read as more than it is.
   3.11 cannot parse 3.12-only syntax; such files are parse failures, not clean.
   The report records `coverage.host_python`.
 * JavaScript coverage is the pinned `tree-sitter-javascript` grammar (ESM,
-  CommonJS, JSX). **TypeScript is not analyzed.** A `.ts`/`.tsx` file that an
-  `include` pattern matches is an *unsupported source*: `unsupported_sources`
-  (`warn` in `strict` and `recommended`: listed under
-  `coverage.unsupported_sources` with a warning line; `fail`: an analysis
-  failure and exit 3; `ignore` in `minimal`) is how a project notices that a
-  file left the policy. An `include` pattern that names an unsupported
-  extension literally (`**/*.ts`) is still a configuration error.
+  CommonJS, JSX). TypeScript coverage (H-TS) is the pinned
+  `tree-sitter-typescript` grammar (`.ts`, `.mts`, `.cts`; `.tsx` with its TSX
+  grammar), read by the JavaScript extractors; see TypeScript below. A file
+  that an `include` pattern matches but no adapter parses (`.vue`, `.svelte`,
+  `.pyx`) is an *unsupported source*: `unsupported_sources` (`warn` in `strict`
+  and `recommended`: listed under `coverage.unsupported_sources` with a warning
+  line; `fail`: an analysis failure and exit 3; `ignore` in `minimal`) is how a
+  project notices that a file left the policy. An `include` pattern that names
+  an unsupported extension literally (`**/*.vue`) is still a configuration
+  error.
 * Only UTF-8 (with or without BOM) sources are read. Other encodings are a
   `decode_error` file status. Python's PEP 263 coding declarations are not honored.
 * File roles (H1) are labels from path globs, not from file contents: a test
@@ -209,8 +212,9 @@ Stated so that a clean report is never read as more than it is.
 * Module edges resolve only among the analyzed files. A Python module's name
   starts at the first package (`__init__.py`) on its path; files outside any
   package answer to their basename. Namespace packages, `sys.path` tricks,
-  `importlib`, and JavaScript path aliases, bundler resolution, `package.json`
-  `exports`, TypeScript sources and JSON imports are not understood: those
+  `importlib`, and JavaScript path aliases (tsconfig `paths` and `baseUrl`
+  included), bundler resolution, `package.json` `exports` and JSON imports are
+  not understood: those
   edges are `external` or `unresolved`, and a cycle through them is not
   detected.
 * Fan-out counts distinct targets of resolved and probable edges; builtins
@@ -361,7 +365,32 @@ Stated so that a clean report is never read as more than it is.
 * `RETRY001` sees bounds only in the handler or the decorator; a timeout around
   the loop is not seen. `BATCH001` does not check whether recorded failures are
   ever reported. `SLEEP001` cannot tell pacing from synchronization.
-* `TYPE001`'s TypeScript half (`any`, `as any`, `@ts-ignore`) arrives with H-TS.
+* `TYPE001` lists escapes where they are written: an `any` inside a type alias
+  is reported at the alias, not at each use; an assertion to the type a value
+  already has is still reported; `unknown`, `object` and `Function` are not
+  escapes. `// eslint-disable` of a `@typescript-eslint` rule is SUPP001/SUPP002's.
+
+## TypeScript
+
+* No type information is used: rules read the syntax, as for JavaScript. A
+  call on a typed receiver (`client: Client` then `client.send()`) resolves no
+  better than in JavaScript, and type annotations never narrow a finding.
+* `import type`, `export type ... from` and `{ type X }` specifiers are erased
+  (no import fact, no module edge), as the compiler erases them; a module that
+  `verbatimModuleSyntax` keeps for its side effects is not modelled.
+  `import x = require("m")` is a module import; `export =` and `import A = N.B`
+  aliases are not followed.
+* A `./m.js` (`.mjs`, `.cjs`) specifier resolves to `m.ts` / `m.tsx` (`.mts`,
+  `.cts`) when no JavaScript file of that name is analyzed, as TypeScript's
+  `node16` resolution does.
+* Namespaces (`namespace N {}`) and `declare module` blocks are read as code,
+  but their members are not module bindings, so `N.f()` does not resolve; enum
+  declarations are not bindings either, and their member values are executable
+  code for MAGIC001.
+* Overload signatures, abstract members and interface members have no body and
+  are not units. Decorators are code: their arguments are scanned.
+* Declaration files (`**/*.d.ts`) are excluded by default; listing one
+  explicitly analyzes it like any TypeScript file.
 
 ## ROLE001
 
@@ -387,9 +416,8 @@ Stated so that a clean report is never read as more than it is.
   and `Promise.allSettled` whose results are never inspected (`ASYNC003`),
   dropped coroutines and Promises (`ASYNC001`) and tasks started without an
   owner (`ASYNC002`), and since H5 `subprocess` calls whose exit status is
-  ignored and shell commands built from data (`PROCESS001`). Planned and not
-  yet reported: TypeScript (H-TS).
-  Keep those in the layered checker until the milestone lands.
+  ignored and shell commands built from data (`PROCESS001`), and since H-TS
+  all of it for TypeScript too, with its type escapes (`TYPE001`).
 
 ## Not yet built (see the specification)
 

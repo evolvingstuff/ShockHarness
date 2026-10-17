@@ -47,7 +47,8 @@ SOURCE_PSEUDO_PATH = "<source>"
 
 
 def analyze_source(source: str, language: str, config: EffectiveConfig) -> FileResult:
-    """Analyze one in-memory source text. ``language`` is ``python`` or ``javascript``."""
+    """Analyze one in-memory source text. ``language`` is ``python``, ``javascript`` or
+    ``typescript``."""
     if language not in registry.ALL_LANGUAGES:
         raise UsageError(
             f"unsupported language {language!r}; use one of {', '.join(registry.ALL_LANGUAGES)}",

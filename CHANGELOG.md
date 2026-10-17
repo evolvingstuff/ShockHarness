@@ -5,6 +5,48 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H-TS of specification section 21 (decision 25): TypeScript.
+
+### Added (H-TS)
+- TypeScript is a third language: `.ts`, `.mts`, `.cts` and `.tsx` are parsed
+  with `tree-sitter-typescript` (a new runtime dependency, pinned
+  `>=0.23.2,<0.24`, approved in decision 8) and analyzed by every JavaScript
+  rule: magic numbers (literal types are reported as annotations), exceptions,
+  defaults (typed and `constructor(private x = v)` parameters), complexity and
+  the call graph, H2-H5 and ROLE001. `report.files[].language` and
+  `coverage.languages` gain `"typescript"` (an additive enum value in
+  `report-v1.schema.json`).
+- `TYPE001` for TypeScript: `any`, type assertions (`x as T`, `<T>x`; not
+  `as const`), non-null assertions (`x!`, new `rules.types.report_non_null`,
+  switching it off is a deviation) and `@ts-ignore` / `@ts-expect-error` /
+  `@ts-nocheck` (under `report_type_ignore`).
+- Type-only imports and exports (`import type`, `{ type X }`, `export type ...
+  from`) are erased: no import fact and no module edge, so a type-only cycle is
+  not a cycle and ROLE001 ignores type-only imports of test files.
+  `import x = require("m")` is a module import. A `./m.js` specifier resolves to
+  `m.ts` / `m.tsx` (`.mjs` to `.mts`, `.cjs` to `.cts`) when no `m.js` is
+  analyzed.
+
+### Changed (H-TS)
+- **The default `include` adds `**/*.ts`, `**/*.tsx`, `**/*.mts` and
+  `**/*.cts`, and the default `exclude` adds `**/*.d.ts`.** A TypeScript
+  repository on the defaults is now analyzed instead of listing its files as
+  unsupported sources, so its gate verdict can change (MAGIC001, EXC001-EXC003
+  and DEF001-DEF006 are errors). To keep the previous scope, set `include` to
+  `["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]`. Python and JavaScript
+  verdicts are unchanged.
+- The default test role adds `**/*.test.ts`, `**/*.spec.ts`, `**/*.test.tsx`,
+  `**/*.spec.tsx`, `**/*.test.mts`, `**/*.spec.mts`; the default config role
+  (and the legacy `configuration_files`) adds `*.config.ts`, `*.config.mts`,
+  `*.config.cts`.
+- A JavaScript exception boundary also covers TypeScript files; a TypeScript
+  boundary (`language = "typescript"`) covers TypeScript only.
+- The cache schema is "7".
+
+### Fixed (H-TS)
+- JavaScript: a function's parenthesized parameters are now its locals (they
+  were not, so mutating a parameter that shadows a module binding counted as a
+  write to that binding).
 ### Added (ROLE001, spec 21.1 decision 24)
 - `ROLE001` (`rules.role_integrity`, category `policy_integrity`): a
   production-role file that imports a test-role file through the module graph

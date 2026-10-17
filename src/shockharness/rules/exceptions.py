@@ -72,7 +72,15 @@ from shockharness.ir.model import (
     NameResolution,
     Span,
 )
-from shockharness.rules.registry import EXC001, EXC002, EXC003, RuleSpec
+from shockharness.rules.registry import (
+    EXC001,
+    EXC002,
+    EXC003,
+    JAVASCRIPT,
+    PYTHON,
+    TYPESCRIPT,
+    RuleSpec,
+)
 from shockharness.rules.severity import section_severity
 from shockharness.schema import boundary_exceptions
 from shockharness.source import SourceText
@@ -528,6 +536,24 @@ def _exc003(
     )
 
 
+# The boundary languages that cover a file: a JavaScript boundary also covers TypeScript
+# (the same runtime and catch semantics); a TypeScript boundary covers TypeScript only.
+BOUNDARY_LANGUAGES = {
+    PYTHON: frozenset({PYTHON}),
+    JAVASCRIPT: frozenset({JAVASCRIPT}),
+    TYPESCRIPT: frozenset({TYPESCRIPT, JAVASCRIPT}),
+}
+
+
+def _applicable_boundaries(
+    settings: Mapping[str, Any], language: str, path: str
+) -> tuple[Boundary, ...]:
+    languages = BOUNDARY_LANGUAGES[language]
+    return tuple(
+        b for b in load_boundaries(settings) if b.language in languages and b.paths.matches(path)
+    )
+
+
 def run_exception_rules(
     facts: ModuleFacts,
     source: SourceText,
@@ -542,8 +568,7 @@ def run_exception_rules(
     With ``defer_return_fallback`` (DEF005 is active) the ``return_fallback``
     classification is left to DEF005 so that one handler yields one hard finding.
     """
-    boundaries = load_boundaries(settings)
-    applicable = tuple(b for b in boundaries if b.language == language and b.paths.matches(path))
+    applicable = _applicable_boundaries(settings, language, path)
     transparent_rethrow = bool(settings["transparent_rethrow"])
     transparent_guards = frozenset(str(name) for name in settings["transparent_guards"])
     capture_managers = frozenset(str(name) for name in settings["capture_managers"])

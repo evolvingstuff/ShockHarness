@@ -3366,3 +3366,110 @@ keep testing what they were written for.
 * A test asserted `finding.category`, which is not a field of `Finding` (the
   category is derived from the registry); it now uses `registry.category_of`.
 
+## Milestone H-TS: TypeScript — DONE (2026-10-16)
+
+TypeScript as a third language, as recorded in spec 21.2 (H-TS row) and
+decisions 8 and 25. Implemented in the lead session; not released.
+
+### What was built
+
+* **Language plumbing**: `registry.TYPESCRIPT`, `ALL_LANGUAGES` and
+  `JAVASCRIPT_FAMILY`; `.ts`, `.tsx`, `.mts`, `.cts` in discovery; the report
+  schema's language enum; default include, exclude (`**/*.d.ts`), test-role and
+  config-role globs; the dependency `tree-sitter-typescript>=0.23.2,<0.24`.
+* **Parsing** (`ir/javascript.py`): `extract_typescript_facts` picks the TSX
+  grammar for `.tsx` and the TypeScript grammar otherwise, and runs the same
+  extraction core as JavaScript (`_extract_facts`, now split into
+  `_parse_failure`, `_literals_and_comments`, `_literal`).
+* **TypeScript node types in the JavaScript extractors**: the anonymous
+  `number` keyword token is not a literal; literal types count as annotations;
+  `required_parameter` / `optional_parameter` through one helper
+  (`parameter_parts`) for DEF001, complexity and locals; `this: T` is not a
+  parameter; `public_field_definition` next to `field_definition`;
+  `abstract_class_declaration` next to `class_declaration`; `as`, `!`,
+  `satisfies` and `<T>` seen through wherever parentheses are (`unwrap_parens`,
+  DEF context).
+* **Imports and the graph**: type-only imports, specifiers and re-exports are
+  erased; `import x = require()`; `.js` → `.ts` specifier resolution
+  (`callgraph.TYPESCRIPT_SOURCES`); TypeScript cycles are labelled TypeScript.
+* **TYPE001's TypeScript half** (`ir/javascript_catalog._type_escape`,
+  `rules/api_catalog._type001`): `any` (excerpt: the annotated parameter,
+  variable, member or type parameter, else the type), assertions, non-null
+  (`report_non_null`), and the `@ts-*` directives.
+* **Exception boundaries**: a JavaScript boundary covers TypeScript.
+
+### Decisions (mine; review these)
+
+1. **TypeScript is in the default `include`.** Support means analysis; leaving
+   it out would make a TypeScript repository look clean. This is the one change
+   that can move a verdict (for TypeScript repositories only); the CHANGELOG
+   says how to keep the old scope.
+2. **`.d.ts` files are excluded by default**: they hold no executable code, and
+   their literal types would only add MAGIC001 findings.
+3. **Type-only imports are erased**, as `tsc` erases them: a type-only cycle is
+   not a runtime cycle, and type-only code from a test file ships nothing.
+   `verbatimModuleSyntax` (which keeps a side-effect import) is not modelled.
+4. **Literal types are annotations**, reported and labelled like Python's
+   `Literal[8080]`; enum member values are executable code.
+5. **A JavaScript boundary covers TypeScript**: the runtime and the catch
+   semantics are the same, and a mixed repository should not have to declare
+   every boundary twice.
+6. **TYPE001 does not apply to plain JavaScript** (no types to escape), and
+   `x as unknown as T` is one assertion.
+7. **An optional parameter (`x?: T`) is not a default**: there is no value.
+8. **The JavaScript locals fix ships with H-TS**: found while unwrapping
+   TypeScript parameters, it is a real JavaScript bug (parameters were missing
+   from a unit's locals), and fixing it changes no verdict on any target below.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  188 findings  (cache hits 0 / misses 140, then 140 / 0)
+
+$ pytest -q        # CPython 3.14, 3.11.11, 3.12.8, 3.13.1
+1104 passed        (on each)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+**Parity.** The whole suite was run with a plugin that extracts every
+JavaScript source it analyzes a second time as TSX and compares the facts
+(language, parser and parse-failure message aside): no difference on any
+source. The `.ts` grammar differs only on JSX, which TypeScript accepts in
+`.tsx` only.
+
+**Regression against 0.6.0.** `shockharness==0.6.0` against this tree (its
+configuration without `rules.types`), all three profiles, H4, H5 and ROLE001
+rule IDs excluded: identical exits and findings on the self-scan (188), the
+golden fixtures (exits 3/3/1) and both examples. None of them contains
+TypeScript. Self-diff in a scratch clone against 1785ca7 (ROLE001):
+`gate: PASS (exit 0)`, no new findings, no complexity regressions, after the
+first self-diff flagged the renamed extraction core, three functions that each
+grew by a line or a branch, and a comment in `rules/api_catalog.py` that
+spelled out the Python type-ignore directive (TYPE001 and VERIFY002 read it as
+one).
+
+New tests: `tests/unit/test_typescript.py` (17: discovery and `.d.ts`, the TSX
+grammar, roles, MAGIC001, DEF001, locals in both languages, classes and type
+wrappers, a JavaScript sample giving identical findings as TypeScript, imports,
+`.js` → `.ts` resolution with a type-only cycle, ROLE001 and type-only imports,
+TYPE001 kinds and switches, every suffix). Six existing test functions used `.ts`
+as the example of an unsupported file; they now use `.rs`.
+
+### Failures observed during development (and what was done)
+
+* The first TypeScript file crashed the literal walk: the TypeScript grammar's
+  anonymous `number` keyword (`x: number`) has the same type name as a numeric
+  literal. Only named `number` nodes are literals now; `string` and `object`
+  have the same collision and are only ever tested on named expression fields.
+* A patch script stopped on a missing count and wrote nothing; it was rerun.
+* The self-gate caught a `m[k] if k in m else v` lookup (DEF002) and a
+  conditional on `is None` (DEF004) in the new code; both are explicit now.

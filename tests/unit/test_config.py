@@ -118,8 +118,8 @@ def test_invalid_glob_is_rejected_with_key_path(empty_root: Path) -> None:
 
 
 def test_unsupported_language_in_include_is_rejected(empty_root: Path) -> None:
-    write(empty_root, ".shockharness.toml", '[tool.shockharness]\ninclude = ["src/**/*.ts"]\n')
-    with pytest.raises(ConfigError, match=r"'\.ts' is not a supported language"):
+    write(empty_root, ".shockharness.toml", '[tool.shockharness]\ninclude = ["src/**/*.rs"]\n')
+    with pytest.raises(ConfigError, match=r"'\.rs' is not a supported language"):
         load_config(empty_root, None)
 
 

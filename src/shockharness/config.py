@@ -100,6 +100,10 @@ SUPPORTED_EXTENSIONS: Mapping[str, str] = {
     ".js": registry.JAVASCRIPT,
     ".mjs": registry.JAVASCRIPT,
     ".cjs": registry.JAVASCRIPT,
+    ".ts": registry.TYPESCRIPT,
+    ".tsx": registry.TYPESCRIPT,
+    ".mts": registry.TYPESCRIPT,
+    ".cts": registry.TYPESCRIPT,
 }
 
 
@@ -547,7 +551,7 @@ GUARDRAIL_CATALOGS = (
     ("retry", "retry_decorators"),
     ("batches", "roles"),
 )
-TYPE_SWITCHES = ("report_any", "report_cast", "report_type_ignore")
+TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
     ("boolean_arguments", "allowed_callees"),
     ("async_lifecycle", "supervisors"),

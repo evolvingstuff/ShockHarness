@@ -32,12 +32,15 @@ from tree_sitter import Node
 
 from shockharness.constants import EVIDENCE_MAX_CHARS, LOOKUP_WITH_FALLBACK_ARITY
 from shockharness.ir.javascript_catches import (
+    FIELD_DEFINITIONS,
+    TYPE_WRAPPERS,
     block_statements,
     first_expression,
     is_literal_like,
     is_logging_statement,
     node_span,
     node_text,
+    parameter_parts,
     scope_for,
     unwrap_parens,
 )
@@ -321,11 +324,8 @@ class _Collector:
         parts = scope.rsplit(".", 1)
         owner = parts[len(parts) - 1]
         for parameter in parameters.named_children:
-            if parameter.type == "assignment_pattern":
-                left = parameter.child_by_field_name("left")
-                right = parameter.child_by_field_name("right")
-                if left is None or right is None:
-                    continue
+            left, right = parameter_parts(parameter)
+            if right is not None:
                 self._add(
                     right,
                     scope,
@@ -341,9 +341,9 @@ class _Collector:
                     self._pattern_defaults(
                         left, scope, KIND_PARAMETER_DESTRUCTURING, FAMILY_PARAMETER, "parameters"
                     )
-            elif parameter.type in PATTERN_TYPES:
+            elif left.type in PATTERN_TYPES:
                 self._pattern_defaults(
-                    parameter, scope, KIND_PARAMETER_DESTRUCTURING, FAMILY_PARAMETER, "parameters"
+                    left, scope, KIND_PARAMETER_DESTRUCTURING, FAMILY_PARAMETER, "parameters"
                 )
 
     def _declarator(self, declarator: Node, scope: str) -> None:
@@ -825,10 +825,18 @@ def _has_own_call(call: Node) -> tuple[Node, Node] | None:
     return receiver, actual[0]
 
 
+# Parents whose `value` child is assigned; parents that pass their context through (with
+# TypeScript's `as`/`!`/`satisfies`/`<T>` wrappers, which change no value).
+ASSIGNING_PARENTS = frozenset({"variable_declarator", "pair"}) | FIELD_DEFINITIONS
+INHERITING_PARENTS = (
+    frozenset({"parenthesized_expression", "await_expression", "spread_element"}) | TYPE_WRAPPERS
+)
+
+
 def _child_context(parent: Node, child: Node, index: int, inherited: str) -> str:
     kind = parent.type
     field = parent.field_name_for_child(index)
-    if kind in ("variable_declarator", "pair", "field_definition"):
+    if kind in ASSIGNING_PARENTS:
         return CONTEXT_ASSIGNMENT if field == "value" else CONTEXT_EXPRESSION
     if kind in ("assignment_expression", "augmented_assignment_expression"):
         return CONTEXT_ASSIGNMENT if field == "right" else CONTEXT_EXPRESSION
@@ -853,7 +861,7 @@ def _child_context(parent: Node, child: Node, index: int, inherited: str) -> str
         return CONTEXT_TEST if _operator(parent) == "!" else inherited
     if kind == "arguments":
         return CONTEXT_ARGUMENT
-    if kind in ("parenthesized_expression", "await_expression", "spread_element"):
+    if kind in INHERITING_PARENTS:
         return inherited
     return CONTEXT_EXPRESSION
 

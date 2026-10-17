@@ -12,7 +12,15 @@ from dataclasses import dataclass
 from tree_sitter import Node
 
 from shockharness.constants import EVIDENCE_MAX_CHARS, FIRST_COLUMN, FIRST_LINE
-from shockharness.ir.javascript_catches import node_span, node_text, scope_for
+from shockharness.ir.javascript_catches import (
+    FIELD_DEFINITIONS,
+    TYPED_PARAMETERS,
+    is_this_parameter,
+    node_span,
+    node_text,
+    parameter_parts,
+    scope_for,
+)
 from shockharness.ir.lines import logical_line_count
 from shockharness.ir.model import (
     BINDING_CLASS,
@@ -75,12 +83,15 @@ FUNCTION_TYPES = frozenset(
     }
 )
 GENERATOR_TYPES = frozenset({"generator_function_declaration", "generator_function"})
-CLASS_TYPES = frozenset({"class_declaration", "class"})
+CLASS_TYPES = frozenset({"class_declaration", "abstract_class_declaration", "class"})
 # Units that are expressions: their first and last lines usually carry the parent's code too.
 EXPRESSION_UNIT_TYPES = frozenset(
     {"arrow_function", "function_expression", "generator_function", "class"}
 )
 UNIT_TYPES = FUNCTION_TYPES | CLASS_TYPES
+NESTED_DECLARATIONS = frozenset({"function_declaration", "generator_function_declaration"}) | (
+    CLASS_TYPES - {"class"}
+)
 STATEMENT_TYPES = frozenset(
     {
         "expression_statement",
@@ -103,6 +114,7 @@ STATEMENT_TYPES = frozenset(
         "export_statement",
         "import_statement",
         "class_declaration",
+        "abstract_class_declaration",
         "function_declaration",
         "generator_function_declaration",
         "statement_block",
@@ -307,7 +319,10 @@ def pattern_names(pattern: Node) -> list[str]:
             left = node.child_by_field_name("left")
             if left is not None:
                 stack.append(left)
-        elif node.type in ("object_pattern", "array_pattern", "rest_pattern"):
+        elif node.type in TYPED_PARAMETERS:
+            binding, _default = parameter_parts(node)
+            stack.append(binding)
+        elif node.type in ("object_pattern", "array_pattern", "rest_pattern", "formal_parameters"):
             stack.extend(reversed(node.named_children))
     return names
 
@@ -389,11 +404,7 @@ class _UnitCollector:
             if node.child_by_field_name("label") is not None:
                 jump = self._new(CK_JUMP, "", parent)
                 jump.labeled = True
-        elif kind in (
-            "function_declaration",
-            "generator_function_declaration",
-            "class_declaration",
-        ):
+        elif kind in NESTED_DECLARATIONS:
             self._nested_declaration(stack, node, parent)
         elif kind == "export_statement":
             declaration = node.child_by_field_name("declaration")
@@ -412,7 +423,7 @@ class _UnitCollector:
             body = node.child_by_field_name("body")
             if body is not None:
                 self._push_block(stack, body, parent)
-        elif kind == "field_definition":
+        elif kind in FIELD_DEFINITIONS:
             self._expr(stack, node.child_by_field_name("value"), self._new(CK_EXPR, "", parent))
         else:
             expression = self._new(CK_EXPR, "", parent)
@@ -441,7 +452,7 @@ class _UnitCollector:
         if name is not None:
             self.locals.add(node_text(name))
         expression = self._new(CK_EXPR, "", parent)
-        if node.type == "class_declaration":
+        if node.type in CLASS_TYPES:
             # extends clause is evaluated here; the body is the class unit
             for child in reversed(node.named_children):
                 if child.type == "class_heritage":
@@ -456,8 +467,9 @@ class _UnitCollector:
     ) -> None:
         """Default-value expressions of a nested unit's parameters belong to this unit."""
         for child in reversed(parameters.named_children):
-            if child.type == "assignment_pattern":
-                self._expr(stack, child.child_by_field_name("right"), parent)
+            _binding, default = parameter_parts(child)
+            if default is not None:
+                self._expr(stack, default, parent)
 
     def _if(
         self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder, kind: str
@@ -833,7 +845,9 @@ def _parameter_count(node: Node) -> int:
     if parameters is None:
         # `x => ...`: a single parameter without parentheses
         return 1 if node.child_by_field_name("parameter") is not None else 0
-    return sum(1 for c in parameters.named_children if c.type != "comment")
+    return sum(
+        1 for c in parameters.named_children if c.type != "comment" and not is_this_parameter(c)
+    )
 
 
 def _unit_span(source: SourceText, node: Node) -> Span:
@@ -898,6 +912,9 @@ def collect_javascript_functions(
 # -- imports and bindings ---------------------------------------------------
 
 
+TYPE_KEYWORD = "type"
+
+
 def _import_bound_names(statement: Node) -> list[str]:
     names: list[str] = []
     for fact in _import_statement(SourceText.from_text(""), statement):
@@ -914,11 +931,23 @@ def _local_name(name: Node, alias: Node | None) -> str:
     return node_text(name)
 
 
+def _type_only(node: Node) -> bool:
+    """TypeScript's ``import type ...``, ``export type ... from`` and ``{type X}``: erased by
+    the compiler, so no runtime import (and no module-graph edge)."""
+    return any(not child.is_named and child.type == TYPE_KEYWORD for child in node.children)
+
+
+def _only_types(clause: Node, specifier_type: str) -> bool:
+    """A ``{...}`` clause whose specifiers are all type-only (TypeScript elides it)."""
+    specifiers = [c for c in clause.named_children if c.type == specifier_type]
+    return len(specifiers) > 0 and all(_type_only(c) for c in specifiers)
+
+
 def _specifier_names(clause: Node, specifier_type: str) -> list[tuple[str, str]]:
     """``{a, b as c}`` of an import or export clause as (name, local) pairs."""
     names: list[tuple[str, str]] = []
     for specifier in clause.named_children:
-        if specifier.type != specifier_type:
+        if specifier.type != specifier_type or _type_only(specifier):
             continue
         name = specifier.child_by_field_name("name")
         if name is None:
@@ -945,6 +974,8 @@ def _import_clause(span: Span, module: str, clause: Node) -> list[ImportFact]:
             if namespace is not None:
                 facts.append(ImportFact(span, IMPORT_MODULE, module, 0, (("", namespace),)))
         elif child.type == "named_imports":
+            if _only_types(child, "import_specifier") and len(clause.named_children) == 1:
+                return []
             names.extend(_specifier_names(child, "import_specifier"))
     if len(names) > 0 or len(facts) == 0:
         facts.append(ImportFact(span, IMPORT_NAMES, module, 0, tuple(names)))
@@ -960,25 +991,42 @@ def _statement_module(statement: Node) -> str | None:
 
 
 def _import_statement(source: SourceText, statement: Node) -> list[ImportFact]:
-    module = _statement_module(statement)
-    if module is None:
-        return []
     span = Span(FIRST_LINE, FIRST_COLUMN, FIRST_LINE, FIRST_COLUMN)
     if source.text != "":
         span = node_span(source, statement)
+    required = [c for c in statement.named_children if c.type == "import_require_clause"]
+    if len(required) > 0:
+        return _require_clause(span, required[0])
+    module = _statement_module(statement)
+    if module is None or _type_only(statement):
+        return []
     clauses = [c for c in statement.named_children if c.type == "import_clause"]
     if len(clauses) == 0:
         return [ImportFact(span, IMPORT_MODULE, module, 0, ())]
     return _import_clause(span, module, clauses[0])
 
 
+def _require_clause(span: Span, clause: Node) -> list[ImportFact]:
+    """TypeScript's ``import fs = require("fs")``: the whole module under one name."""
+    source_node = clause.child_by_field_name("source")
+    names = [c for c in clause.named_children if c.type == "identifier"]
+    if source_node is None or len(names) != 1:
+        return []
+    module = string_value(source_node)
+    if module is None:
+        return []
+    return [ImportFact(span, IMPORT_MODULE, module, 0, (("", node_text(names[0])),))]
+
+
 def _export_statement(source: SourceText, statement: Node) -> list[ImportFact]:
     module = _statement_module(statement)
-    if module is None:
+    if module is None or _type_only(statement):
         return []
     names: list[tuple[str, str]] = []
     for child in statement.named_children:
         if child.type == "export_clause":
+            if _only_types(child, "export_specifier"):
+                return []
             names.extend(_specifier_names(child, "export_specifier"))
         elif child.type == "namespace_export":
             namespace = _namespace_name(child)
@@ -1111,11 +1159,13 @@ def _declaration_bindings(node: Node, span: Span) -> list[ModuleBinding]:
 
 
 def _statement_bindings(node: Node, span: Span) -> list[ModuleBinding]:
-    if node.type in ("function_declaration", "generator_function_declaration", "class_declaration"):
+    if node.type in ("function_declaration", "generator_function_declaration") or (
+        node.type in CLASS_TYPES
+    ):
         name = node.child_by_field_name("name")
         if name is None:
             return []
-        kind = BINDING_CLASS if node.type == "class_declaration" else BINDING_FUNCTION
+        kind = BINDING_CLASS if node.type in CLASS_TYPES else BINDING_FUNCTION
         return [ModuleBinding(node_text(name), kind, mutable=False, span=span)]
     if node.type == "import_statement":
         return [

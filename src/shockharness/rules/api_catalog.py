@@ -17,11 +17,17 @@ from shockharness.ir.model import (
     RETRY_DECORATOR,
     TYPE_ESCAPE_ANY,
     TYPE_ESCAPE_CAST,
+    TYPE_ESCAPE_NON_NULL,
     ModuleFacts,
     ProcessCall,
     Span,
 )
-from shockharness.ir.suppression_directives import TOOL_TYPE_IGNORE
+from shockharness.ir.suppression_directives import (
+    TOOL_TS_EXPECT_ERROR,
+    TOOL_TS_IGNORE,
+    TOOL_TS_NOCHECK,
+    TOOL_TYPE_IGNORE,
+)
 from shockharness.rules.guardrails import import_aliases, qualified_callee
 from shockharness.rules.registry import (
     BATCH001,
@@ -32,6 +38,7 @@ from shockharness.rules.registry import (
     SLEEP001,
     STUB003,
     TYPE001,
+    TYPESCRIPT,
     RuleSpec,
 )
 from shockharness.source import SourceText
@@ -57,6 +64,28 @@ METHOD_PREFIX = "."
 PROMISE_SLEEP = "Promise"
 TIMERS_SET_TIMEOUT = "timers/promises.setTimeout"
 DYNAMIC = "<dynamic>"
+# Directives that silence the type checker: Python's type-ignore comment and TypeScript's
+# @ts-ignore, @ts-expect-error and @ts-nocheck (the whole file).
+TYPE_CHECKER_DIRECTIVES = frozenset(
+    {TOOL_TYPE_IGNORE, TOOL_TS_IGNORE, TOOL_TS_EXPECT_ERROR, TOOL_TS_NOCHECK}
+)
+ESCAPE_MESSAGES = {
+    TYPE_ESCAPE_ANY: "{name} turns type checking off for this value: {text}",
+    TYPE_ESCAPE_CAST: "{name} asserts a type without checking it: {text}",
+    TYPE_ESCAPE_NON_NULL: (
+        "{name} (!) claims the value is never null or undefined without checking it: {text}"
+    ),
+}
+PYTHON_ESCAPE_NAMES = {
+    TYPE_ESCAPE_ANY: "Any",
+    TYPE_ESCAPE_CAST: "cast(...)",
+    TYPE_ESCAPE_NON_NULL: "",  # TypeScript only
+}
+TYPESCRIPT_ESCAPE_NAMES = {
+    TYPE_ESCAPE_ANY: "any",
+    TYPE_ESCAPE_CAST: "a type assertion",
+    TYPE_ESCAPE_NON_NULL: "a non-null assertion",
+}
 
 
 def _finding(
@@ -175,27 +204,26 @@ def _result001(
 
 
 def _type001(
-    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
+    facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
     severity = str(settings["severity"])
     found: list[Finding] = []
     wanted = {
         TYPE_ESCAPE_ANY: settings["report_any"] is True,
         TYPE_ESCAPE_CAST: settings["report_cast"] is True,
+        TYPE_ESCAPE_NON_NULL: settings["report_non_null"] is True,
     }
+    names = PYTHON_ESCAPE_NAMES if language == PYTHON else TYPESCRIPT_ESCAPE_NAMES
     for escape in facts.catalog.type_escapes:
         if not wanted[escape.kind]:
             continue
-        if escape.kind == TYPE_ESCAPE_ANY:
-            message = f"Any turns type checking off for this value: {escape.text}"
-        else:
-            message = f"cast(...) asserts a type without checking it: {escape.text}"
+        message = ESCAPE_MESSAGES[escape.kind].format(name=names[escape.kind], text=escape.text)
         found.append(
             _finding(TYPE001, severity, path, escape.span, message, source, CONFIDENCE_EXACT)
         )
     if settings["report_type_ignore"] is True:
         for directive in facts.verification.suppressions:
-            if directive.tool != TOOL_TYPE_IGNORE:
+            if directive.tool not in TYPE_CHECKER_DIRECTIVES:
                 continue
             found.append(
                 _finding(
@@ -323,8 +351,8 @@ def run_catalog_rules(
         found.extend(_process001(facts, source, path, language, rules["processes"]))
     if RESULT001.rule_id in active:
         found.extend(_result001(facts, source, path, language, rules["results"]))
-    if TYPE001.rule_id in active and language == PYTHON:
-        found.extend(_type001(facts, source, path, rules["types"]))
+    if TYPE001.rule_id in active and language in (PYTHON, TYPESCRIPT):
+        found.extend(_type001(facts, source, path, language, rules["types"]))
     if SLEEP001.rule_id in active:
         found.extend(_sleep001(facts, source, path, language, rules["sleep"]))
     if RETRY001.rule_id in active:

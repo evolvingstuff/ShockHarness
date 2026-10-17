@@ -9,6 +9,7 @@ import re
 from importlib import metadata
 
 import tree_sitter_javascript
+import tree_sitter_typescript
 from tree_sitter import Language, Node, Parser
 
 from shockharness.constants import (
@@ -49,12 +50,37 @@ from shockharness.source import SourceText
 
 _LANGUAGE = Language(tree_sitter_javascript.language())
 _PARSER = Parser(_LANGUAGE)
+# H-TS: TypeScript and TSX have their own grammars; the facts are read by the same
+# extractors, whose node types the TypeScript grammar shares with JavaScript.
+_TYPESCRIPT_PARSER = Parser(Language(tree_sitter_typescript.language_typescript()))
+_TSX_PARSER = Parser(Language(tree_sitter_typescript.language_tsx()))
+TSX_SUFFIX = ".tsx"
 
 PARSER_NAME = "tree-sitter-javascript " + metadata.version("tree-sitter-javascript")
+TYPESCRIPT_PARSER_NAME = "tree-sitter-typescript " + metadata.version("tree-sitter-typescript")
+JAVASCRIPT_LANGUAGE = "javascript"
+TYPESCRIPT_LANGUAGE = "typescript"
 
 NUMBER = "number"
 UNARY = "unary_expression"
 COMMENT = "comment"
+# TypeScript nodes whose subtree is a type: a number in one (`type Port = 8080`, `x: 5`,
+# `f<3>()`) is a literal type, reported as in a type annotation like Python's Literal[8080].
+TYPE_CONTEXTS = frozenset(
+    {
+        "type_annotation",
+        "omitting_type_annotation",
+        "opting_type_annotation",
+        "adding_type_annotation",
+        "asserts_annotation",
+        "type_predicate_annotation",
+        "type_alias_declaration",
+        "interface_declaration",
+        "type_arguments",
+        "type_parameters",
+        "literal_type",
+    }
+)
 SIGN_OPERATORS = frozenset({"-", "+"})
 
 LEGACY_OCTAL = re.compile(r"0[0-7]+")
@@ -229,86 +255,131 @@ def _first_error(root: Node) -> Node | None:
 
 
 def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
-    tree = _PARSER.parse(source.text.encode("utf-8"))
+    return _extract_facts(source, filename, _PARSER, PARSER_NAME, JAVASCRIPT_LANGUAGE)
+
+
+def extract_typescript_facts(source: SourceText, filename: str) -> ModuleFacts:
+    parser = _TSX_PARSER if filename.endswith(TSX_SUFFIX) else _TYPESCRIPT_PARSER
+    return _extract_facts(source, filename, parser, TYPESCRIPT_PARSER_NAME, TYPESCRIPT_LANGUAGE)
+
+
+def _extract_facts(
+    source: SourceText, filename: str, parser: Parser, parser_name: str, language: str
+) -> ModuleFacts:
+    tree = parser.parse(source.text.encode("utf-8"))
     root = tree.root_node
     error = _first_error(root)
     if error is not None:
-        kind = "missing token" if error.is_missing else "syntax error"
-        first_line = node_text(error).split("\n")[0]
-        if len(first_line) > EVIDENCE_MAX_CHARS:
-            first_line = first_line[:EVIDENCE_MAX_CHARS] + "..."
-        return failed_facts(
-            "javascript",
-            PARSER_NAME,
-            ParseFailure(
-                span=node_span(source, error),
-                message=f"{kind} near {first_line!r} in {filename}",
-            ),
-        )
-
-    literals: list[NumericLiteral] = []
-    comments: list[Comment] = []
-    definitions = _constant_definition_values(root)
-    stack: list[tuple[Node, str]] = [(root, MODULE_SCOPE)]
-    while len(stack) > 0:
-        node, scope = stack.pop()
-        if node.type == COMMENT:
-            comments.append(Comment(span=node_span(source, node), text=node_text(node)))
-            continue
-        folded = _fold_unary(node)
-        if folded is not None:
-            number, negated = folded
-            value = parse_js_number(node_text(number))
-            if negated:
-                value = -value
-            literals.append(
-                NumericLiteral(
-                    span=node_span(source, node),
-                    raw=node_text(node),
-                    value=value,
-                    negated=negated,
-                    in_annotation=False,
-                    scope=scope,
-                    constant_definition=node.id in definitions,
-                )
-            )
-            continue
-        if node.type == NUMBER:
-            literals.append(
-                NumericLiteral(
-                    span=node_span(source, node),
-                    raw=node_text(node),
-                    value=parse_js_number(node_text(node)),
-                    negated=False,
-                    in_annotation=False,
-                    scope=scope,
-                    constant_definition=node.id in definitions,
-                )
-            )
-            continue
-        child_scope = scope_for(node, scope)
-        for child in reversed(node.children):
-            stack.append((child, child_scope))
-
-    literals.sort(key=lambda lit: lit.span)
-    comments.sort(key=lambda comment: comment.span)
+        return failed_facts(language, parser_name, _parse_failure(source, filename, error))
+    literals, comments = _literals_and_comments(source, root)
     guardrails, asynchrony, catalog = _policy_facts(source, root)
     return ModuleFacts(
-        language="javascript",
-        parser=PARSER_NAME,
-        numeric_literals=tuple(literals),
-        comments=tuple(comments),
+        language=language,
+        parser=parser_name,
+        numeric_literals=literals,
+        comments=comments,
         catches=collect_javascript_catches(source, root),
         managers=(),  # JavaScript has no exception-capturing context manager idiom
         defaults=collect_javascript_defaults(source, root),
-        functions=collect_javascript_functions(source, root, tuple(comments)),
+        functions=collect_javascript_functions(source, root, comments),
         imports=collect_javascript_imports(source, root),
         bindings=collect_javascript_bindings(source, root),
-        verification=collect_javascript_verification(source, root, tuple(comments)),
+        verification=collect_javascript_verification(source, root, comments),
         guardrails=guardrails,
         asynchrony=asynchrony,
         catalog=catalog,
         parse_failure=None,
+    )
+
+
+def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:
+    kind = "missing token" if error.is_missing else "syntax error"
+    first_line = node_text(error).split("\n")[0]
+    if len(first_line) > EVIDENCE_MAX_CHARS:
+        first_line = first_line[:EVIDENCE_MAX_CHARS] + "..."
+    return ParseFailure(
+        span=node_span(source, error),
+        message=f"{kind} near {first_line!r} in {filename}",
+    )
+
+
+def _literals_and_comments(
+    source: SourceText, root: Node
+) -> tuple[tuple[NumericLiteral, ...], tuple[Comment, ...]]:
+    """Every numeric literal (a unary sign chain folded into one) and every comment."""
+    literals: list[NumericLiteral] = []
+    comments: list[Comment] = []
+    definitions = _constant_definition_values(root)
+    stack: list[tuple[Node, str, bool]] = [(root, MODULE_SCOPE, False)]
+    while len(stack) > 0:
+        node, scope, in_annotation = stack.pop()
+        if node.type == COMMENT:
+            comments.append(Comment(span=node_span(source, node), text=node_text(node)))
+            continue
+        literal = _literal(
+            source, node, scope, in_annotation=in_annotation, definition=node.id in definitions
+        )
+        if literal is not None:
+            literals.append(literal)
+            continue
+        child_scope = scope_for(node, scope)
+        child_annotation = in_annotation or node.type in TYPE_CONTEXTS
+        for child in reversed(node.children):
+            stack.append((child, child_scope, child_annotation))
+    literals.sort(key=lambda lit: lit.span)
+    comments.sort(key=lambda comment: comment.span)
+    return tuple(literals), tuple(comments)
+
+
+def _literal(
+    source: SourceText, node: Node, scope: str, *, in_annotation: bool, definition: bool
+) -> NumericLiteral | None:
+    """The literal ``node`` is: a number, or a unary sign chain over one."""
+    folded = _fold_unary(node)
+    if folded is not None:
+        number, negated = folded
+        return _numeric(
+            source,
+            node,
+            number,
+            scope,
+            negated=negated,
+            in_annotation=in_annotation,
+            definition=definition,
+        )
+    # The TypeScript grammar also has an anonymous `number` keyword token (`x: number`).
+    if node.type == NUMBER and node.is_named:
+        return _numeric(
+            source,
+            node,
+            node,
+            scope,
+            negated=False,
+            in_annotation=in_annotation,
+            definition=definition,
+        )
+    return None
+
+
+def _numeric(
+    source: SourceText,
+    node: Node,
+    number: Node,
+    scope: str,
+    *,
+    negated: bool,
+    in_annotation: bool,
+    definition: bool,
+) -> NumericLiteral:
+    value = parse_js_number(node_text(number))
+    return NumericLiteral(
+        span=node_span(source, node),
+        raw=node_text(node),
+        value=-value if negated else value,
+        negated=negated,
+        in_annotation=in_annotation,
+        scope=scope,
+        constant_definition=definition,
     )
 
 

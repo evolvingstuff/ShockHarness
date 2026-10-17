@@ -47,10 +47,12 @@ SCOPES = frozenset(
         "arrow_function",
         "method_definition",
         "class_declaration",
+        "abstract_class_declaration",
         "class",
     }
 )
 FUNCTION_NAMES = frozenset({"function_declaration", "generator_function_declaration"})
+CLASSES = frozenset({"class_declaration", "abstract_class_declaration", "class"})
 LOOPS = frozenset({"for_statement", "for_in_statement", "while_statement", "do_statement"})
 SWITCH = "switch_statement"
 LABELED = "labeled_statement"
@@ -68,7 +70,7 @@ STRING_FRAGMENT = "string_fragment"
 BOOLEANS = frozenset({"true", "false"})
 SPREAD = "spread_element"
 COMMENT = "comment"
-FIELD = "field_definition"
+FIELDS = frozenset({"field_definition", "public_field_definition"})
 STATIC = "static"
 ERROR_SUFFIX = "Error"
 NOT_IMPLEMENTED = re.compile(r"\bnot\s+(yet\s+)?implemented\b|\bunimplemented\b|^\s*todo\b", re.I)
@@ -188,9 +190,9 @@ def _scope_name(node: Node, scope: str) -> str:
 
 def _runs_at_import(node: Node) -> bool:
     """False for code that runs later: function bodies, methods, instance fields."""
-    if node.type in SCOPES and node.type not in ("class_declaration", "class"):
+    if node.type in SCOPES and node.type not in CLASSES:
         return False
-    if node.type == FIELD:
+    if node.type in FIELDS:
         return any(child.type == STATIC for child in node.children)
     return True
 

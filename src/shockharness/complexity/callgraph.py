@@ -49,7 +49,7 @@ from shockharness.ir.model import (
     ModuleBinding,
     Span,
 )
-from shockharness.rules.registry import JAVASCRIPT, PYTHON
+from shockharness.rules.registry import JAVASCRIPT_FAMILY, PYTHON
 
 CONFIDENCE_RESOLVED = "resolved"
 CONFIDENCE_PROBABLE = "probable"
@@ -158,7 +158,10 @@ JAVASCRIPT_GLOBALS: frozenset[str] = frozenset(
         "performance",
     }
 )
-JAVASCRIPT_EXTENSIONS = (".js", ".mjs", ".cjs")
+JAVASCRIPT_EXTENSIONS = (".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")
+# TypeScript's ESM convention writes the emitted extension in the specifier ("./util.js"
+# for util.ts); each is tried with the TypeScript source extensions too.
+TYPESCRIPT_SOURCES = {".js": (".ts", ".tsx"), ".mjs": (".mts",), ".cjs": (".cts",)}
 JAVASCRIPT_INDEXES = tuple(f"/index{ext}" for ext in JAVASCRIPT_EXTENSIONS)
 PYTHON_INIT = "/__init__.py"
 # A JavaScript default import binds the module's default export; attribute calls on it are
@@ -308,6 +311,9 @@ class _ModuleIndex:
         if joined.startswith("/"):
             joined = joined.lstrip("/")
         candidates = [joined, *[joined + ext for ext in JAVASCRIPT_EXTENSIONS]]
+        stem, suffix = posixpath.splitext(joined)
+        if suffix in TYPESCRIPT_SOURCES:
+            candidates.extend(stem + ext for ext in TYPESCRIPT_SOURCES[suffix])
         candidates.extend(joined + index for index in JAVASCRIPT_INDEXES)
         for candidate in candidates:
             if candidate in self.paths:
@@ -384,7 +390,7 @@ def resolve_module_edges(
                 "computed import target",
             )
         ]
-    if module.language == JAVASCRIPT:
+    if module.language in JAVASCRIPT_FAMILY:
         return [_edge(module, fact, fact.module, "", index.javascript(module.path, fact.module))]
     specifier = "." * fact.level + fact.module
     if fact.level > 0:

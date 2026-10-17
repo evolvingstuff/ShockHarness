@@ -33,7 +33,7 @@ from shockharness.rules.registry import (
     BOOL001,
     EXC004,
     IMPORT001,
-    JAVASCRIPT,
+    JAVASCRIPT_FAMILY,
     PYTHON,
     STATE001,
     STUB001,
@@ -341,7 +341,7 @@ def _target(fact: ImportFact, module: str, name: str, local: str, language: str)
         return module
     if fact.kind != IMPORT_NAMES:
         return None
-    if name == DEFAULT_EXPORT and language == JAVASCRIPT:
+    if name == DEFAULT_EXPORT and language in JAVASCRIPT_FAMILY:
         return module  # a CommonJS module's default export is the module object
     return f"{module}.{name}"
 

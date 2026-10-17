@@ -157,11 +157,13 @@ rule IDs, and unsupported include extensions are **errors**, never warnings.
 ```toml
 [tool.shockharness]
 profile = "strict"                      # "strict" | "recommended" | "minimal"; see Profiles
-include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
+include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs",
+           "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]   # TypeScript since H-TS
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**",
-           "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
+           "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**",
+           "**/*.d.ts"]                 # declaration files hold types only
 parse_errors = "fail"                   # "fail" -> exit 3 on any unparseable file; "warn" -> reported, gate unaffected
-unsupported_sources = "warn"            # an included file no adapter parses (.ts, .pyx): "fail" -> exit 3, "warn" -> listed, "ignore" -> counted only ("ignore" in minimal)
+unsupported_sources = "warn"            # an included file no adapter parses (.pyx, .vue): "fail" -> exit 3, "warn" -> listed, "ignore" -> counted only ("ignore" in minimal)
 follow_symlinks = false                 # never leave the root through a link unless asked
 
 [tool.shockharness.cache]
@@ -727,10 +729,11 @@ roles = ["production", "test"]
 python_must_use = ["sorted", "copy.deepcopy", ".strip", ".replace", ...]
 javascript_must_use = ["structuredClone", ".map", ".filter", ".trim", ...]
 
-[tool.shockharness.rules.types]       # TYPE001, review
-report_any = true
-report_cast = true
-report_type_ignore = true
+[tool.shockharness.rules.types]       # TYPE001, review; Python and TypeScript
+report_any = true                     # Any / any
+report_cast = true                    # cast(...); x as T, <T>x (not as const)
+report_non_null = true                # x! (TypeScript)
+report_type_ignore = true             # # type: ignore; @ts-ignore, @ts-expect-error, @ts-nocheck
 
 [tool.shockharness.rules.sleep]       # SLEEP001, review
 python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
@@ -794,8 +797,9 @@ library's `analyze_paths` alone is `"not_collected"` (use
 
 `unsupported_sources` (top level, next to `parse_errors`; 0.2.0) decides what
 a file that `include` matches but no adapter can parse means. ShockHarness
-reads `.py`, `.js`, `.mjs` and `.cjs`; a `.ts`, `.tsx`, `.pyx` or `.ipynb`
-file in an included tree is otherwise silently outside the policy.
+reads `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts` and `.cts`; a `.pyx`,
+`.vue`, `.svelte` or `.ipynb` file in an included tree is otherwise silently
+outside the policy.
 
 | Value | Effect |
 |---|---|

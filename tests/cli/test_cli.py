@@ -296,7 +296,7 @@ def test_no_inline_suppressions_flag(empty_root: Path, capsys: pytest.CaptureFix
 
 
 def test_unsupported_explicit_file(empty_root: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    ts = write(empty_root, "a.ts", "")
+    ts = write(empty_root, "a.rs", "")
     code, _, err = run(["scan", str(ts), "--root", str(empty_root)], capsys)
     assert code == 2
     assert "unsupported file type" in err
@@ -1052,18 +1052,18 @@ def test_unsupported_sources_policy(
     empty_root: Path, capsys: pytest.CaptureFixture[str], policy: str
 ) -> None:
     """0.2.0 second brief, item 4: fail exits 3 and names the file, warn lists it, ignore
-    says nothing; a .ts file outside include is never mentioned."""
+    says nothing; a .rs file outside include is never mentioned."""
     write(
         empty_root,
         ".shockharness.toml",
         f'[tool.shockharness]\ninclude = ["src/**/*"]\nunsupported_sources = "{policy}"\n',
     )
-    write(empty_root, "src/a.ts", "const x: number = 1;\n")
+    write(empty_root, "src/a.rs", "fn main() {}\n")
     write(empty_root, "src/ok.js", "const y = 1;\n")
-    write(empty_root, "docs/outside.ts", "export {};\n")
+    write(empty_root, "docs/outside.rs", "export {};\n")
     root = ["--root", str(empty_root)]
     code, out, _ = run(["check", str(empty_root), *root], capsys)
-    assert "docs/outside.ts" not in out
+    assert "docs/outside.rs" not in out
     if policy == "fail":
         assert code == 3
         assert "gate: ERROR (exit 3)" in out
@@ -1072,7 +1072,7 @@ def test_unsupported_sources_policy(
             '= "fail"' in out
         )
         assert (
-            "src/a.ts: unsupported_source: extension '.ts' is not a supported language and "
+            "src/a.rs: unsupported_source: extension '.rs' is not a supported language and "
             'unsupported_sources = "fail"' in out
         )
         assert "analysis status: failed" in out
@@ -1081,12 +1081,12 @@ def test_unsupported_sources_policy(
         assert "gate: PASS (exit 0)" in out
         assert (
             "  warning: 1 included file(s) have an extension no adapter parses and were not "
-            'analyzed (unsupported_sources = "warn"): src/a.ts' in out
+            'analyzed (unsupported_sources = "warn"): src/a.rs' in out
         )
         assert "analysis status: complete" in out
     else:
         assert code == 0
-        assert "a.ts" not in out
+        assert "a.rs" not in out
         assert "policy deviation: unsupported_sources is 'ignore'" in out
     code, out, _ = run(["check", str(empty_root), "--format", "json", *root], capsys)
     data = json.loads(out)
@@ -1099,12 +1099,12 @@ def test_unsupported_sources_policy(
         assert data["files"] == [data["files"][0]] and data["files"][0]["path"] == "src/ok.js"
     else:
         assert coverage["unsupported_sources"] == [
-            {"path": "src/a.ts", "reason": "extension '.ts' is not a supported language"}
+            {"path": "src/a.rs", "reason": "extension '.rs' is not a supported language"}
         ]
     if policy == "fail":
         failed = [f for f in data["files"] if f["status"] == "unsupported_source"]
         assert [(f["path"], f["language"], f["parser"]) for f in failed] == [
-            ("src/a.ts", "unsupported", None)
+            ("src/a.rs", "unsupported", None)
         ]
         assert data["coverage"]["files_failed"] == 1 and data["analysis_status"] == "failed"
         assert data["gate"]["analysis_failures"] == 1

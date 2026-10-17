@@ -55,6 +55,7 @@ NAMED_SCOPE_TYPES = frozenset(
         "function_declaration",
         "generator_function_declaration",
         "class_declaration",
+        "abstract_class_declaration",
         "method_definition",
     }
 )
@@ -62,6 +63,15 @@ ANONYMOUS_FUNCTION_TYPES = frozenset(
     {"arrow_function", "function_expression", "generator_function", "class"}
 )
 IGNORED_IN_BLOCK = frozenset({"comment", "empty_statement"})
+# A class field: `x = v` in JavaScript, `x: T = v` (public_field_definition) in TypeScript,
+# whose name is in the `property` and `name` field respectively.
+FIELD_DEFINITIONS = frozenset({"field_definition", "public_field_definition"})
+FIELD_NAME_FIELDS = {"field_definition": "property", "public_field_definition": "name"}
+# TypeScript wrappers that change only the static type, never the value: `(x as T)`, `x!`,
+# `x satisfies T`, `<T>x`. Code that reads the value looks through them like parentheses.
+TYPE_WRAPPERS = frozenset(
+    {"as_expression", "non_null_expression", "satisfies_expression", "type_assertion"}
+)
 COMPOUND_STATEMENTS = frozenset(
     {
         "if_statement",
@@ -77,6 +87,7 @@ COMPOUND_STATEMENTS = frozenset(
         "function_declaration",
         "generator_function_declaration",
         "class_declaration",
+        "abstract_class_declaration",
     }
 )
 OPERATION_TYPES = frozenset(
@@ -111,6 +122,32 @@ def node_span(source: SourceText, node: Node) -> Span:
     )
 
 
+# TypeScript wraps each parameter (`x: T = v`, `x?: T`, `private x = v`) in one of these,
+# with the binding in `pattern` and the default in `value`.
+TYPED_PARAMETERS = frozenset({"required_parameter", "optional_parameter"})
+THIS_PARAMETER = "this"
+
+
+def parameter_parts(parameter: Node) -> tuple[Node, Node | None]:
+    """A formal parameter's binding (identifier or pattern) and its default value, the
+    same for ``x = v`` in JavaScript and ``x: T = v`` in TypeScript."""
+    if parameter.type in TYPED_PARAMETERS:
+        pattern = parameter.child_by_field_name("pattern")
+        assert pattern is not None, "TypeScript parameter without a pattern"
+        return pattern, parameter.child_by_field_name("value")
+    if parameter.type == "assignment_pattern":
+        left = parameter.child_by_field_name("left")
+        assert left is not None, "assignment pattern without a left side"
+        return left, parameter.child_by_field_name("right")
+    return parameter, None
+
+
+def is_this_parameter(parameter: Node) -> bool:
+    """TypeScript's ``this: T`` declares the receiver's type; it is not a parameter."""
+    binding, _default = parameter_parts(parameter)
+    return binding.type == THIS_PARAMETER
+
+
 def node_text(node: Node) -> str:
     if node.text is None:
         return ""
@@ -136,12 +173,14 @@ def binding_name(node: Node) -> str:
     parent = node.parent
     if parent is None:
         return ANONYMOUS_SCOPE
-    if parent.type in ("variable_declarator", "pair", "field_definition", "assignment_expression"):
+    if parent.type in ("variable_declarator", "pair", "assignment_expression") or (
+        parent.type in FIELD_DEFINITIONS
+    ):
         field = "left" if parent.type == "assignment_expression" else "name"
         if parent.type == "pair":
             field = "key"
-        if parent.type == "field_definition":
-            field = "property"
+        if parent.type in FIELD_DEFINITIONS:
+            field = FIELD_NAME_FIELDS[parent.type]
         name_node = parent.child_by_field_name(field)
         if name_node is not None:
             return node_text(name_node)
@@ -160,13 +199,22 @@ def first_expression(node: Node) -> Node | None:
 
 
 def unwrap_parens(node: Node) -> Node:
+    """The value inside any parentheses and TypeScript type wrappers around it."""
     current = node
-    while current.type == "parenthesized_expression":
-        inner = first_expression(current)
+    while current.type == "parenthesized_expression" or current.type in TYPE_WRAPPERS:
+        inner = _wrapped_value(current)
         if inner is None:
             return current
         current = inner
     return current
+
+
+def _wrapped_value(node: Node) -> Node | None:
+    if node.type == "type_assertion":
+        # `<T>x`: the type arguments come first, the value last.
+        values = [c for c in node.named_children if c.type not in ("comment", "type_arguments")]
+        return values[0] if len(values) == 1 else None
+    return first_expression(node)
 
 
 def _unwrap_await(node: Node) -> tuple[Node, bool]:
@@ -463,8 +511,11 @@ def _parameter_name(parameter: Node | None) -> str | None:
         return node_text(parameter)
     if parameter.type == "formal_parameters":
         first = first_expression(parameter)
-        if first is not None and first.type == "identifier":
-            return node_text(first)
+        if first is None:
+            return None
+        binding, _default = parameter_parts(first)
+        if binding.type == "identifier":
+            return node_text(binding)
     return None
 
 

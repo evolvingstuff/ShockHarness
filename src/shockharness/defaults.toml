@@ -4,10 +4,12 @@
 
 [tool.shockharness]
 profile = "strict"
-include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs"]
-exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**"]
+# TypeScript (.ts, .tsx, .mts, .cts) since H-TS; declaration files (.d.ts) hold types only
+# and are excluded.
+include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
+exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**", "**/*.d.ts"]
 parse_errors = "fail"
-# A file that `include` matches but no adapter can parse (.ts in a JavaScript tree, .pyx):
+# A file that `include` matches but no adapter can parse (.pyx, .vue):
 # "fail" -> analysis failure, exit 3, like an unparseable file; "warn" -> listed under
 # coverage.unsupported_sources with a warning line; "ignore" -> only counted. Files that
 # `include` does not match or `exclude` drops are never affected.
@@ -38,6 +40,9 @@ config = [
   "*.config.cjs",
   "*.conf.js",
   "*.conf.cjs",
+  "*.config.ts",
+  "*.config.mts",
+  "*.config.cts",
   ".eslintrc.js",
   ".eslintrc.cjs",
   ".prettierrc.js",
@@ -57,6 +62,12 @@ test = [
   "**/*.spec.js",
   "**/*.test.mjs",
   "**/*.spec.mjs",
+  "**/*.test.ts",
+  "**/*.spec.ts",
+  "**/*.test.tsx",
+  "**/*.spec.tsx",
+  "**/*.test.mts",
+  "**/*.spec.mts",
   "**/conftest.py",
 ]
 docs = ["docs/**"]
@@ -93,6 +104,9 @@ configuration_files = [
   "*.config.cjs",
   "*.conf.js",
   "*.conf.cjs",
+  "*.config.ts",
+  "*.config.mts",
+  "*.config.cts",
   ".eslintrc.js",
   ".eslintrc.cjs",
   ".prettierrc.js",
@@ -411,12 +425,17 @@ javascript_must_use = [
   ".with",
 ]
 
-[tool.shockharness.rules.types]            # TYPE001 (Python; TypeScript with H-TS)
+[tool.shockharness.rules.types]            # TYPE001 (Python and TypeScript)
 enabled = true
 severity = "review"
 roles = ["production"]
+# Any / any in an annotation.
 report_any = true
+# cast(...) (Python); x as T and <T>x, except `as const` (TypeScript).
 report_cast = true
+# x! (TypeScript): asserts a value is not null or undefined.
+report_non_null = true
+# # type: ignore (Python); @ts-ignore, @ts-expect-error, @ts-nocheck (TypeScript).
 report_type_ignore = true
 
 [tool.shockharness.rules.sleep]            # SLEEP001

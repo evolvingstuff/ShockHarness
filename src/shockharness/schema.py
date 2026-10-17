@@ -162,7 +162,7 @@ UNSUPPORTED_SOURCE_POLICIES = ("fail", "warn", "ignore")
 # (strict: a named constant is not automatically justified) or "allow" (the name is the
 # remedy the rule asks for; recommended and minimal).
 NAMED_CONSTANT_MODES = ("report", "allow")
-LANGUAGES = ("python", "javascript")
+LANGUAGES = ("python", "javascript", "typescript")
 # Built-in profiles, strictest first. "strict" is the bundled defaults; the others are
 # overlays shipped as package data under shockharness/profiles/.
 PROFILE_STRICT = "strict"
@@ -345,6 +345,7 @@ CONFIG_SCHEMA = TableField(
                         **GUARDRAIL_COMMON,
                         "report_any": BoolField(),
                         "report_cast": BoolField(),
+                        "report_non_null": BoolField(),
                         "report_type_ignore": BoolField(),
                     },
                     required=(),
