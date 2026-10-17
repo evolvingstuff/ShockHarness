@@ -934,6 +934,50 @@ the base classified as production that the head classifies as test, by a new
 category is `policy_integrity`. Unresolved imports are not seen, and a helper
 that only tests import is not judged.
 
+### INPUT001, INPUT002: external input (H6; warning, INPUT002 review)
+
+Both rules read each function's value dependencies (H6 dataflow facts): every
+value is followed through assignments in source order (an assignment inside a
+branch, loop or handler adds to a variable's origins instead of replacing them),
+attribute and subscript reads, string building, containers and calls. A call
+that is not a source, a validator or a resolved project function passes on
+everything it was given (`json.loads(body)` is as tainted as `body`). Sources,
+sinks, validators and configuration reads are the catalogs of `rules.input`,
+resolved through each file's imports (spec 21.1 decision 26).
+
+* **INPUT001** (`severity`, warning): a source value reaches a sink argument
+  without passing a validator. Sources by default are remote input: Flask's
+  `request.*`, Django/Starlette `request.GET`/`.POST`/`.body`, Express/Koa
+  `req.body`/`.query`/`.params`/`.headers`/`.cookies`, AWS Lambda `event.*`;
+  a dotted entry also matches a read rooted at a parameter of that name
+  (approximate). Command-line arguments and stdin are not sources by default:
+  whoever runs the program controls it already. Sinks are shell and process
+  calls, `eval`/`exec`/`Function`, deserialization, file paths, `.execute` /
+  `.query` (by method name, approximate), redirects and outbound URLs, each
+  with its argument position (`"subprocess.run:0"`). Validators are
+  conversions and schemas: `int`, `float`, `uuid.UUID`, `shlex.quote`,
+  pydantic's `.model_validate`, `Number`, `parseInt`, zod's `.parse` /
+  `.safeParse` (`JSON.parse` decodes and is not one). Values cross project
+  functions through the call graph's resolved and probable call sites,
+  arguments into parameters and return values back, at most
+  `rules.input.max_depth` (3) crossings; the message names the source with its
+  location and the functions crossed. Exact when the source, every crossing and
+  the sink are resolved.
+* **INPUT002** (`input002_severity`, review): `os.getenv("X")` /
+  `os.environ.get("X")` (None when unset) or `process.env.X` (undefined) whose
+  value reaches a call argument, a return, an attribute or a module-level
+  binding while no condition of the function looks at it (`if`, `while`,
+  `assert`, a ternary, `and`/`or`, `&&`/`||`/`??`, `not`/`!`). A check of one
+  read covers every read of the same variable in the function; Python's
+  `int(...)` and the other validators count as checks (they raise on None),
+  JavaScript's `Number(...)` does not (NaN). A Python use on the read's own line
+  is DEF006's. Review by default: the rule cannot know which variables are
+  required.
+
+Neither rule sees a guard (`if not cmd.isalnum(): raise`), values stored on
+objects or in module state, closures or callbacks; see
+[limitations.md](limitations.md#input001-input002-h6).
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are

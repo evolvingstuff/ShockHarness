@@ -109,7 +109,7 @@ def _builder(kind: str, label: str) -> _Builder:
 
 
 @dataclass(frozen=True)
-class _UnitInfo:
+class UnitInfo:
     node: ast.AST
     name: str
     kind: str
@@ -135,9 +135,9 @@ def _unit_kind(node: ast.AST, parent: ast.AST | None) -> str:
     return UNIT_FUNCTION
 
 
-def _discover_units(module: ast.Module) -> list[_UnitInfo]:
+def discover_units(module: ast.Module) -> list[UnitInfo]:
     """Every unit in source order with its qualified name and enclosing class."""
-    units: list[_UnitInfo] = [_UnitInfo(module, MODULE_SCOPE, UNIT_MODULE, None)]
+    units: list[UnitInfo] = [UnitInfo(module, MODULE_SCOPE, UNIT_MODULE, None)]
     stack: list[tuple[ast.AST, str, ast.AST | None, str | None]] = [
         (module, MODULE_SCOPE, None, None)
     ]
@@ -148,7 +148,7 @@ def _discover_units(module: ast.Module) -> list[_UnitInfo]:
         if isinstance(node, UNIT_NODES) and node is not module:
             name = scope_name(node)
             child_scope = name if scope == MODULE_SCOPE else f"{scope}.{name}"
-            units.append(_UnitInfo(node, child_scope, _unit_kind(node, parent), class_name))
+            units.append(UnitInfo(node, child_scope, _unit_kind(node, parent), class_name))
             child_class = child_scope if isinstance(node, ast.ClassDef) else None
         children = list(ast.iter_child_nodes(node))
         for child in reversed(children):
@@ -256,7 +256,7 @@ def _assigned_names(target: ast.expr) -> list[str]:
 class _UnitCollector:
     """Builds one unit's control tree and gathers its calls, locals and writes."""
 
-    def __init__(self, source: SourceText, unit: _UnitInfo) -> None:
+    def __init__(self, source: SourceText, unit: UnitInfo) -> None:
         self.source = source
         self.unit = unit
         self.root = _builder(CK_BLOCK, "")
@@ -717,7 +717,7 @@ def _unit_span(source: SourceText, node: ast.AST) -> Span:
 def collect_python_functions(
     source: SourceText, module: ast.Module, comments: Sequence[Comment]
 ) -> tuple[FunctionFact, ...]:
-    units = _discover_units(module)
+    units = discover_units(module)
     spans = [_unit_span(source, unit.node) for unit in units]
     facts: list[FunctionFact] = []
     for index, unit in enumerate(units):

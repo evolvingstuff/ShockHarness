@@ -1966,6 +1966,118 @@ ROLE001 = RuleSpec(
 )
 
 
+# --- H6: external input (spec 21.2, decision 26) ------------------------------------------
+# Advisory until measured (decision 9). The facts are each unit's value dependencies
+# (ir/*_dataflow.py); the catalogs of rules.input decide what is a source, a sink, a
+# validator or an optional configuration read.
+
+INPUT_SECTION = "rules.input"
+INPUT_FAMILY = "input"
+DATAFLOW_SECTIONS = (INPUT_SECTION,)
+
+INPUT001 = RuleSpec(
+    rule_id="INPUT001",
+    version="1",
+    name="external input reaches a sink unvalidated",
+    family=INPUT_FAMILY,
+    config_section=INPUT_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A value from outside the program (request parameters, bodies, headers and cookies "
+        "by default) reaches a shell, eval, deserialization, a file path, a query, a "
+        "redirect or an outbound URL without passing a validator."
+    ),
+    rationale=(
+        "An agent wiring a request field straight into a privileged operation produces code "
+        "that works on every test input and fails on the first hostile one. Validation is "
+        "context-specific; this rule only asks that some recognized validator stands between "
+        "the source and the sink."
+    ),
+    guarantees=(
+        "Sources, sinks (callee and argument position) and validators come from "
+        "rules.input's catalogs, resolved through the file's imports; a dotted entry "
+        "(request.GET, req.body) also matches a read rooted at a parameter of that name "
+        "(approximate). Values are followed through assignments, attribute and subscript "
+        "reads, string building, containers and calls that are not validators, inside a "
+        "function in source order (a value validated on one branch only stays tainted), and "
+        "across project functions through the call graph's resolved and probable sites: "
+        "arguments into parameters and return values back, up to rules.input.max_depth "
+        "function boundaries. One finding per sink and source, at the sink, with the source "
+        "and the functions crossed. Exact when the source, every crossing and the sink are "
+        "resolved; approximate otherwise."
+    ),
+    limitations=(
+        "No path sensitivity and no guards: `if not cmd.isalnum(): raise` before the sink does "
+        "not count; use a validator from the catalog or add the project's own. Values stored "
+        "on objects (self.x = ...) or in module state, closures, callbacks and dynamic calls "
+        "are not followed. A validator is trusted for every sink."
+    ),
+    remediation=(
+        "Parse the input into the type the operation needs at the boundary (a model, a schema, "
+        "int(...), an allowlist lookup), pass the parsed value on, and never build commands, "
+        "queries or paths from raw input: pass argument lists, query parameters and "
+        "base-relative paths. If the project has its own validator, list it in "
+        "rules.input.python_validators / javascript_validators."
+    ),
+    noncompliant_example=(
+        'cmd = request.args["cmd"]\nsubprocess.run(f"convert {cmd}", shell=True)'
+    ),
+    compliant_example=(
+        'size = int(request.args["size"])\nsubprocess.run(["convert", "-resize", str(size)])'
+    ),
+)
+
+INPUT002 = RuleSpec(
+    rule_id="INPUT002",
+    version="1",
+    name="required configuration read as optional",
+    family=INPUT_FAMILY,
+    config_section=INPUT_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "os.getenv('X') / os.environ.get('X') (None when unset) or process.env.X (undefined "
+        "when unset) is passed on, returned or stored without the function ever checking it."
+    ),
+    rationale=(
+        "A missing variable then travels as a value: a connection string 'None', a port "
+        "NaN, a URL ending in 'undefined'. The program starts and fails later, far from the "
+        "cause. Required configuration should fail at startup."
+    ),
+    guarantees=(
+        "A read from rules.input.python_config_reads (a call with the variable name only) or "
+        "javascript_config_reads (process.env.X, process.env['X']) whose value, followed "
+        "inside the function as for INPUT001, reaches a call argument, a return, an attribute "
+        "or a module-level binding, while no condition of the function looks at it (if, "
+        "while, assert, a ternary, &&, ||, ??, not / !). One finding per read, at its first "
+        "use. Python's int(...) / float(...) and the other validators fail loudly on None and "
+        "count as a check; in JavaScript, Number(undefined) is NaN and does not. Severity "
+        "rules.input.input002_severity (review by default: the rule cannot know which "
+        "variables are required)."
+    ),
+    limitations=(
+        "A variable that is optional by design is reported all the same. A check in another "
+        "function (a later validate_config()) is not seen. A read with a "
+        "fallback is DEF006's; a Python read used on its own line is DEF006's too (INPUT002 "
+        "reports only uses on another line)."
+    ),
+    remediation=(
+        "Require the variable where configuration is loaded: os.environ['X'] (KeyError), or "
+        "read it, check it and raise with the variable's name; then pass the checked value "
+        "inward."
+    ),
+    noncompliant_example="const url = process.env.DATABASE_URL;\nexport const db = connect(url);",
+    compliant_example=(
+        "const url = process.env.DATABASE_URL;\n"
+        'if (!url) { throw new Error("DATABASE_URL is required"); }\n'
+        "export const db = connect(url);"
+    ),
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -2015,6 +2127,8 @@ RULES: tuple[RuleSpec, ...] = (
     BATCH001,
     STUB003,
     ROLE001,
+    INPUT001,
+    INPUT002,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -2068,6 +2182,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "retry": CATEGORY_CONTRACT,
     "batches": CATEGORY_CONTRACT,
     ROLE_INTEGRITY_FAMILY: CATEGORY_POLICY,
+    INPUT_FAMILY: CATEGORY_CONTRACT,
 }
 
 

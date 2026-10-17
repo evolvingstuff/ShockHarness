@@ -172,7 +172,7 @@ def _builder(kind: str, label: str) -> _Builder:
 
 
 @dataclass(frozen=True)
-class _UnitInfo:
+class UnitInfo:
     node: Node
     name: str
     kind: str
@@ -195,8 +195,8 @@ def _unit_kind(node: Node) -> str:
     return UNIT_FUNCTION
 
 
-def _discover_units(root: Node) -> list[_UnitInfo]:
-    units: list[_UnitInfo] = [_UnitInfo(root, MODULE_SCOPE, UNIT_MODULE, None)]
+def discover_units(root: Node) -> list[UnitInfo]:
+    units: list[UnitInfo] = [UnitInfo(root, MODULE_SCOPE, UNIT_MODULE, None)]
     stack: list[tuple[Node, str, str | None]] = [(root, MODULE_SCOPE, None)]
     while len(stack) > 0:
         node, scope, class_name = stack.pop()
@@ -204,7 +204,7 @@ def _discover_units(root: Node) -> list[_UnitInfo]:
         child_class = class_name
         if node.is_named and node.type in UNIT_TYPES:
             child_scope = scope_for(node, scope)
-            units.append(_UnitInfo(node, child_scope, _unit_kind(node), class_name))
+            units.append(UnitInfo(node, child_scope, _unit_kind(node), class_name))
             child_class = child_scope if node.type in CLASS_TYPES else None
         for child in reversed(node.children):
             stack.append((child, child_scope, child_class))
@@ -234,7 +234,7 @@ def _unwrap(node: Node) -> Node:
     return current
 
 
-def _dotted(node: Node) -> str | None:
+def dotted_name(node: Node) -> str | None:
     parts: list[str] = []
     current = node
     while current.type == "member_expression":
@@ -328,7 +328,7 @@ def pattern_names(pattern: Node) -> list[str]:
 
 
 class _UnitCollector:
-    def __init__(self, source: SourceText, unit: _UnitInfo) -> None:
+    def __init__(self, source: SourceText, unit: UnitInfo) -> None:
         self.source = source
         self.unit = unit
         self.root = _builder(CK_BLOCK, "")
@@ -673,7 +673,7 @@ class _UnitCollector:
         constructor = node.child_by_field_name("constructor")
         if constructor is None:
             return
-        dotted = _dotted(_unwrap(constructor))
+        dotted = dotted_name(_unwrap(constructor))
         if dotted is None:
             self.calls.append(
                 CallSite(span, _excerpt(constructor), CALL_DYNAMIC, receiver_self=False)
@@ -684,7 +684,7 @@ class _UnitCollector:
     def _member_call(
         self, callee: Node, span: Span, arguments: Node | None, parent: _Builder
     ) -> None:
-        dotted = _dotted(callee)
+        dotted = dotted_name(callee)
         if dotted is None:
             self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, receiver_self=False))
             return
@@ -822,7 +822,7 @@ def _method_name(node: Node) -> str:
     return node_text(name)
 
 
-def _own_name(unit: _UnitInfo) -> str | None:
+def _own_name(unit: UnitInfo) -> str | None:
     node = unit.node
     if node.type == "method_definition":
         return _method_name(node)
@@ -868,7 +868,7 @@ def _is_generator(node: Node) -> bool:
 def collect_javascript_functions(
     source: SourceText, root: Node, comments: Sequence[Comment]
 ) -> tuple[FunctionFact, ...]:
-    units = _discover_units(root)
+    units = discover_units(root)
     spans = [_unit_span(source, unit.node) for unit in units]
     facts: list[FunctionFact] = []
     for index, unit in enumerate(units):

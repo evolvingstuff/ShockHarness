@@ -99,6 +99,8 @@ Implemented rules:
 | `BATCH001` | a loop that drops per-item failures | warning |
 | `STUB003` | a check (`is_admin`, `canEdit`) that always returns `True` | review |
 | `ROLE001` | a test-role file that production code imports, or that holds no test (in a diff: a file newly classified as a test) | warning / review |
+| `INPUT001` | request data reaching a shell, query, file path, redirect or `eval` without a validator, traced across functions | warning |
+| `INPUT002` | `os.getenv("X")` / `process.env.X` passed on, returned or stored with no check | review |
 
 ## Install
 

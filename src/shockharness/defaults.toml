@@ -484,6 +484,63 @@ support_files = [
   "**/setup*.*",
 ]
 
+[tool.shockharness.rules.input]            # INPUT001, INPUT002 (H6)
+enabled = true
+severity = "warning"                       # INPUT001
+input002_severity = "review"               # INPUT002: an unset variable may be intended
+roles = ["production"]
+# INPUT001 follows a value across at most this many function boundaries (an argument into
+# a parameter, or a return value back). Lowering it is a deviation.
+max_depth = 3
+# Sources: a qualified read or call ("flask.request.args" matches request.args.get(...)
+# after `from flask import request`); a dotted entry also matches a read rooted at a
+# parameter of that name (a Django view's request.GET, an Express handler's req.body).
+# Remote input only by default: command-line arguments and stdin come from whoever runs
+# the program, who controls it already ("sys.argv", "input", "process.argv" to add them).
+python_sources = [
+  "flask.request.args", "flask.request.form", "flask.request.values", "flask.request.json",
+  "flask.request.get_json", "flask.request.data", "flask.request.get_data",
+  "flask.request.files", "flask.request.cookies", "flask.request.headers",
+  "request.GET", "request.POST", "request.body", "request.query_params",
+]
+javascript_sources = [
+  "req.body", "req.query", "req.params", "req.headers", "req.cookies",
+  "request.body", "request.query", "request.params",
+  "ctx.request.body", "ctx.query", "ctx.params",
+  "event.body", "event.queryStringParameters", "event.pathParameters",
+]
+# Sinks: "callee:N" is the callee's argument N (counted from 0); ".name:N" is a method of
+# that name on any receiver (approximate).
+python_sinks = [
+  "os.system:0", "os.popen:0", "subprocess.run:0", "subprocess.call:0",
+  "subprocess.check_call:0", "subprocess.check_output:0", "subprocess.Popen:0",
+  "eval:0", "exec:0", "pickle.loads:0", "marshal.loads:0", "yaml.load:0",
+  "open:0", "os.remove:0", "os.unlink:0", "shutil.rmtree:0",
+  ".execute:0", ".executemany:0", "flask.redirect:0",
+  "requests.get:0", "requests.post:0", "urllib.request.urlopen:0",
+]
+javascript_sinks = [
+  "child_process.exec:0", "child_process.execSync:0", "child_process.spawn:0",
+  "child_process.spawnSync:0", "child_process.execFile:0", "child_process.execFileSync:0",
+  "eval:0", "Function:0", "vm.runInNewContext:0", "vm.runInThisContext:0",
+  "fs.readFile:0", "fs.readFileSync:0", "fs.writeFile:0", "fs.writeFileSync:0",
+  "fs.unlink:0", "fs.unlinkSync:0", "fs.rm:0", "fs.rmSync:0", "fs.createReadStream:0",
+  "fs/promises.readFile:0", "fs/promises.writeFile:0", "fs/promises.rm:0",
+  ".query:0", ".redirect:0", "fetch:0",
+]
+# Validators: a value passed through one is clean for every sink ("name" is a qualified
+# callee, ".name" a method on any receiver). Adding one is a deviation.
+python_validators = [
+  "int", "float", "bool", "len", "uuid.UUID", "ipaddress.ip_address", "shlex.quote",
+  ".model_validate", ".model_validate_json", ".parse_obj",
+]
+javascript_validators = [
+  "Number", "parseInt", "parseFloat", "Boolean", ".safeParse", ".parse",
+]
+# INPUT002: reads that yield None / undefined when the variable is unset.
+python_config_reads = ["os.getenv", "os.environ.get"]
+javascript_config_reads = ["process.env"]
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

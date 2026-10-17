@@ -29,6 +29,7 @@ from shockharness.ir.python_catches import (
     node_span,
     scope_name,
 )
+from shockharness.ir.python_dataflow import collect_python_dataflow
 from shockharness.ir.python_defaults import collect_python_defaults
 from shockharness.ir.python_functions import (
     collect_python_bindings,
@@ -282,5 +283,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         guardrails=collect_python_guardrails(source, parsed),
         asynchrony=collect_python_async(source, parsed),
         catalog=collect_python_catalog(source, parsed),
+        dataflow=collect_python_dataflow(source, parsed),
         parse_failure=None,
     )

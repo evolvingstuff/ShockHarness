@@ -54,6 +54,8 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.batches.severity": ("error", "warning", "review"),
     "rules.role_integrity.severity": ("error", "warning", "review"),
     "rules.role_integrity.empty_test_severity": ("error", "warning", "review"),
+    "rules.input.severity": ("error", "warning", "review"),
+    "rules.input.input002_severity": ("error", "warning", "review"),
 }
 # A higher value reports less.
 THRESHOLDS = (

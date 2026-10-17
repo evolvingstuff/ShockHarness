@@ -771,6 +771,35 @@ Lowering either severity to `review` (or below the default), and adding a
 the defaults goes in `support_files`; a file that production code imports does
 not belong in the test role at all.
 
+## External input (INPUT001, INPUT002)
+
+```toml
+[tool.shockharness.rules.input]
+enabled = true
+severity = "warning"              # INPUT001
+input002_severity = "review"      # INPUT002
+roles = ["production"]
+max_depth = 3                     # function boundaries INPUT001 follows a value across
+python_sources = ["flask.request.args", "flask.request.form", "request.GET", ...]
+javascript_sources = ["req.body", "req.query", "ctx.request.body", "event.body", ...]
+python_sinks = ["subprocess.run:0", "os.system:0", "eval:0", "open:0", ".execute:0", ...]
+javascript_sinks = ["child_process.exec:0", "eval:0", "fs.readFile:0", ".query:0", ...]
+python_validators = ["int", "float", "uuid.UUID", "shlex.quote", ".model_validate", ...]
+javascript_validators = ["Number", "parseInt", ".safeParse", ".parse"]
+python_config_reads = ["os.getenv", "os.environ.get"]
+javascript_config_reads = ["process.env"]
+```
+
+A sink entry is `"callee:N"`, the callee's argument N counted from 0 (anything
+else is a configuration error); `".name"` (sinks and validators) is a method of
+that name on any receiver. Removing a source, sink or configuration read,
+adding a validator, lowering either severity, and lowering `max_depth` are
+policy deviations. A project adds its own wrappers: a request helper as a
+source (`"app.http.query"`), a shell helper as a sink (`"app.shell.run:0"`),
+its own validator (`"app.validate.command"`). Command-line programs that take
+arguments from untrusted callers add `"sys.argv"`, `"input"` or
+`"process.argv"`.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

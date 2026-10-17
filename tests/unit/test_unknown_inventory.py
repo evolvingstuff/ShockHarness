@@ -124,6 +124,13 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "ROLE001: violation (imports through resolved module edges only)",
     ),
+    # H6: a traced source at a sink, or an unchecked optional read: always a violation
+    # (confidence approximate when a crossing is probable or a match is by name).
+    ("rules/dataflow.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "INPUT001, INPUT002: violation (unresolved calls pass their arguments on; nothing "
+        "is unknown)",
+    ),
     # H5: every API-catalog finding is a violation (method-name matches are approximate).
     ("rules/api_catalog.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),

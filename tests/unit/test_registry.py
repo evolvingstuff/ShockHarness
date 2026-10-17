@@ -36,7 +36,7 @@ def test_severities_are_valid() -> None:
         assert rule.default_severity in registry.SEVERITIES, rule.rule_id
 
 
-def test_implemented_rules_are_exactly_the_h5_and_role001_set() -> None:
+def test_implemented_rules_are_exactly_the_h6_set() -> None:
     assert {r.rule_id for r in registry.implemented_rules()} == {
         "MAGIC001",
         "EXC001",
@@ -78,6 +78,8 @@ def test_implemented_rules_are_exactly_the_h5_and_role001_set() -> None:
         "BATCH001",
         "STUB003",
         "ROLE001",
+        "INPUT001",
+        "INPUT002",
     }
     assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
 

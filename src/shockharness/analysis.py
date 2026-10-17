@@ -38,11 +38,12 @@ from shockharness.rules import registry
 from shockharness.rules.api_catalog import CATALOG_RULES, run_catalog_rules
 from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
+from shockharness.rules.dataflow import INPUT_RULES, FlowFile, run_input001, run_input002
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
-from shockharness.rules.registry import CATALOG_SECTIONS, GUARDRAIL_SECTIONS
+from shockharness.rules.registry import CATALOG_SECTIONS, DATAFLOW_SECTIONS, GUARDRAIL_SECTIONS
 from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
@@ -241,7 +242,11 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
     """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
     scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
     section = rule.config_section
-    if section is None or section not in (*GUARDRAIL_SECTIONS, *CATALOG_SECTIONS):
+    if section is None or section not in (
+        *GUARDRAIL_SECTIONS,
+        *CATALOG_SECTIONS,
+        *DATAFLOW_SECTIONS,
+    ):
         return True
     return role.role in config.section(section)["roles"]
 
@@ -263,7 +268,8 @@ def _units(
 ) -> tuple[UnitMetrics, ...]:
     """ASYNC001 resolves callees through the call graph, which is built from the units, so
     they are measured for it even when complexity is disabled (and then not reported)."""
-    if complexity["enabled"] is True or registry.ASYNC001.rule_id in applied:
+    graph_rules = (registry.ASYNC001.rule_id, registry.INPUT001.rule_id)
+    if complexity["enabled"] is True or any(rule in applied for rule in graph_rules):
         return measure_units(relative_path, facts.functions, complexity)
     return ()
 
@@ -277,14 +283,14 @@ def _policy_rules(
     role: FileRole,
     disabled_ids: set[str],
 ) -> tuple[list[str], list[Finding]]:
-    """The H3-H5 rules for one file: (rule IDs applied, findings). ASYNC001-ASYNC003 run
-    in the cross-file phase (ASYNC001 needs the call graph); here they are only recorded
-    as applied when they apply to the file, and so is ROLE001."""
+    """The H3-H6 rules for one file: (rule IDs applied, findings). ASYNC001-ASYNC003 and
+    INPUT001 run in the cross-file phase (they need the call graph); here they are only
+    recorded as applied when they apply to the file, and so is ROLE001."""
     rules = config.values["rules"]
     guardrails = _active_guardrails(language, role, config, disabled_ids)
     catalog = frozenset(
         rule.rule_id
-        for rule in CATALOG_RULES
+        for rule in (*CATALOG_RULES, *INPUT_RULES)
         if rule.rule_id not in disabled_ids
         and language in rule.languages
         and _in_scope(rule, role, config)
@@ -300,6 +306,8 @@ def _policy_rules(
         *run_guardrail_rules(facts, source, rules, relative_path, language, guardrails),
         *run_catalog_rules(facts, source, rules, relative_path, language, catalog),
     ]
+    if registry.INPUT002.rule_id in catalog:
+        findings.extend(run_input002(facts, source, relative_path, language, rules["input"]))
     return applied, findings
 
 
@@ -676,22 +684,44 @@ def role_findings(
     return run_role_integrity(files, graph, config.section(registry.ROLE_INTEGRITY_SECTION))
 
 
+def input_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """INPUT001 for every file that applies it (H6): sources traced to sinks across files
+    through the call graph."""
+    if graph is None:
+        return {}
+    files = [
+        FlowFile(
+            path=p.path,
+            language=p.language,
+            facts=p.facts,
+            source=p.source,
+            applies=registry.INPUT001.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    return run_input001(files, graph, config.section(registry.INPUT_SECTION))
+
+
 def complete(
     pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
-    graph_rules = (*ASYNC_RULES, registry.ROLE001)
+    graph_rules = (*ASYNC_RULES, registry.ROLE001, registry.INPUT001)
     if graph is None and any(
         rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
     ):
         graph = build_call_graph(_module_inputs(pendings))
     asynchrony = async_findings(pendings, config, graph)
     roles = role_findings(pendings, config, graph)
+    inputs = input_findings(pendings, config, graph)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        for found in (outcome.graph_findings, asynchrony, roles):
+        for found in (outcome.graph_findings, asynchrony, roles, inputs):
             if pending.path in found:
                 extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))

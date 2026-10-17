@@ -3473,3 +3473,96 @@ as the example of an unsupported file; they now use `.rs`.
 * A patch script stopped on a missing count and wrote nothing; it was rerun.
 * The self-gate caught a `m[k] if k in m else v` lookup (DEF002) and a
   conditional on `is None` (DEF004) in the new code; both are explicit now.
+
+## Milestone H6, part one: INPUT001-INPUT002 — DONE (2026-10-16)
+
+Bounded taint tracking and unchecked configuration reads, as recorded in spec
+21.2 (H6 row) and decision 26. Implemented in the lead session; not released.
+Part two (the cross-site consistency rules of decisions 20 and 21) follows.
+
+### What was built
+
+* **Dataflow facts** (`ir/model.py`: `FlowRead`, `FlowCall`, `FlowStore`,
+  `FlowReturn`, `FlowUnit`, `DataflowFacts`; `ModuleFacts.dataflow`) from
+  `ir/python_dataflow.py` and `ir/javascript_dataflow.py` (JavaScript and
+  TypeScript). Each unit, discovered exactly as the function facts are (so the
+  call graph's unit keys line up), gets its reads, calls with the origins of
+  their receiver and arguments, stores, returns and tested origins. Nesting past
+  `DATAFLOW_MAX_DEPTH` (100) is truncated and marked; operator chains are
+  flattened. Cache schema "8".
+* **Rules** (`rules/dataflow.py`): INPUT002 in the per-file phase; INPUT001 in
+  the cross-file phase, with return summaries iterated to a fixed point and
+  parameter-to-sink reach closed over the call graph's resolved and probable
+  sites, at most `max_depth` crossings.
+* **Config**: `rules.input` (sources, `callee:N` sinks, validators,
+  configuration reads per language; `max_depth`; `input002_severity`), with
+  deviations for removed catalog entries, added validators, lowered severities
+  and a lowered depth, and a configuration error for a malformed sink.
+
+### Decisions (mine; review these)
+
+1. **Facts are config-free value dependencies; catalogs apply in the rules.**
+   The same facts will serve the cross-site rules (argument provenance).
+2. **Unresolved calls pass everything on**, so a value is not lost through
+   `json.loads` or a method call; validators are the only way to clean a value.
+3. **Default sources are remote input only.** Measured on pip, pytest,
+   hypothesis, build, hatchling and npm (790 files): all six INPUT001 findings
+   came from `sys.argv` in command-line code using its own arguments, so
+   `sys.argv`, `input` and `process.argv` are left for projects to add.
+4. **INPUT002 is review.** On the same corpus its findings were mostly variables
+   that are optional by design (`PYTEST_THEME`, an environment report); the
+   rule cannot know which variables are required. A chained property read
+   (`process.env.HOME.length`) throws when unset and is not a candidate.
+5. **A Python use on the read's own line is DEF006's**, which already reports
+   the implicit None there; INPUT002 reports later uses.
+6. **`JSON.parse` is never a validator**, although `.parse` is (zod).
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  188 findings  (cache hits 0 / misses 144, then 144 / 0)
+
+$ pytest -q        # CPython 3.14, 3.11.11, 3.12.8, 3.13.1
+1113 passed        (on each)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed. Parity: the whole suite rerun with
+every JavaScript source extracted a second time as TSX gives identical facts,
+dataflow included. Cost: the self-scan takes 6.7 s against 6.1 s before H6; the
+790-file corpus 51.4 s against 45.6 s for 0.6.0.
+
+**Regression against 0.6.0** (H4-H6 and ROLE001 rule IDs excluded, all three
+profiles): identical exits and findings on the self-scan (188), the golden
+fixtures (exits 3/3/1) and both examples. The golden corpus gains one reviewed
+INPUT002 finding (`javascript/def_process_env.js:7`, `process.env.FALLBACK_LEVEL`
+stored unchecked), and the 0.3.0 regression runs with `rules.input` off.
+Self-diff in a scratch clone against ec8e1b1 (H-TS): `gate: PASS (exit 0)`, no
+new findings, no complexity regressions, after splitting three functions and
+`config._semantic_issues`'s new check, which the first self-diff flagged.
+
+New tests: `tests/unit/test_dataflow.py` (9: Python and JavaScript facts,
+methods and depth, INPUT001 in one function, across files with `max_depth`, in
+JavaScript, INPUT002 in both languages, sink validation).
+
+### Failures observed during development (and what was done)
+
+* The first dataflow walkers recursed and overflowed on 300 nested `if`s;
+  operator chains are now flattened and nesting is capped and marked.
+* `ast.get_source_segment` for excerpts cost 2.7 s of profile time on the
+  self-scan; excerpts now slice the cached line.
+* The golden fixture showed three INPUT002 false positives: a ternary that
+  checks a second read of the same variable, and `||=` / `??=`, which test their
+  left side. Both are fixed; the remaining finding there is a true one.
+* CPython 3.11's parser cannot build a 3000-term expression; the test uses 800.
+* Found on the way, not fixed here: a Python expression of about 2000 terms
+  crashes `ir/python_guardrails.py` (H3) with a RecursionError; 0.6.0 crashes
+  the same way.
+

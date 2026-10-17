@@ -77,6 +77,8 @@ Ask what the code promises when the value is absent or the operation fails.
 | `RETRY001` | When does it give up? | Bound the attempts, retry only transient failures, re-raise the last error. |
 | `BATCH001` | Who learns which items failed? | Collect the failures and return them, or raise after the loop. |
 | `STUB003` | What should the check decide? | Implement it; a deliberate constant becomes a named setting. |
+| `INPUT001` | What does this operation accept, and who checked it? | Parse the input into that type at the boundary (`int(...)`, a model, a schema, an allowlist lookup) and pass the parsed value; build commands as argument lists, queries with parameters. A project validator goes in `rules.input.*_validators`. Never wrap the value in a no-op to silence the finding. |
+| `INPUT002` | Is the variable required? | Require it where configuration loads (`os.environ["X"]`, or check and raise naming the variable); if it is optional, say so with an explicit check of the unset case. |
 | `ASYNC001`-`ASYNC003` | Who waits for this work and sees it fail? | `await` or return it; start tasks in a `TaskGroup`; check every settled result for failure. See the `async-lifecycle` skill. |
 
 An **unknown** finding means the rule could not establish the property, not

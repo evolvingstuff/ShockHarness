@@ -152,6 +152,8 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `ir/javascript_catches.py` | JavaScript catch clauses, promise rejection handlers, instanceof guards, handler classification |
 | `ir/python_defaults.py` | Python parameter/dataclass defaults, mapping/attribute fallbacks, `or`/`is None` fallbacks, environment fallbacks, DEF005 traces |
 | `ir/javascript_defaults.py` | JavaScript parameter/destructuring defaults, `||`/`??`/ternary fallbacks, `process.env` fallbacks, DEF005 traces |
+| `ir/python_dataflow.py`, `ir/javascript_dataflow.py` | H6: each unit's value dependencies (reads, calls with their arguments' origins, stores, returns, tested origins), flow-sensitive in source order |
+| `rules/dataflow.py` | INPUT001 (return summaries to a fixed point, parameter-to-sink reach through the call graph's sites) and INPUT002 |
 | `rules/registry.py` | Every rule ID with metadata and implementation status |
 | `rules/severity.py` | The per-section `severity` cap shared by the rule families |
 | `rules/magic_numbers.py` | MAGIC001 |

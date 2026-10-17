@@ -363,10 +363,7 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                         f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
                     )
                 )
-    for index, pattern in enumerate(values["rules"]["role_integrity"]["support_files"]):
-        problem = validate_glob(pattern)
-        if problem is not None:
-            issues.append(ConfigIssue(f"rules.role_integrity.support_files[{index}]", problem))
+    issues.extend(_guardrail_entry_issues(values["rules"]))
     for index, allowed in enumerate(values["rules"]["module_state"]["allowed"]):
         problem = validate_glob(allowed["path"])
         if problem is not None:
@@ -524,6 +521,7 @@ GUARDRAIL_RULES = {
     "retry": "RETRY001",
     "batches": "BATCH001",
     "role_integrity": "ROLE001",
+    "input": "INPUT001",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -550,12 +548,21 @@ GUARDRAIL_CATALOGS = (
     ("retry", "roles"),
     ("retry", "retry_decorators"),
     ("batches", "roles"),
+    ("input", "roles"),
+    ("input", "python_sources"),
+    ("input", "javascript_sources"),
+    ("input", "python_sinks"),
+    ("input", "javascript_sinks"),
+    ("input", "python_config_reads"),
+    ("input", "javascript_config_reads"),
 )
 TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
     ("boolean_arguments", "allowed_callees"),
     ("async_lifecycle", "supervisors"),
     ("role_integrity", "support_files"),
+    ("input", "python_validators"),
+    ("input", "javascript_validators"),
 )
 REVIEW = "review"
 
@@ -570,6 +577,7 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
                 f"rules.{section}.severity is 'review'; {rule_ids} findings are reported as review"
             )
     found.extend(_guardrail_list_deviations(rules, strict))
+    found.extend(_input_deviations(rules["input"], strict["input"]))
     for key in TYPE_SWITCHES:
         if rules["types"][key] is False and strict["types"][key] is True:
             found.append(f"rules.types.{key} is false; TYPE001 does not report that escape hatch")
@@ -577,6 +585,48 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
         found.append(
             f"rules.module_state.allowed[{index}] permits module state {allowed['name']!r} in "
             f"{allowed['path']}: {allowed['reason']}"
+        )
+    return found
+
+
+SINK_ENTRY = re.compile(r"[^:\s]+:[0-9]+")
+
+
+def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
+    """ROLE001's support globs and H6's sink entries."""
+    issues: list[ConfigIssue] = []
+    for index, pattern in enumerate(rules["role_integrity"]["support_files"]):
+        problem = validate_glob(pattern)
+        if problem is not None:
+            issues.append(ConfigIssue(f"rules.role_integrity.support_files[{index}]", problem))
+    issues.extend(_sink_issues(rules["input"]))
+    return issues
+
+
+def _sink_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
+    """H6: every sink entry is "callee:N" (an argument position counted from 0)."""
+    issues: list[ConfigIssue] = []
+    for key in ("python_sinks", "javascript_sinks"):
+        for index, entry in enumerate(section[key]):
+            if SINK_ENTRY.fullmatch(str(entry)) is None:
+                issues.append(
+                    ConfigIssue(
+                        f"rules.input.{key}[{index}]",
+                        f"must be 'callee:N' (an argument position, from 0), got {entry!r}",
+                    )
+                )
+    return issues
+
+
+def _input_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
+    """H6: INPUT002's own severity lowered to review, and a shallower INPUT001 search."""
+    found: list[str] = []
+    if rules["input002_severity"] == REVIEW and strict["input002_severity"] != REVIEW:
+        found.append("rules.input.input002_severity is 'review'; INPUT002 findings are review")
+    if rules["max_depth"] < strict["max_depth"]:
+        found.append(
+            f"rules.input.max_depth is {rules['max_depth']} (strict: {strict['max_depth']}); "
+            "INPUT001 follows values across fewer function boundaries"
         )
     return found
 

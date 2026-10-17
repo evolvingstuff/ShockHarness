@@ -365,6 +365,22 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "batches": TableField(fields=dict(GUARDRAIL_COMMON), required=()),
+                "input": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "input002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "max_depth": IntField(minimum=1),
+                        "python_sources": ListField(StrField(allow_empty=False)),
+                        "javascript_sources": ListField(StrField(allow_empty=False)),
+                        "python_sinks": ListField(StrField(allow_empty=False)),
+                        "javascript_sinks": ListField(StrField(allow_empty=False)),
+                        "python_validators": ListField(StrField(allow_empty=False)),
+                        "javascript_validators": ListField(StrField(allow_empty=False)),
+                        "python_config_reads": ListField(StrField(allow_empty=False)),
+                        "javascript_config_reads": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
                 "role_integrity": TableField(
                     fields={
                         "enabled": BoolField(),

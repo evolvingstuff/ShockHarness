@@ -154,6 +154,8 @@ def test_report_lists_implemented_rules_in_registry_order(
         "BATCH001",
         "STUB003",
         "ROLE001",
+        "INPUT001",
+        "INPUT002",
     ]
 
 

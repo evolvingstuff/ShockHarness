@@ -463,6 +463,8 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "EXC003",
         "EXC004",
         "IMPORT001",
+        "INPUT001",
+        "INPUT002",
         "MAGIC001",
         "PROCESS001",
         "RESULT001",

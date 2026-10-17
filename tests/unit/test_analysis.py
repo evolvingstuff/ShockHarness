@@ -155,6 +155,8 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
         "EXC003",
         "EXC004",
         "IMPORT001",
+        "INPUT001",
+        "INPUT002",
         "MAGIC001",
         "PROCESS001",
         "RESULT001",

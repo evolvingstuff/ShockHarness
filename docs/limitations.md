@@ -402,6 +402,30 @@ Stated so that a clean report is never read as more than it is.
 * The diff side compares roles of files that exist at both revisions (renames
   followed); a new file added directly under `tests/` is not a reclassification.
 
+## INPUT001-INPUT002 (H6)
+
+* No path sensitivity and no guards: a check before the sink
+  (`if not cmd.isalnum(): raise`) is not seen; only a catalog validator cleans
+  a value, and it cleans it for every sink (`shlex.quote` makes a value clean
+  for a SQL query too).
+* Values are followed through locals, arguments and return values only: an
+  attribute (`self.cmd = ...`), a module-level variable read in another
+  function, a closure, a callback or a dynamically dispatched call breaks the
+  chain. A method call resolves only as far as the call graph resolves it
+  (`self.m(...)` is probable; `Runner().go(...)` is not resolved).
+* A call the analysis cannot resolve passes everything on: `len(body)` would be
+  tainted if `len` were not a validator. Constructors of project classes pass
+  their arguments on rather than following `__init__`.
+* Sources rooted at parameters match by name (`req.body` in any function
+  whose parameter is called `req`); method-name sinks (`.execute`, `.query`)
+  and validators (`.parse`) match any receiver.
+* INPUT002 cannot tell a required variable from an optional one; a check in
+  another function (a later `validate_config()`) is not seen, and destructuring
+  `const { X } = process.env` is not followed.
+* Code nested deeper than 100 statements or expressions is not followed (the
+  unit's facts are marked truncated); long operator chains are flattened and
+  never count against that depth.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
@@ -417,14 +441,17 @@ Stated so that a clean report is never read as more than it is.
   dropped coroutines and Promises (`ASYNC001`) and tasks started without an
   owner (`ASYNC002`), and since H5 `subprocess` calls whose exit status is
   ignored and shell commands built from data (`PROCESS001`), and since H-TS
-  all of it for TypeScript too, with its type escapes (`TYPE001`).
+  all of it for TypeScript too, with its type escapes (`TYPE001`), and since
+  H6 request data reaching a shell, query, file path or redirect unvalidated
+  (`INPUT001`) and unchecked optional configuration reads (`INPUT002`).
 
 ## Not yet built (see the specification)
 
 `MAGIC002`, the
 remaining advanced-guardrail rules of specification section 21, per-function
 churn and rename following, change-impact radius,
-data flow, and `.gitignore` awareness. Unknown CLI commands are argparse
+the H6 cross-site consistency rules (decisions 20 and 21), and `.gitignore`
+awareness. Unknown CLI commands are argparse
 errors (exit 2). Profiles exist but are limited to the three built-in
 ones (no user-defined or remote profiles), and the only command-line overrides
 are `--profile` and `--parse-errors`. The publish workflow and the reusable

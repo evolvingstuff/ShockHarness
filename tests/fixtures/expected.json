@@ -632,6 +632,13 @@
         false
       ],
       [
+        "INPUT002",
+        7,
+        7,
+        "process.env.FALLBACK_LEVEL is undefined",
+        false
+      ],
+      [
         "DEF006",
         7,
         15,

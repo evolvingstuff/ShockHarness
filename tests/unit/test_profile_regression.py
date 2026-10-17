@@ -89,7 +89,7 @@ def _verdict(gate: GateResult) -> dict[str, Any]:
     }
 
 
-# The H3 rules switched off: their sections, and EXC004 (which shares rules.exceptions).
+# The H3-H6 rules switched off: their sections, and EXC004 (which shares rules.exceptions).
 H3_OFF = (
     "".join(
         f"[tool.shockharness.rules.{section}]\nenabled = false\n"
@@ -106,6 +106,7 @@ H3_OFF = (
             "sleep",
             "retry",
             "batches",
+            "input",
         )
     )
     + '[[tool.shockharness.overrides]]\npaths = ["**"]\ndisable = ["EXC004"]\nreason = "0.3.0"\n'

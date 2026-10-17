@@ -5,6 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H6, part one (specification section 21, decision 26): external input.
+Both rules are advisory (decision 9), so no gate verdict changes.
+
+### Added (H6)
+- Dataflow facts: each function's value dependencies (`ModuleFacts.dataflow`),
+  for Python, JavaScript and TypeScript.
+- `INPUT001` (`rules.input`, warning): request data (Flask, Django/Starlette,
+  Express/Koa, Lambda events) that reaches a shell, `eval`, deserialization, a
+  file path, a query, a redirect or an outbound URL without a validator,
+  followed through assignments, string building and calls, and across project
+  functions through the call graph (`max_depth`, 3 crossings). The message names
+  the source, its location and the functions crossed.
+- `INPUT002` (`rules.input.input002_severity`, review): `os.getenv("X")`,
+  `os.environ.get("X")` or `process.env.X` passed on, returned or stored without
+  any check in the function.
+- A sink entry that is not `"callee:N"` is a configuration error.
+
+### Changed (H6)
+- The cache schema is "8".
+
 Milestone H-TS of specification section 21 (decision 25): TypeScript.
 
 ### Added (H-TS)

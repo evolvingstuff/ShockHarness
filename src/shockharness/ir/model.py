@@ -810,6 +810,96 @@ NO_CATALOG = CatalogFacts(
 )
 
 
+# --- Dataflow facts (H6) -----------------------------------------------------------------
+# What a unit computes, as value dependencies, for INPUT001-INPUT002 and the cross-site
+# rules. Syntax only: which reads are sources, which calls are sinks or validators, and how
+# units compose across files is decided by the rules (rules/dataflow.py) with the
+# configured catalogs and the call graph. Every value is a set of origins, strings of three
+# shapes, so a fact never refers to a node:
+ORIGIN_PARAMETER = "p"  # "p:<i>": the unit's i-th parameter (FlowUnit.parameters)
+ORIGIN_READ = "r"  # "r:<i>": the unit's i-th read (FlowUnit.reads)
+ORIGIN_CALL = "c"  # "c:<i>": the result of the unit's i-th call (FlowUnit.calls)
+ORIGIN_SEPARATOR = ":"
+
+
+@dataclass(frozen=True)
+class FlowRead:
+    """A dotted read rooted at a name the unit does not bind (``request.args``,
+    ``sys.argv``, ``process.env.HOME``) or at one of its parameters (``req.body``). A
+    string-literal subscript extends the text (``process.env["HOME"]`` reads
+    ``process.env.HOME``)."""
+
+    span: Span
+    text: str
+    on_parameter: bool
+
+
+@dataclass(frozen=True)
+class FlowCall:
+    """A call (or construction) and the origins of what it is given. ``callee`` is the
+    dotted text as written (the CallSite convention; ``"<dynamic>"`` otherwise), so the
+    call graph's per-site resolution is found by (path, span)."""
+
+    span: Span
+    callee: str
+    text: str
+    receiver: tuple[str, ...]
+    arguments: tuple[tuple[str, ...], ...]
+    keywords: tuple[tuple[str, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class FlowStore:
+    """A value that leaves the unit other than by return: assigned to an attribute or
+    subscript, or bound at module level (in the module unit)."""
+
+    span: Span
+    target: str
+    origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FlowReturn:
+    span: Span
+    origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FlowUnit:
+    """One unit's value dependencies; ``name`` is its FunctionFact name. ``tested`` holds
+    every origin a condition of the unit looks at (if, while, assert, ternary and
+    Boolean-operator tests). ``bound_receiver``: a Python method whose first parameter
+    receives the instance (``self``/``cls``), so call arguments shift by one.
+    ``truncated``: code nested past DATAFLOW_MAX_DEPTH was not followed."""
+
+    name: str
+    parameters: tuple[str, ...]
+    bound_receiver: bool
+    reads: tuple[FlowRead, ...]
+    calls: tuple[FlowCall, ...]
+    stores: tuple[FlowStore, ...]
+    returns: tuple[FlowReturn, ...]
+    tested: tuple[str, ...]
+    truncated: bool
+
+
+@dataclass(frozen=True)
+class DataflowFacts:
+    units: tuple[FlowUnit, ...]
+
+
+NO_DATAFLOW = DataflowFacts(units=())
+
+
+def origin(kind: str, index: int) -> str:
+    return f"{kind}{ORIGIN_SEPARATOR}{index}"
+
+
+def origin_parts(value: str) -> tuple[str, int]:
+    kind, _separator, index = value.partition(ORIGIN_SEPARATOR)
+    return kind, int(index)
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -826,6 +916,7 @@ class ModuleFacts:
     guardrails: GuardrailFacts
     asynchrony: AsyncFacts
     catalog: CatalogFacts
+    dataflow: DataflowFacts
     parse_failure: ParseFailure | None
 
 
@@ -846,5 +937,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         guardrails=NO_GUARDRAILS,
         asynchrony=NO_ASYNC,
         catalog=NO_CATALOG,
+        dataflow=NO_DATAFLOW,
         parse_failure=failure,
     )

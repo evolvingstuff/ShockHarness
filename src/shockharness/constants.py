@@ -30,6 +30,9 @@ CONFIG_DIGEST_SHORT_HEX: Final[int] = 16
 
 # Evidence excerpts are the stripped source line, truncated to this many characters.
 EVIDENCE_MAX_CHARS: Final[int] = 120
+# H6 dataflow: statements and expressions nested deeper than this are not followed (the
+# unit is marked truncated); left-deep operator chains are flattened and never count.
+DATAFLOW_MAX_DEPTH: Final[int] = 100
 
 # Text output wrapping width for rule explanations.
 TEXT_WRAP_WIDTH: Final[int] = 88
@@ -88,8 +91,8 @@ ELAPSED_DECIMALS: Final[int] = 3
 # The content-hash cache (0.3.0): the shape version of index.json and of each entry.
 # Bumped on an incompatible change; a cache written by another version is invalidated.
 # "2": finding status and file role (H1); "3": verification facts (H2); "7": TypeScript
-# facts, and JavaScript parameters counted as a unit's locals (H-TS).
-CACHE_SCHEMA_VERSION: Final[str] = "7"
+# facts, and JavaScript parameters counted as a unit's locals (H-TS); "8": dataflow facts (H6).
+CACHE_SCHEMA_VERSION: Final[str] = "8"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

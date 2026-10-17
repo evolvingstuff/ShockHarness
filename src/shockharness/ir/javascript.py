@@ -27,6 +27,7 @@ from shockharness.ir.javascript_catches import (
     node_text,
     scope_for,
 )
+from shockharness.ir.javascript_dataflow import collect_javascript_dataflow
 from shockharness.ir.javascript_defaults import collect_javascript_defaults
 from shockharness.ir.javascript_functions import (
     collect_javascript_bindings,
@@ -288,6 +289,7 @@ def _extract_facts(
         guardrails=guardrails,
         asynchrony=asynchrony,
         catalog=catalog,
+        dataflow=collect_javascript_dataflow(source, root),
         parse_failure=None,
     )
 
