@@ -15,6 +15,7 @@ from shockharness.ir.javascript_catches import (
     node_text,
 )
 from shockharness.ir.javascript_functions import dotted_name
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.javascript_numbers import parse_js_number
 from shockharness.ir.model import (
     SENTINEL_ARGUMENT,
@@ -27,15 +28,15 @@ from shockharness.source import SourceText
 
 CONSTANT_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
 SIGNS = frozenset({"-", "+"})
-NUMBER = "number"
-CALLS = frozenset({"call_expression", "new_expression"})
+NUMBER = Kind.NUMBER
+CALLS = frozenset({Kind.CALL_EXPRESSION, Kind.NEW_EXPRESSION})
 
 
 def _unwrapped(node: Node) -> Node | None:
     """The value inside parentheses and TypeScript type wrappers (``-1 as number``)."""
     current = node
-    while current.type in TYPE_WRAPPERS or current.type == "parenthesized_expression":
-        inner = [c for c in current.named_children if c.type != "comment"]
+    while current.type in TYPE_WRAPPERS or current.type == Kind.PARENTHESIZED_EXPRESSION:
+        inner = [c for c in current.named_children if c.type != Kind.COMMENT]
         if len(inner) == 0:
             return None
         current = inner[0]
@@ -46,9 +47,9 @@ def _signed(node: Node) -> tuple[Node, bool] | None:
     """(the number under a chain of unary signs, negated); None for any other operator."""
     negative = False
     current = node
-    while current.type == "unary_expression":
-        operator = current.child_by_field_name("operator")
-        argument = current.child_by_field_name("argument")
+    while current.type == Kind.UNARY_EXPRESSION:
+        operator = current.child_by_field_name(Field.OPERATOR)
+        argument = current.child_by_field_name(Field.ARGUMENT)
         if operator is None or argument is None or node_text(operator) not in SIGNS:
             return None
         if node_text(operator) == "-":
@@ -86,8 +87,8 @@ def _named(target: Node | None) -> bool:
     if target is None:
         return False
     name = target
-    if target.type == "member_expression":
-        prop = target.child_by_field_name("property")
+    if target.type == Kind.MEMBER_EXPRESSION:
+        prop = target.child_by_field_name(Field.PROPERTY)
         if prop is None:
             return False
         name = prop
@@ -111,12 +112,12 @@ class _Collector:
             self.add(value, SENTINEL_ASSIGN, _excerpt(target))
 
     def call(self, node: Node) -> None:
-        function = node.child_by_field_name("function")
+        function = node.child_by_field_name(Field.FUNCTION)
         if function is None:
-            function = node.child_by_field_name("constructor")
-        arguments = node.child_by_field_name("arguments")
+            function = node.child_by_field_name(Field.CONSTRUCTOR)
+        arguments = node.child_by_field_name(Field.ARGUMENTS)
         callee = None if function is None else dotted_name(function)
-        if callee is None or arguments is None or arguments.type != "arguments":
+        if callee is None or arguments is None or arguments.type != Kind.ARGUMENTS:
             return
         for argument in arguments.named_children:
             self.add(argument, SENTINEL_ARGUMENT, callee)
@@ -127,27 +128,27 @@ class _Collector:
 
 
 def _declarator(collector: _Collector, node: Node) -> None:
-    collector.assigned(node.child_by_field_name("name"), node.child_by_field_name("value"))
+    collector.assigned(node.child_by_field_name(Field.NAME), node.child_by_field_name(Field.VALUE))
 
 
 def _assignment(collector: _Collector, node: Node) -> None:
-    collector.assigned(node.child_by_field_name("left"), node.child_by_field_name("right"))
+    collector.assigned(node.child_by_field_name(Field.LEFT), node.child_by_field_name(Field.RIGHT))
 
 
 def _field(collector: _Collector, node: Node) -> None:
     name = node.child_by_field_name(FIELD_NAME_FIELDS[node.type])
-    collector.assigned(name, node.child_by_field_name("value"))
+    collector.assigned(name, node.child_by_field_name(Field.VALUE))
 
 
 def _return(collector: _Collector, node: Node) -> None:
-    values = [c for c in node.named_children if c.type != "comment"]
+    values = [c for c in node.named_children if c.type != Kind.COMMENT]
     if len(values) == 1:
         collector.add(values[0], SENTINEL_RETURN, "")
 
 
 def _arrow(collector: _Collector, node: Node) -> None:
-    body = node.child_by_field_name("body")
-    if body is not None and body.type != "statement_block":
+    body = node.child_by_field_name(Field.BODY)
+    if body is not None and body.type != Kind.STATEMENT_BLOCK:
         collector.add(body, SENTINEL_RETURN, "")
 
 
@@ -156,17 +157,17 @@ def _call(collector: _Collector, node: Node) -> None:
 
 
 def _pair(collector: _Collector, node: Node) -> None:
-    key = node.child_by_field_name("key")
+    key = node.child_by_field_name(Field.KEY)
     if key is not None:
-        collector.add(node.child_by_field_name("value"), SENTINEL_ENTRY, _excerpt(key))
+        collector.add(node.child_by_field_name(Field.VALUE), SENTINEL_ENTRY, _excerpt(key))
 
 
 VISITORS: dict[str, Callable[[_Collector, Node], None]] = {
-    "variable_declarator": _declarator,
-    "assignment_expression": _assignment,
-    "return_statement": _return,
-    "arrow_function": _arrow,
-    "pair": _pair,
+    Kind.VARIABLE_DECLARATOR: _declarator,
+    Kind.ASSIGNMENT_EXPRESSION: _assignment,
+    Kind.RETURN_STATEMENT: _return,
+    Kind.ARROW_FUNCTION: _arrow,
+    Kind.PAIR: _pair,
     **{kind: _field for kind in FIELD_DEFINITIONS},
     **{kind: _call for kind in CALLS},
 }

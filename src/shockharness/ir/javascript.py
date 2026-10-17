@@ -31,6 +31,7 @@ from shockharness.ir.javascript_functions import (
     collect_javascript_imports,
 )
 from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.javascript_numbers import parse_js_number
 from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
 from shockharness.ir.javascript_strings import collect_javascript_strings
@@ -61,24 +62,24 @@ TYPESCRIPT_PARSER_NAME = "tree-sitter-typescript " + metadata.version("tree-sitt
 JAVASCRIPT_LANGUAGE = "javascript"
 TYPESCRIPT_LANGUAGE = "typescript"
 
-NUMBER = "number"
-UNARY = "unary_expression"
-COMMENT = "comment"
+NUMBER = Kind.NUMBER
+UNARY = Kind.UNARY_EXPRESSION
+COMMENT = Kind.COMMENT
 # TypeScript nodes whose subtree is a type: a number in one (`type Port = 8080`, `x: 5`,
 # `f<3>()`) is a literal type, reported as in a type annotation like Python's Literal[8080].
 TYPE_CONTEXTS = frozenset(
     {
-        "type_annotation",
-        "omitting_type_annotation",
-        "opting_type_annotation",
-        "adding_type_annotation",
-        "asserts_annotation",
-        "type_predicate_annotation",
-        "type_alias_declaration",
-        "interface_declaration",
-        "type_arguments",
-        "type_parameters",
-        "literal_type",
+        Kind.TYPE_ANNOTATION,
+        Kind.OMITTING_TYPE_ANNOTATION,
+        Kind.OPTING_TYPE_ANNOTATION,
+        Kind.ADDING_TYPE_ANNOTATION,
+        Kind.ASSERTS_ANNOTATION,
+        Kind.TYPE_PREDICATE_ANNOTATION,
+        Kind.TYPE_ALIAS_DECLARATION,
+        Kind.INTERFACE_DECLARATION,
+        Kind.TYPE_ARGUMENTS,
+        Kind.TYPE_PARAMETERS,
+        Kind.LITERAL_TYPE,
     }
 )
 SIGN_OPERATORS = frozenset({"-", "+"})
@@ -86,9 +87,9 @@ SIGN_OPERATORS = frozenset({"-", "+"})
 # A named constant for rules.magic_numbers.named_constant_definitions: UPPER_SNAKE_CASE with
 # leading underscores allowed; only `const` (and `export const`) at module scope qualifies.
 CONSTANT_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
-LEXICAL_DECLARATION = "lexical_declaration"
-EXPORT_STATEMENT = "export_statement"
-VARIABLE_DECLARATOR = "variable_declarator"
+LEXICAL_DECLARATION = Kind.LEXICAL_DECLARATION
+EXPORT_STATEMENT = Kind.EXPORT_STATEMENT
+VARIABLE_DECLARATOR = Kind.VARIABLE_DECLARATOR
 CONST_KIND = "const"
 
 
@@ -96,8 +97,8 @@ def _fold_unary(node: Node) -> tuple[Node, bool] | None:
     negative = False
     current = node
     while current.type == UNARY:
-        operator = current.child_by_field_name("operator")
-        argument = current.child_by_field_name("argument")
+        operator = current.child_by_field_name(Field.OPERATOR)
+        argument = current.child_by_field_name(Field.ARGUMENT)
         if operator is None or argument is None or node_text(operator) not in SIGN_OPERATORS:
             return None
         if node_text(operator) == "-":
@@ -110,8 +111,8 @@ def _fold_unary(node: Node) -> tuple[Node, bool] | None:
 
 # Literal arithmetic accepted in a named constant definition (0.3.0): binary + - * / % **
 # over numeric literals, unary +/- and parentheses.
-BINARY = "binary_expression"
-PARENTHESIZED = "parenthesized_expression"
+BINARY = Kind.BINARY_EXPRESSION
+PARENTHESIZED = Kind.PARENTHESIZED_EXPRESSION
 CONSTANT_OPERATORS = frozenset({"+", "-", "*", "/", "%", "**"})
 
 
@@ -137,8 +138,8 @@ def _constant_operands(node: Node) -> list[Node] | None:
     if node.type == NUMBER:
         return []
     if node.type == UNARY:
-        operator = node.child_by_field_name("operator")
-        argument = node.child_by_field_name("argument")
+        operator = node.child_by_field_name(Field.OPERATOR)
+        argument = node.child_by_field_name(Field.ARGUMENT)
         if operator is None or argument is None or node_text(operator) not in SIGN_OPERATORS:
             return None
         return [argument]
@@ -146,9 +147,9 @@ def _constant_operands(node: Node) -> list[Node] | None:
         inner = [child for child in node.named_children if child.type != COMMENT]
         return inner if len(inner) == 1 else None
     if node.type == BINARY:
-        operator = node.child_by_field_name("operator")
-        left = node.child_by_field_name("left")
-        right = node.child_by_field_name("right")
+        operator = node.child_by_field_name(Field.OPERATOR)
+        left = node.child_by_field_name(Field.LEFT)
+        right = node.child_by_field_name(Field.RIGHT)
         if operator is None or left is None or right is None:
             return None
         return [left, right] if node_text(operator) in CONSTANT_OPERATORS else None
@@ -166,7 +167,7 @@ def _literal_ids(value: Node) -> set[int]:
             ids.add(node.id)
             continue
         if node.type == UNARY:
-            argument = node.child_by_field_name("argument")
+            argument = node.child_by_field_name(Field.ARGUMENT)
             assert argument is not None
             stack.append(argument)
             continue
@@ -178,13 +179,13 @@ def _const_declaration(statement: Node) -> Node | None:
     """``const ...`` or ``export const ...`` -> the lexical_declaration node, else None."""
     declaration = statement
     if statement.type == EXPORT_STATEMENT:
-        exported = statement.child_by_field_name("declaration")
+        exported = statement.child_by_field_name(Field.DECLARATION)
         if exported is None:
             return None
         declaration = exported
     if declaration.type != LEXICAL_DECLARATION:
         return None
-    kind = declaration.child_by_field_name("kind")
+    kind = declaration.child_by_field_name(Field.KIND)
     if kind is None or node_text(kind) != CONST_KIND:
         return None
     return declaration
@@ -204,9 +205,9 @@ def _constant_definition_values(root: Node) -> set[int]:
         for declarator in declaration.named_children:
             if declarator.type != VARIABLE_DECLARATOR:
                 continue
-            name = declarator.child_by_field_name("name")
-            value = declarator.child_by_field_name("value")
-            if name is None or name.type != "identifier":
+            name = declarator.child_by_field_name(Field.NAME)
+            value = declarator.child_by_field_name(Field.VALUE)
+            if name is None or name.type != Kind.IDENTIFIER:
                 continue
             if CONSTANT_NAME.fullmatch(node_text(name)) is None:
                 continue

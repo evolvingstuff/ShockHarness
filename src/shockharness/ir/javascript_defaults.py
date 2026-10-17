@@ -44,6 +44,7 @@ from shockharness.ir.javascript_catches import (
     scope_for,
     unwrap_parens,
 )
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     CONFIDENCE_APPROXIMATE,
     CONFIDENCE_EXACT,
@@ -85,16 +86,18 @@ EMPTY_CONSTRUCTORS = frozenset({"Map", "Set", "Array", "Object", "WeakMap", "Wea
 ENV_OBJECT = "process.env"
 ELLIPSIS_TEXT = "..."
 
-PATTERN_TYPES = frozenset({"object_pattern", "array_pattern"})
-MEMBER_TYPES = frozenset({"member_expression", "subscript_expression", "call_expression"})
-NULLISH_LITERALS = frozenset({"null", "undefined"})
+PATTERN_TYPES = frozenset({Kind.OBJECT_PATTERN, Kind.ARRAY_PATTERN})
+MEMBER_TYPES = frozenset({Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION, Kind.CALL_EXPRESSION})
+NULLISH_LITERALS = frozenset({Kind.NULL, Kind.UNDEFINED})
 EQUALITY = frozenset({"===", "=="})
 INEQUALITY = frozenset({"!==", "!="})
-COMPARISONS = frozenset({"===", "!==", "==", "!=", "<", ">", "<=", ">=", "instanceof", "in"})
-CONDITION_PARENTS = frozenset({"if_statement", "while_statement", "do_statement", "for_statement"})
+COMPARISONS = frozenset({"===", "!==", "==", "!=", "<", ">", "<=", ">=", Kind.INSTANCEOF, "in"})
+CONDITION_PARENTS = frozenset(
+    {Kind.IF_STATEMENT, Kind.WHILE_STATEMENT, Kind.DO_STATEMENT, Kind.FOR_STATEMENT}
+)
 HAS_OWN_METHODS = frozenset({"hasOwnProperty", "hasOwn"})
 VALUE_TYPES = frozenset(
-    {"identifier", "member_expression", "subscript_expression", "call_expression"}
+    {Kind.IDENTIFIER, Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION, Kind.CALL_EXPRESSION}
 )
 
 
@@ -127,14 +130,14 @@ def is_constant_shaped(node: Node | None) -> bool:
     inner = unwrap_parens(node)
     if is_literal_like(inner):
         return True
-    if inner.type == "identifier":
+    if inner.type == Kind.IDENTIFIER:
         return UPPER_CASE_NAME.fullmatch(node_text(inner)) is not None
-    if inner.type == "member_expression":
-        prop = inner.child_by_field_name("property")
+    if inner.type == Kind.MEMBER_EXPRESSION:
+        prop = inner.child_by_field_name(Field.PROPERTY)
         return prop is not None and UPPER_CASE_NAME.fullmatch(node_text(prop)) is not None
-    if inner.type == "new_expression":
-        constructor = inner.child_by_field_name("constructor")
-        arguments = inner.child_by_field_name("arguments")
+    if inner.type == Kind.NEW_EXPRESSION:
+        constructor = inner.child_by_field_name(Field.CONSTRUCTOR)
+        arguments = inner.child_by_field_name(Field.ARGUMENTS)
         return (
             constructor is not None
             and node_text(constructor) in EMPTY_CONSTRUCTORS
@@ -143,7 +146,7 @@ def is_constant_shaped(node: Node | None) -> bool:
     return False
 
 
-BOOLEAN_LITERALS = frozenset({"true", "false"})
+BOOLEAN_LITERALS = frozenset({Kind.TRUE, Kind.FALSE})
 BOOLEAN_OPERATORS = COMPARISONS | frozenset({"&&"})
 
 
@@ -152,9 +155,9 @@ def _is_boolean_expression(node: Node) -> bool:
     inner = unwrap_parens(node)
     if inner.type in BOOLEAN_LITERALS:
         return True
-    if inner.type == "binary_expression":
+    if inner.type == Kind.BINARY_EXPRESSION:
         return _operator(inner) in BOOLEAN_OPERATORS
-    return inner.type == "unary_expression" and _operator(inner) == "!"
+    return inner.type == Kind.UNARY_EXPRESSION and _operator(inner) == "!"
 
 
 def _is_nullish_literal(node: Node | None) -> bool:
@@ -162,7 +165,7 @@ def _is_nullish_literal(node: Node | None) -> bool:
 
 
 def _operator(node: Node) -> str:
-    operator = node.child_by_field_name("operator")
+    operator = node.child_by_field_name(Field.OPERATOR)
     assert operator is not None, f"{node.type} without an operator field"
     return node_text(operator)
 
@@ -170,14 +173,14 @@ def _operator(node: Node) -> str:
 def _env_variable(node: Node) -> str | None:
     """``"X"`` when ``node`` reads ``process.env.X`` / ``process.env["X"]``, else ``None``."""
     inner = unwrap_parens(node)
-    if inner.type not in ("member_expression", "subscript_expression"):
+    if inner.type not in (Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION):
         return None
-    receiver = inner.child_by_field_name("object")
+    receiver = inner.child_by_field_name(Field.OBJECT)
     if receiver is None or node_text(receiver) != ENV_OBJECT:
         return None
-    key = inner.child_by_field_name("property")
+    key = inner.child_by_field_name(Field.PROPERTY)
     if key is None:
-        key = inner.child_by_field_name("index")
+        key = inner.child_by_field_name(Field.INDEX)
     return None if key is None else _text(key)
 
 
@@ -192,20 +195,20 @@ class _ModuleIndex:
         self.constants: dict[str, Node] = {}
         self.helpers: dict[str, Node] = {}
         for statement in root.named_children:
-            if statement.type in ("lexical_declaration", "variable_declaration"):
+            if statement.type in (Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECLARATION):
                 for declarator in statement.named_children:
-                    if declarator.type != "variable_declarator":
+                    if declarator.type != Kind.VARIABLE_DECLARATOR:
                         continue
-                    name = declarator.child_by_field_name("name")
-                    value = declarator.child_by_field_name("value")
-                    if name is None or value is None or name.type != "identifier":
+                    name = declarator.child_by_field_name(Field.NAME)
+                    value = declarator.child_by_field_name(Field.VALUE)
+                    if name is None or value is None or name.type != Kind.IDENTIFIER:
                         continue
-                    if value.type in ("arrow_function", "function_expression"):
+                    if value.type in (Kind.ARROW_FUNCTION, Kind.FUNCTION_EXPRESSION):
                         self.helpers[node_text(name)] = value
                     elif is_constant_shaped(value):
                         self.constants[node_text(name)] = value
-            elif statement.type == "function_declaration":
-                name = statement.child_by_field_name("name")
+            elif statement.type == Kind.FUNCTION_DECLARATION:
+                name = statement.child_by_field_name(Field.NAME)
                 if name is not None:
                     self.helpers[node_text(name)] = statement
 
@@ -213,13 +216,13 @@ class _ModuleIndex:
         """The constant the helper returns, or ``None`` when it is not a one-return helper."""
         if name not in self.helpers:
             return None
-        body = self.helpers[name].child_by_field_name("body")
+        body = self.helpers[name].child_by_field_name(Field.BODY)
         if body is None:
             return None
-        if body.type != "statement_block":
+        if body.type != Kind.STATEMENT_BLOCK:
             return body if is_constant_shaped(body) else None
         statements = block_statements(body)
-        if len(statements) != 1 or statements[0].type != "return_statement":
+        if len(statements) != 1 or statements[0].type != Kind.RETURN_STATEMENT:
             return None
         value = first_expression(statements[0])
         if value is None:
@@ -276,9 +279,9 @@ class _Collector:
         stack = [pattern]
         while len(stack) > 0:
             current = stack.pop()
-            if current.type == "object_assignment_pattern":
-                left = current.child_by_field_name("left")
-                right = current.child_by_field_name("right")
+            if current.type == Kind.OBJECT_ASSIGNMENT_PATTERN:
+                left = current.child_by_field_name(Field.LEFT)
+                right = current.child_by_field_name(Field.RIGHT)
                 if left is not None and right is not None:
                     self._add(
                         right,
@@ -292,9 +295,9 @@ class _Collector:
                         f"destructuring default for {node_text(left)!r} in {where}",
                     )
                 continue
-            if current.type == "assignment_pattern":
-                left = current.child_by_field_name("left")
-                right = current.child_by_field_name("right")
+            if current.type == Kind.ASSIGNMENT_PATTERN:
+                left = current.child_by_field_name(Field.LEFT)
+                right = current.child_by_field_name(Field.RIGHT)
                 if left is not None and right is not None:
                     self._add(
                         right,
@@ -310,10 +313,10 @@ class _Collector:
                     if left.type in PATTERN_TYPES:
                         stack.append(left)
                 continue
-            if current.type == "rest_pattern":
+            if current.type == Kind.REST_PATTERN:
                 continue
-            if current.type == "pair_pattern":
-                value = current.child_by_field_name("value")
+            if current.type == Kind.PAIR_PATTERN:
+                value = current.child_by_field_name(Field.VALUE)
                 if value is not None:
                     stack.append(value)
                 continue
@@ -347,8 +350,8 @@ class _Collector:
                 )
 
     def _declarator(self, declarator: Node, scope: str) -> None:
-        name = declarator.child_by_field_name("name")
-        value = declarator.child_by_field_name("value")
+        name = declarator.child_by_field_name(Field.NAME)
+        value = declarator.child_by_field_name(Field.VALUE)
         if name is None or name.type not in PATTERN_TYPES:
             return
         if _is_env_object(value):
@@ -366,8 +369,8 @@ class _Collector:
 
     def _loop_pattern(self, loop: Node, scope: str) -> None:
         """``for (const {x = v} of rows)``: destructuring defaults on the loop variable."""
-        left = loop.child_by_field_name("left")
-        right = loop.child_by_field_name("right")
+        left = loop.child_by_field_name(Field.LEFT)
+        right = loop.child_by_field_name(Field.RIGHT)
         if left is None or left.type not in PATTERN_TYPES:
             return
         assert right is not None, "for-in/for-of statement without an iterable"
@@ -376,8 +379,8 @@ class _Collector:
 
     def _assignment_pattern(self, assignment: Node, scope: str) -> None:
         """``({x = v} = o)``: destructuring defaults in an assignment expression."""
-        left = assignment.child_by_field_name("left")
-        right = assignment.child_by_field_name("right")
+        left = assignment.child_by_field_name(Field.LEFT)
+        right = assignment.child_by_field_name(Field.RIGHT)
         if left is None or right is None or left.type not in PATTERN_TYPES:
             return
         if _is_env_object(right):
@@ -399,13 +402,13 @@ class _Collector:
         operator = _operator(node)
         if operator not in ("||", "??") or context == CONTEXT_TEST:
             return
-        left = node.child_by_field_name("left")
-        right = node.child_by_field_name("right")
+        left = node.child_by_field_name(Field.LEFT)
+        right = node.child_by_field_name(Field.RIGHT)
         if left is None or right is None:
             return
         if (
             parent is not None
-            and parent.type == "binary_expression"
+            and parent.type == Kind.BINARY_EXPRESSION
             and _operator(parent) == operator
         ):
             return  # ``a || b || c``: the outermost node reports the chain once
@@ -417,8 +420,8 @@ class _Collector:
 
     def _augmented(self, node: Node, scope: str) -> None:
         operator = _operator(node)
-        left = node.child_by_field_name("left")
-        right = node.child_by_field_name("right")
+        left = node.child_by_field_name(Field.LEFT)
+        right = node.child_by_field_name(Field.RIGHT)
         if left is None or right is None:
             return
         subject = _text(left)
@@ -557,23 +560,23 @@ class _Collector:
     # -- ternaries ---------------------------------------------------------------------------
 
     def _ternary(self, node: Node, scope: str, context: str) -> None:
-        condition = node.child_by_field_name("condition")
-        consequence = node.child_by_field_name("consequence")
-        alternative = node.child_by_field_name("alternative")
+        condition = node.child_by_field_name(Field.CONDITION)
+        consequence = node.child_by_field_name(Field.CONSEQUENCE)
+        alternative = node.child_by_field_name(Field.ALTERNATIVE)
         if condition is None or consequence is None or alternative is None:
             return
         test = unwrap_parens(condition)
         negated = False
-        if test.type == "unary_expression" and _operator(test) == "!":
-            argument = test.child_by_field_name("argument")
+        if test.type == Kind.UNARY_EXPRESSION and _operator(test) == "!":
+            argument = test.child_by_field_name(Field.ARGUMENT)
             if argument is None:
                 return
             test = unwrap_parens(argument)
             negated = True
-        if test.type == "binary_expression":
+        if test.type == Kind.BINARY_EXPRESSION:
             operator = _operator(test)
-            left = test.child_by_field_name("left")
-            right = test.child_by_field_name("right")
+            left = test.child_by_field_name(Field.LEFT)
+            right = test.child_by_field_name(Field.RIGHT)
             if left is None or right is None:
                 return
             if operator in EQUALITY or operator in INEQUALITY:
@@ -588,7 +591,7 @@ class _Collector:
                 )
                 self._membership_ternary(node, right, left, present, missing, scope, context)
             return
-        if test.type == "call_expression":
+        if test.type == Kind.CALL_EXPRESSION:
             owner_key = _has_own_call(test)
             if owner_key is not None:
                 owner, key = owner_key
@@ -673,14 +676,14 @@ class _Collector:
         context: str,
     ) -> None:
         inner = unwrap_parens(present)
-        if inner.type not in ("member_expression", "subscript_expression"):
+        if inner.type not in (Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION):
             return
-        receiver = inner.child_by_field_name("object")
+        receiver = inner.child_by_field_name(Field.OBJECT)
         if receiver is None or not _same(receiver, owner):
             return
-        looked_up = inner.child_by_field_name("index")
+        looked_up = inner.child_by_field_name(Field.INDEX)
         if looked_up is None:
-            looked_up = inner.child_by_field_name("property")
+            looked_up = inner.child_by_field_name(Field.PROPERTY)
         if looked_up is None:
             return
         key_text = node_text(unwrap_parens(key))
@@ -701,17 +704,17 @@ class _Collector:
     # -- exception-to-default traces ---------------------------------------------------------
 
     def _catch_trace(self, clause: Node, scope: str) -> None:
-        body = clause.child_by_field_name("body")
+        body = clause.child_by_field_name(Field.BODY)
         if body is None:
             return
         statements = [s for s in block_statements(body) if not is_logging_statement(s)]
-        if len(statements) != 1 or statements[0].type != "return_statement":
+        if len(statements) != 1 or statements[0].type != Kind.RETURN_STATEMENT:
             return
         value = first_expression(statements[0])
         if value is None or is_literal_like(value):
             return  # classified on the CatchFact as return_fallback
         value = unwrap_parens(value)
-        if value.type == "new_expression" and is_constant_shaped(value):
+        if value.type == Kind.NEW_EXPRESSION and is_constant_shaped(value):
             self._add(
                 clause,
                 scope,
@@ -724,7 +727,7 @@ class _Collector:
                 f"handler fabricates an empty value in place: return {_text(value)}",
             )
             return
-        if value.type == "identifier":
+        if value.type == Kind.IDENTIFIER:
             name = node_text(value)
             if name in self.index.constants:
                 constant = self.index.constants[name]
@@ -741,21 +744,21 @@ class _Collector:
                     "(static trace; reassignment is not followed)",
                 )
             return
-        if value.type == "call_expression":
-            function = value.child_by_field_name("function")
-            if function is None or function.type != "identifier":
+        if value.type == Kind.CALL_EXPRESSION:
+            function = value.child_by_field_name(Field.FUNCTION)
+            if function is None or function.type != Kind.IDENTIFIER:
                 return
             returned = self.index.helper_returns(node_text(function))
             if returned is None:
                 return
-            text = "undefined" if returned.type == "return_statement" else _text(returned)
+            text = "undefined" if returned.type == Kind.RETURN_STATEMENT else _text(returned)
             self._add(
                 clause,
                 scope,
                 FAMILY_EXCEPTION,
                 KIND_EXCEPTION_HELPER,
                 _text(value),
-                None if returned.type == "return_statement" else returned,
+                None if returned.type == Kind.RETURN_STATEMENT else returned,
                 CONTEXT_RETURN,
                 CONFIDENCE_APPROXIMATE,
                 f"handler delegates to {node_text(function)}(), a module-level helper that "
@@ -766,21 +769,21 @@ class _Collector:
 
     def visit(self, node: Node, parent: Node | None, scope: str, context: str) -> None:
         kind = node.type
-        if kind == "formal_parameters":
+        if kind == Kind.FORMAL_PARAMETERS:
             self._formal_parameters(node, scope)
-        elif kind == "variable_declarator":
+        elif kind == Kind.VARIABLE_DECLARATOR:
             self._declarator(node, scope)
-        elif kind == "for_in_statement":
+        elif kind == Kind.FOR_IN_STATEMENT:
             self._loop_pattern(node, scope)
-        elif kind == "assignment_expression":
+        elif kind == Kind.ASSIGNMENT_EXPRESSION:
             self._assignment_pattern(node, scope)
-        elif kind == "binary_expression":
+        elif kind == Kind.BINARY_EXPRESSION:
             self._binary(node, parent, scope, context)
-        elif kind == "augmented_assignment_expression":
+        elif kind == Kind.AUGMENTED_ASSIGNMENT_EXPRESSION:
             self._augmented(node, scope)
-        elif kind == "ternary_expression":
+        elif kind == Kind.TERNARY_EXPRESSION:
             self._ternary(node, scope, context)
-        elif kind == "catch_clause":
+        elif kind == Kind.CATCH_CLAUSE:
             self._catch_trace(node, scope)
 
 
@@ -790,15 +793,15 @@ def _nullish_subject(left: Node, right: Node) -> Node | None:
         candidate = left
     elif _is_nullish_literal(left):
         candidate = right
-    elif right.type == "string" and node_text(right).strip("'\"`") == "undefined":
+    elif right.type == Kind.STRING and node_text(right).strip("'\"`") == Kind.UNDEFINED:
         candidate = left
-    elif left.type == "string" and node_text(left).strip("'\"`") == "undefined":
+    elif left.type == Kind.STRING and node_text(left).strip("'\"`") == Kind.UNDEFINED:
         candidate = right
     else:
         return None
     candidate = unwrap_parens(candidate)
-    if candidate.type == "unary_expression" and _operator(candidate) == "typeof":
-        argument = candidate.child_by_field_name("argument")
+    if candidate.type == Kind.UNARY_EXPRESSION and _operator(candidate) == "typeof":
+        argument = candidate.child_by_field_name(Field.ARGUMENT)
         return None if argument is None else unwrap_parens(argument)
     if candidate.type in VALUE_TYPES:
         return candidate
@@ -807,15 +810,15 @@ def _nullish_subject(left: Node, right: Node) -> Node | None:
 
 def _has_own_call(call: Node) -> tuple[Node, Node] | None:
     """``o.hasOwnProperty(k)`` / ``Object.hasOwn(o, k)`` -> (owner, key)."""
-    function = call.child_by_field_name("function")
-    arguments = call.child_by_field_name("arguments")
-    if function is None or arguments is None or function.type != "member_expression":
+    function = call.child_by_field_name(Field.FUNCTION)
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
+    if function is None or arguments is None or function.type != Kind.MEMBER_EXPRESSION:
         return None
-    method = function.child_by_field_name("property")
-    receiver = function.child_by_field_name("object")
+    method = function.child_by_field_name(Field.PROPERTY)
+    receiver = function.child_by_field_name(Field.OBJECT)
     if method is None or receiver is None or node_text(method) not in HAS_OWN_METHODS:
         return None
-    actual = [a for a in arguments.named_children if a.type != "comment"]
+    actual = [a for a in arguments.named_children if a.type != Kind.COMMENT]
     if node_text(method) == "hasOwn":
         if node_text(receiver) != "Object" or len(actual) != LOOKUP_WITH_FALLBACK_ARITY:
             return None
@@ -827,9 +830,10 @@ def _has_own_call(call: Node) -> tuple[Node, Node] | None:
 
 # Parents whose `value` child is assigned; parents that pass their context through (with
 # TypeScript's `as`/`!`/`satisfies`/`<T>` wrappers, which change no value).
-ASSIGNING_PARENTS = frozenset({"variable_declarator", "pair"}) | FIELD_DEFINITIONS
+ASSIGNING_PARENTS = frozenset({Kind.VARIABLE_DECLARATOR, Kind.PAIR}) | FIELD_DEFINITIONS
 INHERITING_PARENTS = (
-    frozenset({"parenthesized_expression", "await_expression", "spread_element"}) | TYPE_WRAPPERS
+    frozenset({Kind.PARENTHESIZED_EXPRESSION, Kind.AWAIT_EXPRESSION, Kind.SPREAD_ELEMENT})
+    | TYPE_WRAPPERS
 )
 
 
@@ -837,29 +841,29 @@ def _child_context(parent: Node, child: Node, index: int, inherited: str) -> str
     kind = parent.type
     field = parent.field_name_for_child(index)
     if kind in ASSIGNING_PARENTS:
-        return CONTEXT_ASSIGNMENT if field == "value" else CONTEXT_EXPRESSION
-    if kind in ("assignment_expression", "augmented_assignment_expression"):
-        return CONTEXT_ASSIGNMENT if field == "right" else CONTEXT_EXPRESSION
-    if kind == "return_statement":
+        return CONTEXT_ASSIGNMENT if field == Field.VALUE else CONTEXT_EXPRESSION
+    if kind in (Kind.ASSIGNMENT_EXPRESSION, Kind.AUGMENTED_ASSIGNMENT_EXPRESSION):
+        return CONTEXT_ASSIGNMENT if field == Field.RIGHT else CONTEXT_EXPRESSION
+    if kind == Kind.RETURN_STATEMENT:
         return CONTEXT_RETURN
-    if kind == "arrow_function":
+    if kind == Kind.ARROW_FUNCTION:
         return (
             CONTEXT_RETURN
-            if field == "body" and child.type != "statement_block"
+            if field == Field.BODY and child.type != Kind.STATEMENT_BLOCK
             else CONTEXT_EXPRESSION
         )
     if kind in CONDITION_PARENTS:
-        return CONTEXT_TEST if field == "condition" else CONTEXT_EXPRESSION
-    if kind == "ternary_expression":
-        return CONTEXT_TEST if field == "condition" else inherited
-    if kind == "binary_expression":
+        return CONTEXT_TEST if field == Field.CONDITION else CONTEXT_EXPRESSION
+    if kind == Kind.TERNARY_EXPRESSION:
+        return CONTEXT_TEST if field == Field.CONDITION else inherited
+    if kind == Kind.BINARY_EXPRESSION:
         operator = _operator(parent)
         if operator == "&&" or operator in COMPARISONS:
             return CONTEXT_TEST
         return inherited
-    if kind == "unary_expression":
+    if kind == Kind.UNARY_EXPRESSION:
         return CONTEXT_TEST if _operator(parent) == "!" else inherited
-    if kind == "arguments":
+    if kind == Kind.ARGUMENTS:
         return CONTEXT_ARGUMENT
     if kind in INHERITING_PARENTS:
         return inherited

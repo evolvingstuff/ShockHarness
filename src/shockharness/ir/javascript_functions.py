@@ -21,6 +21,7 @@ from shockharness.ir.javascript_catches import (
     parameter_parts,
     scope_for,
 )
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.lines import logical_line_count
 from shockharness.ir.model import (
     BINDING_CLASS,
@@ -74,50 +75,53 @@ from shockharness.source import SourceText
 
 FUNCTION_TYPES = frozenset(
     {
-        "function_declaration",
-        "generator_function_declaration",
-        "function_expression",
-        "generator_function",
-        "arrow_function",
-        "method_definition",
+        Kind.FUNCTION_DECLARATION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+        Kind.FUNCTION_EXPRESSION,
+        Kind.GENERATOR_FUNCTION,
+        Kind.ARROW_FUNCTION,
+        Kind.METHOD_DEFINITION,
     }
 )
-GENERATOR_TYPES = frozenset({"generator_function_declaration", "generator_function"})
-CLASS_TYPES = frozenset({"class_declaration", "abstract_class_declaration", "class"})
+GENERATOR_TYPES = frozenset({Kind.GENERATOR_FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION})
+CLASS_TYPES = frozenset({Kind.CLASS_DECLARATION, Kind.ABSTRACT_CLASS_DECLARATION, Kind.CLASS})
 # Units that are expressions: their first and last lines usually carry the parent's code too.
 EXPRESSION_UNIT_TYPES = frozenset(
-    {"arrow_function", "function_expression", "generator_function", "class"}
+    {Kind.ARROW_FUNCTION, Kind.FUNCTION_EXPRESSION, Kind.GENERATOR_FUNCTION, Kind.CLASS}
 )
 UNIT_TYPES = FUNCTION_TYPES | CLASS_TYPES
-NESTED_DECLARATIONS = frozenset({"function_declaration", "generator_function_declaration"}) | (
-    CLASS_TYPES - {"class"}
+LOOP_STATEMENTS = frozenset(
+    {Kind.FOR_STATEMENT, Kind.FOR_IN_STATEMENT, Kind.WHILE_STATEMENT, Kind.DO_STATEMENT}
 )
+NESTED_DECLARATIONS = frozenset(
+    {Kind.FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION_DECLARATION}
+) | (CLASS_TYPES - {Kind.CLASS})
 STATEMENT_TYPES = frozenset(
     {
-        "expression_statement",
-        "lexical_declaration",
-        "variable_declaration",
-        "if_statement",
-        "for_statement",
-        "for_in_statement",
-        "while_statement",
-        "do_statement",
-        "try_statement",
-        "switch_statement",
-        "return_statement",
-        "throw_statement",
-        "break_statement",
-        "continue_statement",
-        "labeled_statement",
-        "with_statement",
-        "debugger_statement",
-        "export_statement",
-        "import_statement",
-        "class_declaration",
-        "abstract_class_declaration",
-        "function_declaration",
-        "generator_function_declaration",
-        "statement_block",
+        Kind.EXPRESSION_STATEMENT,
+        Kind.LEXICAL_DECLARATION,
+        Kind.VARIABLE_DECLARATION,
+        Kind.IF_STATEMENT,
+        Kind.FOR_STATEMENT,
+        Kind.FOR_IN_STATEMENT,
+        Kind.WHILE_STATEMENT,
+        Kind.DO_STATEMENT,
+        Kind.TRY_STATEMENT,
+        Kind.SWITCH_STATEMENT,
+        Kind.RETURN_STATEMENT,
+        Kind.THROW_STATEMENT,
+        Kind.BREAK_STATEMENT,
+        Kind.CONTINUE_STATEMENT,
+        Kind.LABELED_STATEMENT,
+        Kind.WITH_STATEMENT,
+        Kind.DEBUGGER_STATEMENT,
+        Kind.EXPORT_STATEMENT,
+        Kind.IMPORT_STATEMENT,
+        Kind.CLASS_DECLARATION,
+        Kind.ABSTRACT_CLASS_DECLARATION,
+        Kind.FUNCTION_DECLARATION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+        Kind.STATEMENT_BLOCK,
     }
 )
 BOOLEAN_OPERATORS = frozenset({"&&", "||", "??"})
@@ -140,14 +144,14 @@ MUTATING_METHODS = frozenset(
     }
 )
 MUTABLE_CONSTRUCTORS = frozenset({"Map", "Set", "WeakMap", "WeakSet", "Array", "Object"})
-DECLARATION_TYPES = frozenset({"lexical_declaration", "variable_declaration"})
-PATTERN_SKIP = frozenset({"comment", "property_identifier"})
+DECLARATION_TYPES = frozenset({Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECLARATION})
+PATTERN_SKIP = frozenset({Kind.COMMENT, Kind.PROPERTY_IDENTIFIER})
 RECEIVER = "this"
 REQUIRE = "require"
 OBJECT_ASSIGN = "Object.assign"
-IMPORT_CALL = "import"
-STRING = "string"
-STRING_FRAGMENT = "string_fragment"
+IMPORT_CALL = Kind.IMPORT
+STRING = Kind.STRING
+STRING_FRAGMENT = Kind.STRING_FRAGMENT
 DEFAULT_EXPORT = "default"
 STAR = "*"
 
@@ -184,13 +188,13 @@ def _is_async(node: Node) -> bool:
 
 
 def _unit_kind(node: Node) -> str:
-    if node.type == "program":
+    if node.type == Kind.PROGRAM:
         return UNIT_MODULE
     if node.type in CLASS_TYPES:
         return UNIT_CLASS
-    if node.type == "arrow_function":
+    if node.type == Kind.ARROW_FUNCTION:
         return UNIT_ARROW
-    if node.type == "method_definition":
+    if node.type == Kind.METHOD_DEFINITION:
         return UNIT_METHOD
     return UNIT_FUNCTION
 
@@ -219,15 +223,15 @@ def string_value(node: Node) -> str | None:
     fragments = [c for c in node.named_children if c.type == STRING_FRAGMENT]
     if len(fragments) == 0:
         return ""
-    if len(fragments) > 1 or any(c.type == "escape_sequence" for c in node.named_children):
-        return "".join(node_text(c) for c in node.named_children if c.type != "comment")
+    if len(fragments) > 1 or any(c.type == Kind.ESCAPE_SEQUENCE for c in node.named_children):
+        return "".join(node_text(c) for c in node.named_children if c.type != Kind.COMMENT)
     return node_text(fragments[0])
 
 
 def _unwrap(node: Node) -> Node:
     current = node
-    while current.type == "parenthesized_expression":
-        inner = [c for c in current.named_children if c.type != "comment"]
+    while current.type == Kind.PARENTHESIZED_EXPRESSION:
+        inner = [c for c in current.named_children if c.type != Kind.COMMENT]
         if len(inner) != 1:
             return current
         current = inner[0]
@@ -237,18 +241,22 @@ def _unwrap(node: Node) -> Node:
 def dotted_name(node: Node) -> str | None:
     parts: list[str] = []
     current = node
-    while current.type == "member_expression":
-        prop = current.child_by_field_name("property")
-        obj = current.child_by_field_name("object")
-        if prop is None or obj is None or prop.type == "private_property_identifier":
-            if prop is not None and prop.type == "private_property_identifier" and obj is not None:
+    while current.type == Kind.MEMBER_EXPRESSION:
+        prop = current.child_by_field_name(Field.PROPERTY)
+        obj = current.child_by_field_name(Field.OBJECT)
+        if prop is None or obj is None or prop.type == Kind.PRIVATE_PROPERTY_IDENTIFIER:
+            if (
+                prop is not None
+                and prop.type == Kind.PRIVATE_PROPERTY_IDENTIFIER
+                and obj is not None
+            ):
                 parts.append(node_text(prop))
                 current = obj
                 continue
             return None
         parts.append(node_text(prop))
         current = obj
-    if current.type not in ("identifier", RECEIVER):
+    if current.type not in (Kind.IDENTIFIER, RECEIVER):
         return None
     parts.append(node_text(current))
     parts.reverse()
@@ -257,12 +265,12 @@ def dotted_name(node: Node) -> str | None:
 
 def _root_identifier(node: Node) -> str | None:
     current = node
-    while current.type in ("member_expression", "subscript_expression"):
-        obj = current.child_by_field_name("object")
+    while current.type in (Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION):
+        obj = current.child_by_field_name(Field.OBJECT)
         if obj is None:
             return None
         current = obj
-    if current.type == "identifier":
+    if current.type == Kind.IDENTIFIER:
         return node_text(current)
     return None
 
@@ -285,10 +293,10 @@ def _boolean_operators(root: Node) -> tuple[list[str], list[Node]]:
             operators.append(item)
             continue
         unwrapped = _unwrap(item)
-        if unwrapped.type == "binary_expression":
-            operator = unwrapped.child_by_field_name("operator")
-            left = unwrapped.child_by_field_name("left")
-            right = unwrapped.child_by_field_name("right")
+        if unwrapped.type == Kind.BINARY_EXPRESSION:
+            operator = unwrapped.child_by_field_name(Field.OPERATOR)
+            left = unwrapped.child_by_field_name(Field.LEFT)
+            right = unwrapped.child_by_field_name(Field.RIGHT)
             if (
                 operator is not None
                 and left is not None
@@ -309,20 +317,25 @@ def pattern_names(pattern: Node) -> list[str]:
     stack = [pattern]
     while len(stack) > 0:
         node = stack.pop()
-        if node.type in ("identifier", "shorthand_property_identifier_pattern"):
+        if node.type in (Kind.IDENTIFIER, Kind.SHORTHAND_PROPERTY_IDENTIFIER_PATTERN):
             names.append(node_text(node))
-        elif node.type == "pair_pattern":
-            value = node.child_by_field_name("value")
+        elif node.type == Kind.PAIR_PATTERN:
+            value = node.child_by_field_name(Field.VALUE)
             if value is not None:
                 stack.append(value)
-        elif node.type == "assignment_pattern":
-            left = node.child_by_field_name("left")
+        elif node.type == Kind.ASSIGNMENT_PATTERN:
+            left = node.child_by_field_name(Field.LEFT)
             if left is not None:
                 stack.append(left)
         elif node.type in TYPED_PARAMETERS:
             binding, _default = parameter_parts(node)
             stack.append(binding)
-        elif node.type in ("object_pattern", "array_pattern", "rest_pattern", "formal_parameters"):
+        elif node.type in (
+            Kind.OBJECT_PATTERN,
+            Kind.ARRAY_PATTERN,
+            Kind.REST_PATTERN,
+            Kind.FORMAL_PARAMETERS,
+        ):
             stack.extend(reversed(node.named_children))
     return names
 
@@ -356,9 +369,9 @@ class _UnitCollector:
         self, stack: list[tuple[str, Node, _Builder]], body: Node, parent: _Builder
     ) -> None:
         """A statement body: a block's statements, or the single statement itself."""
-        if body.type == "statement_block":
+        if body.type == Kind.STATEMENT_BLOCK:
             self._push_statements(
-                stack, [c for c in body.named_children if c.type != "comment"], parent
+                stack, [c for c in body.named_children if c.type != Kind.COMMENT], parent
             )
         else:
             stack.append((_T_STATEMENT, body, parent))
@@ -375,60 +388,60 @@ class _UnitCollector:
         self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
     ) -> None:
         kind = node.type
-        if kind in ("comment", "empty_statement"):
+        if kind in (Kind.COMMENT, Kind.EMPTY_STATEMENT):
             return
-        if kind == "statement_block":
+        if kind == Kind.STATEMENT_BLOCK:
             self._push_block(stack, node, parent)
             return
         self.statements += 1
-        if kind == "if_statement":
+        if kind == Kind.IF_STATEMENT:
             self._if(stack, node, parent, CK_IF)
-        elif kind in ("for_statement", "for_in_statement", "while_statement", "do_statement"):
+        elif kind in LOOP_STATEMENTS:
             self._loop(stack, node, parent)
-        elif kind == "try_statement":
+        elif kind == Kind.TRY_STATEMENT:
             self._try(stack, node, parent)
-        elif kind == "switch_statement":
+        elif kind == Kind.SWITCH_STATEMENT:
             self._switch(stack, node, parent)
-        elif kind == "labeled_statement":
-            body = node.child_by_field_name("body")
+        elif kind == Kind.LABELED_STATEMENT:
+            body = node.child_by_field_name(Field.BODY)
             if body is not None:
                 self.statements -= 1
                 stack.append((_T_STATEMENT, body, parent))
-        elif kind == "with_statement":
+        elif kind == Kind.WITH_STATEMENT:
             expression = self._new(CK_EXPR, "", parent)
-            body = node.child_by_field_name("body")
+            body = node.child_by_field_name(Field.BODY)
             if body is not None:
                 self._push_block(stack, body, parent)
-            self._expr(stack, node.child_by_field_name("object"), expression)
-        elif kind in ("break_statement", "continue_statement"):
-            if node.child_by_field_name("label") is not None:
+            self._expr(stack, node.child_by_field_name(Field.OBJECT), expression)
+        elif kind in (Kind.BREAK_STATEMENT, Kind.CONTINUE_STATEMENT):
+            if node.child_by_field_name(Field.LABEL) is not None:
                 jump = self._new(CK_JUMP, "", parent)
                 jump.labeled = True
         elif kind in NESTED_DECLARATIONS:
             self._nested_declaration(stack, node, parent)
-        elif kind == "export_statement":
-            declaration = node.child_by_field_name("declaration")
-            value = node.child_by_field_name("value")
+        elif kind == Kind.EXPORT_STATEMENT:
+            declaration = node.child_by_field_name(Field.DECLARATION)
+            value = node.child_by_field_name(Field.VALUE)
             if declaration is not None:
                 self.statements -= 1
                 stack.append((_T_STATEMENT, declaration, parent))
             elif value is not None:
                 self._expr(stack, value, self._new(CK_EXPR, "", parent))
-        elif kind == "import_statement":
+        elif kind == Kind.IMPORT_STATEMENT:
             for name in _import_bound_names(node):
                 self.locals.add(name)
         elif kind in DECLARATION_TYPES:
             self._declaration(stack, node, parent)
-        elif kind == "class_static_block":
-            body = node.child_by_field_name("body")
+        elif kind == Kind.CLASS_STATIC_BLOCK:
+            body = node.child_by_field_name(Field.BODY)
             if body is not None:
                 self._push_block(stack, body, parent)
         elif kind in FIELD_DEFINITIONS:
-            self._expr(stack, node.child_by_field_name("value"), self._new(CK_EXPR, "", parent))
+            self._expr(stack, node.child_by_field_name(Field.VALUE), self._new(CK_EXPR, "", parent))
         else:
             expression = self._new(CK_EXPR, "", parent)
             for child in reversed(node.named_children):
-                if child.type != "comment":
+                if child.type != Kind.COMMENT:
                     self._expr(stack, child, expression)
 
     def _declaration(
@@ -436,10 +449,10 @@ class _UnitCollector:
     ) -> None:
         expression = self._new(CK_EXPR, "", parent)
         for declarator in reversed(node.named_children):
-            if declarator.type != "variable_declarator":
+            if declarator.type != Kind.VARIABLE_DECLARATOR:
                 continue
-            name = declarator.child_by_field_name("name")
-            value = declarator.child_by_field_name("value")
+            name = declarator.child_by_field_name(Field.NAME)
+            value = declarator.child_by_field_name(Field.VALUE)
             if name is not None:
                 self.locals.update(pattern_names(name))
                 self._expr(stack, name, expression)
@@ -448,17 +461,17 @@ class _UnitCollector:
     def _nested_declaration(
         self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
     ) -> None:
-        name = node.child_by_field_name("name")
+        name = node.child_by_field_name(Field.NAME)
         if name is not None:
             self.locals.add(node_text(name))
         expression = self._new(CK_EXPR, "", parent)
         if node.type in CLASS_TYPES:
             # extends clause is evaluated here; the body is the class unit
             for child in reversed(node.named_children):
-                if child.type == "class_heritage":
+                if child.type == Kind.CLASS_HERITAGE:
                     self._expr(stack, child, expression)
         else:
-            parameters = node.child_by_field_name("parameters")
+            parameters = node.child_by_field_name(Field.PARAMETERS)
             if parameters is not None:
                 self._parameter_defaults(stack, parameters, expression)
 
@@ -476,75 +489,75 @@ class _UnitCollector:
     ) -> None:
         builder = self._new(kind, "", parent)
         condition = self._new(CK_EXPR, "", builder)
-        self._expr(stack, node.child_by_field_name("condition"), condition)
+        self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
         then_block = self._new(CK_BLOCK, "", builder)
-        alternative = node.child_by_field_name("alternative")
+        alternative = node.child_by_field_name(Field.ALTERNATIVE)
         if alternative is not None:
-            inner = [c for c in alternative.named_children if c.type != "comment"]
-            if len(inner) == 1 and inner[0].type == "if_statement":
+            inner = [c for c in alternative.named_children if c.type != Kind.COMMENT]
+            if len(inner) == 1 and inner[0].type == Kind.IF_STATEMENT:
                 self.statements += 1
                 self._if(stack, inner[0], builder, CK_ELIF)
             else:
                 else_block = self._new(CK_BLOCK, "", builder)
                 for child in inner:
                     self._push_block(stack, child, else_block)
-        consequence = node.child_by_field_name("consequence")
+        consequence = node.child_by_field_name(Field.CONSEQUENCE)
         if consequence is not None:
             self._push_block(stack, consequence, then_block)
 
     def _loop(self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder) -> None:
         label = LOOP_FOR
-        if node.type == "while_statement":
+        if node.type == Kind.WHILE_STATEMENT:
             label = LOOP_WHILE
-        elif node.type == "do_statement":
+        elif node.type == Kind.DO_STATEMENT:
             label = LOOP_DO
         loop = self._new(CK_LOOP, label, parent)
         condition = self._new(CK_EXPR, "", loop)
         body_block = self._new(CK_BLOCK, "", loop)
-        body = node.child_by_field_name("body")
+        body = node.child_by_field_name(Field.BODY)
         if body is not None:
             self._push_block(stack, body, body_block)
-        if node.type == "for_in_statement":
-            left = node.child_by_field_name("left")
+        if node.type == Kind.FOR_IN_STATEMENT:
+            left = node.child_by_field_name(Field.LEFT)
             if left is not None:
                 self.locals.update(pattern_names(left))
-            self._expr(stack, node.child_by_field_name("right"), condition)
+            self._expr(stack, node.child_by_field_name(Field.RIGHT), condition)
             self._expr(stack, left, condition)
-        elif node.type == "for_statement":
-            initializer = node.child_by_field_name("initializer")
+        elif node.type == Kind.FOR_STATEMENT:
+            initializer = node.child_by_field_name(Field.INITIALIZER)
             if initializer is not None and initializer.type in DECLARATION_TYPES:
                 for declarator in initializer.named_children:
-                    name = declarator.child_by_field_name("name")
+                    name = declarator.child_by_field_name(Field.NAME)
                     if name is not None:
                         self.locals.update(pattern_names(name))
-            self._expr(stack, node.child_by_field_name("increment"), condition)
-            self._expr(stack, node.child_by_field_name("condition"), condition)
+            self._expr(stack, node.child_by_field_name(Field.INCREMENT), condition)
+            self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
             self._expr(stack, initializer, condition)
         else:
-            self._expr(stack, node.child_by_field_name("condition"), condition)
+            self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
 
     def _try(self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder) -> None:
         builder = self._new(CK_TRY, "", parent)
         body = self._new(CK_BLOCK, "", builder)
-        handler = node.child_by_field_name("handler")
-        finalizer = node.child_by_field_name("finalizer")
+        handler = node.child_by_field_name(Field.HANDLER)
+        finalizer = node.child_by_field_name(Field.FINALIZER)
         handler_block: _Builder | None = None
         if handler is not None:
             handler_block = self._new(CK_HANDLER, "", builder)
-            parameter = handler.child_by_field_name("parameter")
+            parameter = handler.child_by_field_name(Field.PARAMETER)
             if parameter is not None:
                 self.locals.update(pattern_names(parameter))
         finally_block: _Builder | None = None
         if finalizer is not None:
             finally_block = self._new(CK_FINALLY, "", builder)
-            finally_body = finalizer.child_by_field_name("body")
+            finally_body = finalizer.child_by_field_name(Field.BODY)
             if finally_body is not None:
                 self._push_block(stack, finally_body, finally_block)
         if handler is not None and handler_block is not None:
-            handler_body = handler.child_by_field_name("body")
+            handler_body = handler.child_by_field_name(Field.BODY)
             if handler_body is not None:
                 self._push_block(stack, handler_body, handler_block)
-        try_body = node.child_by_field_name("body")
+        try_body = node.child_by_field_name(Field.BODY)
         if try_body is not None:
             self._push_block(stack, try_body, body)
 
@@ -553,25 +566,25 @@ class _UnitCollector:
     ) -> None:
         builder = self._new(CK_SWITCH, "", parent)
         subject = self._new(CK_EXPR, "", builder)
-        body = node.child_by_field_name("body")
+        body = node.child_by_field_name(Field.BODY)
         cases: list[tuple[Node, _Builder, _Builder]] = []
         if body is not None:
             for case in body.named_children:
-                if case.type not in ("switch_case", "switch_default"):
+                if case.type not in (Kind.SWITCH_CASE, Kind.SWITCH_DEFAULT):
                     continue
-                label = CASE_DEFAULT if case.type == "switch_default" else ""
+                label = CASE_DEFAULT if case.type == Kind.SWITCH_DEFAULT else ""
                 case_builder = self._new(CK_CASE, label, builder)
                 guard = self._new(CK_EXPR, "", case_builder)
                 case_body = self._new(CK_BLOCK, "", case_builder)
                 cases.append((case, guard, case_body))
         for case, guard, case_body in reversed(cases):
-            statements = [c for c in case.named_children if c.type != "comment"]
-            value = case.child_by_field_name("value")
+            statements = [c for c in case.named_children if c.type != Kind.COMMENT]
+            value = case.child_by_field_name(Field.VALUE)
             if value is not None:
                 statements = [c for c in statements if c.id != value.id]
             self._push_statements(stack, statements, case_body)
             self._expr(stack, value, guard)
-        self._expr(stack, node.child_by_field_name("value"), subject)
+        self._expr(stack, node.child_by_field_name(Field.VALUE), subject)
 
     # -- expressions --------------------------------------------------------
 
@@ -579,16 +592,16 @@ class _UnitCollector:
         self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
     ) -> None:
         kind = node.type
-        if kind == "comment":
+        if kind == Kind.COMMENT:
             return
         if kind in UNIT_TYPES:
             # The body is a separate unit; parameter defaults are evaluated here.
-            parameters = node.child_by_field_name("parameters")
+            parameters = node.child_by_field_name(Field.PARAMETERS)
             if parameters is not None:
                 self._parameter_defaults(stack, parameters, parent)
             return
-        if kind == "binary_expression":
-            operator = node.child_by_field_name("operator")
+        if kind == Kind.BINARY_EXPRESSION:
+            operator = node.child_by_field_name(Field.OPERATOR)
             if operator is not None and node_text(operator) in BOOLEAN_OPERATORS:
                 operators, leaves = _boolean_operators(node)
                 parent.operators += len(operators)
@@ -596,35 +609,35 @@ class _UnitCollector:
                 for leaf in reversed(leaves):
                     self._expr(stack, leaf, parent)
                 return
-        elif kind == "augmented_assignment_expression":
-            operator = node.child_by_field_name("operator")
+        elif kind == Kind.AUGMENTED_ASSIGNMENT_EXPRESSION:
+            operator = node.child_by_field_name(Field.OPERATOR)
             if operator is not None and node_text(operator) in LOGICAL_ASSIGNMENTS:
                 parent.operators += 1
                 parent.sequences += 1
-            self._write(node.child_by_field_name("left"), WRITE_ASSIGN)
-        elif kind == "assignment_expression":
-            left = node.child_by_field_name("left")
+            self._write(node.child_by_field_name(Field.LEFT), WRITE_ASSIGN)
+        elif kind == Kind.ASSIGNMENT_EXPRESSION:
+            left = node.child_by_field_name(Field.LEFT)
             self._write(left, WRITE_ASSIGN)
-            if left is not None and left.type in ("object_pattern", "array_pattern"):
+            if left is not None and left.type in (Kind.OBJECT_PATTERN, Kind.ARRAY_PATTERN):
                 for name in pattern_names(left):
                     self._write_name(name)
-        elif kind == "update_expression":
-            self._write(node.child_by_field_name("argument"), WRITE_ASSIGN)
-        elif kind == "unary_expression":
-            operator = node.child_by_field_name("operator")
-            argument = node.child_by_field_name("argument")
+        elif kind == Kind.UPDATE_EXPRESSION:
+            self._write(node.child_by_field_name(Field.ARGUMENT), WRITE_ASSIGN)
+        elif kind == Kind.UNARY_EXPRESSION:
+            operator = node.child_by_field_name(Field.OPERATOR)
+            argument = node.child_by_field_name(Field.ARGUMENT)
             if operator is not None and node_text(operator) == "delete" and argument is not None:
                 self._write(argument, WRITE_MUTATE)
-        elif kind == "ternary_expression":
+        elif kind == Kind.TERNARY_EXPRESSION:
             conditional = self._new(CK_CONDITIONAL, "", parent)
             condition = self._new(CK_EXPR, "", conditional)
             then_part = self._new(CK_EXPR, "", conditional)
             else_part = self._new(CK_EXPR, "", conditional)
-            self._expr(stack, node.child_by_field_name("alternative"), else_part)
-            self._expr(stack, node.child_by_field_name("consequence"), then_part)
-            self._expr(stack, node.child_by_field_name("condition"), condition)
+            self._expr(stack, node.child_by_field_name(Field.ALTERNATIVE), else_part)
+            self._expr(stack, node.child_by_field_name(Field.CONSEQUENCE), then_part)
+            self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
             return
-        elif kind in ("call_expression", "new_expression"):
+        elif kind in (Kind.CALL_EXPRESSION, Kind.NEW_EXPRESSION):
             self._call(node, parent)
         for child in reversed(node.named_children):
             self._expr(stack, child, parent)
@@ -632,12 +645,12 @@ class _UnitCollector:
     def _write(self, target: Node | None, kind: str) -> None:
         if target is None:
             return
-        if target.type == "identifier":
+        if target.type == Kind.IDENTIFIER:
             if kind == WRITE_ASSIGN:
                 self._write_name(node_text(target))
             return
         root = _root_identifier(target)
-        if root is not None and target.type in ("member_expression", "subscript_expression"):
+        if root is not None and target.type in (Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION):
             self.mutate_candidates.append(root)
 
     def _write_name(self, name: str) -> None:
@@ -645,32 +658,32 @@ class _UnitCollector:
 
     def _call(self, node: Node, parent: _Builder) -> None:
         span = node_span(self.source, node)
-        arguments = node.child_by_field_name("arguments")
-        if node.type == "new_expression":
+        arguments = node.child_by_field_name(Field.ARGUMENTS)
+        if node.type == Kind.NEW_EXPRESSION:
             self._new_call(node, span)
             self._arguments(arguments)
             return
-        function = node.child_by_field_name("function")
+        function = node.child_by_field_name(Field.FUNCTION)
         if function is None:
             return
         callee = _unwrap(function)
         if callee.type == IMPORT_CALL:
             return  # dynamic import: an import fact, not a call
-        if callee.type == "identifier":
+        if callee.type == Kind.IDENTIFIER:
             name = node_text(callee)
             if name == REQUIRE:
                 return  # CommonJS import: an import fact, not a call
             self.calls.append(CallSite(span, name, CALL_NAME, receiver_self=False))
             if name == self.own_name:
                 self._new(CK_RECURSION, "", parent)
-        elif callee.type == "member_expression":
+        elif callee.type == Kind.MEMBER_EXPRESSION:
             self._member_call(callee, span, arguments, parent)
         else:
             self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, receiver_self=False))
         self._arguments(arguments)
 
     def _new_call(self, node: Node, span: Span) -> None:
-        constructor = node.child_by_field_name("constructor")
+        constructor = node.child_by_field_name(Field.CONSTRUCTOR)
         if constructor is None:
             return
         dotted = dotted_name(_unwrap(constructor))
@@ -696,22 +709,22 @@ class _UnitCollector:
 
     def _mutation_through_call(self, callee: Node, dotted: str, arguments: Node | None) -> None:
         """``x.push(v)`` and ``Object.assign(x, ...)`` write to ``x``."""
-        prop = callee.child_by_field_name("property")
-        obj = callee.child_by_field_name("object")
-        if prop is not None and obj is not None and obj.type == "identifier":
+        prop = callee.child_by_field_name(Field.PROPERTY)
+        obj = callee.child_by_field_name(Field.OBJECT)
+        if prop is not None and obj is not None and obj.type == Kind.IDENTIFIER:
             if node_text(prop) in MUTATING_METHODS:
                 self.mutate_candidates.append(node_text(obj))
         if dotted != OBJECT_ASSIGN or arguments is None:
             return
-        first = [a for a in arguments.named_children if a.type != "comment"]
-        if len(first) > 0 and first[0].type == "identifier":
+        first = [a for a in arguments.named_children if a.type != Kind.COMMENT]
+        if len(first) > 0 and first[0].type == Kind.IDENTIFIER:
             self.mutate_candidates.append(node_text(first[0]))
 
     def _arguments(self, arguments: Node | None) -> None:
         if arguments is None:
             return
         for argument in arguments.named_children:
-            if argument.type == "identifier":
+            if argument.type == Kind.IDENTIFIER:
                 self.calls.append(
                     CallSite(
                         node_span(self.source, argument),
@@ -720,9 +733,9 @@ class _UnitCollector:
                         receiver_self=False,
                     )
                 )
-            elif argument.type == "spread_element":
-                inner = [c for c in argument.named_children if c.type != "comment"]
-                if len(inner) == 1 and inner[0].type == "identifier":
+            elif argument.type == Kind.SPREAD_ELEMENT:
+                inner = [c for c in argument.named_children if c.type != Kind.COMMENT]
+                if len(inner) == 1 and inner[0].type == Kind.IDENTIFIER:
                     self.calls.append(
                         CallSite(
                             node_span(self.source, inner[0]),
@@ -738,25 +751,25 @@ class _UnitCollector:
         """Push the unit's own body: parameters bind locals, the body is a block or expression."""
         node = self.unit.node
         if node.type in FUNCTION_TYPES:
-            for field_name in ("parameters", "parameter"):
+            for field_name in (Field.PARAMETERS, Field.PARAMETER):
                 bound = node.child_by_field_name(field_name)
                 if bound is not None:
                     self.locals.update(pattern_names(bound))
-            body = node.child_by_field_name("body")
+            body = node.child_by_field_name(Field.BODY)
             if body is None:
                 return
-            if body.type == "statement_block":
+            if body.type == Kind.STATEMENT_BLOCK:
                 self._push_block(stack, body, self.root)
             else:
                 self._expr(stack, body, self._new(CK_EXPR, "", self.root))
             return
         container = node
         if node.type in CLASS_TYPES:
-            body = node.child_by_field_name("body")
+            body = node.child_by_field_name(Field.BODY)
             if body is None:
                 return
             container = body
-        members = [c for c in container.named_children if c.type != "comment"]
+        members = [c for c in container.named_children if c.type != Kind.COMMENT]
         self._push_statements(stack, members, self.root)
 
     def _method_member(
@@ -765,7 +778,7 @@ class _UnitCollector:
         """A method of a class body: one statement of the class unit, its own unit otherwise."""
         self.statements += 1
         self.locals.add(_method_name(node))
-        parameters = node.child_by_field_name("parameters")
+        parameters = node.child_by_field_name(Field.PARAMETERS)
         if parameters is not None:
             self._parameter_defaults(stack, parameters, self._new(CK_EXPR, "", parent))
 
@@ -776,7 +789,7 @@ class _UnitCollector:
             task, payload, parent = stack.pop()
             if task != _T_STATEMENT:
                 self._expression(stack, payload, parent)
-            elif payload.type == "method_definition":
+            elif payload.type == Kind.METHOD_DEFINITION:
                 self._method_member(stack, payload, parent)
             else:
                 self._statement(stack, payload, parent)
@@ -816,7 +829,7 @@ def _trivial_expr(node: ControlNode) -> bool:
 
 
 def _method_name(node: Node) -> str:
-    name = node.child_by_field_name("name")
+    name = node.child_by_field_name(Field.NAME)
     if name is None:
         return ""
     return node_text(name)
@@ -824,16 +837,16 @@ def _method_name(node: Node) -> str:
 
 def _own_name(unit: UnitInfo) -> str | None:
     node = unit.node
-    if node.type == "method_definition":
+    if node.type == Kind.METHOD_DEFINITION:
         return _method_name(node)
     if node.type in FUNCTION_TYPES:
-        name = node.child_by_field_name("name")
+        name = node.child_by_field_name(Field.NAME)
         if name is not None:
             return node_text(name)
         parent = node.parent
-        if parent is not None and parent.type == "variable_declarator":
-            bound = parent.child_by_field_name("name")
-            if bound is not None and bound.type == "identifier":
+        if parent is not None and parent.type == Kind.VARIABLE_DECLARATOR:
+            bound = parent.child_by_field_name(Field.NAME)
+            if bound is not None and bound.type == Kind.IDENTIFIER:
                 return node_text(bound)
     return None
 
@@ -841,17 +854,17 @@ def _own_name(unit: UnitInfo) -> str | None:
 def _parameter_count(node: Node) -> int:
     if node.type not in FUNCTION_TYPES:
         return 0
-    parameters = node.child_by_field_name("parameters")
+    parameters = node.child_by_field_name(Field.PARAMETERS)
     if parameters is None:
         # `x => ...`: a single parameter without parentheses
-        return 1 if node.child_by_field_name("parameter") is not None else 0
+        return 1 if node.child_by_field_name(Field.PARAMETER) is not None else 0
     return sum(
-        1 for c in parameters.named_children if c.type != "comment" and not is_this_parameter(c)
+        1 for c in parameters.named_children if c.type != Kind.COMMENT and not is_this_parameter(c)
     )
 
 
 def _unit_span(source: SourceText, node: Node) -> Span:
-    if node.type == "program":
+    if node.type == Kind.PROGRAM:
         last_line = max(source.line_count, FIRST_LINE)
         return Span(FIRST_LINE, FIRST_COLUMN, last_line, len(source.line_text(last_line)) + 1)
     return node_span(source, node)
@@ -860,7 +873,7 @@ def _unit_span(source: SourceText, node: Node) -> Span:
 def _is_generator(node: Node) -> bool:
     if node.type in GENERATOR_TYPES:
         return True
-    if node.type == "method_definition":
+    if node.type == Kind.METHOD_DEFINITION:
         return any(c.type == "*" for c in node.children if not c.is_named)
     return False
 
@@ -882,7 +895,12 @@ def collect_javascript_functions(
                 (
                     other,
                     units[other_index].node.type
-                    in ("arrow_function", "function_expression", "generator_function", "class"),
+                    in (
+                        Kind.ARROW_FUNCTION,
+                        Kind.FUNCTION_EXPRESSION,
+                        Kind.GENERATOR_FUNCTION,
+                        Kind.CLASS,
+                    ),
                 )
                 for other_index, other in enumerate(spans)
                 if other_index != index
@@ -949,15 +967,17 @@ def _specifier_names(clause: Node, specifier_type: str) -> list[tuple[str, str]]
     for specifier in clause.named_children:
         if specifier.type != specifier_type or _type_only(specifier):
             continue
-        name = specifier.child_by_field_name("name")
+        name = specifier.child_by_field_name(Field.NAME)
         if name is None:
             continue
-        names.append((node_text(name), _local_name(name, specifier.child_by_field_name("alias"))))
+        names.append(
+            (node_text(name), _local_name(name, specifier.child_by_field_name(Field.ALIAS)))
+        )
     return names
 
 
 def _namespace_name(node: Node) -> str | None:
-    inner = [c for c in node.named_children if c.type == "identifier"]
+    inner = [c for c in node.named_children if c.type == Kind.IDENTIFIER]
     if len(inner) == 1:
         return node_text(inner[0])
     return None
@@ -967,16 +987,16 @@ def _import_clause(span: Span, module: str, clause: Node) -> list[ImportFact]:
     facts: list[ImportFact] = []
     names: list[tuple[str, str]] = []
     for child in clause.named_children:
-        if child.type == "identifier":
+        if child.type == Kind.IDENTIFIER:
             names.append((DEFAULT_EXPORT, node_text(child)))
-        elif child.type == "namespace_import":
+        elif child.type == Kind.NAMESPACE_IMPORT:
             namespace = _namespace_name(child)
             if namespace is not None:
                 facts.append(ImportFact(span, IMPORT_MODULE, module, 0, (("", namespace),)))
-        elif child.type == "named_imports":
-            if _only_types(child, "import_specifier") and len(clause.named_children) == 1:
+        elif child.type == Kind.NAMED_IMPORTS:
+            if _only_types(child, Kind.IMPORT_SPECIFIER) and len(clause.named_children) == 1:
                 return []
-            names.extend(_specifier_names(child, "import_specifier"))
+            names.extend(_specifier_names(child, Kind.IMPORT_SPECIFIER))
     if len(names) > 0 or len(facts) == 0:
         facts.append(ImportFact(span, IMPORT_NAMES, module, 0, tuple(names)))
     return facts
@@ -984,7 +1004,7 @@ def _import_clause(span: Span, module: str, clause: Node) -> list[ImportFact]:
 
 def _statement_module(statement: Node) -> str | None:
     """The literal specifier of an import/export statement, if it has one."""
-    source_node = statement.child_by_field_name("source")
+    source_node = statement.child_by_field_name(Field.SOURCE)
     if source_node is None:
         return None
     return string_value(source_node)
@@ -994,13 +1014,13 @@ def _import_statement(source: SourceText, statement: Node) -> list[ImportFact]:
     span = Span(FIRST_LINE, FIRST_COLUMN, FIRST_LINE, FIRST_COLUMN)
     if source.text != "":
         span = node_span(source, statement)
-    required = [c for c in statement.named_children if c.type == "import_require_clause"]
+    required = [c for c in statement.named_children if c.type == Kind.IMPORT_REQUIRE_CLAUSE]
     if len(required) > 0:
         return _require_clause(span, required[0])
     module = _statement_module(statement)
     if module is None or _type_only(statement):
         return []
-    clauses = [c for c in statement.named_children if c.type == "import_clause"]
+    clauses = [c for c in statement.named_children if c.type == Kind.IMPORT_CLAUSE]
     if len(clauses) == 0:
         return [ImportFact(span, IMPORT_MODULE, module, 0, ())]
     return _import_clause(span, module, clauses[0])
@@ -1008,8 +1028,8 @@ def _import_statement(source: SourceText, statement: Node) -> list[ImportFact]:
 
 def _require_clause(span: Span, clause: Node) -> list[ImportFact]:
     """TypeScript's ``import fs = require("fs")``: the whole module under one name."""
-    source_node = clause.child_by_field_name("source")
-    names = [c for c in clause.named_children if c.type == "identifier"]
+    source_node = clause.child_by_field_name(Field.SOURCE)
+    names = [c for c in clause.named_children if c.type == Kind.IDENTIFIER]
     if source_node is None or len(names) != 1:
         return []
     module = string_value(source_node)
@@ -1024,11 +1044,11 @@ def _export_statement(source: SourceText, statement: Node) -> list[ImportFact]:
         return []
     names: list[tuple[str, str]] = []
     for child in statement.named_children:
-        if child.type == "export_clause":
-            if _only_types(child, "export_specifier"):
+        if child.type == Kind.EXPORT_CLAUSE:
+            if _only_types(child, Kind.EXPORT_SPECIFIER):
                 return []
-            names.extend(_specifier_names(child, "export_specifier"))
-        elif child.type == "namespace_export":
+            names.extend(_specifier_names(child, Kind.EXPORT_SPECIFIER))
+        elif child.type == Kind.NAMESPACE_EXPORT:
             namespace = _namespace_name(child)
             if namespace is not None:
                 names.append((STAR, namespace))
@@ -1039,16 +1059,18 @@ def _export_statement(source: SourceText, statement: Node) -> list[ImportFact]:
 
 def _require_target(call: Node) -> tuple[str | None, bool]:
     """(module specifier, is_require) for ``require(...)`` and ``import(...)`` calls."""
-    function = call.child_by_field_name("function")
-    arguments = call.child_by_field_name("arguments")
+    function = call.child_by_field_name(Field.FUNCTION)
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
     if function is None or arguments is None:
         return None, False
     callee = _unwrap(function)
-    if (callee.type == "identifier" and node_text(callee) == REQUIRE) or callee.type == IMPORT_CALL:
+    if (
+        callee.type == Kind.IDENTIFIER and node_text(callee) == REQUIRE
+    ) or callee.type == IMPORT_CALL:
         pass
     else:
         return None, False
-    actual = [a for a in arguments.named_children if a.type != "comment"]
+    actual = [a for a in arguments.named_children if a.type != Kind.COMMENT]
     if len(actual) == 0:
         return None, True
     return string_value(actual[0]), True
@@ -1059,12 +1081,12 @@ def collect_javascript_imports(source: SourceText, root: Node) -> tuple[ImportFa
     stack = [root]
     while len(stack) > 0:
         node = stack.pop()
-        if node.type == "import_statement":
+        if node.type == Kind.IMPORT_STATEMENT:
             imports.extend(_import_statement(source, node))
             continue
-        if node.type == "export_statement":
+        if node.type == Kind.EXPORT_STATEMENT:
             imports.extend(_export_statement(source, node))
-        if node.type == "call_expression":
+        if node.type == Kind.CALL_EXPRESSION:
             module, is_import = _require_target(node)
             if is_import:
                 span = node_span(source, node)
@@ -1083,31 +1105,31 @@ def collect_javascript_imports(source: SourceText, root: Node) -> tuple[ImportFa
 
 def _require_kind(call: Node) -> str:
     parent = call.parent
-    if parent is not None and parent.type == "variable_declarator":
-        name = parent.child_by_field_name("name")
-        if name is not None and name.type == "object_pattern":
+    if parent is not None and parent.type == Kind.VARIABLE_DECLARATOR:
+        name = parent.child_by_field_name(Field.NAME)
+        if name is not None and name.type == Kind.OBJECT_PATTERN:
             return IMPORT_NAMES
     return IMPORT_MODULE
 
 
 def _require_names(call: Node) -> tuple[tuple[str, str], ...]:
     parent = call.parent
-    if parent is None or parent.type != "variable_declarator":
+    if parent is None or parent.type != Kind.VARIABLE_DECLARATOR:
         return ()
-    name = parent.child_by_field_name("name")
+    name = parent.child_by_field_name(Field.NAME)
     if name is None:
         return ()
-    if name.type == "identifier":
+    if name.type == Kind.IDENTIFIER:
         return (("", node_text(name)),)
-    if name.type == "object_pattern":
+    if name.type == Kind.OBJECT_PATTERN:
         names: list[tuple[str, str]] = []
         for child in name.named_children:
-            if child.type == "shorthand_property_identifier_pattern":
+            if child.type == Kind.SHORTHAND_PROPERTY_IDENTIFIER_PATTERN:
                 names.append((node_text(child), node_text(child)))
-            elif child.type == "pair_pattern":
-                key = child.child_by_field_name("key")
-                value = child.child_by_field_name("value")
-                if key is not None and value is not None and value.type == "identifier":
+            elif child.type == Kind.PAIR_PATTERN:
+                key = child.child_by_field_name(Field.KEY)
+                value = child.child_by_field_name(Field.VALUE)
+                if key is not None and value is not None and value.type == Kind.IDENTIFIER:
                     names.append((node_text(key), node_text(value)))
         return tuple(names)
     return ()
@@ -1117,27 +1139,27 @@ def _is_mutable_value(value: Node | None) -> bool:
     if value is None:
         return False
     unwrapped = _unwrap(value)
-    if unwrapped.type in ("object", "array"):
+    if unwrapped.type in (Kind.OBJECT, Kind.ARRAY):
         return True
-    if unwrapped.type == "new_expression":
-        constructor = unwrapped.child_by_field_name("constructor")
+    if unwrapped.type == Kind.NEW_EXPRESSION:
+        constructor = unwrapped.child_by_field_name(Field.CONSTRUCTOR)
         return constructor is not None and node_text(constructor) in MUTABLE_CONSTRUCTORS
     return False
 
 
 def _declarator_bindings(declarator: Node, reassignable: bool, span: Span) -> list[ModuleBinding]:
-    name = declarator.child_by_field_name("name")
-    value = declarator.child_by_field_name("value")
+    name = declarator.child_by_field_name(Field.NAME)
+    value = declarator.child_by_field_name(Field.VALUE)
     if name is None:
         return []
-    if value is not None and value.type == "call_expression":
+    if value is not None and value.type == Kind.CALL_EXPRESSION:
         _module, is_import = _require_target(value)
         if is_import:
             return [
                 ModuleBinding(local, BINDING_IMPORT, mutable=False, span=span)
                 for _imported, local in _require_names(value)
             ]
-    if name.type == "identifier" and value is not None:
+    if name.type == Kind.IDENTIFIER and value is not None:
         if value.type in FUNCTION_TYPES:
             return [ModuleBinding(node_text(name), BINDING_FUNCTION, mutable=False, span=span)]
         if value.type in CLASS_TYPES:
@@ -1147,27 +1169,27 @@ def _declarator_bindings(declarator: Node, reassignable: bool, span: Span) -> li
 
 
 def _declaration_bindings(node: Node, span: Span) -> list[ModuleBinding]:
-    kind_node = node.child_by_field_name("kind")
-    reassignable = node.type == "variable_declaration" or (
+    kind_node = node.child_by_field_name(Field.KIND)
+    reassignable = node.type == Kind.VARIABLE_DECLARATION or (
         kind_node is not None and node_text(kind_node) != "const"
     )
     found: list[ModuleBinding] = []
     for declarator in node.named_children:
-        if declarator.type == "variable_declarator":
+        if declarator.type == Kind.VARIABLE_DECLARATOR:
             found.extend(_declarator_bindings(declarator, reassignable, span))
     return found
 
 
 def _statement_bindings(node: Node, span: Span) -> list[ModuleBinding]:
-    if node.type in ("function_declaration", "generator_function_declaration") or (
+    if node.type in (Kind.FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION_DECLARATION) or (
         node.type in CLASS_TYPES
     ):
-        name = node.child_by_field_name("name")
+        name = node.child_by_field_name(Field.NAME)
         if name is None:
             return []
         kind = BINDING_CLASS if node.type in CLASS_TYPES else BINDING_FUNCTION
         return [ModuleBinding(node_text(name), kind, mutable=False, span=span)]
-    if node.type == "import_statement":
+    if node.type == Kind.IMPORT_STATEMENT:
         return [
             ModuleBinding(local, BINDING_IMPORT, mutable=False, span=span)
             for local in _import_bound_names(node)
@@ -1181,8 +1203,8 @@ def collect_javascript_bindings(source: SourceText, root: Node) -> tuple[ModuleB
     bindings: dict[str, ModuleBinding] = {}
     for statement in root.named_children:
         node = statement
-        if node.type == "export_statement":
-            declaration = node.child_by_field_name("declaration")
+        if node.type == Kind.EXPORT_STATEMENT:
+            declaration = node.child_by_field_name(Field.DECLARATION)
             if declaration is None:
                 continue
             node = declaration

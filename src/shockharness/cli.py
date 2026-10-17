@@ -18,6 +18,7 @@ from shockharness.analysis import CACHE_BYPASSED, CACHE_CONFIGURED, AnalysisOpti
 from shockharness.api import analyze_paths, apply_baseline, with_history
 from shockharness.config import (
     DEDICATED_FILENAME,
+    PARSE_ERROR_POLICIES,
     USER_TIERS,
     CliOverrides,
     EffectiveConfig,
@@ -69,7 +70,6 @@ FORMAT_JSON = "json"
 FORMAT_SARIF = "sarif"
 FORMATS = (FORMAT_TEXT, FORMAT_JSON, FORMAT_SARIF)
 WORKING_TREE_REVISION = "HEAD"
-PARSE_ERROR_POLICIES = ("fail", "warn")
 COMMAND_CHECK = "check"
 COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
 COMMAND_VERSION = "version"

@@ -24,7 +24,13 @@ from typing import Any
 from shockharness.analysis import STATUS_UNSUPPORTED, FileResult
 from shockharness.complexity.coupling import STATUS_AVAILABLE
 from shockharness.complexity.regressions import exceeds_threshold
-from shockharness.config import UNSUPPORTED_IGNORE, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
+from shockharness.config import (
+    PARSE_ERRORS_FAIL,
+    PARSE_ERRORS_KEY,
+    UNSUPPORTED_IGNORE,
+    UNSUPPORTED_SOURCES_KEY,
+    EffectiveConfig,
+)
 from shockharness.constants import ELAPSED_DECIMALS, REPORT_SCHEMA_VERSION, SUMMARY_TOP_FILES
 from shockharness.discovery import DiscoveryResult
 from shockharness.findings import FINDING_STATUSES, Finding
@@ -104,7 +110,7 @@ def _analysis_status(files: Sequence[FileResult], config: EffectiveConfig) -> st
     if failures == 0:
         return STATUS_COMPLETE
     unsupported = any(f.status == STATUS_UNSUPPORTED for f in files)
-    if config.values["parse_errors"] == "fail" or unsupported:
+    if config.values[PARSE_ERRORS_KEY] == PARSE_ERRORS_FAIL or unsupported:
         return STATUS_FAILED
     return STATUS_INCOMPLETE
 

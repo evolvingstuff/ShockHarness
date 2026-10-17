@@ -58,6 +58,9 @@ UNSUPPORTED_SOURCES_KEY = "unsupported_sources"
 UNSUPPORTED_FAIL = "fail"
 UNSUPPORTED_WARN = "warn"
 UNSUPPORTED_IGNORE = "ignore"
+PARSE_ERRORS_KEY = "parse_errors"
+PARSE_ERRORS_FAIL = "fail"
+PARSE_ERROR_POLICIES = (PARSE_ERRORS_FAIL, "warn")
 PROFILES_PACKAGE = "shockharness.profiles"
 # Sections that carry a `severity` cap (see rules/severity.py), with the rules they cover.
 SEVERITY_SECTIONS: Mapping[str, str] = {
@@ -768,7 +771,7 @@ def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> 
             "numeric literal that is the whole value of a module-level named constant "
             "definition is not reported"
         )
-    if values["parse_errors"] != "fail":
+    if values[PARSE_ERRORS_KEY] != PARSE_ERRORS_FAIL:
         found.append(
             f"parse_errors is {values['parse_errors']!r}; syntax failures do not fail the gate"
         )
@@ -1052,10 +1055,9 @@ def _validate_overrides(overrides: CliOverrides) -> None:
         raise ConfigError(
             f"--profile must be one of {', '.join(PROFILES)}", repr(overrides.profile)
         )
-    parse_choices = ("fail", "warn")
-    if overrides.parse_errors is not None and overrides.parse_errors not in parse_choices:
+    if overrides.parse_errors is not None and overrides.parse_errors not in PARSE_ERROR_POLICIES:
         raise ConfigError(
-            f"--parse-errors must be one of {', '.join(parse_choices)}",
+            f"--parse-errors must be one of {', '.join(PARSE_ERROR_POLICIES)}",
             repr(overrides.parse_errors),
         )
 

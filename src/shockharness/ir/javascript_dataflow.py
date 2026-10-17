@@ -30,6 +30,7 @@ from shockharness.ir.javascript_functions import (
     pattern_names,
     string_value,
 )
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     ORIGIN_CALL,
     ORIGIN_PARAMETER,
@@ -48,39 +49,51 @@ from shockharness.source import SourceText
 Origins = frozenset[str]
 EMPTY: Origins = frozenset()
 DYNAMIC = "<dynamic>"
-COMMENT = "comment"
-IDENTIFIER = "identifier"
-MEMBER = "member_expression"
-SUBSCRIPT = "subscript_expression"
-DECLARATIONS = frozenset({"lexical_declaration", "variable_declaration"})
+COMMENT = Kind.COMMENT
+IDENTIFIER = Kind.IDENTIFIER
+MEMBER = Kind.MEMBER_EXPRESSION
+SUBSCRIPT = Kind.SUBSCRIPT_EXPRESSION
+DECLARATIONS = frozenset({Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECLARATION})
 NESTED_DECLARATIONS = frozenset(
-    {"function_declaration", "generator_function_declaration", "class_declaration"}
-) | (CLASS_TYPES - {"class"})
-FIELDS = frozenset({"field_definition", "public_field_definition"})
-PATTERNS = frozenset({"object_pattern", "array_pattern"})
+    {Kind.FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION_DECLARATION, Kind.CLASS_DECLARATION}
+) | (CLASS_TYPES - {Kind.CLASS})
+FIELDS = frozenset({Kind.FIELD_DEFINITION, Kind.PUBLIC_FIELD_DEFINITION})
+PATTERNS = frozenset({Kind.OBJECT_PATTERN, Kind.ARRAY_PATTERN})
 # The field holding what a declaring node binds.
 DECLARED_FIELDS = {
-    "variable_declarator": "name",
-    "catch_clause": "parameter",
-    "for_in_statement": "left",
+    Kind.VARIABLE_DECLARATOR: Field.NAME,
+    Kind.CATCH_CLAUSE: Field.PARAMETER,
+    Kind.FOR_IN_STATEMENT: Field.LEFT,
 }
 TESTING_OPERATORS = frozenset({"&&", "||", "??"})
 LOGICAL_ASSIGNMENTS = frozenset({"&&=", "||=", "??="})
-COMPARISONS = frozenset({"===", "!==", "==", "!=", "<", ">", "<=", ">=", "instanceof", "in"})
+COMPARISONS = frozenset({"===", "!==", "==", "!=", "<", ">", "<=", ">=", Kind.INSTANCEOF, "in"})
 NOT = "!"
 AND = "&&"
 JUNCTIONS = frozenset({AND, "||"})
-EXITS = frozenset({"return_statement", "throw_statement", "continue_statement", "break_statement"})
+EXITS = frozenset(
+    {Kind.RETURN_STATEMENT, Kind.THROW_STATEMENT, Kind.CONTINUE_STATEMENT, Kind.BREAK_STATEMENT}
+)
 TESTING = "testing"
 COMPARING = "comparing"
 COMBINING = "combining"
 BOOLEAN_UNARY = frozenset({"!", "typeof", "void", "delete"})
 LITERALS = frozenset(
-    {"string", "number", "true", "false", "null", "undefined", "regex", "this", "super"}
+    {
+        Kind.STRING,
+        Kind.NUMBER,
+        Kind.TRUE,
+        Kind.FALSE,
+        Kind.NULL,
+        Kind.UNDEFINED,
+        Kind.REGEX,
+        Kind.THIS,
+        Kind.SUPER,
+    }
 )
-WRAPPERS = frozenset({"parenthesized_expression", "await_expression", "spread_element"}) | (
-    TYPE_WRAPPERS
-)
+WRAPPERS = frozenset(
+    {Kind.PARENTHESIZED_EXPRESSION, Kind.AWAIT_EXPRESSION, Kind.SPREAD_ELEMENT}
+) | (TYPE_WRAPPERS)
 
 
 def _named(node: Node) -> list[Node]:
@@ -121,7 +134,7 @@ def _declared(node: Node) -> list[str]:
     if node.type in DECLARED_FIELDS:
         return _field_names(node, DECLARED_FIELDS[node.type])
     if node.type in NESTED_DECLARATIONS:
-        name = node.child_by_field_name("name")
+        name = node.child_by_field_name(Field.NAME)
         if name is None:
             return []
         return [node_text(name)]
@@ -138,10 +151,10 @@ def _local_names(unit: Node) -> set[str]:
 def _parameter_nodes(node: Node) -> list[Node]:
     if node.type not in UNIT_TYPES or node.type in CLASS_TYPES:
         return []
-    single = node.child_by_field_name("parameter")
+    single = node.child_by_field_name(Field.PARAMETER)
     if single is not None:
         return [single]
-    parameters = node.child_by_field_name("parameters")
+    parameters = node.child_by_field_name(Field.PARAMETERS)
     if parameters is None:
         return []
     return [p for p in _named(parameters) if not is_this_parameter(p)]
@@ -150,11 +163,11 @@ def _parameter_nodes(node: Node) -> list[Node]:
 def _segment(node: Node) -> str | None:
     """The name a property read or string-literal subscript adds to a chain."""
     if node.type == MEMBER:
-        prop = node.child_by_field_name("property")
+        prop = node.child_by_field_name(Field.PROPERTY)
         if prop is None:
             return None
         return node_text(prop)
-    index = node.child_by_field_name("index")
+    index = node.child_by_field_name(Field.INDEX)
     if index is None:
         return None
     return string_value(index)
@@ -167,7 +180,7 @@ def _chain(node: Node) -> tuple[Node, str] | None:
     current = node
     while current.type in (MEMBER, SUBSCRIPT):
         segment = _segment(current)
-        obj = current.child_by_field_name("object")
+        obj = current.child_by_field_name(Field.OBJECT)
         if segment is None or obj is None:
             return None
         parts.append(segment)
@@ -184,7 +197,7 @@ class _Unit:
     def __init__(self, source: SourceText, info: UnitInfo) -> None:
         self.source = source
         self.info = info
-        self.module = info.node.type == "program"
+        self.module = info.node.type == Kind.PROGRAM
         nodes = _parameter_nodes(info.node)
         self.parameters = [node_text(parameter_parts(p)[0]) for p in nodes]
         self.env: dict[str, Origins] = {}
@@ -213,7 +226,7 @@ class _Unit:
         if self.module:
             self.statements(_named(node))
         elif node.type in CLASS_TYPES:
-            body = node.child_by_field_name("body")
+            body = node.child_by_field_name(Field.BODY)
             if body is not None:
                 self.class_members(_named(body))
         else:
@@ -235,10 +248,10 @@ class _Unit:
         for parameter in _parameter_nodes(node):
             _binding, default = parameter_parts(parameter)
             self.expr(default)
-        body = node.child_by_field_name("body")
+        body = node.child_by_field_name(Field.BODY)
         if body is None:
             return
-        if body.type == "statement_block":
+        if body.type == Kind.STATEMENT_BLOCK:
             self.statements(_named(body))
         else:
             value = self.expr(body)
@@ -247,12 +260,12 @@ class _Unit:
     def class_members(self, members: Iterable[Node]) -> None:
         for member in members:
             if member.type in FIELDS:
-                value = self.expr(member.child_by_field_name("value"))
+                value = self.expr(member.child_by_field_name(Field.VALUE))
                 name = member.child_by_field_name(FIELD_NAME_FIELDS[member.type])
                 assert name is not None, "class field without a name"
                 self.store(member, node_text(name), value)
-            elif member.type == "class_static_block":
-                body = member.child_by_field_name("body")
+            elif member.type == Kind.CLASS_STATIC_BLOCK:
+                body = member.child_by_field_name(Field.BODY)
                 if body is not None:
                     self.statements(_named(body))
 
@@ -286,20 +299,20 @@ class _Unit:
             node, truth = stack.pop()
             if node.type in WRAPPERS:
                 stack.extend((child, truth) for child in _named(node))
-            elif node.type == "unary_expression" and _unary_operator(node) == NOT:
+            elif node.type == Kind.UNARY_EXPRESSION and _unary_operator(node) == NOT:
                 stack.extend((child, not truth) for child in _named(node))
-            elif node.type == "binary_expression" and _operator(node) in JUNCTIONS:
+            elif node.type == Kind.BINARY_EXPRESSION and _operator(node) in JUNCTIONS:
                 # `a && b` true: both are; `a || b` false: neither is.
                 if (_operator(node) == AND) == truth:
                     stack.extend((child, truth) for child in _named(node))
-            elif node.type == "call_expression" and truth:
+            elif node.type == Kind.CALL_EXPRESSION and truth:
                 found.extend(_guard(node))
         return found
 
     def block(self, node: Node | None) -> None:
         if node is None:
             return
-        if node.type in ("statement_block", "else_clause", "finally_clause"):
+        if node.type in (Kind.STATEMENT_BLOCK, Kind.ELSE_CLAUSE, Kind.FINALLY_CLAUSE):
             self.statements(_named(node))
         else:
             self.statements([node])
@@ -348,8 +361,8 @@ class _Unit:
 
     def pattern_defaults(self, pattern: Node) -> None:
         for node in _own_nodes(pattern):
-            if node.type in ("assignment_pattern", "object_assignment_pattern"):
-                self.expr(node.child_by_field_name("right"))
+            if node.type in (Kind.ASSIGNMENT_PATTERN, Kind.OBJECT_ASSIGNMENT_PATTERN):
+                self.expr(node.child_by_field_name(Field.RIGHT))
 
     def assign(self, target: Node, origins: Origins) -> None:
         if target.type == IDENTIFIER:
@@ -358,9 +371,9 @@ class _Unit:
                 self.store(target, name, origins)
             self.bind(name, origins)
         elif target.type in (MEMBER, SUBSCRIPT):
-            self.expr(target.child_by_field_name("object"))
+            self.expr(target.child_by_field_name(Field.OBJECT))
             if target.type == SUBSCRIPT:
-                self.expr(target.child_by_field_name("index"))
+                self.expr(target.child_by_field_name(Field.INDEX))
             self.store(target, _excerpt(target), origins)
         elif target.type in PATTERNS:
             self.declare(target, origins)
@@ -407,8 +420,8 @@ class _Unit:
         chain = _chain(node)
         if chain is None:
             if node.type == SUBSCRIPT:
-                self.expr(node.child_by_field_name("index"))
-            return self.expr(node.child_by_field_name("object"))
+                self.expr(node.child_by_field_name(Field.INDEX))
+            return self.expr(node.child_by_field_name(Field.OBJECT))
         root, text = chain
         name = node_text(root)
         if name not in self.locals:
@@ -421,8 +434,8 @@ class _Unit:
         return held
 
     def call(self, node: Node) -> Origins:
-        is_new = node.type == "new_expression"
-        function = node.child_by_field_name("constructor" if is_new else "function")
+        is_new = node.type == Kind.NEW_EXPRESSION
+        function = node.child_by_field_name(Field.CONSTRUCTOR if is_new else Field.FUNCTION)
         receiver = EMPTY
         callee = DYNAMIC
         if function is not None:
@@ -433,17 +446,17 @@ class _Unit:
                     break
                 unwrapped = inner[0]
             if unwrapped.type == MEMBER:
-                receiver = self.expr(unwrapped.child_by_field_name("object"))
+                receiver = self.expr(unwrapped.child_by_field_name(Field.OBJECT))
             elif unwrapped.type != IDENTIFIER:
                 self.expr(unwrapped)
             dotted = dotted_name(unwrapped)
-            prop = unwrapped.child_by_field_name("property")
+            prop = unwrapped.child_by_field_name(Field.PROPERTY)
             if dotted is not None:
                 callee = dotted
             elif unwrapped.type == MEMBER and prop is not None:
                 # A method on a computed receiver (db.pool().query(q)): ".name" entries match.
                 callee = f"{DYNAMIC}.{node_text(prop)}"
-        arguments = self.arguments(node.child_by_field_name("arguments"))
+        arguments = self.arguments(node.child_by_field_name(Field.ARGUMENTS))
         self.calls.append(
             FlowCall(
                 span=node_span(self.source, node),
@@ -461,7 +474,7 @@ class _Unit:
     def arguments(self, node: Node | None) -> tuple[tuple[str, ...], ...]:
         if node is None:
             return ()
-        if node.type == "template_string":
+        if node.type == Kind.TEMPLATE_STRING:
             return (_sorted(self.expr(node)),)
         return tuple(_sorted(self.expr(argument)) for argument in _named(node))
 
@@ -471,10 +484,10 @@ class _Unit:
 
 def _declaration(unit: _Unit, node: Node) -> None:
     for declarator in _named(node):
-        if declarator.type != "variable_declarator":
+        if declarator.type != Kind.VARIABLE_DECLARATOR:
             continue
-        name = declarator.child_by_field_name("name")
-        value = unit.expr(declarator.child_by_field_name("value"))
+        name = declarator.child_by_field_name(Field.NAME)
+        value = unit.expr(declarator.child_by_field_name(Field.VALUE))
         if name is not None:
             unit.declare(name, value)
 
@@ -489,10 +502,10 @@ def _return(unit: _Unit, node: Node) -> None:
 
 
 def _if(unit: _Unit, node: Node) -> None:
-    condition = node.child_by_field_name("condition")
+    condition = node.child_by_field_name(Field.CONDITION)
     unit.test(condition)
-    consequence = node.child_by_field_name("consequence")
-    alternative = node.child_by_field_name("alternative")
+    consequence = node.child_by_field_name(Field.CONSEQUENCE)
+    alternative = node.child_by_field_name(Field.ALTERNATIVE)
     unit.guarded(consequence, unit.holding(condition, when_true=True))
     otherwise = unit.holding(condition, when_true=False)
     unit.guarded(alternative, otherwise)
@@ -505,7 +518,7 @@ def _exits(node: Node | None) -> bool:
     if node is None:
         return False
     last = node
-    if node.type == "statement_block":
+    if node.type == Kind.STATEMENT_BLOCK:
         statements = _named(node)
         if len(statements) == 0:
             return False
@@ -514,8 +527,8 @@ def _exits(node: Node | None) -> bool:
 
 
 def _first_argument(call: Node) -> str:
-    arguments = call.child_by_field_name("arguments")
-    if arguments is None or arguments.type != "arguments":
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
+    if arguments is None or arguments.type != Kind.ARGUMENTS:
         return ""
     given = _named(arguments)
     if len(given) == 0:
@@ -524,7 +537,7 @@ def _first_argument(call: Node) -> str:
 
 
 def _guard(call: Node) -> list[FlowGuard]:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     argument = _first_argument(call)
     if function is None or argument == "":
         return []
@@ -535,52 +548,52 @@ def _guard(call: Node) -> list[FlowGuard]:
 
 
 def _unary_operator(node: Node) -> str:
-    operator = node.child_by_field_name("operator")
+    operator = node.child_by_field_name(Field.OPERATOR)
     if operator is None:
         return ""
     return node_text(operator)
 
 
 def _loop(unit: _Unit, node: Node) -> None:
-    unit.expr(node.child_by_field_name("initializer"))
-    unit.test(node.child_by_field_name("condition"))
+    unit.expr(node.child_by_field_name(Field.INITIALIZER))
+    unit.test(node.child_by_field_name(Field.CONDITION))
     unit.weak += 1
-    unit.expr(node.child_by_field_name("increment"))
+    unit.expr(node.child_by_field_name(Field.INCREMENT))
     unit.weak -= 1
-    unit.branch(node.child_by_field_name("body"))
+    unit.branch(node.child_by_field_name(Field.BODY))
 
 
 def _for_in(unit: _Unit, node: Node) -> None:
-    iterated = unit.expr(node.child_by_field_name("right"))
-    left = node.child_by_field_name("left")
+    iterated = unit.expr(node.child_by_field_name(Field.RIGHT))
+    left = node.child_by_field_name(Field.LEFT)
     unit.weak += 1
     if left is not None:
         unit.assign(left, iterated)
     unit.weak -= 1
-    unit.branch(node.child_by_field_name("body"))
+    unit.branch(node.child_by_field_name(Field.BODY))
 
 
 def _try(unit: _Unit, node: Node) -> None:
-    unit.block(node.child_by_field_name("body"))
-    handler = node.child_by_field_name("handler")
+    unit.block(node.child_by_field_name(Field.BODY))
+    handler = node.child_by_field_name(Field.HANDLER)
     if handler is not None:
-        parameter = handler.child_by_field_name("parameter")
+        parameter = handler.child_by_field_name(Field.PARAMETER)
         if parameter is not None:
             for name in pattern_names(parameter):
                 unit.bind(name, EMPTY)
-        unit.branch(handler.child_by_field_name("body"))
-    unit.block(node.child_by_field_name("finalizer"))
+        unit.branch(handler.child_by_field_name(Field.BODY))
+    unit.block(node.child_by_field_name(Field.FINALIZER))
 
 
 def _switch(unit: _Unit, node: Node) -> None:
-    unit.test(node.child_by_field_name("value"))
-    body = node.child_by_field_name("body")
+    unit.test(node.child_by_field_name(Field.VALUE))
+    body = node.child_by_field_name(Field.BODY)
     if body is None:
         return
     unit.weak += 1
     for case in _named(body):
-        unit.test(case.child_by_field_name("value"))
-        unit.statements(c for c in _named(case) if c != case.child_by_field_name("value"))
+        unit.test(case.child_by_field_name(Field.VALUE))
+        unit.statements(c for c in _named(case) if c != case.child_by_field_name(Field.VALUE))
     unit.weak -= 1
 
 
@@ -589,14 +602,14 @@ def _block(unit: _Unit, node: Node) -> None:
 
 
 def _labeled(unit: _Unit, node: Node) -> None:
-    unit.block(node.child_by_field_name("body"))
+    unit.block(node.child_by_field_name(Field.BODY))
 
 
 def _export(unit: _Unit, node: Node) -> None:
-    declaration = node.child_by_field_name("declaration")
+    declaration = node.child_by_field_name(Field.DECLARATION)
     if declaration is not None:
         unit.statements([declaration])
-    unit.expr(node.child_by_field_name("value"))
+    unit.expr(node.child_by_field_name(Field.VALUE))
 
 
 def _ignored(unit: _Unit, node: Node) -> None:
@@ -605,26 +618,26 @@ def _ignored(unit: _Unit, node: Node) -> None:
 
 StatementHandler = Callable[[_Unit, Node], None]
 STATEMENTS: dict[str, StatementHandler] = {
-    "lexical_declaration": _declaration,
-    "variable_declaration": _declaration,
-    "expression_statement": _expression,
-    "throw_statement": _expression,
-    "return_statement": _return,
-    "if_statement": _if,
-    "for_statement": _loop,
-    "while_statement": _loop,
-    "do_statement": _loop,
-    "for_in_statement": _for_in,
-    "try_statement": _try,
-    "switch_statement": _switch,
-    "statement_block": _block,
-    "labeled_statement": _labeled,
-    "export_statement": _export,
-    "import_statement": _ignored,
-    "empty_statement": _ignored,
-    "break_statement": _ignored,
-    "continue_statement": _ignored,
-    "debugger_statement": _ignored,
+    Kind.LEXICAL_DECLARATION: _declaration,
+    Kind.VARIABLE_DECLARATION: _declaration,
+    Kind.EXPRESSION_STATEMENT: _expression,
+    Kind.THROW_STATEMENT: _expression,
+    Kind.RETURN_STATEMENT: _return,
+    Kind.IF_STATEMENT: _if,
+    Kind.FOR_STATEMENT: _loop,
+    Kind.WHILE_STATEMENT: _loop,
+    Kind.DO_STATEMENT: _loop,
+    Kind.FOR_IN_STATEMENT: _for_in,
+    Kind.TRY_STATEMENT: _try,
+    Kind.SWITCH_STATEMENT: _switch,
+    Kind.STATEMENT_BLOCK: _block,
+    Kind.LABELED_STATEMENT: _labeled,
+    Kind.EXPORT_STATEMENT: _export,
+    Kind.IMPORT_STATEMENT: _ignored,
+    Kind.EMPTY_STATEMENT: _ignored,
+    Kind.BREAK_STATEMENT: _ignored,
+    Kind.CONTINUE_STATEMENT: _ignored,
+    Kind.DEBUGGER_STATEMENT: _ignored,
 }
 
 
@@ -648,7 +661,7 @@ def _call(unit: _Unit, node: Node) -> Origins:
 
 
 def _operator(node: Node) -> str:
-    operator = node.child_by_field_name("operator")
+    operator = node.child_by_field_name(Field.OPERATOR)
     assert operator is not None, "binary expression without an operator"
     return node_text(operator)
 
@@ -667,10 +680,10 @@ def _operands(node: Node, kind: str) -> list[Node]:
     stack: list[Node] = [node]
     while len(stack) > 0:
         current = stack.pop()
-        if current.type != "binary_expression" or _kind(_operator(current)) != kind:
+        if current.type != Kind.BINARY_EXPRESSION or _kind(_operator(current)) != kind:
             leaves.append(current)
             continue
-        for field in ("right", "left"):
+        for field in (Field.RIGHT, Field.LEFT):
             child = current.child_by_field_name(field)
             if child is not None:
                 stack.append(child)
@@ -695,26 +708,26 @@ def _binary(unit: _Unit, node: Node) -> Origins:
 
 
 def _unary(unit: _Unit, node: Node) -> Origins:
-    operator = node.child_by_field_name("operator")
-    value = unit.expr(node.child_by_field_name("argument"))
+    operator = node.child_by_field_name(Field.OPERATOR)
+    value = unit.expr(node.child_by_field_name(Field.ARGUMENT))
     if operator is not None and node_text(operator) in BOOLEAN_UNARY:
         return EMPTY
     return value
 
 
 def _ternary(unit: _Unit, node: Node) -> Origins:
-    unit.test(node.child_by_field_name("condition"))
-    return unit.expr(node.child_by_field_name("consequence")) | unit.expr(
-        node.child_by_field_name("alternative")
+    unit.test(node.child_by_field_name(Field.CONDITION))
+    return unit.expr(node.child_by_field_name(Field.CONSEQUENCE)) | unit.expr(
+        node.child_by_field_name(Field.ALTERNATIVE)
     )
 
 
 def _assignment(unit: _Unit, node: Node) -> Origins:
-    value = unit.expr(node.child_by_field_name("right"))
-    left = node.child_by_field_name("left")
+    value = unit.expr(node.child_by_field_name(Field.RIGHT))
+    left = node.child_by_field_name(Field.LEFT)
     if left is None:
         return value
-    if node.type == "augmented_assignment_expression":
+    if node.type == Kind.AUGMENTED_ASSIGNMENT_EXPRESSION:
         # `x ||= v`, `x ??= v`, `x &&= v` test x; `x += v` combines it.
         if _operator(node) in LOGICAL_ASSIGNMENTS:
             value = value | unit.test(left)
@@ -732,8 +745,8 @@ def _sequence(unit: _Unit, node: Node) -> Origins:
 
 
 def _pair(unit: _Unit, node: Node) -> Origins:
-    unit.expr(node.child_by_field_name("key"))
-    return unit.expr(node.child_by_field_name("value"))
+    unit.expr(node.child_by_field_name(Field.KEY))
+    return unit.expr(node.child_by_field_name(Field.VALUE))
 
 
 def _yield(unit: _Unit, node: Node) -> Origins:
@@ -745,19 +758,19 @@ def _yield(unit: _Unit, node: Node) -> Origins:
 ExpressionHandler = Callable[[_Unit, Node], Origins]
 EXPRESSIONS: dict[str, ExpressionHandler] = {
     IDENTIFIER: _identifier,
-    "shorthand_property_identifier": _shorthand,
+    Kind.SHORTHAND_PROPERTY_IDENTIFIER: _shorthand,
     MEMBER: _chained,
     SUBSCRIPT: _chained,
-    "call_expression": _call,
-    "new_expression": _call,
-    "binary_expression": _binary,
-    "unary_expression": _unary,
-    "ternary_expression": _ternary,
-    "assignment_expression": _assignment,
-    "augmented_assignment_expression": _assignment,
-    "sequence_expression": _sequence,
-    "pair": _pair,
-    "yield_expression": _yield,
+    Kind.CALL_EXPRESSION: _call,
+    Kind.NEW_EXPRESSION: _call,
+    Kind.BINARY_EXPRESSION: _binary,
+    Kind.UNARY_EXPRESSION: _unary,
+    Kind.TERNARY_EXPRESSION: _ternary,
+    Kind.ASSIGNMENT_EXPRESSION: _assignment,
+    Kind.AUGMENTED_ASSIGNMENT_EXPRESSION: _assignment,
+    Kind.SEQUENCE_EXPRESSION: _sequence,
+    Kind.PAIR: _pair,
+    Kind.YIELD_EXPRESSION: _yield,
 }
 
 

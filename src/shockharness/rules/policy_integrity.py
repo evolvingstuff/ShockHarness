@@ -49,7 +49,7 @@ from shockharness.findings import (
     STATUS_VIOLATION,
     Finding,
 )
-from shockharness.gating.baseline import assign_fingerprints
+from shockharness.gating.baseline import FINGERPRINTS_FIELD, assign_fingerprints
 from shockharness.ir.model import Span
 from shockharness.loosening import loosenings
 from shockharness.roles import FILE_ROLES_KEY, ROLE_PRODUCTION, ROLE_TEST, role_classifier
@@ -159,9 +159,9 @@ def _baseline_fingerprints(text: str) -> dict[str, str] | None:
     document, error = _json_document(text)
     if error is not None or not isinstance(document, dict):
         return None
-    if "fingerprint_version" not in document or "fingerprints" not in document:
+    if "fingerprint_version" not in document or FINGERPRINTS_FIELD not in document:
         return None
-    entries = document["fingerprints"]
+    entries = document[FINGERPRINTS_FIELD]
     if not isinstance(entries, list):
         return None
     found: dict[str, str] = {}

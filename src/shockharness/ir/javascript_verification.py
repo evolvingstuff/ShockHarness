@@ -24,6 +24,7 @@ from tree_sitter import Node
 
 from shockharness.constants import EQUALITY_OPERANDS
 from shockharness.ir.javascript_catches import node_span, node_text
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     MARKER_FOCUS,
     MARKER_SKIP,
@@ -51,17 +52,17 @@ MEMBER_MARKERS = {"skip": MARKER_SKIP, "only": MARKER_FOCUS}
 NAME_SEPARATOR = " > "
 DYNAMIC_NAME = "<dynamic>"
 
-CALL = "call_expression"
-MEMBER = "member_expression"
-IDENTIFIER = "identifier"
-STRING = "string"
-TEMPLATE = "template_string"
-SUBSTITUTION = "template_substitution"
-STATEMENT_BLOCK = "statement_block"
-COMMENT = "comment"
-FUNCTIONS = frozenset({"arrow_function", "function_expression", "function"})
-LITERALS = frozenset({"number", STRING, TEMPLATE, "true", "false", "null"})
-FALSY_KEYWORDS = frozenset({"false", "null"})
+CALL = Kind.CALL_EXPRESSION
+MEMBER = Kind.MEMBER_EXPRESSION
+IDENTIFIER = Kind.IDENTIFIER
+STRING = Kind.STRING
+TEMPLATE = Kind.TEMPLATE_STRING
+SUBSTITUTION = Kind.TEMPLATE_SUBSTITUTION
+STATEMENT_BLOCK = Kind.STATEMENT_BLOCK
+COMMENT = Kind.COMMENT
+FUNCTIONS = frozenset({Kind.ARROW_FUNCTION, Kind.FUNCTION_EXPRESSION, Kind.FUNCTION})
+LITERALS = frozenset({Kind.NUMBER, STRING, TEMPLATE, Kind.TRUE, Kind.FALSE, Kind.NULL})
+FALSY_KEYWORDS = frozenset({Kind.FALSE, Kind.NULL})
 EXPECT_PREFIX = "expect"
 ASSERT = "assert"
 EQUALITY_MATCHERS = frozenset({"toBe", "toEqual", "toStrictEqual"})
@@ -81,7 +82,7 @@ def _collapse(text: str) -> str:
 
 
 def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name("arguments")
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
     if arguments is None:
         return []
     return [child for child in arguments.named_children if child.type != COMMENT]
@@ -99,7 +100,7 @@ def _literal_name(node: Node) -> str | None:
 
 def _callee(call: Node) -> tuple[str, str | None] | None:
     """(``describe``|``it``|``test``, marker kind or None) for a suite or test call."""
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return None
     if function.type == IDENTIFIER:
@@ -111,8 +112,8 @@ def _callee(call: Node) -> tuple[str, str | None] | None:
         return None
     if function.type != MEMBER:
         return None
-    target = function.child_by_field_name("object")
-    member = function.child_by_field_name("property")
+    target = function.child_by_field_name(Field.OBJECT)
+    member = function.child_by_field_name(Field.PROPERTY)
     if target is None or member is None or target.type != IDENTIFIER:
         return None
     base = node_text(target)
@@ -123,12 +124,12 @@ def _callee(call: Node) -> tuple[str, str | None] | None:
 
 
 def _is_truthy_literal(node: Node) -> bool:
-    if node.type == "true":
+    if node.type == Kind.TRUE:
         return True
     if node.type in (STRING, TEMPLATE):
         name = _literal_name(node)
         return name is not None and name != ""
-    if node.type == "number":
+    if node.type == Kind.NUMBER:
         digits = node_text(node).lower().replace("_", "").rstrip("n")
         for prefix in NUMBER_PREFIXES:
             if digits.startswith(prefix):
@@ -157,7 +158,7 @@ def _expect_argument(node: Node | None) -> Node | None:
     """The single literal argument of ``expect(L)``, else None."""
     if node is None or node.type != CALL:
         return None
-    function = node.child_by_field_name("function")
+    function = node.child_by_field_name(Field.FUNCTION)
     if function is None or function.type != IDENTIFIER or node_text(function) != EXPECT_PREFIX:
         return None
     arguments = _arguments(node)
@@ -167,7 +168,7 @@ def _expect_argument(node: Node | None) -> Node | None:
 
 
 def _is_tautology(call: Node) -> bool:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return False
     arguments = _arguments(call)
@@ -179,8 +180,8 @@ def _is_tautology(call: Node) -> bool:
         )
     if function.type != MEMBER:
         return False
-    target = function.child_by_field_name("object")
-    member = function.child_by_field_name("property")
+    target = function.child_by_field_name(Field.OBJECT)
+    member = function.child_by_field_name(Field.PROPERTY)
     if target is None or member is None:
         return False
     method = node_text(member)
@@ -203,20 +204,20 @@ def _is_tautology(call: Node) -> bool:
 
 
 def _is_assertion(call: Node) -> bool:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return False
     if function.type == IDENTIFIER:
         name = node_text(function)
         return name.startswith((EXPECT_PREFIX, ASSERT))
     if function.type == MEMBER:
-        target = function.child_by_field_name("object")
+        target = function.child_by_field_name(Field.OBJECT)
         return target is not None and target.type == IDENTIFIER and node_text(target) == ASSERT
     return False
 
 
 def _body_empty(callback: Node) -> bool:
-    body = callback.child_by_field_name("body")
+    body = callback.child_by_field_name(Field.BODY)
     if body is None or body.type != STATEMENT_BLOCK:
         return False
     return all(child.type == COMMENT for child in body.named_children)
@@ -245,7 +246,7 @@ def _case(source: SourceText, call: Node, callback: Node, name: str) -> CaseFact
 
 
 def _marker_text(call: Node, name: str) -> str:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     assert function is not None
     return f"{_collapse(node_text(function))}({name!r})"
 
@@ -271,7 +272,7 @@ def collect_javascript_verification(
                         name = literal
                 qualified = NAME_SEPARATOR.join((*suites, name))
                 if marker is not None:
-                    function = node.child_by_field_name("function")
+                    function = node.child_by_field_name(Field.FUNCTION)
                     assert function is not None
                     markers.append(
                         SkipMarker(

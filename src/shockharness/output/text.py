@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from shockharness.cache.store import STATUS_ENABLED as CACHE_ENABLED
+from shockharness.complexity.coupling import STATUS_AVAILABLE as METRICS_AVAILABLE
 from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
 from shockharness.constants import (
     COMMIT_SHORT_HEX,
@@ -16,6 +17,7 @@ from shockharness.constants import (
 from shockharness.findings import Finding
 from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
+from shockharness.history.hotspots import STATUS_AVAILABLE as HISTORY_AVAILABLE
 from shockharness.report import Report
 from shockharness.rules.complexity import is_cycle_finding
 from shockharness.rules.registry import CATEGORY_POLICY, PYTHON, RuleSpec, category_of
@@ -63,7 +65,7 @@ def _history_lines(metrics: dict[str, Any]) -> list[str]:
     if "history" not in metrics:
         return []
     history = metrics["history"]
-    if history["status"] != "available":
+    if history["status"] != HISTORY_AVAILABLE:
         return [f"  history: {history['status']} ({history['reason']})"]
     horizon = history["horizon"]
     lines = [
@@ -88,7 +90,7 @@ def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
     if "complexity" not in metrics:
         return []
     complexity = metrics["complexity"]
-    if complexity["status"] != "available":
+    if complexity["status"] != METRICS_AVAILABLE:
         return [f"  complexity: {complexity['status']} ({complexity['reason']})"]
     functions = complexity["functions"]
     saturated = sum(1 for f in functions if f["npath"]["saturated"])
@@ -105,7 +107,7 @@ def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
             f'(gates.complexity_regressions = "{complexity["regression_policy"]}")'
         )
     graph = metrics["graph"]
-    if graph["status"] == "available":
+    if graph["status"] == METRICS_AVAILABLE:
         edges = graph["summary"]["call_edges"]
         modules = graph["summary"]["module_edges"]
         lines.append(
@@ -116,7 +118,7 @@ def _complexity_lines(metrics: dict[str, Any]) -> list[str]:
             f"{graph['summary']['shared_mutable_state']} shared mutable binding(s)"
         )
         displacement = graph["abstraction_displacement"]
-        if displacement["status"] == "available":
+        if displacement["status"] == METRICS_AVAILABLE:
             lines.append(
                 f"  abstraction displacement (experimental, approximate): "
                 f"{len(displacement['findings'])} unit(s)"
@@ -335,7 +337,7 @@ def _summary_lines(report: Report) -> list[str]:
     else:
         lines.append(f"  files with the most policy findings ({families}; not CPLX): none")
     complexity = summary["complexity"]
-    if complexity["status"] == "available":
+    if complexity["status"] == METRICS_AVAILABLE:
         over = ", ".join(
             f"{key} = {complexity['thresholds'][key]}: {count}"
             for key, count in complexity["units_over"].items()

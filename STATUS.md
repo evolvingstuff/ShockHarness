@@ -3882,8 +3882,7 @@ after the message and `allowed` exemptions. A sample of 25: platforms (`win32`,
 (`setup`, `teardown`, `xfail`), error codes (`ERESOLVE`); generic words (`text`,
 `left`, `none`, `true`) remain, which is why it is review. On this repository's
 own `src`: 51 review findings, most of them tree-sitter node type names written out
-in several `ir/javascript_*.py` files (real: one node-type module would remove
-them; left for a separate change).
+in several `ir/javascript_*.py` files (real: see the next entry).
 
 Decisions (mine): messages are recorded with their callee and left out by the
 rule (so `message_callees` can change without a cache bump); the value of an
@@ -3896,3 +3895,27 @@ the comparison requirement, Python and JavaScript / TypeScript positions, roles,
 settings and deviations). 1154 tests pass on 3.14 and 3.11; the self-gate passes;
 verdicts against 0.6.0 (new rule IDs excluded) are unchanged except the known
 `-1` MAGIC001 fixtures of 0.7.0.
+
+## The tool's own repeated strings (MAGIC002 on src) — DONE (2026-10-17)
+
+MAGIC002 reported 51 values on `src`; 44 were tree-sitter node kinds and field
+names written out across the `ir/javascript_*.py` files. `ir/javascript_nodes.py`
+now holds them as `Kind.*` (120 node kinds) and `Field.*` (29 field names), and
+every comparison, set and field lookup in the JavaScript IR uses them (about 1000
+literals, rewritten by script; short local aliases such as `CALL` now point at
+`Kind.CALL_EXPRESSION`). `"function"` stays in the kind sets as `Kind.FUNCTION`. The
+`Kind` class is 123 logical lines, so the self-configuration disables CPLX006 for
+that one file, with the reason recorded (a list of names, not a long unit).
+Also named: the metrics status `"available"` in the text renderer and hotspots
+(the existing `STATUS_AVAILABLE` constants), the baseline document's
+`"fingerprints"` key (`FINGERPRINTS_FIELD`, read by VERIFY003 too), and the
+`parse_errors` policy values (`PARSE_ERRORS_FAIL`, `PARSE_ERROR_POLICIES` in
+config.py, used by the CLI, the gate and the report).
+
+Kept (4 findings): `"roles"` and `"exceptions"` are configuration keys whose
+owner is the schema, and `"isinstance"` and `"body"` are names of Python's own
+`ast` API, which does not drift the way a grammar does.
+
+Evidence: findings on the 790-file corpus are identical before and after (31412,
+same rule, place, severity and message); 1154 tests pass on 3.14 and 3.11; the
+self-gate passes.

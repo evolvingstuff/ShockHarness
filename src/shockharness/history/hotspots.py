@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from shockharness.complexity.coupling import STATUS_AVAILABLE as COMPLEXITY_AVAILABLE
 from shockharness.config import EffectiveConfig
 from shockharness.history.cochange import cochange_pairs
 from shockharness.history.git import (
@@ -84,7 +85,7 @@ def hotspot_scores(
     churn: Mapping[str, Mapping[str, Any]], complexity: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     """``(hotspots, reason)``: exactly one is set."""
-    if complexity["status"] != "available":
+    if complexity["status"] != COMPLEXITY_AVAILABLE:
         return None, f"not computed: complexity metrics are {complexity['status']}"
     files: Mapping[str, Mapping[str, Any]] = complexity["files"]
     totals = {path: int(files[path][COGNITIVE_TOTAL]) for path in churn if path in files}

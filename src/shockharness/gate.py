@@ -33,7 +33,13 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from shockharness.analysis import STATUS_UNSUPPORTED, FileResult
-from shockharness.config import FAIL_ON_UNKNOWN_KEY, FAIL_ON_UNKNOWN_SECTIONS, EffectiveConfig
+from shockharness.config import (
+    FAIL_ON_UNKNOWN_KEY,
+    FAIL_ON_UNKNOWN_SECTIONS,
+    PARSE_ERRORS_FAIL,
+    PARSE_ERRORS_KEY,
+    EffectiveConfig,
+)
 from shockharness.constants import COMMIT_SHORT_HEX, EXIT_INTERNAL_ERROR, EXIT_OK, EXIT_VIOLATIONS
 from shockharness.findings import Finding
 from shockharness.gating.baseline import (
@@ -176,13 +182,13 @@ def evaluate(
     parse_failures = failures - unsupported
 
     reasons: list[str] = []
-    parse_policy = config.values["parse_errors"]
+    parse_policy = config.values[PARSE_ERRORS_KEY]
     hard_policy = config.values["gates"]["new_hard_violations"]
     regression_policy = config.values["gates"]["complexity_regressions"]
     regressions_fail = complexity_regressions > 0 and regression_policy == REGRESSIONS_FAIL
 
-    if (parse_failures > 0 and parse_policy == "fail") or unsupported > 0:
-        if parse_failures > 0 and parse_policy == "fail":
+    if (parse_failures > 0 and parse_policy == PARSE_ERRORS_FAIL) or unsupported > 0:
+        if parse_failures > 0 and parse_policy == PARSE_ERRORS_FAIL:
             reasons.append(
                 f'{parse_failures} file(s) could not be analyzed and parse_errors = "fail"'
             )

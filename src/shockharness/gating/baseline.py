@@ -23,6 +23,8 @@ from shockharness.errors import UsageError
 from shockharness.findings import Finding
 
 FINGERPRINT_KEY = f"shockharness/v{FINGERPRINT_VERSION}"
+# The baseline document's list of entries (read by VERIFY003 too).
+FINGERPRINTS_FIELD = "fingerprints"
 
 IdentityKey = tuple[str, str, str | None, str]
 
@@ -99,7 +101,7 @@ class Baseline:
             "tool_version": self.tool_version,
             "config_digest": self.config_digest,
             "fingerprint_version": self.fingerprint_version,
-            "fingerprints": [e.to_json_dict() for e in sorted(self.entries, key=_entry_sort)],
+            FINGERPRINTS_FIELD: [e.to_json_dict() for e in sorted(self.entries, key=_entry_sort)],
         }
 
 
@@ -186,11 +188,11 @@ def parse_baseline(document: Any, origin: str) -> Baseline:
         )
     tool_version = _require_str(document, "tool_version", origin)
     config_digest = _require_str(document, "config_digest", origin)
-    if "fingerprints" not in document or not isinstance(document["fingerprints"], list):
+    if FINGERPRINTS_FIELD not in document or not isinstance(document[FINGERPRINTS_FIELD], list):
         raise UsageError("baseline is missing the list field 'fingerprints'", origin)
     entries: list[BaselineEntry] = []
     seen: set[str] = set()
-    for index, raw in enumerate(document["fingerprints"]):
+    for index, raw in enumerate(document[FINGERPRINTS_FIELD]):
         where = f"{origin} fingerprints[{index}]"
         if not isinstance(raw, dict):
             raise UsageError("baseline entry must be a JSON object", where)

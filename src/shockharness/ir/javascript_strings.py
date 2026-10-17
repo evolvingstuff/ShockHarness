@@ -12,6 +12,7 @@ from tree_sitter import Node
 
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_functions import dotted_name, string_value
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     STRING_ARGUMENT,
     STRING_COMPARE,
@@ -25,32 +26,32 @@ from shockharness.source import SourceText
 
 COMPARISONS = frozenset({"===", "!==", "==", "!="})
 CONSTANT_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
-MODULE_LOADERS = frozenset({"require", "import"})
+MODULE_LOADERS = frozenset({"require", Kind.IMPORT})
 TYPE_NODES = frozenset(
     {
-        "type_annotation",
-        "type_alias_declaration",
-        "interface_declaration",
-        "type_arguments",
-        "type_parameters",
-        "literal_type",
+        Kind.TYPE_ANNOTATION,
+        Kind.TYPE_ALIAS_DECLARATION,
+        Kind.INTERFACE_DECLARATION,
+        Kind.TYPE_ARGUMENTS,
+        Kind.TYPE_PARAMETERS,
+        Kind.LITERAL_TYPE,
     }
 )
-JSX_ATTRIBUTES = frozenset({"jsx_attribute"})
+JSX_ATTRIBUTES = frozenset({Kind.JSX_ATTRIBUTE})
 
 
 def _template_value(node: Node) -> str | None:
     """The text of a template without substitutions (`` `pending` ``)."""
-    if any(child.type == "template_substitution" for child in node.named_children):
+    if any(child.type == Kind.TEMPLATE_SUBSTITUTION for child in node.named_children):
         return None
     text = node_text(node)
     return text[1 : len(text) - 1]
 
 
 def _value(node: Node) -> str | None:
-    if node.type == "string":
+    if node.type == Kind.STRING:
         return string_value(node)
-    if node.type == "template_string":
+    if node.type == Kind.TEMPLATE_STRING:
         return _template_value(node)
     return None
 
@@ -69,12 +70,12 @@ def _call_context(parent: Node) -> tuple[str, str] | None:
     call = parent.parent
     if call is None:
         return (STRING_ARGUMENT, "")
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
-        function = call.child_by_field_name("constructor")
+        function = call.child_by_field_name(Field.CONSTRUCTOR)
     if function is None:
         return (STRING_ARGUMENT, "")
-    if function.type == "import" or node_text(function) in MODULE_LOADERS:
+    if function.type == Kind.IMPORT or node_text(function) in MODULE_LOADERS:
         return None
     dotted = dotted_name(function)
     if dotted is None:
@@ -87,12 +88,12 @@ def _context(node: Node) -> tuple[str, str] | None:
     parent = node.parent
     if parent is None:
         return (STRING_VALUE, "")
-    if parent.type in ("import_statement", "export_statement", "expression_statement"):
+    if parent.type in (Kind.IMPORT_STATEMENT, Kind.EXPORT_STATEMENT, Kind.EXPRESSION_STATEMENT):
         return None  # a module specifier, or a directive / bare statement
-    if parent.type == "arguments":
+    if parent.type == Kind.ARGUMENTS:
         return _call_context(parent)
-    name = parent.child_by_field_name("name")
-    if parent.type == "variable_declarator" and name is not None:
+    name = parent.child_by_field_name(Field.NAME)
+    if parent.type == Kind.VARIABLE_DECLARATOR and name is not None:
         if CONSTANT_NAME.fullmatch(node_text(name)) is not None:
             return None  # a named definition (const STATUS = "pending"), the remedy
     return (_position(node, parent), "")
@@ -100,16 +101,16 @@ def _context(node: Node) -> tuple[str, str] | None:
 
 def _position(node: Node, parent: Node) -> str:
     """The kind of a string that is not an argument."""
-    if parent.type == "pair" and parent.child_by_field_name("key") == node:
+    if parent.type == Kind.PAIR and parent.child_by_field_name(Field.KEY) == node:
         return STRING_KEY
-    if parent.type == "subscript_expression":
+    if parent.type == Kind.SUBSCRIPT_EXPRESSION:
         return STRING_SUBSCRIPT
     if parent.type in JSX_ATTRIBUTES:
         return STRING_JSX
-    if parent.type == "switch_case":
+    if parent.type == Kind.SWITCH_CASE:
         return STRING_COMPARE
-    operator = parent.child_by_field_name("operator")
-    if parent.type == "binary_expression" and operator is not None:
+    operator = parent.child_by_field_name(Field.OPERATOR)
+    if parent.type == Kind.BINARY_EXPRESSION and operator is not None:
         if node_text(operator) in COMPARISONS:
             return STRING_COMPARE
     return STRING_VALUE

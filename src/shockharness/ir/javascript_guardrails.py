@@ -25,6 +25,7 @@ from tree_sitter import Node
 from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_dom import collect_element_guards
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     EXIT_BREAK,
     EXIT_CONTINUE,
@@ -41,38 +42,40 @@ from shockharness.source import SourceText
 
 SCOPES = frozenset(
     {
-        "function_declaration",
-        "generator_function_declaration",
-        "function_expression",
-        "function",
-        "generator_function",
-        "arrow_function",
-        "method_definition",
-        "class_declaration",
-        "abstract_class_declaration",
-        "class",
+        Kind.FUNCTION_DECLARATION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+        Kind.FUNCTION_EXPRESSION,
+        Kind.FUNCTION,
+        Kind.GENERATOR_FUNCTION,
+        Kind.ARROW_FUNCTION,
+        Kind.METHOD_DEFINITION,
+        Kind.CLASS_DECLARATION,
+        Kind.ABSTRACT_CLASS_DECLARATION,
+        Kind.CLASS,
     }
 )
-FUNCTION_NAMES = frozenset({"function_declaration", "generator_function_declaration"})
-CLASSES = frozenset({"class_declaration", "abstract_class_declaration", "class"})
-LOOPS = frozenset({"for_statement", "for_in_statement", "while_statement", "do_statement"})
-SWITCH = "switch_statement"
-LABELED = "labeled_statement"
-LABEL = "statement_identifier"
-TRY = "try_statement"
-FINALIZER = "finalizer"
-THROW = "throw_statement"
-NEW = "new_expression"
-CALL = "call_expression"
-MEMBER = "member_expression"
-IDENTIFIER = "identifier"
-PROPERTY = "property_identifier"
-STRING = "string"
-STRING_FRAGMENT = "string_fragment"
-BOOLEANS = frozenset({"true", "false"})
-SPREAD = "spread_element"
-COMMENT = "comment"
-FIELDS = frozenset({"field_definition", "public_field_definition"})
+FUNCTION_NAMES = frozenset({Kind.FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION_DECLARATION})
+CLASSES = frozenset({Kind.CLASS_DECLARATION, Kind.ABSTRACT_CLASS_DECLARATION, Kind.CLASS})
+LOOPS = frozenset(
+    {Kind.FOR_STATEMENT, Kind.FOR_IN_STATEMENT, Kind.WHILE_STATEMENT, Kind.DO_STATEMENT}
+)
+SWITCH = Kind.SWITCH_STATEMENT
+LABELED = Kind.LABELED_STATEMENT
+LABEL = Kind.STATEMENT_IDENTIFIER
+TRY = Kind.TRY_STATEMENT
+FINALIZER = Field.FINALIZER
+THROW = Kind.THROW_STATEMENT
+NEW = Kind.NEW_EXPRESSION
+CALL = Kind.CALL_EXPRESSION
+MEMBER = Kind.MEMBER_EXPRESSION
+IDENTIFIER = Kind.IDENTIFIER
+PROPERTY = Kind.PROPERTY_IDENTIFIER
+STRING = Kind.STRING
+STRING_FRAGMENT = Kind.STRING_FRAGMENT
+BOOLEANS = frozenset({Kind.TRUE, Kind.FALSE})
+SPREAD = Kind.SPREAD_ELEMENT
+COMMENT = Kind.COMMENT
+FIELDS = frozenset({Kind.FIELD_DEFINITION, Kind.PUBLIC_FIELD_DEFINITION})
 STATIC = "static"
 ERROR_SUFFIX = "Error"
 NOT_IMPLEMENTED = re.compile(
@@ -94,8 +97,8 @@ def dotted_callee(node: Node) -> str | None:
         return node_text(node)
     if node.type != MEMBER:
         return None
-    obj = node.child_by_field_name("object")
-    prop = node.child_by_field_name("property")
+    obj = node.child_by_field_name(Field.OBJECT)
+    prop = node.child_by_field_name(Field.PROPERTY)
     if obj is None or prop is None or prop.type != PROPERTY:
         return None
     base = dotted_callee(obj)
@@ -105,7 +108,7 @@ def dotted_callee(node: Node) -> str | None:
 
 
 def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name("arguments")
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
     if arguments is None:
         return []
     return [child for child in arguments.named_children if child.type != COMMENT]
@@ -129,9 +132,9 @@ class _FinallyScan:
     def scan(self, node: Node, labels: frozenset[str], *, in_loop: bool, in_switch: bool) -> None:
         if node.type in SCOPES:
             return
-        if node.type == "return_statement":
+        if node.type == Kind.RETURN_STATEMENT:
             self.exits.append(FinallyExit(EXIT_RETURN, node_span(self.source, node)))
-        elif node.type in ("break_statement", "continue_statement"):
+        elif node.type in (Kind.BREAK_STATEMENT, Kind.CONTINUE_STATEMENT):
             self._jump(node, labels, in_loop=in_loop, in_switch=in_switch)
         inner_loop = in_loop or node.type in LOOPS
         inner_switch = in_switch or node.type == SWITCH
@@ -144,7 +147,7 @@ class _FinallyScan:
             self.scan(child, inner_labels, in_loop=inner_loop, in_switch=inner_switch)
 
     def _jump(self, node: Node, labels: frozenset[str], *, in_loop: bool, in_switch: bool) -> None:
-        kind = EXIT_BREAK if node.type == "break_statement" else EXIT_CONTINUE
+        kind = EXIT_BREAK if node.type == Kind.BREAK_STATEMENT else EXIT_CONTINUE
         label = _label(node)
         if label is not None:
             leaves = label not in labels
@@ -169,7 +172,7 @@ def _not_implemented(throw: Node) -> bool:
     created = [child for child in throw.named_children if child.type == NEW]
     if len(created) != 1:
         return False
-    constructor = created[0].child_by_field_name("constructor")
+    constructor = created[0].child_by_field_name(Field.CONSTRUCTOR)
     if constructor is None or not node_text(constructor).endswith(ERROR_SUFFIX):
         return False
     arguments = _arguments(created[0])
@@ -182,9 +185,9 @@ def _not_implemented(throw: Node) -> bool:
 
 
 def _scope_name(node: Node, scope: str) -> str:
-    if node.type not in FUNCTION_NAMES and node.type != "method_definition":
+    if node.type not in FUNCTION_NAMES and node.type != Kind.METHOD_DEFINITION:
         return scope
-    name = node.child_by_field_name("name")
+    name = node.child_by_field_name(Field.NAME)
     if name is None:
         return scope
     if scope == MODULE_SCOPE:
@@ -241,7 +244,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
 
 def _booleans(source: SourceText, call: Node) -> list[BooleanArgument]:
     arguments = _arguments(call)
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if len(arguments) <= 1 or function is None:
         return []
     if any(argument.type == SPREAD for argument in arguments):
@@ -264,7 +267,7 @@ def _import_time(source: SourceText, root: Node) -> list[ImportTimeCall]:
         if not _runs_at_import(node):
             continue
         if node.type == CALL:
-            function = node.child_by_field_name("function")
+            function = node.child_by_field_name(Field.FUNCTION)
             callee = None
             if function is not None:
                 callee = dotted_callee(function)

@@ -26,6 +26,7 @@ from tree_sitter import Node
 from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_guardrails import dotted_callee
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     CHECK_ABSENT,
     RETRY_LOOP,
@@ -45,52 +46,54 @@ from shockharness.source import SourceText
 PROCESS_NAMES = frozenset({"exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync"})
 FUNCTIONS = frozenset(
     {
-        "function_declaration",
-        "generator_function_declaration",
-        "function_expression",
-        "function",
-        "generator_function",
-        "arrow_function",
-        "method_definition",
+        Kind.FUNCTION_DECLARATION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+        Kind.FUNCTION_EXPRESSION,
+        Kind.FUNCTION,
+        Kind.GENERATOR_FUNCTION,
+        Kind.ARROW_FUNCTION,
+        Kind.METHOD_DEFINITION,
     }
 )
-LOOPS = frozenset({"for_statement", "for_in_statement", "while_statement", "do_statement"})
-PREDEFINED_TYPE = "predefined_type"
+LOOPS = frozenset(
+    {Kind.FOR_STATEMENT, Kind.FOR_IN_STATEMENT, Kind.WHILE_STATEMENT, Kind.DO_STATEMENT}
+)
+PREDEFINED_TYPE = Kind.PREDEFINED_TYPE
 ANY = "any"
-AS_EXPRESSION = "as_expression"
-TYPE_ASSERTION = "type_assertion"
-NON_NULL = "non_null_expression"
+AS_EXPRESSION = Kind.AS_EXPRESSION
+TYPE_ASSERTION = Kind.TYPE_ASSERTION
+NON_NULL = Kind.NON_NULL_EXPRESSION
 CONST = "const"
 TYPE_SUFFIX = "_type"
-TYPE_ANNOTATION = "type_annotation"
-TYPE_NODES = frozenset({TYPE_ANNOTATION, "type_arguments", "constraint", "default_type"})
+TYPE_ANNOTATION = Kind.TYPE_ANNOTATION
+TYPE_NODES = frozenset({TYPE_ANNOTATION, Kind.TYPE_ARGUMENTS, Kind.CONSTRAINT, Kind.DEFAULT_TYPE})
 ANNOTATED = frozenset(
     {
-        "required_parameter",
-        "optional_parameter",
-        "variable_declarator",
-        "public_field_definition",
-        "property_signature",
-        "type_parameter",
+        Kind.REQUIRED_PARAMETER,
+        Kind.OPTIONAL_PARAMETER,
+        Kind.VARIABLE_DECLARATOR,
+        Kind.PUBLIC_FIELD_DEFINITION,
+        Kind.PROPERTY_SIGNATURE,
+        Kind.TYPE_PARAMETER,
     }
 )
 # Nodes around a type that are not the type itself: `: T` and a type parameter's `= T`.
-WRAPPING_TYPES = frozenset({TYPE_ANNOTATION, "default_type"})
-COMMENT_NODE = "comment"
-ITERATING = frozenset({"for_statement", "for_in_statement"})
-CALL = "call_expression"
-NEW = "new_expression"
-AWAIT = "await_expression"
-STATEMENT = "expression_statement"
-TEMPLATE = "template_string"
-SUBSTITUTION = "template_substitution"
-BINARY = "binary_expression"
-STRING = "string"
-OBJECT = "object"
-PAIR = "pair"
-TRY = "try_statement"
-CATCH = "catch_clause"
-TRUE = "true"
+WRAPPING_TYPES = frozenset({TYPE_ANNOTATION, Kind.DEFAULT_TYPE})
+COMMENT_NODE = Kind.COMMENT
+ITERATING = frozenset({Kind.FOR_STATEMENT, Kind.FOR_IN_STATEMENT})
+CALL = Kind.CALL_EXPRESSION
+NEW = Kind.NEW_EXPRESSION
+AWAIT = Kind.AWAIT_EXPRESSION
+STATEMENT = Kind.EXPRESSION_STATEMENT
+TEMPLATE = Kind.TEMPLATE_STRING
+SUBSTITUTION = Kind.TEMPLATE_SUBSTITUTION
+BINARY = Kind.BINARY_EXPRESSION
+STRING = Kind.STRING
+OBJECT = Kind.OBJECT
+PAIR = Kind.PAIR
+TRY = Kind.TRY_STATEMENT
+CATCH = Kind.CATCH_CLAUSE
+TRUE = Kind.TRUE
 SET_TIMEOUT = "setTimeout"
 PROMISE = "Promise"
 STATUS = re.compile(r"\.status\b")
@@ -98,7 +101,7 @@ LOGGING = re.compile(r"^console\.\w+$")
 PREDICATE = re.compile(
     r"^(is|has|can|should)[A-Z_]|^(check|validate|verify|authori[sz]e|authenticate|allow)"
 )
-EXITS = frozenset({"throw_statement", "return_statement", "break_statement"})
+EXITS = frozenset({Kind.THROW_STATEMENT, Kind.RETURN_STATEMENT, Kind.BREAK_STATEMENT})
 
 
 def _excerpt(node: Node) -> str:
@@ -109,14 +112,14 @@ def _excerpt(node: Node) -> str:
 
 
 def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name("arguments")
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
     if arguments is None:
         return []
-    return [child for child in arguments.named_children if child.type != "comment"]
+    return [child for child in arguments.named_children if child.type != Kind.COMMENT]
 
 
 def _callee(call: Node) -> str | None:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return None
     return dotted_callee(function)
@@ -159,8 +162,8 @@ def _is_shell_true(pair: Node) -> bool:
     """``shell: true`` in an options object."""
     if pair.type != PAIR:
         return False
-    key = pair.child_by_field_name("key")
-    value = pair.child_by_field_name("value")
+    key = pair.child_by_field_name(Field.KEY)
+    value = pair.child_by_field_name(Field.VALUE)
     return (
         key is not None and value is not None and node_text(key) == "shell" and value.type == TRUE
     )
@@ -198,17 +201,17 @@ def _returned(parent: Node | None, function: Node | None) -> bool:
     """``return spawnSync(...)``, or ``const r = spawnSync(...)`` and later ``return r``."""
     if parent is None:
         return False
-    if parent.type == "return_statement":
+    if parent.type == Kind.RETURN_STATEMENT:
         return True
-    name = parent.child_by_field_name("name")
-    if parent.type != "variable_declarator" or name is None or function is None:
+    name = parent.child_by_field_name(Field.NAME)
+    if parent.type != Kind.VARIABLE_DECLARATOR or name is None or function is None:
         return False
     stack: list[Node] = [function]
     while len(stack) > 0:
         node = stack.pop()
         stack.extend(node.named_children)
-        values = [c for c in node.named_children if c.type != "comment"]
-        if node.type == "return_statement" and len(values) == 1:
+        values = [c for c in node.named_children if c.type != Kind.COMMENT]
+        if node.type == Kind.RETURN_STATEMENT and len(values) == 1:
             if node_text(values[0]) == node_text(name):
                 return True
     return False
@@ -216,7 +219,7 @@ def _returned(parent: Node | None, function: Node | None) -> bool:
 
 def _promise_sleep(new: Node) -> bool:
     """``new Promise((resolve) => setTimeout(resolve, ...))``."""
-    constructor = new.child_by_field_name("constructor")
+    constructor = new.child_by_field_name(Field.CONSTRUCTOR)
     if constructor is None or node_text(constructor) != PROMISE:
         return False
     return SET_TIMEOUT in node_text(new)
@@ -238,7 +241,7 @@ def _sleep(source: SourceText, node: Node) -> SleepCall | None:
 
 def _catches(loop: Node) -> list[Node]:
     """``catch`` clauses in the loop body, outside nested functions and loops."""
-    body = loop.child_by_field_name("body")
+    body = loop.child_by_field_name(Field.BODY)
     found: list[Node] = []
     if body is None:
         return found
@@ -266,11 +269,11 @@ def _gives_up(catch: Node) -> bool:
 
 
 def _swallowing(catch: Node) -> bool:
-    body = catch.child_by_field_name("body")
+    body = catch.child_by_field_name(Field.BODY)
     if body is None:
         return False
     for statement in body.named_children:
-        if statement.type in ("comment", "continue_statement", "empty_statement"):
+        if statement.type in (Kind.COMMENT, Kind.CONTINUE_STATEMENT, Kind.EMPTY_STATEMENT):
             continue
         if statement.type == STATEMENT and statement.named_child_count > 0:
             call = statement.named_children[0]
@@ -282,39 +285,39 @@ def _swallowing(catch: Node) -> bool:
 
 
 def _forever(loop: Node) -> bool:
-    if loop.type == "while_statement":
-        condition = loop.child_by_field_name("condition")
+    if loop.type == Kind.WHILE_STATEMENT:
+        condition = loop.child_by_field_name(Field.CONDITION)
         return condition is not None and node_text(condition).strip("() \n") == TRUE
-    if loop.type == "for_statement":
-        condition = loop.child_by_field_name("condition")
+    if loop.type == Kind.FOR_STATEMENT:
+        condition = loop.child_by_field_name(Field.CONDITION)
         return condition is None or node_text(condition).strip("; \n") in ("", TRUE)
     return False
 
 
 def _predicate_name(node: Node) -> str | None:
-    name = node.child_by_field_name("name")
+    name = node.child_by_field_name(Field.NAME)
     if name is not None:
         return node_text(name)
     parent = node.parent
     if (
-        node.type == "arrow_function"
+        node.type == Kind.ARROW_FUNCTION
         and parent is not None
-        and parent.type == "variable_declarator"
+        and parent.type == Kind.VARIABLE_DECLARATOR
     ):
-        declared = parent.child_by_field_name("name")
+        declared = parent.child_by_field_name(Field.NAME)
         if declared is not None:
             return node_text(declared)
     return None
 
 
 def _returns_true(function: Node) -> bool:
-    body = function.child_by_field_name("body")
+    body = function.child_by_field_name(Field.BODY)
     if body is None:
         return False
     if body.type == TRUE:
         return True  # (x) => true
-    statements = [c for c in body.named_children if c.type != "comment"]
-    if len(statements) != 1 or statements[0].type != "return_statement":
+    statements = [c for c in body.named_children if c.type != Kind.COMMENT]
+    if len(statements) != 1 or statements[0].type != Kind.RETURN_STATEMENT:
         return False
     values = statements[0].named_children
     return len(values) == 1 and values[0].type == TRUE

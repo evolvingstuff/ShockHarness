@@ -19,26 +19,27 @@ from tree_sitter import Node
 from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_guardrails import dotted_callee
+from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import AsyncFacts, DiscardedCall, SettledBatch
 from shockharness.source import SourceText
 
 FUNCTIONS = frozenset(
     {
-        "function_declaration",
-        "generator_function_declaration",
-        "function_expression",
-        "function",
-        "generator_function",
-        "arrow_function",
-        "method_definition",
+        Kind.FUNCTION_DECLARATION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+        Kind.FUNCTION_EXPRESSION,
+        Kind.FUNCTION,
+        Kind.GENERATOR_FUNCTION,
+        Kind.ARROW_FUNCTION,
+        Kind.METHOD_DEFINITION,
     }
 )
-CALL = "call_expression"
-STATEMENT = "expression_statement"
-AWAIT = "await_expression"
-UNARY = "unary_expression"
-RETURN = "return_statement"
-PARENTHESIZED = "parenthesized_expression"
+CALL = Kind.CALL_EXPRESSION
+STATEMENT = Kind.EXPRESSION_STATEMENT
+AWAIT = Kind.AWAIT_EXPRESSION
+UNARY = Kind.UNARY_EXPRESSION
+RETURN = Kind.RETURN_STATEMENT
+PARENTHESIZED = Kind.PARENTHESIZED_EXPRESSION
 ASYNC = "async"
 VOID = "void"
 ALL_SETTLED = "Promise.allSettled"
@@ -79,7 +80,7 @@ def _is_void(node: Node) -> bool:
 
 
 def _callee(call: Node) -> str:
-    function = call.child_by_field_name("function")
+    function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return DYNAMIC
     dotted = dotted_callee(function)
@@ -127,7 +128,7 @@ def _inspected(consumer: Node | None, function: Node | None) -> bool:
         return False
     if consumer.type == RETURN:
         return True
-    if function.type == "arrow_function" and consumer.id == function.id:
+    if function.type == Kind.ARROW_FUNCTION and consumer.id == function.id:
         return True
     return INSPECTION.search(node_text(function)) is not None
 

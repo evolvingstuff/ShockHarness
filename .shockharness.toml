@@ -259,6 +259,11 @@ disable = ["MAGIC001"]
 reason = "Single designated module holding every numeric constant the tool needs (exit codes, schema version, caps)"
 
 [[tool.shockharness.overrides]]
+paths = ["src/shockharness/ir/javascript_nodes.py"]
+disable = ["CPLX006"]
+reason = "The tree-sitter names the JavaScript IR uses, one constant per line in two classes (Kind, Field); a list of names, not a long unit"
+
+[[tool.shockharness.overrides]]
 roles = ["test"]
 disable = ["MAGIC001", "DEF001"]
 reason = "Test code encodes literal expected outputs and pytest fixture signatures"
