@@ -4132,3 +4132,53 @@ spec 21.1 decision 35):
 4. Rule-switching VERIFY003 findings are errors in CI.
 
 The round-2 write-up is corrected: those two overrides are not evasions.
+
+## Decision 35 built: tests exempt by default, no rule switched off unasked — DONE (2026-10-17)
+
+Part 1 (a):
+* `init` writes the test exemption in all three profiles (an inline entry in the strict
+  file's `overrides`, a table in the short profile files).
+* `skills install` writes that file when the project has no ShockHarness configuration
+  and otherwise keeps the configuration as it is.
+* The six skills and the README say `init` has done it, and that switching any other
+  rule off is the user's decision. The shared Step 5 text now says six skills, not four,
+  and mentions the config and `--lock`.
+
+Part 2:
+* `loosening.is_remedy`: a new catch boundary naming one file. Every other loosening,
+  glob boundaries included, switches a rule off.
+* `rules/accepted_policy.py`: `check` (`api.with_accepted_policy`) and the edit hook
+  compare the configuration file with the accepted one, and report each rule switched off
+  as VERIFY003. The accepted configuration is the merge base with `origin/HEAD`, else
+  `HEAD`, else what `init` writes; only the config files are exported (new
+  `git.committed_paths` and `git.export_paths`).
+* The new key `rules.verification.rule_switching_severity` (default `error`; lowering it
+  is a deviation and an ordered loosening; strictest of both sides) also applies to
+  rule-switching findings in `diff` / `gate --base`. This is a behavior change: those
+  were warnings under decision 9.
+* The hook hashes the configuration file on every run and feeds back VERIFY003 and
+  `--policy` attempts when it changed, whichever tool changed it.
+* `coverage.accepted_configuration` and a `VERIFY003:` text line say what was compared;
+  outside git nothing is compared.
+* `skills install --hook --lock` writes `~/.config/shockharness/locks/<project>-<digest>.toml`
+  (effective configuration minus boundaries, via a small TOML writer in `skills/lock.py`)
+  and adds `--policy` to the hook command; an existing lock is kept without `--force`.
+
+Evidence:
+* `tests/unit/test_accepted_policy.py` (14): the exemption per profile, remedy versus
+  glob, error until committed, the merge base on a branch, lowering the severity, no
+  commit, a `HEAD` without configuration, outside git, an unreadable accepted
+  configuration (unknown), `check` exit and text, `gate --base` exit 1, the hook once per
+  change, the lock round trip and block, and install writing config and lock.
+* Updated tests: the init text, the strictest merge, the installer signature, the
+  inventory sites (`policy_finding`, `accepted_policy._unknown`), and the diff exemption
+  test (its loosening is now an error).
+* 1199 tests pass; CI lint and the self-gate pass. Live: a scratch repository, the hook
+  through a Bash event, and a locked hook.
+
+Replay: round 2's 12 gated builds, each with `build.sh`'s configuration committed as the
+accepted one. The new check flags exactly the 2 test-role overrides and none of the 30
+catch boundaries.
+
+Self-granted deviation, for Tom: one new boundary in `.shockharness.toml`
+(`ConfigError` in `rules/accepted_policy.py`, the same shape as `policy_integrity.py`'s).

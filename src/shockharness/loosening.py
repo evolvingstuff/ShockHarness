@@ -20,6 +20,10 @@ Three sources of looseness, each reported once per key:
    looser.
 3. **Thresholds and scope.** A raised complexity threshold; a pattern added to
    ``exclude``; a pattern removed from ``include``.
+
+Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
+EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
+glob included, switches a rule off, and only a person may accept it.
 """
 
 import re
@@ -38,6 +42,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "unsupported_sources": ("fail", "warn", "ignore"),
     "parse_errors": ("fail", "warn"),
     "rules.verification.severity": ("error", "warning", "review"),
+    "rules.verification.rule_switching_severity": ("error", "warning", "review"),
     # Allowing -1 is the default; a project that had it off and turns it on loosens.
     "rules.magic_numbers.allow_unary_negative_one": ("False", "True"),
     "complexity.fan_out_severity": ("warning", "review"),
@@ -76,6 +81,9 @@ THRESHOLDS = (
 )
 INCLUDE_KEY = "include"
 EXCLUDE_KEY = "exclude"
+# A boundary's deviation line starts with its index (config._deviations).
+BOUNDARY_LINE = re.compile(r"rules\.exceptions\.boundaries\[(?P<index>\d+)\] ")
+GLOB_CHARACTERS = frozenset("*?[")
 
 
 @dataclass(frozen=True)
@@ -198,3 +206,17 @@ def loosenings(
         found.append(item)
         reported.add(item.key)
     return found
+
+
+def is_remedy(item: Loosening, after_values: Mapping[str, Any]) -> bool:
+    """True for a new catch boundary naming one file (no glob): what EXC001's remediation
+    asks for. A glob boundary covers many files, close to switching EXC001 off for them."""
+    match = BOUNDARY_LINE.match(item.message)
+    if match is None:
+        return False
+    boundaries = after_values["rules"]["exceptions"]["boundaries"]
+    index = int(match.group("index"))
+    if index >= len(boundaries):
+        return False
+    path = str(boundaries[index]["path"])
+    return not any(character in GLOB_CHARACTERS for character in path)

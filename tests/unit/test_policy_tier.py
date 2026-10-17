@@ -136,6 +136,7 @@ def test_strictest_verification_takes_the_stricter_side() -> None:
         "fail_on_unknown": False,
         "allowed_skip_reasons": ["flaky"],
         "report_narrow_suppressions": False,
+        "rule_switching_severity": "error",
     }
     head = {
         "enabled": False,
@@ -143,6 +144,7 @@ def test_strictest_verification_takes_the_stricter_side() -> None:
         "fail_on_unknown": True,
         "allowed_skip_reasons": ["flaky", "slow"],
         "report_narrow_suppressions": False,
+        "rule_switching_severity": "review",
     }
     assert strictest_verification(head, base) == {
         "enabled": True,
@@ -150,6 +152,7 @@ def test_strictest_verification_takes_the_stricter_side() -> None:
         "fail_on_unknown": True,
         "allowed_skip_reasons": ["flaky"],
         "report_narrow_suppressions": False,
+        "rule_switching_severity": "error",
     }
     assert strictest_verification(head, None) == head
 

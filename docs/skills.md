@@ -60,15 +60,33 @@ with `generic`, an unknown agent) exit 2 and write nothing.
 ## `skills install`
 
 ```bash
-shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force]
+shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force] [--hook [--lock]]
 ```
 
 Writes `<destination>/<name>/SKILL.md` for each of the six skills, byte for
 byte as shipped, then `<destination>/.shockharness-skills.json`. If any of
 those files already exists the command refuses (exit 2) and writes nothing;
-`--force` replaces them all. The command never creates, edits or deletes any
-other file: it does not touch `AGENTS.md`, `CLAUDE.md`, `settings.json` or any
-agent configuration. For `generic` it prints the line to add by hand:
+`--force` replaces them all. Besides the skills, only three files are ever
+written:
+
+* **`.shockharness.toml`**, when the project (not `--user`) has no ShockHarness
+  configuration at all: the file `shockharness init` writes, strict profile with
+  the test exemption (spec 21.1 decision 35). An existing configuration is never
+  changed.
+* **`.claude/settings.json`**, with `--hook` (`--agent claude`): the edit-time
+  hook is appended to the `PostToolUse` hooks, once.
+* **The lock**, with `--hook --lock`: the project's effective configuration,
+  minus `rules.exceptions.boundaries`, written as a `--policy` file to
+  `~/.config/shockharness/locks/<project>-<digest>.toml`; the hook command gets
+  `--policy "<that file>"`. The project's configuration can then tighten those
+  keys but not loosen them; a loosening is reverted to the lock's value and fed
+  back as `VERIFY003`. To accept a change, edit the lock. An existing lock is
+  kept unless `--force` is given. An agent with unrestricted shell access can
+  still edit a file in the home directory, so the lock is a strong signal, not a
+  guarantee; Claude Code's sandbox, when on, keeps writes inside the project.
+
+It never touches `AGENTS.md`, `CLAUDE.md` or other agent configuration. For
+`generic` it prints the line to add by hand:
 
 ```text
 Add this line to the agent's instruction file (for example AGENTS.md):

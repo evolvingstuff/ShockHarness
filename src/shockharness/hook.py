@@ -10,6 +10,12 @@ configuration does not include exits 0 and prints nothing.
 
 Only the edited file is analyzed: the cross-file rules see that file alone, so the gate
 (``check`` or ``gate`` in CI) stays the authority.
+
+Whatever the tool, the project's ShockHarness configuration file is checked too: when its
+content changed since the hook last saw it, every rule it switches off since the accepted
+configuration (VERIFY003, spec 21.1 decision 35) and every key that tries to loosen the
+``--policy`` file is fed back, so an agent hears at once that switching a rule off is the
+user's decision.
 """
 
 import json
@@ -22,12 +28,15 @@ from typing import Any
 from shockharness.analysis import AnalysisOptions
 from shockharness.api import analyze_paths
 from shockharness.cache.store import cache_settings
-from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
+from shockharness.config import SUPPORTED_EXTENSIONS, TIER_CLI, EffectiveConfig
 from shockharness.constants import HOOK_FEEDBACK
 from shockharness.findings import Finding
 from shockharness.history.git import locate_repository, run_git_text
 from shockharness.hook_state import HookStore
 from shockharness.output.text import finding_lines
+from shockharness.rules.accepted_policy import accepted_policy
+from shockharness.rules.policy_integrity import USER_TIERS, policy_attempt_findings
+from shockharness.rules.registry import VERIFICATION_SECTION
 
 AGENT_CLAUDE_CODE = "claude-code"
 HOOK_AGENTS = (AGENT_CLAUDE_CODE,)
@@ -201,6 +210,46 @@ def _feedback(
     return "".join(parts), details
 
 
+def _config_name(root: Path, config: EffectiveConfig) -> str | None:
+    """The project's configuration file relative to ``root``; None for the bundled
+    defaults or a file outside the project."""
+    if config.source.tier not in USER_TIERS:
+        return None
+    relative = _within(Path(config.source.path), root)
+    if relative is None:
+        return None
+    return relative.as_posix()
+
+
+def _config_feedback(
+    root: Path,
+    config: EffectiveConfig,
+    state: Mapping[str, str],
+    store: HookStore,
+    fail_on: str,
+) -> tuple[str, list[str], dict[str, str]]:
+    """(message, run-log lines, new state) for a configuration file whose content
+    changed since the hook last saw it."""
+    name = _config_name(root, config)
+    if name is None:
+        return "", [], {}
+    changed = _changed(root, [name], state, store)
+    if len(changed) == 0:
+        return "", [], {}
+    explicit: Path | None = None
+    if config.source.tier == TIER_CLI:
+        explicit = Path(config.source.path)
+    findings = [
+        *accepted_policy(root, explicit).findings,
+        *policy_attempt_findings(config, root, config.section(VERIFICATION_SECTION)),
+    ]
+    shown = _fed_back(findings, fail_on)
+    if len(shown) == 0:
+        return "", [], changed
+    details = [f"{f.rule_id} {f.path}:{f.span.line}" for f in shown]
+    return _message(name, shown), details, changed
+
+
 def run_post_edit(
     event_text: str,
     root: Path,
@@ -224,8 +273,15 @@ def run_post_edit(
     message, details = "", []
     if len(changed) > 0:
         message, details = _feedback(root, sorted(changed), config, options, fail_on)
-        store.save_state({**state, **changed})
-    return _finish(store, tool, sorted(changed), details, message, candidates.note)
+    config_message, config_details, config_changed = _config_feedback(
+        root, config, state, store, fail_on
+    )
+    if len(changed) > 0 or len(config_changed) > 0:
+        store.save_state({**state, **changed, **config_changed})
+    files = sorted({*changed, *config_changed})
+    return _finish(
+        store, tool, files, [*details, *config_details], message + config_message, candidates.note
+    )
 
 
 def _finish(

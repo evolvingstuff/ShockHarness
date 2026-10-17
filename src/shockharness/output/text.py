@@ -161,6 +161,21 @@ def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+ACCEPTED_COVERAGE = "accepted_configuration"
+ACCEPTED_COMPARED = "compared"
+
+
+def _accepted_line(accepted: Mapping[str, Any]) -> str:
+    """VERIFY003's comparison with the accepted configuration (spec 21.1 decision 35)."""
+    if accepted["status"] == ACCEPTED_COMPARED:
+        return (
+            f"  VERIFY003: configuration compared with {accepted['accepted']} (rules switched off)"
+        )
+    return (
+        f"  VERIFY003: configuration {accepted['status'].replace('_', ' ')} ({accepted['reason']})"
+    )
+
+
 def _verification_line(verification: Mapping[str, Any], rules: Sequence[str]) -> str:
     """The VERIFY rules' state for this run (H2): they need a base revision."""
     listed = ", ".join(rules)
@@ -239,6 +254,8 @@ def _trailer_lines(report: Report) -> list[str]:
     applied = [rule for rule in coverage["rules_implemented"] if rule not in needing_base]
     lines.append("  rules applied: " + ", ".join(applied))
     lines.append(_verification_line(coverage["verification"], needing_base))
+    if ACCEPTED_COVERAGE in coverage:
+        lines.append(_accepted_line(coverage[ACCEPTED_COVERAGE]))
     lines.extend(_unanalyzed_rule_lines(coverage))
     unsupported = coverage["unsupported_sources"]
     if len(unsupported) > 0 and coverage["unsupported_sources_policy"] == "warn":

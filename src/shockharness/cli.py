@@ -15,10 +15,14 @@ from dataclasses import replace
 from pathlib import Path
 
 from shockharness.analysis import CACHE_BYPASSED, CACHE_CONFIGURED, AnalysisOptions
-from shockharness.api import analyze_paths, apply_baseline, with_history
+from shockharness.api import analyze_paths, apply_baseline, with_accepted_policy, with_history
 from shockharness.config import (
     DEDICATED_FILENAME,
+    DEDICATED_FILENAMES,
+    NO_OVERRIDES,
     PARSE_ERROR_POLICIES,
+    PYPROJECT_FILENAME,
+    TEST_EXEMPTION_RULES,
     USER_TIERS,
     CliOverrides,
     EffectiveConfig,
@@ -64,15 +68,17 @@ from shockharness.skills.adapters import (
 )
 from shockharness.skills.install import (
     ACTION_NONE,
-    HOOK_COMMAND,
     MANIFEST_FILENAME,
     STATUS_EDITED,
     STATUS_UP_TO_DATE,
     SkillsResult,
+    hook_command,
     install_claude_hook,
     install_skills,
     update_skills,
+    write_lock,
 )
+from shockharness.skills.lock import lock_path, render_lock
 from shockharness.version import __version__
 
 PROGRAM = "shockharness"
@@ -242,6 +248,14 @@ def _add_skills_install_parser(
         help="--agent claude: also add an edit-time hook to the project's .claude/settings.json "
         "(PostToolUse on Edit/Write/MultiEdit runs `shockharness hook claude-code post-edit`, "
         "so the agent hears findings right after each edit); appended, never replacing hooks",
+    )
+    skills_install.add_argument(
+        "--lock",
+        action="store_true",
+        help="with --hook: write the project's configuration (catch boundaries aside) as a "
+        "policy file under ~/.config/shockharness/locks/ and run the hook with --policy, so "
+        "the project can tighten the configuration but not loosen it; kept if it exists "
+        "(--force rewrites it)",
     )
 
 
@@ -426,6 +440,7 @@ def _load_config(args: argparse.Namespace) -> EffectiveConfig:
 def _analyze_working_tree(args: argparse.Namespace) -> Report:
     config = _load_config(args)
     report = analyze_paths(list(args.paths), args.root, config, _options(args))
+    report = with_accepted_policy(report, args.root, args.config, config)
     if args.baseline is not None:
         report = apply_baseline(report, load_baseline(args.baseline), config)
     report = with_history(report, args.root, WORKING_TREE_REVISION, config)
@@ -635,6 +650,10 @@ def _print_skill_files(result: SkillsResult) -> None:
 
 
 def _check_hook_arguments(args: argparse.Namespace, agent: str) -> None:
+    if args.lock and not args.hook:
+        raise UsageError(
+            "--lock locks the configuration the edit hook runs under; add --hook", None
+        )
     if not args.hook:
         return
     if agent != AGENT_CLAUDE:
@@ -649,9 +668,13 @@ def _check_hook_arguments(args: argparse.Namespace, agent: str) -> None:
 def _report_hook(args: argparse.Namespace, agent: str, project_root: Path) -> None:
     """Install the edit-time hook when asked; offer it to a Claude Code project otherwise."""
     if args.hook:
-        settings, status = install_claude_hook(project_root)
+        lock = None
+        if args.lock:
+            lock = _write_project_lock(project_root, args.force)
+        command = hook_command(lock)
+        settings, status = install_claude_hook(project_root, command)
         sys.stdout.write(
-            f"  hook       {settings} ({status}): {HOOK_COMMAND}\n"
+            f"  hook       {settings} ({status}): {command}\n"
             "Edit-time feedback needs `shockharness` on the PATH the agent's hooks run with; "
             "if it lives in a virtual environment, put that path in the command.\n"
         )
@@ -661,6 +684,58 @@ def _report_hook(args: argparse.Namespace, agent: str, project_root: Path) -> No
             ".claude/settings.json, so the agent hears findings right after each edit "
             "instead of at commit or in CI.\n"
         )
+
+
+def _write_project_lock(project_root: Path, force: bool) -> Path:
+    """The ``--lock`` policy file: written from the project's configuration, or kept."""
+    path = lock_path(project_root, Path.home())
+    if path.exists() and not force:
+        sys.stdout.write(
+            f"  lock       {path}: kept (edit it to accept a change; --force rewrites it)\n"
+        )
+        return path
+    config = load_config_with_overrides(project_root, None, NO_OVERRIDES)
+    write_lock(path, render_lock(config, project_root))
+    sys.stdout.write(
+        f"  lock       {path}: written; the project's configuration may tighten these keys "
+        "but not loosen them (catch boundaries aside); edit the lock to accept a change\n"
+    )
+    return path
+
+
+TOOL_TABLE_HEADER = "[tool.shockharness"
+
+
+def _configured(project_root: Path) -> str | None:
+    """The project's ShockHarness configuration file, None when it has none. Only
+    presence is checked: ``check`` validates it."""
+    for name in DEDICATED_FILENAMES:
+        if (project_root / name).is_file():
+            return name
+    pyproject = project_root / PYPROJECT_FILENAME
+    if not pyproject.is_file():
+        return None
+    text, _error = read_text(pyproject)
+    if text is not None and any(
+        line.strip().startswith(TOOL_TABLE_HEADER) for line in text.splitlines()
+    ):
+        return PYPROJECT_FILENAME
+    return None
+
+
+def _ensure_project_config(project_root: Path) -> None:
+    """A project with no ShockHarness configuration gets what ``init`` writes, with the
+    test exemption (spec 21.1 decision 35); an existing one is never changed."""
+    present = _configured(project_root)
+    if present is not None:
+        sys.stdout.write(f"  config     {present}: kept as it is\n")
+        return
+    _write_output(render_profile_config_toml(PROFILE_STRICT), project_root / DEDICATED_FILENAME)
+    exempt = ", ".join(TEST_EXEMPTION_RULES)
+    sys.stdout.write(
+        f"  config     {DEDICATED_FILENAME}: written (strict profile, as `init` writes it; "
+        f"tests exempt from {exempt})\n"
+    )
 
 
 def _install_skills(args: argparse.Namespace, destination: Path, project_root: Path) -> int:
@@ -678,6 +753,8 @@ def _install_skills(args: argparse.Namespace, destination: Path, project_root: P
             "Add this line to the agent's instruction file (for example AGENTS.md):\n"
             f"  {pointer_line(project_root)}\n"
         )
+    if not args.user:
+        _ensure_project_config(project_root)
     _report_hook(args, adapter.agent, project_root)
     return result.exit_code
 

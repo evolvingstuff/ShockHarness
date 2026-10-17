@@ -1,6 +1,6 @@
 # Decision 35: tests exempt by default, and no rule switched off unasked
 
-Status: **accepted (Tom, 2026-10-17), not built.** From the under-the-gate experiment,
+Status: **accepted (Tom, 2026-10-17) and built** (see STATUS.md, "Decision 35 built"). From the under-the-gate experiment,
 round 2 (`evals/under-the-gate/RESULTS-round2.md`, finding 3). Tom's answers are under
 "Decisions" below.
 

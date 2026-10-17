@@ -51,7 +51,7 @@ from shockharness.findings import (
 )
 from shockharness.gating.baseline import FINGERPRINTS_FIELD, assign_fingerprints
 from shockharness.ir.model import Span
-from shockharness.loosening import loosenings
+from shockharness.loosening import is_remedy, loosenings
 from shockharness.roles import FILE_ROLES_KEY, ROLE_PRODUCTION, ROLE_TEST, role_classifier
 from shockharness.rules.registry import VERIFY003
 from shockharness.rules.tool_configs import TOOL_CONFIG_FILES, read_tool_settings, tool_loosenings
@@ -322,6 +322,10 @@ def _first_line_mentioning(text: str, needles: Sequence[str]) -> int:
     return FIRST_LINE
 
 
+def _stricter(current: Mapping[str, Any], base: Mapping[str, Any], key: str) -> str:
+    return min((str(current[key]), str(base[key])), key=VERIFICATION_SEVERITY_ORDER.index)
+
+
 def strictest_verification(
     current: Mapping[str, Any], base: Mapping[str, Any] | None
 ) -> dict[str, Any]:
@@ -329,13 +333,10 @@ def strictest_verification(
     change cannot switch off or lower the rules that report it doing so."""
     if base is None:
         return dict(current)
-    severity = min(
-        (str(current["severity"]), str(base["severity"])),
-        key=VERIFICATION_SEVERITY_ORDER.index,
-    )
     return {
         "enabled": any((current["enabled"] is True, base["enabled"] is True)),
-        "severity": severity,
+        "severity": _stricter(current, base, "severity"),
+        "rule_switching_severity": _stricter(current, base, "rule_switching_severity"),
         "fail_on_unknown": any(
             (current["fail_on_unknown"] is True, base["fail_on_unknown"] is True)
         ),
@@ -351,7 +352,7 @@ def strictest_verification(
     }
 
 
-def _finding(
+def policy_finding(
     path: str,
     line: int,
     message: str,
@@ -418,7 +419,7 @@ def policy_attempt_findings(
             "the policy's value applies"
         )
         findings.append(
-            _finding(
+            policy_finding(
                 path,
                 line,
                 message,
@@ -439,8 +440,12 @@ def _listed(paths: Sequence[str]) -> str:
 
 
 def _config_findings(
-    base: PolicySnapshot, head: PolicySnapshot, short: str, severity: str
+    base: PolicySnapshot, head: PolicySnapshot, short: str, severities: tuple[str, str]
 ) -> list[Finding]:
+    """Configuration loosenings since base. ``severities`` is (VERIFY severity, rule
+    switching severity): every loosening but a one-file catch boundary switches a rule off
+    (spec 21.1 decision 35)."""
+    severity, rule_switching = severities
     findings: list[Finding] = []
     anchor = head.config_file
     if anchor is None:
@@ -451,7 +456,7 @@ def _config_findings(
     if base.config is None or head.config is None:
         if head_text == _text_at(base.texts, anchor):
             return findings
-        findings.append(_unloadable_config(base, head, anchor, short, severity))
+        findings.append(_unloadable_config(base, head, anchor, short, rule_switching))
         return findings
     for item in loosenings(
         base.config.values, base.config.deviations, head.config.values, head.config.deviations
@@ -460,14 +465,14 @@ def _config_findings(
         if head_text is not None:
             line = toml_key_line(head_text, item.key)
         findings.append(
-            _finding(
+            policy_finding(
                 anchor,
                 line,
                 f"configuration loosened since base {short}: {item.message}",
                 item.message,
                 "configuration",
                 None,
-                severity,
+                severity if is_remedy(item, head.config.values) else rule_switching,
             )
         )
     findings.extend(_dropped_files(head, anchor, head_text, severity))
@@ -479,7 +484,7 @@ def _unloadable_config(
 ) -> Finding:
     side = "base" if base.config is None else "head"
     error = base.config_error if base.config is None else head.config_error
-    return _finding(
+    return policy_finding(
         anchor,
         FIRST_LINE,
         f"the ShockHarness configuration changed between base {short} and head",
@@ -504,7 +509,7 @@ def _dropped_files(
     if head_text is not None:
         line = toml_key_line(head_text, "exclude")
     return [
-        _finding(
+        policy_finding(
             anchor,
             line,
             f"{len(dropped)} file(s) the base configuration analyzes are not analyzed "
@@ -533,7 +538,7 @@ def _tool_findings(
         after, after_error = read_tool_settings(name, anchor_text)
         if before is None or after is None:
             findings.append(
-                _finding(
+                policy_finding(
                     name,
                     FIRST_LINE,
                     f"{name} changed since base {short}",
@@ -550,7 +555,7 @@ def _tool_findings(
                 (item.item, item.category.split(".")[len(item.category.split(".")) - 1]),
             )
             findings.append(
-                _finding(
+                policy_finding(
                     name,
                     line,
                     f"{item.message} in {name} (looser than at base {short})",
@@ -581,7 +586,7 @@ def _workflow_findings(
             continue
         for item in workflow_loosenings(base_text, head_text):
             findings.append(
-                _finding(
+                policy_finding(
                     path,
                     item.line,
                     f"{item.message} (since base {short})",
@@ -619,7 +624,7 @@ def _baseline_findings(
             rules[rule] += 1
         summary = ", ".join(f"{rule}: {count}" for rule, count in sorted(rules.items()))
         findings.append(
-            _finding(
+            policy_finding(
                 path,
                 FIRST_LINE,
                 f"baseline {path} gained {len(added)} fingerprint(s) since base {short} "
@@ -659,7 +664,7 @@ def _role_findings(
             continue
         moved = "" if base_path == path else f" (moved from {base_path})"
         found.append(
-            _finding(
+            policy_finding(
                 path,
                 FIRST_LINE,
                 f"{path} was a production file at base {short} and is now classified as a test "
@@ -700,7 +705,7 @@ def compare_policy(
     short = base_commit[:COMMIT_SHORT_HEX]
     severity = str(settings["severity"])
     findings = [
-        *_config_findings(base, head, short, severity),
+        *_config_findings(base, head, short, (severity, str(settings["rule_switching_severity"]))),
         *_tool_findings(base, head, short, severity),
         *_workflow_findings(base, head, renames, short, severity),
         *_baseline_findings(base, head, renames, short, severity),

@@ -89,6 +89,7 @@ EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_
 
 NAMED_CONSTANT_ALLOW = NAMED_CONSTANT_MODES[1]
 VERIFICATION_REVIEW = "review"
+VERIFICATION_ERROR = "error"
 
 TIER_CLI = "cli"
 TIER_DEDICATED = "dedicated"
@@ -737,6 +738,12 @@ def _verification_deviations(verification: Mapping[str, Any]) -> list[str]:
             "rules.verification.severity is 'review'; VERIFY001, VERIFY002 and VERIFY004 "
             "findings are reported as review and never fail the gate"
         )
+    if verification["rule_switching_severity"] != VERIFICATION_ERROR:
+        found.append(
+            f"rules.verification.rule_switching_severity is "
+            f"{verification['rule_switching_severity']!r}; a configuration change that "
+            "switches a rule off does not fail the gate"
+        )
     for index, reason in enumerate(verification["allowed_skip_reasons"]):
         found.append(
             f"rules.verification.allowed_skip_reasons[{index}] accepts an added skip marker "
@@ -1154,19 +1161,57 @@ def load_config_with_overrides(
 
 
 def render_default_config_toml() -> str:
-    """The text ``shockharness init --profile strict`` writes: the bundled defaults, verbatim."""
+    """The bundled defaults, verbatim (``init --profile strict`` adds the test exemption)."""
     return resources.files("shockharness").joinpath("defaults.toml").read_text(encoding="utf-8")
+
+
+# The override `init` and `skills install` write (spec 21.1 decision 35): the exemption
+# ShockHarness's own configuration has and the skills recommend.
+TEST_EXEMPTION_RULES = ("MAGIC001", "DEF001")
+TEST_EXEMPTION_REASON = (
+    "Test code states literal expected values, and test helpers and fixtures take keyword "
+    "defaults (written by shockharness init; remove it to hold tests to every rule)"
+)
+DEFAULTS_OVERRIDES_LINE = "overrides = []\n"
+
+
+def _test_exemption_rules() -> str:
+    return ", ".join(f'"{rule}"' for rule in TEST_EXEMPTION_RULES)
+
+
+def _test_exemption_inline() -> str:
+    """The test exemption as an inline table, for the ``overrides`` array."""
+    return (
+        f'{{ roles = ["test"], disable = [{_test_exemption_rules()}], '
+        f'reason = "{TEST_EXEMPTION_REASON}" }}'
+    )
+
+
+def test_exemption_table() -> str:
+    """The test exemption as an ``[[tool.shockharness.overrides]]`` table."""
+    return (
+        "[[tool.shockharness.overrides]]\n"
+        'roles = ["test"]\n'
+        f"disable = [{_test_exemption_rules()}]\n"
+        f'reason = "{TEST_EXEMPTION_REASON}"\n'
+    )
 
 
 def render_profile_config_toml(name: str) -> str:
     """The text ``shockharness init --profile NAME`` writes.
 
-    ``strict`` is the bundled defaults verbatim. Any other profile gets a short file
-    that selects the profile and nothing else: spelling out the strict values would
-    override the profile layer and silently undo it.
+    ``strict`` is the bundled defaults verbatim, except that ``overrides`` holds the test
+    exemption (decision 35). Any other profile gets a short file that selects the
+    profile and holds the test exemption, nothing else: spelling out the strict values
+    would override the profile layer and silently undo it.
     """
     if name == PROFILE_STRICT:
-        return render_default_config_toml()
+        defaults = render_default_config_toml()
+        if DEFAULTS_OVERRIDES_LINE not in defaults:
+            raise ConfigError("the bundled defaults no longer set overrides = []", name)
+        return defaults.replace(
+            DEFAULTS_OVERRIDES_LINE, f"overrides = [\n  {_test_exemption_inline()},\n]\n", 1
+        )
     if name not in PROFILES:
         raise ConfigError(f"unknown profile; known profiles: {', '.join(PROFILES)}", name)
     return (
@@ -1176,4 +1221,5 @@ def render_profile_config_toml(name: str) -> str:
         "\n"
         "[tool.shockharness]\n"
         f'profile = "{name}"\n'
+        "\n" + test_exemption_table()
     )

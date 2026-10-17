@@ -37,9 +37,16 @@ from shockharness.gate import NO_REGRESSIONS, GateResult
 from shockharness.gating.baseline import Baseline
 from shockharness.gating.baseline import apply_baseline as apply_baseline_fingerprints
 from shockharness.history.hotspots import collect_history
-from shockharness.report import Report, build_report, rebuild_with_findings
+from shockharness.report import (
+    Report,
+    build_report,
+    build_summary,
+    execution_summary,
+    rebuild_with_findings,
+)
 from shockharness.roles import FILE_ROLES_KEY, role_classifier
 from shockharness.rules import registry
+from shockharness.rules.accepted_policy import accepted_policy
 from shockharness.rules.policy_integrity import fingerprinted, policy_attempt_findings
 from shockharness.rules.registry import VERIFICATION_SECTION
 
@@ -147,6 +154,36 @@ def evaluate_gate(report: Report, baseline: Baseline | None, config: EffectiveCo
     return apply_baseline(report, baseline, config).gate
 
 
+ACCEPTED_COVERAGE = "accepted_configuration"
+
+
+def with_accepted_policy(
+    report: Report, root: Path, explicit: Path | None, config: EffectiveConfig
+) -> Report:
+    """Add VERIFY003 for every rule the working configuration switches off since the
+    accepted one (spec 21.1 decision 35) and re-evaluate the gate.
+
+    Runs local git (the accepted configuration is the merge base with ``origin/HEAD``, else
+    ``HEAD``, else what ``init`` writes); ``explicit`` is the run's ``--config`` path.
+    ``coverage.accepted_configuration`` says what was compared, or why nothing was.
+    """
+    result = accepted_policy(root, explicit)
+    findings = [*report.findings, *result.findings]
+    verdict = gate_module.evaluate(findings, list(report.files), config, None, NO_REGRESSIONS)
+    rebuilt = rebuild_with_findings(report, findings, verdict)
+    analyzed = {file.path for file in rebuilt.files}
+    classifier = role_classifier(config.values[FILE_ROLES_KEY])
+    roles = {
+        f.path: classifier.classify(f.path).role for f in rebuilt.findings if f.path not in analyzed
+    }
+    return replace(
+        rebuilt,
+        coverage={**report.coverage, ACCEPTED_COVERAGE: result.coverage},
+        execution_summary=execution_summary(rebuilt.files, rebuilt.findings),
+        summary=build_summary(rebuilt.files, rebuilt.findings, report.metrics, roles),
+    )
+
+
 def with_history(report: Report, root: Path, revision: str, config: EffectiveConfig) -> Report:
     """Attach ``metrics.history`` read from local git for the report's files at ``revision``.
 
@@ -174,5 +211,6 @@ __all__ = [
     "apply_baseline",
     "evaluate_gate",
     "load_config",
+    "with_accepted_policy",
     "with_history",
 ]

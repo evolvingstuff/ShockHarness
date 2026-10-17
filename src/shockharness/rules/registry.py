@@ -1145,7 +1145,11 @@ VERIFY003 = RuleSpec(
         "added ignores, deselections or omissions, removed selections or test paths, "
         "lowered fail_under, or turned an ESLint rule down. With --policy, in any run: every "
         "repository key that would loosen a key the policy file sets (the policy's value "
-        "applies)."
+        "applies). In check and the edit hook (spec 21.1 decision 35): every configuration "
+        "loosening that switches a rule off (all but a catch boundary naming one file) since "
+        "the accepted configuration, which is the merge base with origin/HEAD, else HEAD, else "
+        "what init writes. Rule-switching findings take rules.verification.rule_switching_severity "
+        "(error by default) in every mode."
     ),
     limitations=(
         "Workflows are read as text, not YAML: flow style, anchors and matrix-generated "
@@ -1155,11 +1159,17 @@ VERIFY003 = RuleSpec(
         "makes a configuration invalid at one revision yields an unknown finding. Per-path "
         "[[overrides]] do not apply to VERIFY003; only rules.verification.enabled turns it "
         "off, and the strictest of the run's and the base revision's rules.verification "
-        "applies, so a change cannot switch off the rule reporting it."
+        "applies, so a change cannot switch off the rule reporting it. The accepted-configuration "
+        "comparison of check and the hook needs git: outside a repository nothing is "
+        "compared (coverage.accepted_configuration says so), and any commit accepts a "
+        "change, one an agent makes included; a pull request's gate --base is the check "
+        "the agent cannot make pass by committing."
     ),
     remediation=(
         "Revert the loosening, or make the policy change deliberately in its own reviewed "
-        "change with the reason in the commit message. An organization that wants a key "
+        "change with the reason in the commit message. An agent never switches a rule off "
+        "to get past a finding: it undoes the change or asks the user, who accepts it by "
+        "committing it. An organization that wants a key "
         "fixed sets it in the --policy file kept outside the repository. "
         + VERIFICATION_REMEDIATION_COMMON
     ),

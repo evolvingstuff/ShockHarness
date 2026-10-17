@@ -219,12 +219,19 @@ def test_an_exemption_granted_in_the_same_change_does_not_apply(
         ["diff", "--base", base, "--head", "HEAD", "--format", "json", "--root", str(empty_root)],
         capsys,
     )
-    assert code == 0
+    assert code == 0  # diff reports; gate decides
+    # The loosening itself switches a rule off (spec 21.1 decision 35): an error.
     data = json.loads(out)
     rows = verify_rows(data)
     assert ("VERIFY001", "tests/test_calc.py", 9) in rows
-    severities = {f["severity"] for f in data["findings"] if f["rule_id"].startswith("VERIFY")}
-    assert severities == {"warning"}
+    others = {
+        f["severity"]
+        for f in data["findings"]
+        if f["rule_id"].startswith("VERIFY") and f["rule_id"] != "VERIFY003"
+    }
+    assert others == {"warning"}
+    switching = {f["severity"] for f in data["findings"] if f["rule_id"] == "VERIFY003"}
+    assert switching == {"error"}
     loosened = [f["message"] for f in data["findings"] if f["rule_id"] == "VERIFY003"]
     assert any("allowed_skip_reasons" in message for message in loosened)
     assert any("rules.verification.severity" in message for message in loosened)

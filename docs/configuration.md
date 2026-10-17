@@ -577,6 +577,7 @@ severity = "warning"              # "warning" | "error" | "review"
 fail_on_unknown = false
 allowed_skip_reasons = []         # e.g. ["POSIX signals only"]
 report_narrow_suppressions = false
+rule_switching_severity = "error" # a configuration change that switches a rule off
 ```
 
 `VERIFY001`-`VERIFY004` compare the head revision of a `diff` or `gate
@@ -584,8 +585,29 @@ report_narrow_suppressions = false
 test skip and focus markers, blanket suppression comments, a looser policy
 (configuration, files dropped from analysis, baselines, workflows, other tools'
 settings), and assertions made unable to fail. A plain `check` has no base and
-reports them as not applicable, except the `--policy` attempts of `VERIFY003`.
-See `docs/rules.md` for every pattern.
+reports them as not applicable, except two parts of `VERIFY003`: the `--policy`
+attempts, and every rule the configuration switches off since the **accepted
+configuration** (below). See `docs/rules.md` for every pattern.
+
+**Switching a rule off needs a person (spec 21.1 decision 35).** Every
+configuration loosening except a catch boundary naming one file switches a rule
+off: an `[[overrides]]` entry, a disabled rule family, a lowered severity or gate
+mode, a raised threshold, a new `exclude` pattern, a looser profile, an allowed
+value, a boundary whose `path` is a glob. `check` and the edit hook compare the
+working configuration file with the accepted one: the configuration at the merge
+base of `HEAD` and `origin/HEAD`, else at `HEAD`, else (no commit yet, or that
+revision has no ShockHarness configuration) what `shockharness init` writes for
+the configured profile. Each rule switched off is a `VERIFY003` finding at
+`rule_switching_severity`, the stricter of the working and accepted values;
+committing the change (on a branch, merging it) accepts it. In `diff` and `gate
+--base` the same changes since the base revision get that severity too, so with
+the default `"error"` a pull request that switches a rule off fails. Outside a
+git repository nothing can be accepted, so nothing is compared;
+`coverage.accepted_configuration` and a `VERIFY003:` line in the text report say
+what was compared or why not. `shockharness init` (and `skills install` in a
+project with no configuration) writes the test exemption
+(`roles = ["test"]`, `disable = ["MAGIC001", "DEF001"]`), so a new project does
+not need to add it.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -594,6 +616,7 @@ See `docs/rules.md` for every pattern.
 | `fail_on_unknown` | `false` | whether an `unknown` VERIFY finding (the base version could not be analyzed, or rename detection failed) gates according to its severity |
 | `allowed_skip_reasons` | `[]` | exact reason strings that make an added Python skip acceptable (JavaScript skips carry no reason). Each entry is listed as a policy deviation |
 | `report_narrow_suppressions` | `false` | `VERIFY002` always reports blanket suppressions; with `true` it also reports added suppressions that name specific rule codes |
+| `rule_switching_severity` | `"error"` | the severity of `VERIFY003` findings for a configuration change that switches a rule off (above). Lowering it is a deviation and is itself reported at the accepted configuration's severity |
 
 The bundled default is the same in all three profiles: specification section
 21.1 decision 9 keeps new rules at `warning` until their precision has been

@@ -474,6 +474,7 @@ CONFIG_SCHEMA = TableField(
                         "fail_on_unknown": BoolField(),
                         "allowed_skip_reasons": ListField(StrField(allow_empty=False)),
                         "report_narrow_suppressions": BoolField(),
+                        "rule_switching_severity": EnumField(VERIFICATION_SEVERITIES),
                     },
                     required=(),
                 ),

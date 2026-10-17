@@ -180,11 +180,17 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: violation",
     ),
     # VERIFY003 (H2 part 2).
-    ("rules/policy_integrity.py", "_finding"): (
+    ("rules/policy_integrity.py", "policy_finding"): (
         frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),
         "violation when both sides of the comparison were read; unknown (confidence "
         "unresolved) when a configuration, tool configuration or baseline of either "
         "revision could not be read or parsed",
+    ),
+    # VERIFY003 against the accepted configuration (spec 21.1 decision 35).
+    ("rules/accepted_policy.py", "_unknown"): (
+        frozenset({"STATUS_UNKNOWN"}),
+        "unknown (confidence unresolved) when the configuration accepted at the merge base "
+        "or HEAD could not be exported or loaded: one finding naming the error, never a pass",
     ),
     ("suppressions.py", "_problem_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),

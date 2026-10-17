@@ -50,6 +50,12 @@ exception = "UnicodeDecodeError"
 reason = "Config file bytes are external input; non-UTF-8 becomes a ConfigError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/rules/accepted_policy.py"
+language = "python"
+exception = "shockharness.errors.ConfigError"
+reason = "VERIFY003 loads the configuration a person last accepted, from a commit; an invalid one becomes an unknown finding naming the error, never a crash or a pass (spec 21.1 decision 35)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/rules/policy_integrity.py"
 language = "python"
 exception = "OSError"

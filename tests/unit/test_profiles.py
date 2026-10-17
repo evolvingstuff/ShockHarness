@@ -291,10 +291,25 @@ def test_section_severity_is_validated(make_config: Callable[[str], EffectiveCon
 
 
 def test_init_text_per_profile() -> None:
-    assert render_profile_config_toml("strict") == profile_defaults_text()
+    # Strict: the bundled defaults verbatim, except the test exemption (decision 35).
+    strict = render_profile_config_toml("strict")
+    assert (
+        strict.replace(
+            strict[
+                strict.index("overrides = [\n") : strict.index(
+                    "]\n", strict.index("overrides = [\n")
+                )
+                + 2
+            ],
+            "overrides = []\n",
+        )
+        == profile_defaults_text()
+    )
+    assert 'roles = ["test"], disable = ["MAGIC001", "DEF001"]' in strict
     short = render_profile_config_toml("minimal")
     assert 'profile = "minimal"' in short
     assert "parse_errors" not in short  # spelling out values would override the profile
+    assert 'disable = ["MAGIC001", "DEF001"]' in short
     with pytest.raises(ConfigError, match="unknown profile"):
         render_profile_config_toml("lenient")
 

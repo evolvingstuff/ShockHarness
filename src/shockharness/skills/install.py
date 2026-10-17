@@ -6,7 +6,9 @@ lets ``update`` tell a file the tool generated (hash equals the manifest) from o
 user edited (hash differs): generated files are rewritten when the package ships a
 newer version, edited files are never touched and are reported as conflicts.
 
-Nothing here reads or writes outside the destination directory.
+Skills and the manifest are written only into the destination directory; the edit hook
+into the project's ``.claude/settings.json``, and the ``--lock`` policy file into
+``~/.config/shockharness/locks/`` (``skills/lock.py``).
 """
 
 import hashlib
@@ -352,6 +354,15 @@ COMMAND_KEY = "command"
 JSON_KINDS = {dict: "object", list: "array"}
 HOOK_ADDED = "added"
 HOOK_PRESENT = "already present"
+HOOK_COMMAND_UPDATED = "command updated"
+POLICY_FLAG = "--policy"
+
+
+def hook_command(lock: Path | None) -> str:
+    """The hook's command; with a lock file (``--lock``) it runs under that policy."""
+    if lock is None:
+        return HOOK_COMMAND
+    return f'{HOOK_COMMAND} {POLICY_FLAG} "{lock}"'
 
 
 def _settings_document(path: Path) -> dict[str, Any]:
@@ -375,8 +386,11 @@ def _settings_document(path: Path) -> dict[str, Any]:
 
 
 def _runs_shockharness(handler: Any) -> bool:
-    return isinstance(handler, dict) and COMMAND_KEY in handler and (
-        handler[COMMAND_KEY] == HOOK_COMMAND
+    return (
+        isinstance(handler, dict)
+        and COMMAND_KEY in handler
+        and isinstance(handler[COMMAND_KEY], str)
+        and handler[COMMAND_KEY].startswith(HOOK_COMMAND)
     )
 
 
@@ -405,24 +419,45 @@ def _member(document: dict[str, Any], key: str, empty: Any, path: Path) -> Any:
     return value
 
 
-def install_claude_hook(project_root: Path) -> tuple[Path, str]:
-    """Add the post-edit hook to ``.claude/settings.json``: appended to any PostToolUse
-    hooks already configured, never replacing them, and only once. A hook installed by an
-    earlier version gets the current matcher (Bash included)."""
+def _update_group(group: dict[str, Any], command: str) -> str | None:
+    """Bring an installed hook group to the current matcher and ``command``; the status,
+    or None when it already matches."""
+    status = None
+    if MATCHER_KEY not in group or group[MATCHER_KEY] != EDIT_TOOLS:
+        group[MATCHER_KEY] = EDIT_TOOLS
+        status = HOOK_UPDATED
+    for handler in group[HOOKS_KEY]:
+        if _runs_shockharness(handler) and handler[COMMAND_KEY] != command:
+            handler[COMMAND_KEY] = command
+            if status is None:
+                status = HOOK_COMMAND_UPDATED
+    return status
+
+
+def install_claude_hook(project_root: Path, command: str) -> tuple[Path, str]:
+    """Add the post-edit hook running ``command`` to ``.claude/settings.json``: appended
+    to any PostToolUse hooks already configured, never replacing them, and only once. A
+    hook installed earlier gets the current matcher (Bash included) and ``command`` (with
+    or without a lock)."""
     path = project_root / CLAUDE_SETTINGS
     document = _settings_document(path)
     hooks = _member(document, HOOKS_KEY, {}, path)
     groups = _member(hooks, POST_TOOL_USE, [], path)
     existing = _hook_group(groups)
-    if existing is not None and MATCHER_KEY in existing and existing[MATCHER_KEY] == EDIT_TOOLS:
-        return path, HOOK_PRESENT
-    status = HOOK_UPDATED
     if existing is None:
-        handler = {"type": "command", COMMAND_KEY: HOOK_COMMAND, "timeout": HOOK_TIMEOUT_SECONDS}
+        handler = {"type": "command", COMMAND_KEY: command, "timeout": HOOK_TIMEOUT_SECONDS}
         groups.append({MATCHER_KEY: EDIT_TOOLS, HOOKS_KEY: [handler]})
         status = HOOK_ADDED
     else:
-        existing[MATCHER_KEY] = EDIT_TOOLS
+        updated = _update_group(existing, command)
+        if updated is None:
+            return path, HOOK_PRESENT
+        status = updated
     text = json.dumps(document, indent=JSON_INDENT) + "\n"
     _write_bytes(path, text.encode("utf-8"))
     return path, status
+
+
+def write_lock(path: Path, text: str) -> None:
+    """Write the ``--lock`` policy file (its directory is created)."""
+    _write_bytes(path, text.encode("utf-8"))

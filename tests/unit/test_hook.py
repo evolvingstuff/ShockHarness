@@ -93,8 +93,8 @@ def test_install_appends_the_hook_once(empty_root: Path) -> None:
     settings.parent.mkdir()
     existing = {"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": []}]}, "model": "x"}
     settings.write_text(json.dumps(existing), encoding="utf-8")
-    assert install_claude_hook(empty_root) == (settings, "added")
-    assert install_claude_hook(empty_root) == (settings, "already present")
+    assert install_claude_hook(empty_root, HOOK_COMMAND) == (settings, "added")
+    assert install_claude_hook(empty_root, HOOK_COMMAND) == (settings, "already present")
     document = json.loads(settings.read_text(encoding="utf-8"))
     assert document["model"] == "x"
     groups = document["hooks"]["PostToolUse"]
@@ -103,15 +103,15 @@ def test_install_appends_the_hook_once(empty_root: Path) -> None:
 
 
 def test_install_creates_settings_and_refuses_malformed_ones(empty_root: Path) -> None:
-    settings, status = install_claude_hook(empty_root)
+    settings, status = install_claude_hook(empty_root, HOOK_COMMAND)
     assert status == "added"
     assert json.loads(settings.read_text(encoding="utf-8"))["hooks"]["PostToolUse"][0]["matcher"]
     settings.write_text('{"hooks": []}', encoding="utf-8")
     with pytest.raises(UsageError, match="'hooks' must be a JSON object"):
-        install_claude_hook(empty_root)
+        install_claude_hook(empty_root, HOOK_COMMAND)
     settings.write_text("{", encoding="utf-8")
     with pytest.raises(UsageError, match="not valid JSON"):
-        install_claude_hook(empty_root)
+        install_claude_hook(empty_root, HOOK_COMMAND)
 
 
 def test_skills_install_offers_the_hook(
@@ -179,10 +179,10 @@ def test_install_updates_an_older_matcher(empty_root: Path) -> None:
     older = {"type": "command", "command": HOOK_COMMAND, "timeout": 60}
     document = {"hooks": {"PostToolUse": [{"matcher": "Edit|Write|MultiEdit", "hooks": [older]}]}}
     settings.write_text(json.dumps(document), encoding="utf-8")
-    assert install_claude_hook(empty_root) == (settings, "matcher updated")
+    assert install_claude_hook(empty_root, HOOK_COMMAND) == (settings, "matcher updated")
     groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["PostToolUse"]
     assert [g["matcher"] for g in groups] == ["Edit|Write|MultiEdit|Bash"]
-    assert install_claude_hook(empty_root) == (settings, "already present")
+    assert install_claude_hook(empty_root, HOOK_COMMAND) == (settings, "already present")
 
 
 def test_a_hook_that_cannot_keep_its_files_says_so(

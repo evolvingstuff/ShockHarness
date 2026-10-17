@@ -237,6 +237,12 @@ allowed_skip_reasons = []
 # VERIFY002 reports blanket suppressions always; narrow ones (naming rule codes) only
 # when this is true.
 report_narrow_suppressions = false
+# VERIFY003 findings for a configuration change that switches a rule off (spec 21.1
+# decision 35): every loosening except a catch boundary naming one file. `check` and the
+# edit hook report them against the last accepted configuration, `diff` and `gate
+# --base` against the base revision. "error" (default) fails the gate until a person
+# accepts the change; lower values are a policy deviation.
+rule_switching_severity = "error"
 
 # H3 guardrails (STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001; EXC004 lives in
 # rules.exceptions). Each table's `severity` is the severity of every finding of its rules:

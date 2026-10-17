@@ -6,6 +6,27 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Spec 21.1 decision 35, from the under-the-gate experiment (round 2):
+  - `shockharness init`, and `skills install` in a project with no
+    configuration, write the test exemption ShockHarness's own configuration
+    has (`roles = ["test"]`, `disable = ["MAGIC001", "DEF001"]`). The skills
+    say `init` has done it.
+  - `check` and the edit hook report every rule the configuration switches
+    off since the accepted configuration (the merge base with `origin/HEAD`,
+    else `HEAD`, else what `init` writes) as `VERIFY003`. Every loosening
+    counts except a catch boundary naming one file. The new key
+    `rules.verification.rule_switching_severity` (default `"error"`) sets the
+    severity, so `check` fails until a person commits the change. The hook
+    feeds it back as soon as the configuration file changes, whichever tool
+    changed it. `coverage.accepted_configuration` says what was compared.
+  - `skills install --hook --lock` writes the project's configuration
+    (boundaries aside) as a `--policy` file under
+    `~/.config/shockharness/locks/` and runs the hook with it.
+  - **Behavior change:** in `diff` and `gate --base`, a configuration change
+    that switches a rule off is now a `VERIFY003` error (it was a warning, per
+    decision 9), so such a pull request fails the gate. Set
+    `rule_switching_severity = "warning"` to keep the old behavior; that is
+    itself a reported deviation.
 - Edit-time feedback for Claude Code: `shockharness hook claude-code post-edit`
   reads a `PostToolUse` tool call on stdin, analyzes the edited file and feeds
   its findings (`--fail-on`, `warning` by default) back to the agent with exit 2.

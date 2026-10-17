@@ -84,6 +84,8 @@ COCHANGE_MAX_FILES_PER_COMMIT: Final[int] = 50
 
 # Length of the abbreviated commit hash in human-readable output.
 COMMIT_SHORT_HEX: Final[int] = 12
+# skills install --lock: hex digits of the project-path digest in the lock file name.
+LOCK_DIGEST_HEX: Final[int] = 12
 
 # Skills manifest (Milestone G): `.shockharness-skills.json` written by `skills install`.
 # Bumped on an incompatible change to its shape.

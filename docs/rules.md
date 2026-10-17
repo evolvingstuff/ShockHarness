@@ -677,7 +677,14 @@ path or role, both of which are visible policy changes in review.
 
 **VERIFY003: a looser policy.** The base and head revisions' committed
 configurations are loaded the way `check` loads them (no `--config`, no
-`--policy`) and compared. A configuration is looser when:
+`--policy`) and compared. A plain `check` and the edit hook compare the working
+configuration with the accepted one instead (the merge base with `origin/HEAD`,
+else `HEAD`, else what `init` writes) and report only the loosenings that
+switch a rule off; see `docs/configuration.md`, "Switching a rule off needs a
+person". Every loosening except a catch boundary naming one file switches a rule
+off and is reported at `rules.verification.rule_switching_severity` (`error` by
+default) in both modes; the rest of VERIFY003 keeps `rules.verification.severity`.
+A configuration is looser when:
 
 * it has a policy deviation the base did not have (a disabled family, a lowered
   severity, an allowed value, a new boundary, guard or capture manager, an
@@ -685,8 +692,9 @@ configurations are loaded the way `check` loads them (no `--config`, no
   `fail_on_unknown = false`, an allowed skip reason, ...). List entries are
   matched by text, so reordering a list is not a loosening;
 * an ordered setting moved towards its looser end: `gates.*`,
-  `unsupported_sources`, `parse_errors`, `rules.verification.severity`
-  (`error` < `warning` < `review`), `complexity.fan_out_severity`;
+  `unsupported_sources`, `parse_errors`, `rules.verification.severity` and
+  `rules.verification.rule_switching_severity` (`error` < `warning` < `review`),
+  `complexity.fan_out_severity`;
 * a complexity threshold (`*_warn`) was raised;
 * `include` lost a pattern or `exclude` gained one.
 

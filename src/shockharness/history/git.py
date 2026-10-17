@@ -147,9 +147,7 @@ def commit_date(root: Path, commit: str) -> tuple[str | None, str | None]:
     return canonical_iso(text), None
 
 
-def export_tree(toplevel: Path, commit: str, destination: Path) -> str | None:
-    """Extract the whole tree at ``commit`` into ``destination``. Returns an error or None."""
-    result = run_git(toplevel, ["archive", "--format=tar", "--end-of-options", commit])
+def _extract(result: GitResult, destination: Path) -> str | None:
     if not result.ok:
         return result.error
     with tarfile.open(fileobj=io.BytesIO(result.stdout), mode="r:") as archive:
@@ -158,6 +156,31 @@ def export_tree(toplevel: Path, commit: str, destination: Path) -> str | None:
         else:
             archive.extractall(destination)
     return None
+
+
+def export_tree(toplevel: Path, commit: str, destination: Path) -> str | None:
+    """Extract the whole tree at ``commit`` into ``destination``. Returns an error or None."""
+    return _extract(
+        run_git(toplevel, ["archive", "--format=tar", "--end-of-options", commit]), destination
+    )
+
+
+def committed_paths(
+    toplevel: Path, commit: str, paths: Sequence[str]
+) -> tuple[list[str] | None, str | None]:
+    """Which of ``paths`` (relative to ``toplevel``) are files at ``commit``."""
+    text, error = run_git_text(toplevel, ["ls-tree", "-z", "--name-only", commit, "--", *paths])
+    if text is None:
+        return None, error
+    return [path for path in text.split("\0") if path != ""], None
+
+
+def export_paths(
+    toplevel: Path, commit: str, paths: Sequence[str], destination: Path
+) -> str | None:
+    """Extract the files ``paths`` (each present at ``commit``) into ``destination``."""
+    command = ["archive", "--format=tar", "--end-of-options", commit, *paths]
+    return _extract(run_git(toplevel, command), destination)
 
 
 @dataclass(frozen=True)

@@ -163,14 +163,16 @@ step 4), never only inside a shell command.
 ### Step 2: write the policy file
 
 ```bash
-shockharness init                 # writes .shockharness.toml: strict profile, every default spelled out
+shockharness init                 # writes .shockharness.toml: strict profile, every default spelled out, tests exempt
 shockharness config validate      # exit 0; prints the profile and every policy deviation
 ```
 
-Commit `.shockharness.toml`. Adjust `include` and `exclude` so only source is
-analyzed. Tests may stay included; exempt them from `MAGIC001` and `DEF001`
-with an `[[tool.shockharness.overrides]]` entry that carries a `reason`, as
-the tool's own configuration does.
+Commit `.shockharness.toml` and adjust `include`/`exclude` so only source is
+analyzed; `init` already exempts tests from `MAGIC001` and `DEF001`. Never
+switch a rule off to get past a finding (an override, a disabled rule, a lower
+severity, a wider `exclude`): that is the user's decision, and `check` and the
+hook report it as `VERIFY003` until a person commits it. A catch boundary
+naming one file is the remedy `EXC001` asks for and needs no sign-off.
 
 ### Step 3: first run, and the four onboarding paths for an existing codebase
 
@@ -245,25 +247,23 @@ updates:
 
 ### Step 5: install the agent skills
 
-Four skills ship inside the package: `write-compliant-code`,
-`fix-violations`, `refactor-complexity` and `pre-commit-review`.
+Six skills ship inside the package (`shockharness skills list` names them).
 
 ```bash
 shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent claude --hook                       # also: findings after every edit (.claude/settings.json)
+shockharness skills install --agent claude --hook --lock                # also: a lock file the project's configuration cannot loosen
 shockharness skills install --agent codex                               # .agents/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent generic --project docs/agent-skills # any agent; prints the line to add to AGENTS.md
 shockharness skills update --agent claude --check                       # exit 1 when an installed skill is stale or edited
 ```
 
-Add `--user` to install into the per-user directory (`~/.claude/skills` or
-`~/.agents/skills`) instead of the repository. `install` never overwrites an
-existing file unless `--force` is given. A manifest,
-`.shockharness-skills.json`, is written next to the skills and records the
-package version and a SHA-256 per file; `skills update` rewrites unedited
-files, leaves edited files alone and reports each as a conflict with the
-remediation. Put `skills update --check` in CI to detect drift after an
-upgrade.
+Add `--user` to install into `~/.claude/skills` or `~/.agents/skills`
+instead. `install` writes `.shockharness.toml` (as `init` does) when the project
+has none, and never overwrites a file without `--force`. A manifest,
+`.shockharness-skills.json`, records a SHA-256 per file: `skills update`
+rewrites unedited files and reports edited ones as conflicts. Put `skills
+update --check` in CI to detect drift after an upgrade.
 
 ### Step 6: verify
 
