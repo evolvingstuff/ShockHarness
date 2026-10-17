@@ -50,6 +50,22 @@ def _where(use: SentinelUse) -> str:
     return "is returned"
 
 
+def _standard(use: SentinelUse, standard_targets: frozenset[str]) -> bool:
+    """An assignment to, or an entry of, a name whose -1 a platform standard defines."""
+    if use.kind not in (SENTINEL_ASSIGN, SENTINEL_ENTRY):
+        return False
+    _receiver, _dot, name = use.target.rpartition(METHOD_PREFIX)
+    return name in standard_targets
+
+
+def _directions(facts: ModuleFacts) -> frozenset[str]:
+    """Callees (with their keyword) the file also passes ``1``: there a ``-1`` is the
+    opposite step (``move(-1)`` beside ``move(1)``), not a sentinel."""
+    return frozenset(
+        use.target for use in facts.sentinels if use.kind == SENTINEL_ARGUMENT and use.value == 1
+    )
+
+
 def run_magic003(
     facts: ModuleFacts,
     source: SourceText,
@@ -66,14 +82,16 @@ def run_magic003(
     checked = {float(v) for v in settings["values"]} & permitted
     prefix = "python" if language == PYTHON else "javascript"
     index_callees = frozenset(str(c) for c in settings[f"{prefix}_index_callees"])
+    standard_targets = frozenset(str(t) for t in settings["standard_targets"])
+    directions = _directions(facts)
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for use in facts.sentinels:
-        if use.value not in checked:
+        if use.value not in checked or _standard(use, standard_targets):
             continue
         if use.kind == SENTINEL_ARGUMENT:
             callee = use.target.partition(KEYWORD_SEPARATOR)[0]
-            if _exempt(callee, aliases, index_callees):
+            if _exempt(callee, aliases, index_callees) or use.target in directions:
                 continue
         message = (
             f"{use.raw} {_where(use)}: if it stands for something this program means "

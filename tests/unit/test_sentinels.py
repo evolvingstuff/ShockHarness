@@ -86,3 +86,25 @@ def test_magic003_settings(make_config: Callable[[str], EffectiveConfig]) -> Non
         '[tool.shockharness.rules.sentinels]\npython_index_callees = ["range", ".level"]\n'
     )
     assert any("python_index_callees also permits '.level'" in d for d in widened.deviations)
+
+
+def test_magic003_standard_targets_and_directions(
+    strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    # MetaList: HTML's tabIndex = -1, and a step of -1 beside a step of 1.
+    js = (
+        "export function f(button, list) {\n"
+        "  button.tabIndex = -1;\n"
+        "  const props = { tabIndex: -1, level: -1 };\n"  # 3: level
+        "  move(list, 1);\n"
+        "  move(list, -1);\n"
+        "  pick(list, -1);\n"  # 6: never passed 1
+        "  return props;\n"
+        "}\n"
+    )
+    assert lines(run(strict_config, "src/a.js", js)) == [3, 6]
+    py = "def f(n):\n    consider(n, 1)\n    consider(n, -1)\n    widget.tab_index = -1\n"
+    assert lines(run(strict_config, "src/a.py", py)) == [4]
+    widened = make_config('[tool.shockharness.rules.sentinels]\nstandard_targets = ["level"]\n')
+    assert lines(run(widened, "src/a.js", js)) == [2, 3, 6]  # tabIndex no longer listed
+    assert any("standard_targets also permits 'level'" in d for d in widened.deviations)

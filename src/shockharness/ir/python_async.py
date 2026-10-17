@@ -29,6 +29,8 @@ RETURN_EXCEPTIONS = "return_exceptions"
 ISINSTANCE = "isinstance"
 FAILURE_TYPE_MARKERS = ("Exception", "Error")
 DYNAMIC = "<dynamic>"
+STR_TYPE = "str"
+BYTES_TYPE = "bytes"
 
 
 def _excerpt(node: ast.AST) -> str:
@@ -89,6 +91,21 @@ def _returns_exceptions(call: ast.Call) -> bool:
         and keyword.value.value is True
         for keyword in call.keywords
     )
+
+
+def _literal_method(function: ast.expr) -> str:
+    """``str.join`` for ``", ".join(...)`` (a method of a string or bytes literal, an
+    f-string too), whose type is known; DYNAMIC for any other computed callee."""
+    if not isinstance(function, ast.Attribute):
+        return DYNAMIC
+    receiver = function.value
+    if isinstance(receiver, ast.JoinedStr):
+        return f"{STR_TYPE}.{function.attr}"
+    if isinstance(receiver, ast.Constant) and isinstance(receiver.value, str):
+        return f"{STR_TYPE}.{function.attr}"
+    if isinstance(receiver, ast.Constant) and isinstance(receiver.value, bytes):
+        return f"{BYTES_TYPE}.{function.attr}"
+    return DYNAMIC
 
 
 def _argument_count(call: ast.Call) -> int | None:
@@ -159,7 +176,7 @@ class _Scope:
             callee = dotted_name(node.func)
             bound_by: str | None = None
             if callee is None:
-                callee = DYNAMIC
+                callee = _literal_method(node.func)
             elif "." in callee:
                 root, _dot, _rest = callee.partition(".")
                 if root in self.bound:

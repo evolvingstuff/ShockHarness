@@ -5,6 +5,19 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (MetaList's rule ideas)
+- `MAGIC003`: not reported for a name in the new `standard_targets` (`tabIndex`,
+  where HTML defines `-1`), nor for a `-1` passed to a callee the same file also
+  passes `1` (`move(-1)` beside `move(1)`).
+- `RESULT001`: a method of a string literal is recorded as the `str` method, and
+  `str.join` is in the Python defaults, so `", ".join(parts)` alone on a line is
+  reported. The cache schema is "15".
+- Skills: `pre-commit-review` asks that an element attached to `document.body`
+  is skipped by every page-level "outside press" handler and pressed by a
+  browser test in each mode; `fix-violations` warns that a fallback helper
+  (`_mapping_value_or`) is `.get` under another name, and asks whether a type
+  checker runs before acting on TYPE001.
+
 ### Changed (feedback from MetaList on 0.7.0, second round)
 - `RESULT001`: a catalog entry can give the number of positional arguments the
   pure callee takes (`.replace/2-3`, JavaScript `.replace/2`); a call with

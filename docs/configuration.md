@@ -828,9 +828,11 @@ roles = ["production"]
 values = [-1]                     # adding 0 or 1 is possible, and noisy
 python_index_callees = ["range", "slice", "itertools.islice", ".pop", ".insert", ".split", ...]
 javascript_index_callees = [".slice", ".at", ".splice", ".substr", ".indexOf", ...]
+standard_targets = ["tabIndex"]   # names whose -1 a platform standard defines
 ```
 
-Removing a value or a role and adding an index callee are policy deviations.
+Removing a value or a role, and adding an index callee or a standard target, are
+policy deviations.
 
 ## Repeated strings (MAGIC002)
 

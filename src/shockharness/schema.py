@@ -419,6 +419,7 @@ CONFIG_SCHEMA = TableField(
                         "values": ListField(NumberField()),
                         "python_index_callees": ListField(StrField(allow_empty=False)),
                         "javascript_index_callees": ListField(StrField(allow_empty=False)),
+                        "standard_targets": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

@@ -587,6 +587,7 @@ GUARDRAIL_PERMISSIONS = (
     ("input", "javascript_validators"),
     ("sentinels", "python_index_callees"),
     ("sentinels", "javascript_index_callees"),
+    ("sentinels", "standard_targets"),
     ("magic_strings", "message_callees"),
     ("magic_strings", "allowed"),
 )

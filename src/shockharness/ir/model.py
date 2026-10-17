@@ -684,7 +684,8 @@ NO_GUARDRAILS = GuardrailFacts(
 class DiscardedCall:
     """A call whose result is thrown away: an expression statement (Python ``f()``,
     JavaScript ``f();``) or a JavaScript ``void f()``. ``callee`` is the dotted callee as
-    written; ``span`` is the call's span (the same as its ``CallSite``). ``bound_by`` is,
+    written (``str.join`` for a method of a string literal, ``", ".join(...)``, whose
+    type is known); ``span`` is the call's span (the same as its ``CallSite``). ``bound_by`` is,
     for ``name.method(...)``, the dotted callee of the ``with``/``async with`` that bound
     ``name`` in the enclosing function (``asyncio.TaskGroup`` for ``tg.create_task``).
     ``arguments`` counts the positional arguments, None when some are unpacked

@@ -175,6 +175,7 @@ NOT_FOUND = 404  # shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.
 - [ ] Verdict is `PASS` only with `gate: PASS (exit 0)` and a green test summary in the quoted output.
 - [ ] `shockharness exceptions .` read; any exception the change adds is listed above with its reason.
 - [ ] Any bug the review found that the analyzer missed has a rule proposal attached.
+- [ ] An element the change attaches to `document.body` (a notice, banner, overlay or card) is skipped by every page-level press handler that treats a press as "outside" (leaving edit mode, closing a menu), and a browser test presses each of its buttons in each mode (editing, searching).
 
 ## Adopting ShockHarness
 

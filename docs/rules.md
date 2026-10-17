@@ -925,9 +925,10 @@ receiver (`.strip`, `.map`; approximate). `/N` or `/N-M` after an entry is the
 number of positional arguments the pure callee takes (`.replace/2-3`, JavaScript
 `.replace/2`): a call with another count is a different method of the same name
 (`location.replace(url)`, `Path.replace(p)`, `store.replaceAll({...})`) and is not
-reported, nor is one with unpacked arguments. `.join` is not in the defaults: as
-a statement on a name it was `Thread.join` in every case measured, and the
-`", ".join(x)` mistake has a literal receiver, which is not recorded. A call in the body of a `try` that has a handler is not reported
+reported, nor is one with unpacked arguments. A method of a string literal is
+recorded as the `str` method, so `"str.join"` (in the Python defaults) reports
+`", ".join(parts)` alone on a line; `.join` on a name is not in the defaults: it
+was `Thread.join` in every case measured. A call in the body of a `try` that has a handler is not reported
 either: it may run for what it raises (`host.encode("idna")` to validate). A
 function of an imported module (`os.replace`) never matches a method entry.
 
@@ -1094,7 +1095,11 @@ entry. Not reported: subscripts, slices, arithmetic, comparisons
 (`indexOf(x) === -1`), an UPPER_SNAKE_CASE target (`NO_SELECTION = -1` is the
 remedy), and arguments of the `python_index_callees` / `javascript_index_callees`
 catalogs (`range`, `slice`, `.pop`, `.split`, `.reshape`; `.slice`, `.at`,
-`.splice`, `.substr` ...), where `-1` is an index or a count. On pip, pytest,
+`.splice`, `.substr` ...), where `-1` is an index or a count. Also not reported:
+an assignment to, or an entry of, a name in `standard_targets` (`tabIndex`, where
+HTML defines `-1` as "focusable, not in the Tab order"), and a `-1` passed to a
+callee that the same file also passes `1` (`move(-1)` beside `move(1)`: a
+direction). On pip, pytest,
 hypothesis, build, hatchling and npm it gives 42 findings where 0.6.0 reported
 543 for `-1` (`sys.exit(-1)`, `return -1` for "not found", `lineno = -1`,
 `max(..., default=-1)`, click's `nargs=-1`).

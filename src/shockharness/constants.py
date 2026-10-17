@@ -35,8 +35,6 @@ EVIDENCE_MAX_CHARS: Final[int] = 120
 DATAFLOW_MAX_DEPTH: Final[int] = 100
 # GUARD001's rules.consistency.guard_min_percent is a percentage of call sites.
 PERCENT: Final[int] = 100
-# MAGIC003: the unary -1 that allow_unary_negative_one permits.
-NEGATIVE_ONE: Final[float] = -1.0
 # MAGIC002 messages: the other places named, and the characters of a value shown.
 STRING_PLACES_SHOWN: Final[int] = 3
 STRING_VALUE_SHOWN: Final[int] = 60
@@ -101,7 +99,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # facts, and JavaScript parameters counted as a unit's locals (H-TS); "8": dataflow facts
 # (H6); "9": call guards (H6 part two); "10": sentinel facts (MAGIC003); "11": element
 # guards (DOM001); "12": cleanup and returned flags, computed-receiver callees.
-CACHE_SCHEMA_VERSION: Final[str] = "14"
+CACHE_SCHEMA_VERSION: Final[str] = "15"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

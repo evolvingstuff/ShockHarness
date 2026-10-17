@@ -136,6 +136,11 @@ javascript_index_callees = [
   ".slice", ".at", ".splice", ".substr", ".substring", ".charAt", ".charCodeAt",
   ".codePointAt", ".indexOf", ".lastIndexOf", ".includes", ".subarray",
 ]
+# Names (the last part of an assigned name, or an entry's key) whose -1 a platform
+# standard defines: HTML's tabIndex = -1 is "focusable, not in the Tab order". Adding one
+# is a deviation. A -1 passed to a callee that the same file also passes 1 (move(-1),
+# move(1)) is a direction and is not reported either.
+standard_targets = ["tabIndex"]
 
 [tool.shockharness.rules.magic_strings]    # MAGIC002 (decision 31)
 enabled = true
@@ -448,14 +453,16 @@ roles = ["production", "test"]
 # count is a different method of that name (Thread.join(timeout=1), location.replace(url),
 # Path.replace(p)).
 # A call in a try block with a handler is not reported: it may run for what it raises.
-# ".join" is not listed: as a statement on a name it was Thread.join in every case
-# measured (pytest, pip, hypothesis, MetaList), and ", ".join(x) is not seen.
+# A method of a string literal is the str method ("str.join" matches ", ".join(parts));
+# ".join" on a name is not listed: it was Thread.join in every case measured (pytest,
+# pip, hypothesis, MetaList).
 python_must_use = [
   "sorted",
   "reversed",
   "copy.copy",
   "copy.deepcopy",
   "dataclasses.replace",
+  "str.join/1",
   ".strip/0-1",
   ".lstrip/0-1",
   ".rstrip/0-1",

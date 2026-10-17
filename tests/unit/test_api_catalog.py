@@ -115,7 +115,7 @@ def test_result001_counts_arguments_and_skips_validation(
         "    worker.join(timeout=5)\n"  # Thread.join: no positional argument
         "    worker.join()\n"  # Thread.join(): str.join needs 1
         "    path.replace(target)\n"  # Path.replace renames
-        "    ', '.join(parts)\n"  # 6: a computed receiver is not recorded (<dynamic>)
+        "    ', '.join(parts)\n"  # 6: a string literal's method is str.join
         "    name.join(parts)\n"  # 7: .join is not in the defaults (Thread.join(3))
         "    layout.split(*parts)\n"  # unpacked: the count is unknown
         "    try:\n"
@@ -125,7 +125,7 @@ def test_result001_counts_arguments_and_skips_validation(
         "    return name\n"
     )
     config = make_config("")
-    assert [r[0] for r in rows(run(config, "src/a.py", py), "RESULT001")] == [2]
+    assert [r[0] for r in rows(run(config, "src/a.py", py), "RESULT001")] == [2, 6]
     js = (
         "export function f(name, store, tab) {\n"
         "  window.location.replace(url);\n"  # navigation
@@ -140,7 +140,7 @@ def test_result001_counts_arguments_and_skips_validation(
     wider = make_config(
         '[tool.shockharness.rules.results]\npython_must_use = [".join/1", ".replace"]\n'
     )
-    assert [r[0] for r in rows(run(wider, "src/a.py", py), "RESULT001")] == [2, 5, 7]
+    assert [r[0] for r in rows(run(wider, "src/a.py", py), "RESULT001")] == [2, 5, 6, 7]
     removed = next(d for d in wider.deviations if "python_must_use no longer lists" in d)
     assert "'sorted'" in removed
     assert "'.replace/2-3'" not in removed  # ".replace" covers it: any number of arguments
