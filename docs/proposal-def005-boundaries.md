@@ -1,7 +1,7 @@
-# Proposal: DEF005 inside a declared boundary (decision 37, draft)
+# Decision 37: DEF005 inside a declared boundary
 
-Status: **draft, waiting on Tom.** From the under-the-gate experiment, round 3
-(`evals/under-the-gate/RESULTS-round3.md`, finding 5). Nothing here is built.
+Status: **accepted (Tom, 2026-10-17): option (b), built.** From the under-the-gate
+experiment, round 3 (`evals/under-the-gate/RESULTS-round3.md`, finding 5).
 
 ## What happened
 

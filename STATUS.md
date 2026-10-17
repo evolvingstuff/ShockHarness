@@ -4378,3 +4378,21 @@ Results:
 The shape is precise, but rare: the only instance found is the bug itself. The choice is
 Tom's: build it at review as a guard (about half a session), or measure on third-party
 front ends first (the old clones are gone, and recloning is a download).
+
+## Decision 37: DEF005 and an entry point's exit status — DONE (2026-10-17)
+
+Tom chose option (b) of `docs/proposal-def005-boundaries.md`.
+* **Adapter.** The Python defaults adapter gives a handler that returns a module
+  constant bound to a non-zero int, in a top-level function, a kind of its own:
+  * `handler_returns_entry_exit_status` when the function is `main` or called under
+    `if __name__ == "__main__":`;
+  * `handler_returns_exit_status` otherwise.
+* **Rule.** DEF005 skips the fact when a declared boundary approves the catch, and the
+  kind is the entry one or the function is named in `[project.scripts]`.
+* **Config.** `EffectiveConfig.entry_points` is read from the root pyproject.toml and is
+  part of the config digest, so cached results follow it.
+* **Wording.** DEF005's remediation and fix-violations now say not to re-implement a
+  library's validation to avoid its exception.
+
+Tests: `test_def005_entry_exit.py` (4). Each entry-point form is exempt; `helper`,
+`zero` and a catch outside any boundary are still reported.

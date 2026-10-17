@@ -638,7 +638,11 @@ DEF005 = RuleSpec(
         "Let the exception propagate, or convert it into a typed error that carries the cause "
         "(raise X from exc; new Error(msg, { cause: err })). If a missing resource is genuinely "
         "optional, make the absence a first-class value the caller must handle, not a default "
-        "shaped like success."
+        "shaped like success. Never re-implement a library's validation to avoid "
+        "catching its exception (a hand-written date check returning None): raise your own "
+        "typed error from the handler (raise InvalidDate(...) from exc). At the entry point, "
+        "a named non-zero exit status returned inside a declared boundary is not reported "
+        "(decision 37)."
     ),
     noncompliant_example=(
         "try:\n    return json.loads(raw)\nexcept ValueError:\n    return DEFAULT_SETTINGS"

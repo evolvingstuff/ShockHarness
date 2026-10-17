@@ -178,10 +178,10 @@ def test_deviations_are_explicit(empty_root: Path) -> None:
 
 def test_digest_is_deterministic_and_sensitive() -> None:
     base = load_bundled_defaults()
-    assert config_digest(base) == config_digest(load_bundled_defaults())
+    assert config_digest(base, ()) == config_digest(load_bundled_defaults(), ())
     changed = load_bundled_defaults()
     changed["parse_errors"] = "warn"
-    assert config_digest(base) != config_digest(changed)
+    assert config_digest(base, ()) != config_digest(changed, ())
 
 
 def test_section_lookup(empty_root: Path) -> None:

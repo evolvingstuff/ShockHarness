@@ -38,6 +38,11 @@ SUPP002 warning: delete the comment and keep the citation as a plain comment.
   * the `python -O` refusal is only for code that asserts.
 - `DEF002`: `x = m.setdefault(k, <empty container>)` whose next statement mutates `x`
   is the grouping idiom, like the chained form, and is not reported.
+- `DEF005` (decision 37): inside a declared boundary, an entry point's handler that
+  returns a named non-zero exit status (`return EXIT_UNREADABLE`) is not reported.
+  The entry point is `main`, a function called under `if __name__ == "__main__":`, or
+  one named in `[project.scripts]`. The remediation says not to re-implement a
+  library's validation to avoid its exception.
 - `BOOL001`: the expected value of an assertion (`assertEqual(x, True)`,
   `assert.equal(v, true)`) is not reported. MetaList had 159 of its 353 findings there.
 - ShockHarness's own configuration drops its `constants.py` MAGIC001 override.

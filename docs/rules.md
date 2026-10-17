@@ -533,6 +533,15 @@ A catch whose handler returns a value converts a failure into data.
   names bound to non-constant values, helpers with more than one statement.
   Those handlers are EXC001 territory only.
 
+* **Not reported (0.9.0, spec 21.1 decision 37):** an entry point's handler that
+  returns a named non-zero exit status (`return EXIT_UNREADABLE`, where
+  `EXIT_UNREADABLE = 2` at module level), inside a declared boundary that approves
+  the caught type. At the process edge an exit status is how a program reports
+  failure. The entry point is a top-level function named `main`, one called under
+  `if __name__ == "__main__":`, or one named in `[project.scripts]` of the root
+  `pyproject.toml`. A zero, a bare literal, any other function, and a catch no
+  boundary approves are still reported. Python only.
+
 While DEF005 is active EXC002 does not also report `return_fallback`; see
 EXC002 above.
 

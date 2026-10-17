@@ -545,7 +545,7 @@ BOUNDARY_LANGUAGES = {
 }
 
 
-def _applicable_boundaries(
+def applicable_boundaries(
     settings: Mapping[str, Any], language: str, path: str
 ) -> tuple[Boundary, ...]:
     languages = BOUNDARY_LANGUAGES[language]
@@ -568,7 +568,7 @@ def run_exception_rules(
     With ``defer_return_fallback`` (DEF005 is active) the ``return_fallback``
     classification is left to DEF005 so that one handler yields one hard finding.
     """
-    applicable = _applicable_boundaries(settings, language, path)
+    applicable = applicable_boundaries(settings, language, path)
     transparent_rethrow = bool(settings["transparent_rethrow"])
     transparent_guards = frozenset(str(name) for name in settings["transparent_guards"])
     capture_managers = frozenset(str(name) for name in settings["capture_managers"])

@@ -57,8 +57,17 @@ from shockharness.rules.dataflow import (
     run_input001,
     run_input002,
 )
-from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
-from shockharness.rules.exceptions import manager_catches, run_exception_rules
+from shockharness.rules.defaults import (
+    DEFAULT_RULES,
+    EntryExits,
+    run_default_rules,
+    script_functions,
+)
+from shockharness.rules.exceptions import (
+    applicable_boundaries,
+    manager_catches,
+    run_exception_rules,
+)
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001, run_magic004
@@ -76,6 +85,7 @@ from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
 
+EXCEPTIONS_SECTION = "rules.exceptions"
 STATUS_ANALYZED = "analyzed"
 STATUS_PARSE_ERROR = "parse_error"
 STATUS_DECODE_ERROR = "decode_error"
@@ -464,6 +474,23 @@ def _failed(
     )
 
 
+def _default_rules(
+    facts: ModuleFacts,
+    source: SourceText,
+    config: EffectiveConfig,
+    relative_path: str,
+    language: str,
+    active: frozenset[str],
+) -> list[Finding]:
+    """DEF001-DEF006, with what DEF005 needs to accept an entry point's exit status."""
+    entries = EntryExits(
+        applicable_boundaries(config.section(EXCEPTIONS_SECTION), language, relative_path),
+        script_functions(config.entry_points, relative_path),
+    )
+    settings = config.section(str(registry.DEF001.config_section))
+    return run_default_rules(facts, source, settings, relative_path, language, active, entries)
+
+
 def _magic_rules(
     facts: ModuleFacts,
     source: SourceText,
@@ -533,14 +560,7 @@ def prepare_text(
     if len(active_default_rules) > 0:
         applied.extend(sorted(active_default_rules))
         findings.extend(
-            run_default_rules(
-                facts,
-                source,
-                config.section(str(registry.DEF001.config_section)),
-                relative_path,
-                language,
-                active_default_rules,
-            )
+            _default_rules(facts, source, config, relative_path, language, active_default_rules)
         )
 
     policy_applied, policy_findings = _policy_rules(
@@ -991,9 +1011,6 @@ def complete(
         verification={pending.path: verification_input(pending) for pending in pendings},
         catches=_catches(pendings, config),
     )
-
-
-EXCEPTIONS_SECTION = "rules.exceptions"
 
 
 def _catches(

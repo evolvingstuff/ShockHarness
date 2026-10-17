@@ -304,6 +304,12 @@ KIND_NULLISH_COALESCE = "coalesce"  # x ?? v
 KIND_NULLISH_ASSIGN = "coalesce_assign"  # x ??= v
 KIND_NULLISH_TERNARY = "nullish_ternary"  # x if x is not None else v / x == null ? v : x
 KIND_EXCEPTION_CONSTANT = "handler_returns_constant"  # except ...: return DEFAULT (module constant)
+# Decision 37: a top-level function's handler returns a module constant bound to a non-zero
+# int (an exit status). DEF005 skips it inside a declared boundary when the function is the
+# entry point: ENTRY when the adapter sees it (main, or called under __main__), EXIT when
+# only [project.scripts] can say.
+KIND_EXCEPTION_EXIT_STATUS = "handler_returns_exit_status"
+KIND_EXCEPTION_ENTRY_EXIT = "handler_returns_entry_exit_status"
 KIND_EXCEPTION_HELPER = (
     "handler_returns_helper"  # except ...: return fallback() (helper returns a literal)
 )

@@ -177,6 +177,9 @@ class EffectiveConfig:
     digest: str
     policy: PolicyFile | None
     policy_attempts: tuple[PolicyAttempt, ...]
+    # The project's console scripts, "module:function", from [project.scripts] of the
+    # root pyproject.toml: entry points for DEF005 (spec 21.1 decision 37).
+    entry_points: tuple[str, ...]
 
     def section(self, dotted: str) -> Mapping[str, Any]:
         node: Any = self.values
@@ -867,11 +870,13 @@ def _merge_legacy_configuration_files(
 CACHE_KEY = "cache"
 
 
-def config_digest(values: Mapping[str, Any]) -> str:
+def config_digest(values: Mapping[str, Any], entry_points: Sequence[str]) -> str:
     """SHA-256 of the canonical JSON of every key that can change a result: the
     ``cache`` table (where results are stored, and whether) is left out, so toggling
-    the cache neither changes the digest a baseline records nor the cache key."""
-    policy = {key: value for key, value in values.items() if key != CACHE_KEY}
+    the cache neither changes the digest a baseline records nor the cache key. The
+    project's entry points change DEF005 findings, so they are part of it."""
+    policy: dict[str, Any] = {key: value for key, value in values.items() if key != CACHE_KEY}
+    policy[ENTRY_POINTS_DIGEST_KEY] = list(entry_points)
     canonical = json.dumps(policy, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -1140,15 +1145,55 @@ def load_config_with_overrides(
         )
     _merge_legacy_configuration_files(merged, origins, notes)
 
+    return _effective(merged, source, origins, notes, strict_values, policy, attempts, root)
+
+
+def _effective(
+    merged: dict[str, Any],
+    source: ConfigSource,
+    origins: dict[str, str],
+    notes: list[str],
+    strict_values: Mapping[str, Any],
+    policy: PolicyFile | None,
+    attempts: list[PolicyAttempt],
+    root: Path,
+) -> EffectiveConfig:
+    """The loaded configuration, with the project's entry points (decision 37)."""
+    entry_points = project_entry_points(root)
     return EffectiveConfig(
         values=merged,
         source=source,
         origins=origins,
         notes=tuple(notes),
         deviations=_deviations(merged, strict_values),
-        digest=config_digest(merged),
+        digest=config_digest(merged, entry_points),
         policy=policy,
         policy_attempts=tuple(attempts),
+        entry_points=entry_points,
+    )
+
+
+PROJECT_TABLE = "project"
+SCRIPTS_TABLE = "scripts"
+ENTRY_POINTS_DIGEST_KEY = "<entry_points>"
+
+
+def project_entry_points(root: Path) -> tuple[str, ...]:
+    """``[project.scripts]`` of the root pyproject.toml as sorted "module:function"
+    values (an extra after the function, "pkg.cli:main [extra]", is dropped); empty
+    when there is no pyproject.toml or no such table."""
+    pyproject = root / PYPROJECT_FILENAME
+    if not pyproject.is_file():
+        return ()
+    document = _read_toml(pyproject)
+    if PROJECT_TABLE not in document or not isinstance(document[PROJECT_TABLE], dict):
+        return ()
+    project = document[PROJECT_TABLE]
+    if SCRIPTS_TABLE not in project or not isinstance(project[SCRIPTS_TABLE], dict):
+        return ()
+    scripts = project[SCRIPTS_TABLE]
+    return tuple(
+        sorted(str(target).split()[0] for target in scripts.values() if str(target).strip())
     )
 
 

@@ -36,7 +36,8 @@ static trace), not about whether the shape is present. ``rules.defaults.fail_on_
 (default true: these findings have always failed the gate) decides whether they gate.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
@@ -57,6 +58,8 @@ from shockharness.ir.model import (
     KIND_DISCARDED_REMOVAL,
     KIND_ENV_DESTRUCTURING,
     KIND_ENV_GET_IMPLICIT,
+    KIND_EXCEPTION_ENTRY_EXIT,
+    KIND_EXCEPTION_EXIT_STATUS,
     KIND_FALLBACK_HELPER,
     KIND_GETATTR,
     KIND_MAPPING_GET,
@@ -67,11 +70,12 @@ from shockharness.ir.model import (
     KIND_NEXT_DEFAULT,
     KIND_PARAMETER,
     KIND_PARAMETER_DESTRUCTURING,
+    CatchFact,
     DefaultFact,
     ModuleFacts,
     Span,
 )
-from shockharness.rules.exceptions import KIND_LABELS
+from shockharness.rules.exceptions import KIND_LABELS, Boundary, evaluate_approval
 from shockharness.rules.registry import (
     DEF001,
     DEF002,
@@ -270,6 +274,58 @@ def _finding(
     )
 
 
+@dataclass(frozen=True)
+class EntryExits:
+    """What DEF005 needs to accept an entry point's exit status (spec 21.1 decision 37):
+    the boundaries that apply to the file, and its functions [project.scripts] names."""
+
+    boundaries: tuple[Boundary, ...]
+    script_functions: frozenset[str]
+
+
+def _approved_exit(fact: DefaultFact, catches: Sequence[CatchFact], entries: EntryExits) -> bool:
+    """An entry point's handler returning a named non-zero exit status, inside a declared
+    boundary that approves the catch: the process edge reporting a failure."""
+    if fact.kind == KIND_EXCEPTION_EXIT_STATUS:
+        if fact.scope not in entries.script_functions:
+            return False
+    elif fact.kind != KIND_EXCEPTION_ENTRY_EXIT:
+        return False
+    handlers = [catch for catch in catches if catch.span == fact.span]
+    return any(evaluate_approval(catch, entries.boundaries).approved for catch in handlers)
+
+
+SCRIPT_SEPARATOR = ":"
+SOURCE_DIRECTORY = "src"
+PACKAGE_INIT = "__init__"
+PYTHON_SUFFIX = ".py"
+
+
+def module_names(relative_path: str) -> frozenset[str]:
+    """The dotted module names a file can be imported as: ``src/pkg/cli.py`` is
+    ``pkg.cli`` (src layout) or ``src.pkg.cli``; ``pkg/__init__.py`` is ``pkg``."""
+    if not relative_path.endswith(PYTHON_SUFFIX):
+        return frozenset()
+    parts = relative_path[: -len(PYTHON_SUFFIX)].split("/")
+    if parts[len(parts) - 1] == PACKAGE_INIT:
+        parts = parts[: len(parts) - 1]
+    names = {".".join(parts)}
+    if len(parts) > 1 and parts[0] == SOURCE_DIRECTORY:
+        names.add(".".join(parts[1:]))
+    return frozenset(names)
+
+
+def script_functions(entry_points: Sequence[str], relative_path: str) -> frozenset[str]:
+    """The functions of this file that [project.scripts] names ("module:function")."""
+    modules = module_names(relative_path)
+    found: set[str] = set()
+    for entry in entry_points:
+        module, _separator, function = entry.partition(SCRIPT_SEPARATOR)
+        if module in modules and function != "":
+            found.add(function)
+    return frozenset(found)
+
+
 def run_default_rules(
     facts: ModuleFacts,
     source: SourceText,
@@ -277,12 +333,15 @@ def run_default_rules(
     path: str,
     language: str,
     active_rule_ids: frozenset[str],
+    entries: EntryExits,
 ) -> list[Finding]:
     """Run DEF001-DEF006 over the module's default facts; only ``active_rule_ids`` report."""
     findings: list[Finding] = []
     for fact in facts.defaults:
         rule = FAMILY_RULES[fact.family]
         if rule.rule_id not in active_rule_ids:
+            continue
+        if fact.family == FAMILY_EXCEPTION and _approved_exit(fact, facts.catches, entries):
             continue
         severity = _severity(fact, settings)
         if severity is None:
@@ -301,25 +360,31 @@ def run_default_rules(
             )
         )
     if DEF005.rule_id in active_rule_ids:
-        for catch in facts.catches:
-            if catch.body.classification != BODY_RETURN_FALLBACK:
-                continue
-            findings.append(
-                _finding(
-                    DEF005,
-                    section_severity(settings, SEVERITY_ERROR),
-                    path,
-                    catch.span,
-                    f"{KIND_LABELS[catch.kind]} converts the exception into a fallback value: "
-                    f"{catch.body.detail} (EXC002 classification return_fallback; the handler is "
-                    "reported once, here)",
-                    source,
-                    CONFIDENCE_EXACT,
-                    STATUS_VIOLATION,
-                    catch.scope,
-                )
-            )
+        findings.extend(_returned_fallbacks(facts, source, settings, path))
     return findings
+
+
+def _returned_fallbacks(
+    facts: ModuleFacts, source: SourceText, settings: Mapping[str, Any], path: str
+) -> list[Finding]:
+    """DEF005 for the handlers EXC002 classifies as return_fallback (literal returns)."""
+    return [
+        _finding(
+            DEF005,
+            section_severity(settings, SEVERITY_ERROR),
+            path,
+            catch.span,
+            f"{KIND_LABELS[catch.kind]} converts the exception into a fallback value: "
+            f"{catch.body.detail} (EXC002 classification return_fallback; the handler is "
+            "reported once, here)",
+            source,
+            CONFIDENCE_EXACT,
+            STATUS_VIOLATION,
+            catch.scope,
+        )
+        for catch in facts.catches
+        if catch.body.classification == BODY_RETURN_FALLBACK
+    ]
 
 
 def loosened_modes(settings: Mapping[str, Any]) -> list[str]:

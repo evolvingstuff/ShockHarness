@@ -70,6 +70,8 @@ from shockharness.ir.model import (
     KIND_ENV_NULLISH,
     KIND_ENV_TRUTHINESS,
     KIND_EXCEPTION_CONSTANT,
+    KIND_EXCEPTION_ENTRY_EXIT,
+    KIND_EXCEPTION_EXIT_STATUS,
     KIND_EXCEPTION_HELPER,
     KIND_FALLBACK_HELPER,
     KIND_GETATTR,
@@ -155,6 +157,9 @@ class _ModuleIndex:
     constants: dict[str, ast.expr]
     helpers: dict[str, ast.FunctionDef | ast.AsyncFunctionDef]
     table: SymbolTable  # import resolution for defaultdict and pydantic.BaseModel
+    # Top-level functions that are the program's entry point: ``main``, and the names
+    # called under ``if __name__ == "__main__":`` (decision 37).
+    entry_functions: frozenset[str]
 
 
 def _text(source: SourceText, node: ast.AST) -> str:
@@ -332,7 +337,49 @@ def _index_module(module: ast.Module) -> _ModuleIndex:
         elif isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             helpers[stmt.name] = stmt
     return _ModuleIndex(
-        _env_names(module), _mapping_names(module), constants, helpers, SymbolTable(module, "")
+        _env_names(module),
+        _mapping_names(module),
+        constants,
+        helpers,
+        SymbolTable(module, ""),
+        _entry_functions(module, frozenset(helpers)),
+    )
+
+
+ENTRY_FUNCTION = "main"
+SCOPE_SEPARATOR = "."  # scopes are dotted: "Class.method"; a top-level function has none
+MAIN_MODULE = "__main__"
+
+
+def _is_main_guard(stmt: ast.stmt) -> bool:
+    """``if __name__ == "__main__":`` (either operand order)."""
+    if not isinstance(stmt, ast.If) or not isinstance(stmt.test, ast.Compare):
+        return False
+    test = stmt.test
+    if len(test.ops) != 1 or not isinstance(test.ops[0], ast.Eq):
+        return False
+    operands = [test.left, *test.comparators]
+    names = [o.id for o in operands if isinstance(o, ast.Name)]
+    strings = [o.value for o in operands if isinstance(o, ast.Constant)]
+    return names == ["__name__"] and strings == [MAIN_MODULE]
+
+
+def _entry_functions(module: ast.Module, functions: frozenset[str]) -> frozenset[str]:
+    found = {ENTRY_FUNCTION} & functions
+    for stmt in module.body:
+        if not _is_main_guard(stmt):
+            continue
+        for node in ast.walk(stmt):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in functions:
+                    found.add(node.func.id)
+    return frozenset(found)
+
+
+def _is_exit_status(constant: ast.expr) -> bool:
+    """A non-zero int literal (``True`` and ``False`` are not exit statuses)."""
+    return (
+        isinstance(constant, ast.Constant) and type(constant.value) is int and constant.value != 0
     )
 
 
@@ -1205,6 +1252,15 @@ class _Collector:
 
     # -- exception-to-default traces --------------------------------------------------------
 
+    def _constant_kind(self, scope: str, constant: ast.expr) -> str:
+        """An exit status returned by a top-level function gets its own kind (decision 37)."""
+        top_level = scope != MODULE_SCOPE and SCOPE_SEPARATOR not in scope
+        if not top_level or not _is_exit_status(constant):
+            return KIND_EXCEPTION_CONSTANT
+        if scope in self.index.entry_functions:
+            return KIND_EXCEPTION_ENTRY_EXIT
+        return KIND_EXCEPTION_EXIT_STATUS
+
     def _handler_trace(self, handler: ast.ExceptHandler, scope: str) -> None:
         statements = [s for s in handler.body if not is_pass(s) and not is_logging_statement(s)]
         if len(statements) != 1 or not isinstance(statements[0], ast.Return):
@@ -1232,7 +1288,7 @@ class _Collector:
                     handler,
                     scope,
                     FAMILY_EXCEPTION,
-                    KIND_EXCEPTION_CONSTANT,
+                    self._constant_kind(scope, constant),
                     value.id,
                     constant,
                     CONTEXT_RETURN,
