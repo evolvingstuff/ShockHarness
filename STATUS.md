@@ -4396,3 +4396,14 @@ Tom chose option (b) of `docs/proposal-def005-boundaries.md`.
 
 Tests: `test_def005_entry_exit.py` (4). Each entry-point form is exempt; `helper`,
 `zero` and a catch outside any boundary are still reported.
+
+## Release 0.9.0 (2026-10-17)
+
+On Tom's go-ahead, after CI was green on 00e5299. `version.py` is 0.9.0, with every pin
+moved from 0.8.0: the README, docs, both examples, the six skills' adoption section, and
+the tests that check the pins. The changelog's `[0.9.0]` section says no change makes a
+passing gate fail:
+* decision 36 allows named constants (now-unneeded MAGIC001 suppressions become SUPP002
+  warnings);
+* decision 37 and the DEF002 and BOOL001 fixes report fewer findings;
+* EXC005 and MAGIC004 only report.

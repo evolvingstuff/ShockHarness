@@ -5,12 +5,23 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
-**Upgrading from 0.8.0.** Spec 21.1 decision 36: MAGIC001 no longer reports the literal
-of a module-level named constant definition (`MAX_PAGES = 8`, `const SETTLE_MS = 400`,
-`CHUNK_BYTES = 64 * 1024`) in any profile. `named_constant_definitions = "allow"` is now
-the strict default too; `"report"` is a tightening. A gate can only get greener, but an
-existing `# shockharness: ignore[MAGIC001]` on such a line now matches nothing and is a
-SUPP002 warning: delete the comment and keep the citation as a plain comment.
+## [0.9.0] - 2026-10-17
+
+Fewer reasons to work around the gate: the findings of the under-the-gate experiment
+(three rounds) and of MetaList. New rules ship at `warning` or `review` (decision 9).
+
+**Upgrading from 0.8.0.** No change makes a passing gate fail:
+- **Named constants (decision 36).** MAGIC001 no longer reports the literal of a
+  module-level named constant definition (`MAX_PAGES = 8`, `const SETTLE_MS = 400`,
+  `CHUNK_BYTES = 64 * 1024`) in any profile. `named_constant_definitions = "allow"` is
+  now the strict default too; `"report"` is a tightening. An existing
+  `# shockharness: ignore[MAGIC001]` on such a line now matches nothing and is a
+  SUPP002 warning: delete the comment and keep the citation as a plain comment.
+- **Fewer false alarms.** DEF005 (an entry point's exit status inside a boundary,
+  decision 37), DEF002 (an assigned grouping `setdefault`) and BOOL001 (assertion
+  arguments) report fewer findings.
+- **New findings, never failing the gate.** EXC005 (warning) and MAGIC004 (review) are
+  new; they report but never fail.
 
 ### Added
 - `EXC005` (`rules.exceptions`, warning): a declared catch boundary naming an
