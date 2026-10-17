@@ -1654,7 +1654,9 @@ ASYNC003 = RuleSpec(
         "expression statement, awaited or not; exact), or when the enclosing function "
         "neither returns the batch nor inspects a result for failure (Python: an isinstance "
         "check against a type whose name contains Exception or Error; JavaScript: .status, "
-        ".reason or a 'rejected' string; approximate)."
+        ".reason or a 'rejected' string; approximate). Not reported: a Python gather in a "
+        "finally / except block of a function that called .cancel() before it (the wait for "
+        "cancellation to finish)."
     ),
     limitations=(
         "Inspection is recognized anywhere in the enclosing function, not traced to the "
@@ -1722,7 +1724,8 @@ PROCESS001 = RuleSpec(
         "os.system, os.popen, subprocess.getoutput, child_process.exec / execSync); and "
         "subprocess.run without check=True, subprocess.call or child_process.spawnSync whose "
         "result is thrown away or whose function never reads .returncode / .status, and "
-        "os.system whose result is thrown away. Exact."
+        "os.system whose result is thrown away; a result returned to the caller (directly or "
+        "through a returned name) is the caller's to check. Exact."
     ),
     limitations=(
         "Whether a non-literal value can contain shell syntax is not traced (that is H6's "
@@ -2110,7 +2113,8 @@ INPUT002 = RuleSpec(
         "or a module-level binding, while no condition of the function looks at it (if, "
         "while, assert, a ternary, &&, ||, ??, not / !). One finding per read, at its first "
         "use. Python's int(...) / float(...) and the other validators fail loudly on None and "
-        "count as a check; in JavaScript, Number(undefined) is NaN and does not. Severity "
+        "count as a check; in JavaScript, Number(undefined) is NaN and does not, while a "
+        "node:assert call given the value (through nested calls) does. Severity "
         "rules.input.input002_severity (review by default: the rule cannot know which "
         "variables are required)."
     ),

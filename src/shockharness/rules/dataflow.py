@@ -57,6 +57,8 @@ ASSERT_TARGET = "assert"
 FIRST_WORD = re.compile(r"_*[A-Za-z][a-z0-9]*")
 BELOW = ".*"
 OPTIMIZE_FLAG = "sys.flags.optimize"
+ASSERT_MODULE = "assert"
+ASSERT_MODULE_BELOW = ("assert.", "assert/")
 # Decoders that a ".parse" validator entry must not match: they parse, they do not check.
 DECODERS = frozenset({"JSON.parse"})
 ABSENT = {PYTHON: "None"}
@@ -461,7 +463,11 @@ class Analysis:
 
     def run(self) -> dict[str, list[Finding]]:
         self.summarize()
-        reach = self.reach()
+        self.collect(self.reach())
+        return self.findings()
+
+    def collect(self, reach: Reach) -> None:
+        """Every (source, sink) pair: sources at a sink here, and through parameters."""
         for _key, located in sorted(self.units.items()):
             evaluation = Evaluation(self, located)
             for value, hit in evaluation.sink_hits():
@@ -470,9 +476,15 @@ class Analysis:
                         self.report(element, hit)
             for passed in evaluation.passed():
                 self.report_passed(passed, reach)
+
+    def findings(self) -> dict[str, list[Finding]]:
         by_path: dict[str, list[Finding]] = {}
-        for taint, hit in self.found.values():
-            _add(by_path, hit.file.path, self.finding(taint, hit))
+        if self.mode.assert_sinks:
+            for taints, hit in self.by_assert():
+                _add(by_path, hit.file.path, self.assert_finding(taints, hit))
+        else:
+            for taint, hit in self.found.values():
+                _add(by_path, hit.file.path, self.finding(taint, hit))
         for findings in by_path.values():
             findings.sort(key=lambda f: (f.span, f.message))
         return by_path
@@ -491,24 +503,27 @@ class Analysis:
                 exact = element.exact and passed.exact and hit.exact
                 self.report(replace(element, exact=exact, via=via), hit)
 
-    def finding(self, taint: Taint, hit: SinkHit) -> Finding:
-        through = ""
-        if len(taint.via) > 0:
-            through = f" (through {CROSSING.join(taint.via)})"
+    def by_assert(self) -> list[tuple[list[Taint], SinkHit]]:
+        """ASSERT001: every source that reaches one assert, so it is reported once."""
+        grouped: dict[tuple[str, Span], tuple[list[Taint], SinkHit]] = {}
+        for taint, hit in sorted(
+            self.found.values(), key=lambda item: (item[1].span, item[0].span)
+        ):
+            key = (hit.file.path, hit.span)
+            if key not in grouped:
+                grouped[key] = ([], hit)
+            grouped[key][0].append(taint)
+        return list(grouped.values())
+
+    def assert_finding(self, taints: Sequence[Taint], hit: SinkHit) -> Finding:
+        origins = "; ".join(_origin(taint) for taint in taints)
         confidence = CONFIDENCE_APPROXIMATE
-        if taint.exact and hit.exact:
+        if hit.exact and all(taint.exact for taint in taints):
             confidence = CONFIDENCE_EXACT
-        origin = f"{taint.label} ({taint.path}:{taint.span.line})"
-        if self.mode.assert_sinks:
-            message = (
-                f"{hit.text} checks external input, {origin}{through}: an expected failure "
-                "is an error to raise, and python -O removes the assert"
-            )
-        else:
-            message = (
-                f"{origin} reaches argument {hit.argument + 1} of {hit.target}(...) without "
-                f"passing a validator{through}: {hit.text}"
-            )
+        message = (
+            f"{hit.text} checks external input, {origins}: an expected failure is an error "
+            "to raise, and python -O removes the assert"
+        )
         return _finding(
             self.mode.rule,
             self.mode.severity,
@@ -518,6 +533,36 @@ class Analysis:
             hit.file.source,
             confidence,
         )
+
+    def finding(self, taint: Taint, hit: SinkHit) -> Finding:
+        confidence = CONFIDENCE_APPROXIMATE
+        if taint.exact and hit.exact:
+            confidence = CONFIDENCE_EXACT
+        through = ""
+        if len(taint.via) > 0:
+            through = f" (through {CROSSING.join(taint.via)})"
+        message = (
+            f"{taint.label} ({taint.path}:{taint.span.line}) reaches argument "
+            f"{hit.argument + 1} of {hit.target}(...) without passing a validator"
+            f"{through}: {hit.text}"
+        )
+        return _finding(
+            self.mode.rule,
+            self.mode.severity,
+            hit.file.path,
+            hit.span,
+            message,
+            hit.file.source,
+            confidence,
+        )
+
+
+def _origin(taint: Taint) -> str:
+    """``label (path:line)``, with the functions crossed."""
+    through = ""
+    if len(taint.via) > 0:
+        through = f" (through {CROSSING.join(taint.via)})"
+    return f"{taint.label} ({taint.path}:{taint.span.line}){through}"
 
 
 def _parameter_flows(evaluation: Evaluation, key: str, direct: Reach, edges: Edges) -> None:
@@ -749,6 +794,39 @@ def _uses(
     return sorted(uses)
 
 
+def _is_assertion(callee: str, aliases: Mapping[str, str]) -> bool:
+    """A call into node:assert (``assert(...)``, ``assert.ok``, ``strict.equal``): it
+    throws when its condition fails, so what it is given is checked."""
+    root = callee.partition(METHOD_PREFIX)[0]
+    if root not in aliases:
+        return False
+    qualified = qualified_callee(callee, aliases)
+    return qualified == ASSERT_MODULE or qualified.startswith(ASSERT_MODULE_BELOW)
+
+
+def _asserted(unit: FlowUnit, aliases: Mapping[str, str]) -> frozenset[str]:
+    """Every origin a node:assert call of the unit is given, through nested calls
+    (``assert(["a", "b"].includes(name))`` checks ``name``)."""
+    found: set[str] = set()
+    pending: list[str] = []
+    for call in unit.calls:
+        if _is_assertion(call.callee, aliases):
+            for values in (*call.arguments, *(v for _name, v in call.keywords)):
+                pending.extend(values)
+    while len(pending) > 0:
+        item = pending.pop()
+        if item in found:
+            continue
+        found.add(item)
+        kind, index = origin_parts(item)
+        if kind == ORIGIN_CALL:
+            nested = unit.calls[index]
+            pending.extend(nested.receiver)
+            for values in nested.arguments:
+                pending.extend(values)
+    return frozenset(found)
+
+
 def run_input002(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
@@ -763,7 +841,10 @@ def run_input002(
         reads = _optional_reads(unit, aliases, entries, language)
         # A check on one read of a variable covers every read of it in the unit
         # (`process.env.X === undefined ? d : process.env.X`).
-        checked = {read.text for read in reads if read.origin in unit.tested}
+        asserted = _asserted(unit, aliases)
+        checked = {
+            read.text for read in reads if read.origin in unit.tested or read.origin in asserted
+        }
         for read in reads:
             if read.text in checked:
                 continue

@@ -405,6 +405,10 @@ class _Unit:
         dotted = _dotted(node.func)
         if dotted is not None:
             callee = dotted
+        elif isinstance(node.func, ast.Attribute):
+            # A method on a computed receiver (Path(p).read_text(), conn.cursor().execute()):
+            # the receiver is unknown, the method name still matches ".name" entries.
+            callee = f"{DYNAMIC}.{node.func.attr}"
         arguments = tuple(_sorted(self.expr(argument)) for argument in node.args)
         keywords = tuple(self.keyword(keyword) for keyword in node.keywords)
         first = ""

@@ -702,12 +702,15 @@ class SettledBatch:
     failures come back as values. ``discarded`` when the result is thrown away;
     ``inspected`` when the enclosing function checks a result for failure
     (``isinstance(r, ...Exception)``, ``.status``, ``.reason``, ``"rejected"``) or returns
-    the batch to its caller."""
+    the batch to its caller. ``cancellation_wait`` (Python): the gather is in a ``finally``
+    or ``except`` block of a function that cancelled tasks before it, the standard wait
+    for cancellation to finish (failures surfaced in the try body already)."""
 
     callee: str
     text: str
     discarded: bool
     inspected: bool
+    cancellation_wait: bool
     span: Span
 
 
@@ -742,7 +745,8 @@ class ProcessCall:
     (an f-string or template with substitutions, ``+``, ``%``, ``.format``); ``check`` is
     ``true``/``false``/``absent`` (Python ``check=``); ``discarded`` when the result is
     thrown away; ``status_read`` when the enclosing function reads ``.returncode`` /
-    ``.status``."""
+    ``.status``; ``returned`` when the result is returned to the caller (directly or
+    through a name the function returns), whose job checking the status then is."""
 
     callee: str
     text: str
@@ -751,6 +755,7 @@ class ProcessCall:
     check: str
     discarded: bool
     status_read: bool
+    returned: bool
     span: Span
 
 

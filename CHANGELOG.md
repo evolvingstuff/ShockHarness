@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (feedback from MetaList on 0.7.0)
+- `ASYNC003` does not report a Python `gather(..., return_exceptions=True)` in a
+  `finally` / `except` block of a function that cancelled tasks before it (the
+  wait for cancellation to finish).
+- `PROCESS001` does not report an exit status returned to the caller with the
+  result (`return subprocess.run(...)`, or through a returned name).
+- `INPUT002` counts a `node:assert` call given the value (`assert(...)`,
+  `assert.ok`, `assert.equal`, through nested calls) as a check.
+- `ASSERT001` reports an assert once, listing every external source that reaches
+  it (it reported one finding per source).
+- Dataflow: a method called on a computed receiver (`Path(p).read_text()`,
+  `conn.cursor().execute(q)`) now matches `.name` catalog entries. The cache
+  schema is "12".
+
 ### Added
 - `DOM001` (`rules.dom`, warning, JavaScript and TypeScript): a delegated event
   handler that tests `event.target instanceof HTMLElement` before

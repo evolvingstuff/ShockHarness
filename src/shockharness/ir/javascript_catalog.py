@@ -189,8 +189,29 @@ def _process(source: SourceText, call: Node, callee: str) -> ProcessCall:
         check=CHECK_ABSENT,
         discarded=parent is not None and parent.type == STATEMENT,
         status_read=function is not None and STATUS.search(node_text(function)) is not None,
+        returned=_returned(parent, function),
         span=node_span(source, call),
     )
+
+
+def _returned(parent: Node | None, function: Node | None) -> bool:
+    """``return spawnSync(...)``, or ``const r = spawnSync(...)`` and later ``return r``."""
+    if parent is None:
+        return False
+    if parent.type == "return_statement":
+        return True
+    name = parent.child_by_field_name("name")
+    if parent.type != "variable_declarator" or name is None or function is None:
+        return False
+    stack: list[Node] = [function]
+    while len(stack) > 0:
+        node = stack.pop()
+        stack.extend(node.named_children)
+        values = [c for c in node.named_children if c.type != "comment"]
+        if node.type == "return_statement" and len(values) == 1:
+            if node_text(values[0]) == node_text(name):
+                return True
+    return False
 
 
 def _promise_sleep(new: Node) -> bool:

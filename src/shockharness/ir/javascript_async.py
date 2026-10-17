@@ -115,6 +115,7 @@ def _settled(source: SourceText, call: Node) -> SettledBatch | None:
         text=_excerpt(call),
         discarded=consumer is not None and consumer.type == STATEMENT,
         inspected=_inspected(consumer, _enclosing_function(call)),
+        cancellation_wait=False,
         span=node_span(source, call),
     )
 

@@ -187,6 +187,8 @@ def _async003(
 ) -> list[Finding]:
     found: list[Finding] = []
     for batch in facts.asynchrony.settled_batches:
+        if batch.cancellation_wait:
+            continue  # waiting for cancelled tasks to finish, in a finally / except block
         if batch.discarded:
             message = (
                 f"{batch.callee}(...) turns failures into values and its results are thrown "

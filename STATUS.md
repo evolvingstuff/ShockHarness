@@ -3839,3 +3839,27 @@ Decision (mine): the positive form is reported too, since it drops the same clic
 Evidence: `tests/unit/test_dom.py` (2: both forms in JavaScript and TypeScript,
 the narrower class, `Element`, `currentTarget`, a guard with no `closest`, the
 classes catalog, roles). 1144 tests pass.
+
+## Feedback on 0.7.0 from MetaList — DONE (2026-10-17)
+
+MetaList upgraded to 0.7.0 and reported four false alarms (and that ASSERT001 v2
+found 28 asserts, every one a real check of external input; ASSERT002 led to a
+startup refusal of `-O`):
+
+* **ASYNC003**: `SettledBatch.cancellation_wait` (Python): a gather in a
+  `finally` body or an `except` handler of a scope that calls `.cancel()` before
+  it is skipped. A gather in a `finally` without a cancellation, and a
+  cancellation wait outside a cleanup block, stay reported.
+* **PROCESS001**: `ProcessCall.returned` (both languages): a result returned
+  directly or through a returned name is the caller's to check.
+* **INPUT002**: a `node:assert` call (`assert`, `assert.ok`, `strict.equal`,
+  `assert/strict`; the root must be imported, so `console.assert` never counts)
+  checks every origin it is given, through nested calls.
+* **ASSERT001**: one finding per assert listing every source (it reported one per
+  source). On the way, a method on a computed receiver (`Path(p).read_text()`,
+  `conn.cursor().execute(q)`) is recorded as `<dynamic>.name`, so `.name` catalog
+  entries match it in every dataflow rule.
+
+Evidence: four new tests (one per fix); the 790-file corpus counts of every
+H4-H6 and MAGIC003/DOM001 rule are unchanged by these fixes. The released
+INPUT001 message wording is kept.

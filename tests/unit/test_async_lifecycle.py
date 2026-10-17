@@ -191,3 +191,32 @@ def test_roles_and_deviations(
     assert "rules.async_lifecycle.roles no longer lists 'test'" in deviations
     assert "rules.async_lifecycle.supervisors also permits 'app.Supervisor'" in deviations
     assert "rules.async_lifecycle.severity is 'review'" in deviations
+
+
+def test_async003_skips_waiting_for_cancelled_tasks(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    """MetaList feedback (0.7.0): gather(return_exceptions=True) in a finally / except
+    block after cancelling the tasks waits for cancellation to finish."""
+    write(
+        empty_root,
+        "src/runtime.py",
+        "import asyncio\n\n\n"
+        "async def run(tasks):\n"
+        "    try:\n        await asyncio.gather(*tasks)\n"
+        "    finally:\n"
+        "        for task in tasks:\n            task.cancel()\n"
+        "        await asyncio.gather(*tasks, return_exceptions=True)\n\n\n"  # not reported
+        "async def other(tasks):\n"
+        "    try:\n        await asyncio.sleep(0)\n"
+        "    finally:\n        await asyncio.gather(*tasks, return_exceptions=True)\n\n\n"  # 17
+        "async def third(tasks):\n"
+        "    for task in tasks:\n        task.cancel()\n"
+        "    await asyncio.gather(*tasks, return_exceptions=True)\n",  # 23: not a cleanup block
+    )
+    lines = [
+        line
+        for rule, _path, line, _status in rows(analyze(empty_root, strict_config))
+        if rule == "ASYNC003"
+    ]
+    assert lines == [17, 23]

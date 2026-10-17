@@ -176,6 +176,25 @@ class _Scope:
             parent = self.parents[id(parent)]
         return isinstance(parent, ast.Expr)
 
+    def _returned(self, call: ast.Call) -> bool:
+        """``return subprocess.run(...)``, or ``result = ...`` and later ``return result``."""
+        parent = self.parents[id(call)]
+        if isinstance(parent, ast.Await):
+            parent = self.parents[id(parent)]
+        if isinstance(parent, ast.Return):
+            return True
+        if not isinstance(parent, ast.Assign) or len(parent.targets) != 1:
+            return False
+        target = parent.targets[0]
+        if not isinstance(target, ast.Name):
+            return False
+        return any(
+            isinstance(node, ast.Return)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == target.id
+            for node, _parent in self.nodes
+        )
+
     def calls(self) -> tuple[list[ProcessCall], list[SleepCall]]:
         processes: list[ProcessCall] = []
         sleeps: list[SleepCall] = []
@@ -203,6 +222,7 @@ class _Scope:
                         check=_check(node),
                         discarded=self._discarded(node),
                         status_read=self.reads_status,
+                        returned=self._returned(node),
                         span=node_span(self.source, node),
                     )
                 )

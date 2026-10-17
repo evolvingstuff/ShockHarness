@@ -120,8 +120,8 @@ def _finding(
 
 
 def _status_ignored(call: ProcessCall, qualified: str) -> bool:
-    if qualified not in STATUS_APIS or call.check == CHECK_TRUE:
-        return False
+    if qualified not in STATUS_APIS or call.check == CHECK_TRUE or call.returned:
+        return False  # checked here, or handed to the caller with the result
     if call.discarded:
         return True
     # os.system returns a plain int, so only a dropped result is certain to be ignored.

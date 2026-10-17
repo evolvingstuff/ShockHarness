@@ -38,6 +38,9 @@ def _excerpt(node: ast.AST) -> str:
     return text
 
 
+CANCEL = "cancel"
+
+
 def scope_nodes(scope: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
     """(node, parent) for every node in ``scope``, not descending into nested scopes."""
     found: list[tuple[ast.AST, ast.AST]] = []
@@ -104,6 +107,30 @@ class _Scope:
             return self.parents[id(parent)]
         return parent
 
+    def in_cleanup(self, node: ast.AST) -> bool:
+        """Inside a ``finally`` body or an ``except`` handler of this scope."""
+        current = node
+        while id(current) in self.parents:
+            parent = self.parents[id(current)]
+            if isinstance(parent, ast.ExceptHandler):
+                return True
+            if isinstance(parent, ast.Try | ast.TryStar) and current in parent.finalbody:
+                return True
+            current = parent
+        return False
+
+    def cancellation_wait(self, call: ast.Call) -> bool:
+        """A gather that waits for tasks this scope cancelled before it."""
+        if not self.in_cleanup(call):
+            return False
+        return any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == CANCEL
+            and (node.lineno, node.col_offset) < (call.lineno, call.col_offset)
+            for node, _parent in self.nodes
+        )
+
     def discarded(self) -> list[DiscardedCall]:
         found: list[DiscardedCall] = []
         for node, parent in self.nodes:
@@ -150,6 +177,7 @@ class _Scope:
                     text=_excerpt(node),
                     discarded=isinstance(usage, ast.Expr),
                     inspected=inspected,
+                    cancellation_wait=self.cancellation_wait(node),
                     span=node_span(self.source, node),
                 )
             )

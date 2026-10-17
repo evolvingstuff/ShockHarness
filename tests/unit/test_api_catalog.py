@@ -232,3 +232,22 @@ def test_roles_scope_the_catalog_rules(make_config: Callable[[str], EffectiveCon
         "PROCESS001",
         "RESULT001",
     ]
+
+
+def test_process001_hands_a_returned_result_to_the_caller(strict_config: EffectiveConfig) -> None:
+    """MetaList feedback (0.7.0): the callers of run_command_allow_failure check returncode."""
+    py = (
+        "import subprocess\n\n\n"
+        "def run_command_allow_failure(cmd):\n"
+        "    return subprocess.run(cmd, capture_output=True)\n\n\n"
+        "def stored(cmd):\n    result = subprocess.run(cmd)\n    return result\n\n\n"
+        "def lost(cmd):\n    result = subprocess.run(cmd)\n    return cmd\n"  # 14
+    )
+    assert [r[0] for r in rows(run(strict_config, "src/a.py", py), "PROCESS001")] == [14]
+    js = (
+        'import { spawnSync } from "node:child_process";\n'
+        "export function a(c) { return spawnSync(c, []); }\n"
+        "export function b(c) { const r = spawnSync(c, []); return r; }\n"
+        "export function d(c) { const r = spawnSync(c, []); return c; }\n"  # 4
+    )
+    assert [r[0] for r in rows(run(strict_config, "src/a.js", js), "PROCESS001")] == [4]

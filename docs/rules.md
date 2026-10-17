@@ -881,7 +881,9 @@ kept (assigned, added to a set, awaited) is not reported.
 name contains `Exception` or `Error`; JavaScript inspection is a `.status` or
 `.reason` access or a `"rejected"` string, anywhere in the enclosing function.
 Returning the batch (or a concise arrow that evaluates to it) hands the check to
-the caller.
+the caller. A Python `gather(..., return_exceptions=True)` in a `finally` body or
+an `except` handler of a function that called `.cancel()` before it is the
+standard wait for cancellation to finish, and is not reported (0.7.0 feedback).
 
 ### PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003: API catalog (H5; warning or review)
 
@@ -907,7 +909,8 @@ that always uses one (`os.system`, `os.popen`, `subprocess.getoutput`,
 `child_process.exec` / `execSync`). (2) `subprocess.run` without `check=True`,
 `subprocess.call` and `child_process.spawnSync` whose result is thrown away or
 whose function never reads `.returncode` / `.status`, and `os.system` whose
-result is thrown away. Whether the data can contain shell syntax is not traced
+result is thrown away. A result returned to the caller (directly, or through a
+name the function returns) is the caller's to check and is not reported. Whether the data can contain shell syntax is not traced
 (that is H6).
 
 **RESULT001.** Uses H4's discarded-call facts. An entry in
@@ -992,7 +995,9 @@ resolved through each file's imports (spec 21.1 decision 26).
   `os.environ.get("X")` (None when unset) or `process.env.X` (undefined) whose
   value reaches a call argument, a return, an attribute or a module-level
   binding while no condition of the function looks at it (`if`, `while`,
-  `assert`, a ternary, `and`/`or`, `&&`/`||`/`??`, `not`/`!`). A check of one
+  `assert`, a ternary, `and`/`or`, `&&`/`||`/`??`, `not`/`!`, or a `node:assert`
+  call given the value, even through a nested call such as
+  `assert(["a", "b"].includes(name))`; `console.assert` only logs). A check of one
   read covers every read of the same variable in the function; Python's
   `int(...)` and the other validators count as checks (they raise on None),
   JavaScript's `Number(...)` does not (NaN). A Python use on the read's own line

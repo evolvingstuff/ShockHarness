@@ -437,8 +437,12 @@ class _Unit:
             elif unwrapped.type != IDENTIFIER:
                 self.expr(unwrapped)
             dotted = dotted_name(unwrapped)
+            prop = unwrapped.child_by_field_name("property")
             if dotted is not None:
                 callee = dotted
+            elif unwrapped.type == MEMBER and prop is not None:
+                # A method on a computed receiver (db.pool().query(q)): ".name" entries match.
+                callee = f"{DYNAMIC}.{node_text(prop)}"
         arguments = self.arguments(node.child_by_field_name("arguments"))
         self.calls.append(
             FlowCall(

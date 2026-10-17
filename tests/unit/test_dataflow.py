@@ -288,3 +288,35 @@ def test_sink_entries_name_an_argument(make_config: Callable[[str], EffectiveCon
     with pytest.raises(ConfigError, match=r"python_sinks\[1\]: must be 'callee:N'"):
         make_config('[tool.shockharness.rules.input]\npython_sinks = ["os.system:0", "eval"]\n')
     assert registry.INPUT002.default_severity == "review"
+
+
+def test_input002_counts_node_assert_as_a_check(strict_config: EffectiveConfig) -> None:
+    """MetaList feedback (0.7.0): assert([...].includes(name)) from node:assert checks name;
+    console.assert only logs."""
+    text = (
+        'import assert from "node:assert";\n'
+        "const browserName = process.env.BROWSER_TEST_BROWSER;\n"
+        'assert(["chrome", "firefox"].includes(browserName), "chrome or firefox");\n'
+        "const port = process.env.PORT;\n"  # 4
+        'console.assert(port, "port");\n'
+        "export const config = { browserName, port };\n"
+    )
+    result = run(strict_config, "scripts/browser-smoke.mjs", text)
+    assert [f.span.line for f in result.findings if f.rule_id == "INPUT002"] == [4]
+
+
+def test_assert001_reports_an_assert_once_with_every_source(
+    strict_config: EffectiveConfig,
+) -> None:
+    text = (
+        "import sys\nfrom pathlib import Path\n\n\n"
+        "def run_update(path):\n"
+        "    text = Path(path).read_text()\n"  # a method on a computed receiver
+        "    check(text, sys.argv[1])\n\n\n"
+        "def check(text, arg):\n"
+        "    assert text.startswith('v') and arg, 'bad update'\n"  # 11
+    )
+    result = run(strict_config, "app/app_updates.py", text)
+    found = [f for f in result.findings if f.rule_id == "ASSERT001"]
+    assert [f.span.line for f in found] == [11]
+    assert ".read_text (app/app_updates.py:6) (through check); sys.argv" in found[0].message
