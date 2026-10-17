@@ -95,7 +95,7 @@ def test_hard_violations_warn_mode(
 def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: EffectiveConfig) -> None:
     write(empty_root, "src/a.py", "x = 1\n")
     report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
-    assert report.coverage["rules_not_implemented"] == ["MAGIC002"]
+    assert report.coverage["rules_not_implemented"] == []  # MAGIC002 landed after 0.7.0
     assert report.coverage["rules_needing_base_revision"] == [
         "VERIFY001",
         "VERIFY002",
@@ -111,6 +111,7 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
 # The rules expected, as one constant (the list grows with every rule).
 IMPLEMENTED_IN_ORDER = (
     "MAGIC001",
+    "MAGIC002",
     "EXC001",
     "EXC002",
     "EXC003",
@@ -209,7 +210,7 @@ def test_text_output_mentions_everything_that_matters(
     text = text_output.render(report)
     assert "src/a.py:1:5: MAGIC001 error:" in text
     assert "src/bad.js" in text and "parse_error" in text
-    assert "rules not implemented (not analyzed):" in text
+    assert "rules not implemented (not analyzed):" not in text  # none is left
     assert "gate: ERROR (exit 3)" in text
 
 

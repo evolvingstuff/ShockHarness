@@ -40,7 +40,7 @@ mean nothing was verified.
 ## What to report, in this order
 
 1. **Unsupported analysis.** Quote the `rules not implemented (not analyzed)`
-   line (`MAGIC002`) and the `N failed` count
+   line when the report has one, and the `N failed` count
    of files that could not be analyzed. A clean gate covers only the rules
    that ran and the files that parsed. Name any file reported as a parse
    failure or excluded by configuration when it is part of the change.
@@ -116,7 +116,6 @@ Scope: src/app/settings.py, src/app/pages.py, tests/test_pages.py
 Config: shockharness config validate -> exit 0; profile strict; deviations: tests/** disables MAGIC001, DEF001 (reason: fixtures encode literal expected outputs)
 Analyzer: shockharness check . -> exit 0
   shockharness 0.7.0: 7 file(s), 7 analyzed, 0 failed; 1 finding(s), 1 suppressed
-  rules not implemented (not analyzed): MAGIC002
   gate: PASS (exit 0)
 Gate vs base: shockharness gate --base origin/main --head HEAD -> exit 0; 0 new, 2 fixed, 1 unchanged finding(s)
 Suppressions in this change: none (the existing MAGIC001 suppression on src/app/http.py:9, RFC 9110 section 15.5.5, is unchanged)
@@ -134,7 +133,6 @@ Analyzer: shockharness check . -> exit 1
   src/client.js:12:5: DEF005 error: catch clause converts the exception into a fallback value: return null; (EXC002 classification return_fallback; the handler is reported once, here)  [} catch (err) {]
   src/client.js:12:5: EXC001 error: catch clause is forbidden: untyped catch binds every error; a JavaScript catch passes only inside an approved boundary whose error class the handler checks with instanceof and otherwise rethrows  [} catch (err) {]
   shockharness 0.7.0: 3 file(s), 3 analyzed, 0 failed; 2 finding(s), 0 suppressed
-  rules not implemented (not analyzed): MAGIC002
   gate: FAIL (exit 1)
 Gate vs base: not run (working tree uncommitted)
 Suppressions in this change: none

@@ -53,7 +53,7 @@ def test_rules_list_and_explain(capsys: pytest.CaptureFixture[str]) -> None:
     assert "DEF001    error    implemented" in out
     assert "DEF003    review   implemented" in out
     assert "CPLX001   warning  implemented" in out
-    assert "MAGIC002  review   planned" in out
+    assert "MAGIC002  review   implemented" in out
     code, out, _ = run(["rules", "explain", "MAGIC001"], capsys)
     assert code == 0
     assert "Detection guarantees" in out
@@ -955,7 +955,7 @@ def test_check_reports_complexity_as_warnings_in_every_format(
     assert "gate: PASS (exit 0)" in out
     code, out, _ = run(["check", str(empty_root / "src"), "--format", "json", *root], capsys)
     data = json.loads(out)
-    assert data["coverage"]["rules_not_implemented"] == ["MAGIC002"]
+    assert data["coverage"]["rules_not_implemented"] == []
     assert "CPLX005" in data["coverage"]["rules_implemented"]
     assert data["metrics"]["complexity"]["status"] == "available"
     assert data["metrics"]["graph"]["summary"]["units"] == 4

@@ -966,6 +966,26 @@ class SentinelUse:
     target: str
 
 
+# --- String facts (MAGIC002) -------------------------------------------------------------
+# Every string literal that could be a repeated constant, with its position. Docstrings,
+# the literal parts of f-strings and templates, type annotations, import specifiers and
+# __all__ are never recorded; which kinds and callees count is the rule's configuration.
+STRING_ARGUMENT = "argument"  # f("pending"); ``callee`` names f
+STRING_SUBSCRIPT = "subscript"  # row["status"], headers["X-Request-Id"]
+STRING_KEY = "key"  # {"status": ...}, { "Content-Type": ... }
+STRING_COMPARE = "compare"  # status == "pending", x in ("a", "b")
+STRING_JSX = "jsx"  # <div className="card">
+STRING_VALUE = "value"  # assigned, returned, a container element
+
+
+@dataclass(frozen=True)
+class StringUse:
+    span: Span
+    value: str
+    kind: str
+    callee: str
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -984,6 +1004,7 @@ class ModuleFacts:
     catalog: CatalogFacts
     dataflow: DataflowFacts
     sentinels: tuple[SentinelUse, ...]
+    strings: tuple[StringUse, ...]
     parse_failure: ParseFailure | None
 
 
@@ -1006,5 +1027,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         catalog=NO_CATALOG,
         dataflow=NO_DATAFLOW,
         sentinels=(),
+        strings=(),
         parse_failure=failure,
     )

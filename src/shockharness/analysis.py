@@ -61,9 +61,11 @@ from shockharness.rules.registry import (
     DATAFLOW_SECTIONS,
     GUARDRAIL_SECTIONS,
     SENTINEL_SECTIONS,
+    STRING_SECTIONS,
 )
 from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.sentinels import run_magic003
+from shockharness.rules.strings import StringFile, run_magic002
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -317,6 +319,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         *CATALOG_SECTIONS,
         *DATAFLOW_SECTIONS,
         *SENTINEL_SECTIONS,
+        *STRING_SECTIONS,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -373,6 +376,7 @@ def _policy_rules(
             registry.PROV001,
             registry.GUARD001,
             registry.MAGIC003,
+            registry.MAGIC002,
         )
         if rule.rule_id not in disabled_ids
         and language in rule.languages
@@ -819,6 +823,25 @@ def assert_findings(
     return found
 
 
+def string_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig
+) -> dict[str, list[Finding]]:
+    """MAGIC002: string literals repeated across the files where the rule applies."""
+    files = [
+        StringFile(
+            path=p.path,
+            strings=p.facts.strings,
+            source=p.source,
+            applies=registry.MAGIC002.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    return run_magic002(files, config.section(registry.MAGIC_STRINGS_SECTION))
+
+
 def consistency_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -861,10 +884,19 @@ def complete(
     inputs = input_findings(pendings, config, graph)
     asserts = assert_findings(pendings, config, graph)
     consistency = consistency_findings(pendings, config, graph)
+    strings = string_findings(pendings, config)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        for found in (outcome.graph_findings, asynchrony, roles, inputs, asserts, consistency):
+        for found in (
+            outcome.graph_findings,
+            asynchrony,
+            roles,
+            inputs,
+            asserts,
+            consistency,
+            strings,
+        ):
             if pending.path in found:
                 extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))

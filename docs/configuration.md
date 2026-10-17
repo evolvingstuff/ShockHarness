@@ -193,7 +193,7 @@ configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs",
                        ".prettierrc.js", ".prettierrc.cjs", "gulpfile.js", "Gruntfile.js"]
                                         # legacy spelling of file_roles.config (kept through 0.x); see File roles
 
-[tool.shockharness.rules.magic_strings]   # MAGIC002: registered, not implemented
+[tool.shockharness.rules.magic_strings]   # MAGIC002, see "Repeated strings (MAGIC002)"
 enabled = true
 mode = "review"
 
@@ -424,11 +424,6 @@ default is always an error; disable the rule by override if a path needs it.
 The two *implicit* shapes, `m.get(k)` and `os.getenv("X")` with no fallback, are
 `review` under both `forbid` and `review`, and off under `allow`: they may
 yield `None` for a missing value, but nothing proves the value was required.
-
-Keys for the one unimplemented rule family (`magic_strings`) are validated
-and stored so that a configuration written today keeps working when the rule
-lands. They have no effect on findings yet; the report's
-`coverage.rules_not_implemented` says so.
 
 ## Complexity
 
@@ -836,6 +831,26 @@ javascript_index_callees = [".slice", ".at", ".splice", ".substr", ".indexOf", .
 ```
 
 Removing a value or a role and adding an index callee are policy deviations.
+
+## Repeated strings (MAGIC002)
+
+```toml
+[tool.shockharness.rules.magic_strings]
+enabled = true
+mode = "review"                   # "fail": the findings are errors
+roles = ["production"]
+min_length = 4                    # characters, whitespace aside
+min_occurrences = 3
+min_files = 2
+min_compared_files = 2            # files where the value is compared (==, in, ===, case)
+kinds = ["argument", "subscript", "compare", "value"]   # "key" and "jsx" are opt-in
+message_callees = ["debug", "info", "warning", "warn", "error", "exception", ...]
+allowed = ["utf-8", "utf8", "__main__", "strict", "replace", "ignore", "ascii"]
+```
+
+Raising a threshold, removing a role or a kind, and adding a message callee or
+an allowed value are policy deviations; `mode = "fail"` back to `"review"` is a
+loosening `VERIFY003` reports in a diff.
 
 ## Delegated handlers (DOM001)
 

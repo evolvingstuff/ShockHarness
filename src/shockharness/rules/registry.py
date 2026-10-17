@@ -2345,17 +2345,67 @@ DOM001 = RuleSpec(
     ),
 )
 
+# --- MAGIC002 (decision 31) ---------------------------------------------------------------
+
+MAGIC_STRINGS_SECTION = "rules.magic_strings"
+STRING_SECTIONS = (MAGIC_STRINGS_SECTION,)
+
+MAGIC002 = RuleSpec(
+    rule_id="MAGIC002",
+    version="1",
+    name="string literal repeated across files",
+    family="magic_strings",
+    config_section=MAGIC_STRINGS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "The same string literal (a status, an endpoint, a header, an error code) is written "
+        "out at several places across files: one decision copied around, which a rename or "
+        "a typo in one copy splits."
+    ),
+    rationale=(
+        "A repeated literal is a contract with no owner: nothing ties the copies together, so "
+        "they drift. One name, defined where the meaning is, makes every use point at the "
+        "same decision and makes a change one edit."
+    ),
+    guarantees=(
+        "Cross-file, over the files whose role is in rules.magic_strings.roles: string "
+        "literals of the configured kinds (arguments, subscripts, comparisons and plain "
+        "values by default; dict / object keys and JSX attributes are opt-in) at least "
+        "min_length characters long (whitespace aside), not listed in allowed, and not the "
+        "message of a log call or an exception (message_callees; a callee ending in Error, "
+        "Exception or Warning), that appear at least min_occurrences times in at least "
+        "min_files files and are compared (==, in, case) in at least min_compared_files "
+        "files (2: a decision string, not a word that repeats). One finding per value, at "
+        "its first use, naming the other places. "
+        "Never counted: docstrings, f-string and template parts, type annotations and "
+        "TypeScript literal types, import specifiers, require() arguments, __all__ and "
+        "directives. Severity: review, or error with mode = 'fail'."
+    ),
+    limitations=(
+        "Whether two equal strings mean the same thing is not known: a word that happens to "
+        "repeat (a column name, a label) is reported too. Strings built at run time and "
+        "strings inside f-strings or templates are not seen."
+    ),
+    remediation=(
+        "Define the value once where its meaning lives (an enum, a constants module, a "
+        "config schema) and use the name everywhere. If the copies only look alike, leave "
+        "them, or list the value in rules.magic_strings.allowed with the reason in review."
+    ),
+    noncompliant_example=(
+        "# a.py\nif order.status == 'pending': ...\n# b.py\norder.status = 'pending'"
+    ),
+    compliant_example=(
+        "# statuses.py\nclass Status(StrEnum):\n    PENDING = 'pending'\n"
+        "# a.py\nif order.status == Status.PENDING: ..."
+    ),
+)
+
 
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
-    _planned(
-        "MAGIC002",
-        "suspicious string literal",
-        "magic_strings",
-        "rules.magic_strings",
-        SEVERITY_REVIEW,
-        "Decision strings, status codes, endpoints and repeated protocol strings should be named.",
-    ),
+    MAGIC002,
     EXC001,
     EXC002,
     EXC003,

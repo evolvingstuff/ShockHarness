@@ -3863,3 +3863,36 @@ startup refusal of `-O`):
 Evidence: four new tests (one per fix); the 790-file corpus counts of every
 H4-H6 and MAGIC003/DOM001 rule are unchanged by these fixes. The released
 INPUT001 message wording is kept.
+
+## MAGIC002: one string repeated across files — DONE (2026-10-17)
+
+Spec 21.1 decision 31, and the user's question whether anything looks for
+duplicated text strings across a codebase (only a placeholder did). Facts:
+`StringUse(span, value, kind, callee)` on `ModuleFacts.strings`, from
+`ir/python_strings.py` and `ir/javascript_strings.py`; kinds argument, subscript,
+key, compare, jsx, value. The rule (`rules/strings.py`, cross-file in
+`analysis.complete`, section `rules.magic_strings`, review, production) groups
+values and reports one finding per value at its first use.
+
+Measurement before defaults (the 790-file corpus as one tree): 956 values repeat
+3 times in 2 files; most were words, not decisions. Requiring comparisons: one
+compare 395, compares in two files 179 (chosen, `min_compared_files = 2`), 171
+after the message and `allowed` exemptions. A sample of 25: platforms (`win32`,
+`darwin`, `arm64`), modes and options (`only-if-needed`, `public`), phases
+(`setup`, `teardown`, `xfail`), error codes (`ERESOLVE`); generic words (`text`,
+`left`, `none`, `true`) remain, which is why it is review. On this repository's
+own `src`: 51 review findings, most of them tree-sitter node type names written out
+in several `ir/javascript_*.py` files (real: one node-type module would remove
+them; left for a separate change).
+
+Decisions (mine): messages are recorded with their callee and left out by the
+rule (so `message_callees` can change without a cache bump); the value of an
+UPPER_SNAKE_CASE definition is never counted, since it is the remedy; a raised
+threshold, a removed kind or role, and an added message callee or allowed value
+are deviations; `mode` fail to review is a loosening for VERIFY003.
+
+Evidence: `tests/unit/test_strings.py` (6: the two-file report and its message,
+the comparison requirement, Python and JavaScript / TypeScript positions, roles,
+settings and deviations). 1154 tests pass on 3.14 and 3.11; the self-gate passes;
+verdicts against 0.6.0 (new rule IDs excluded) are unchanged except the known
+`-1` MAGIC001 fixtures of 0.7.0.

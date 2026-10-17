@@ -33,6 +33,7 @@ from shockharness.ir.javascript_functions import (
 from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
 from shockharness.ir.javascript_numbers import parse_js_number
 from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
+from shockharness.ir.javascript_strings import collect_javascript_strings
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -264,6 +265,7 @@ def _extract_facts(
         catalog=catalog,
         dataflow=collect_javascript_dataflow(source, root),
         sentinels=collect_javascript_sentinels(source, root),
+        strings=collect_javascript_strings(source, root),
         parse_failure=None,
     )
 

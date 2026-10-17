@@ -44,9 +44,9 @@ the full detection guarantees.
 
 A clean report says `gate: PASS (exit 0)`. Exit `1` is a policy violation, `2`
 an invalid configuration or invocation, `3` a tool failure or, under
-`parse_errors = "fail"`, a file that could not be parsed. Every report also
-lists `rules not implemented (not analyzed)`: `MAGIC002` is registered but
-produces no findings yet, so a clean run never implies it was checked. The
+`parse_errors = "fail"`, a file that could not be parsed. A report lists any
+registered rule that is not implemented yet under `rules not implemented (not
+analyzed)`: a clean run never implies such a rule was checked. The
 complexity family (`CPLX001`-`CPLX006`) is advisory: warnings that never fail
 a plain `check`; see the `refactor-complexity` skill.
 

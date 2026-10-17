@@ -251,7 +251,20 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "magic_strings": TableField(
-                    fields={"enabled": BoolField(), "mode": EnumField(("review", "fail"))},
+                    fields={
+                        "enabled": BoolField(),
+                        "mode": EnumField(("review", "fail")),
+                        "roles": ListField(EnumField(ROLES)),
+                        "min_length": IntField(minimum=1),
+                        "min_occurrences": IntField(minimum=1),
+                        "min_files": IntField(minimum=1),
+                        "min_compared_files": IntField(minimum=0),
+                        "kinds": ListField(
+                            EnumField(("argument", "subscript", "compare", "value", "key", "jsx"))
+                        ),
+                        "message_callees": ListField(StrField(allow_empty=False)),
+                        "allowed": ListField(StrField(allow_empty=True)),
+                    },
                     required=(),
                 ),
                 "exceptions": TableField(

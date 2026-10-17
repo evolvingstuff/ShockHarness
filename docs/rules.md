@@ -1034,6 +1034,32 @@ and 29).
   (75) of them are guarded, and some are not; the message names the most common
   guard.
 
+### MAGIC002: one string repeated across files (review)
+
+A status (`"pending"`), an error code (`"ERESOLVE"`), a platform or a mode
+written out at several places and compared in more than one file is one
+decision copied around: a rename or a typo in one copy splits it silently (spec
+21.1 decision 31). MAGIC002 groups the string literals of every file in
+`rules.magic_strings.roles` (production) by value and reports a value that is at
+least `min_length` (4) characters long, whitespace aside, appears at least
+`min_occurrences` (3) times in at least `min_files` (2) files, and is compared
+(`==`, `!=`, `in`, `===`, `!==`, a `case`) in at least `min_compared_files` (2)
+of them. One finding per value, at its first use, naming up to three other
+places. Counted positions (`kinds`): call arguments, subscripts, comparisons and
+plain values; dict / object keys (`key`) and JSX attribute values (`jsx`) are
+opt-in. Never counted: docstrings and directives, f-string and template parts,
+type annotations and TypeScript literal types, import specifiers, `require()` /
+`import()` arguments, `__all__`, the value of an UPPER_SNAKE_CASE definition
+(`PENDING = "pending"` is the remedy), the message of a log or print call
+(`message_callees`) or of a callee ending in `Error`, `Exception` or `Warning`,
+and the values in `allowed` (`"utf-8"`, `"__main__"`, `"strict"` ...).
+Approximate: two equal strings may mean different things. Requiring comparisons
+in two files is what separates a decision from a word that repeats: on pip,
+pytest, hypothesis, build, hatchling and npm analyzed as one tree, 956 values
+repeat, and 171 are reported (`"win32"`, `"darwin"`, `"only-if-needed"`,
+`"teardown"`, `"ERESOLVE"`; generic words such as `"text"` and `"none"` remain).
+`mode = "fail"` makes the findings errors.
+
 ### MAGIC003: a small number standing in for a meaning (review)
 
 MAGIC001 permits `-1`, `0` and `1` because they are how code counts and indexes.
@@ -1068,12 +1094,9 @@ TypeScript; exact.
 
 ## Registered, not implemented
 
-These IDs are reserved and configurable now; they produce no findings and are
-listed in every report under `coverage.rules_not_implemented`.
-
-| ID | Name | Planned milestone |
-|---|---|---|
-| MAGIC002 | suspicious string literal (advisory) | post-B |
+None since MAGIC002 landed. A rule registered before it is built is listed in
+every report under `coverage.rules_not_implemented`, and the text report prints
+the list when it is not empty.
 
 ## Rule metadata contract
 

@@ -205,6 +205,21 @@ def _policy_lines(config: EffectiveConfig) -> list[str]:
     return lines
 
 
+def _unanalyzed_rule_lines(coverage: Mapping[str, Any]) -> list[str]:
+    """The rules not implemented and the rules the configuration disables, when any."""
+    lines: list[str] = []
+    if len(coverage["rules_not_implemented"]) > 0:
+        lines.append(
+            "  rules not implemented (not analyzed): "
+            + ", ".join(coverage["rules_not_implemented"])
+        )
+    if len(coverage["rules_disabled_globally"]) > 0:
+        lines.append(
+            "  rules disabled by config: " + ", ".join(coverage["rules_disabled_globally"])
+        )
+    return lines
+
+
 def _trailer_lines(report: Report) -> list[str]:
     """Everything after the findings: totals, rules, config, metrics, status, gate."""
     lines: list[str] = []
@@ -222,13 +237,7 @@ def _trailer_lines(report: Report) -> list[str]:
     applied = [rule for rule in coverage["rules_implemented"] if rule not in needing_base]
     lines.append("  rules applied: " + ", ".join(applied))
     lines.append(_verification_line(coverage["verification"], needing_base))
-    lines.append(
-        "  rules not implemented (not analyzed): " + ", ".join(coverage["rules_not_implemented"])
-    )
-    if len(coverage["rules_disabled_globally"]) > 0:
-        lines.append(
-            "  rules disabled by config: " + ", ".join(coverage["rules_disabled_globally"])
-        )
+    lines.extend(_unanalyzed_rule_lines(coverage))
     unsupported = coverage["unsupported_sources"]
     if len(unsupported) > 0 and coverage["unsupported_sources_policy"] == "warn":
         listed = ", ".join(entry["path"] for entry in unsupported)

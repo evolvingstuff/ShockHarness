@@ -55,15 +55,16 @@ settled batches whose failures nobody checks; a sixth skill, `async-lifecycle`)
 and H5 (API-catalog rules: shell commands from data and ignored exit statuses,
 must-use results, type escape hatches, fixed sleeps, unbounded retries, batches
 that drop failures, checks that always say yes).
-`MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
-`rules_not_implemented` so a clean run never implies coverage the tool does
-not have. See `STATUS.md` for exact evidence.
+Every registered rule is implemented; a report lists any rule registered but not
+built under `rules_not_implemented`, so a clean run never implies coverage the
+tool does not have. See `STATUS.md` for exact evidence.
 
 Implemented rules:
 
 | ID | What it reports | Default |
 |---|---|---|
 | `MAGIC001` | numeric literal other than `0`, `1` or `-1` in executable code | error |
+| `MAGIC002` | a string (a status, a mode, an error code) written out 3+ times across files and compared in two of them | review |
 | `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
@@ -181,7 +182,6 @@ src/client.py:24:5: EXC001 error: except handler of 'OSError' is forbidden: catc
 shockharness 0.7.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
   by severity: error=5
   rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, CPLX006, SUPP001, SUPP002
-  rules not implemented (not analyzed): MAGIC002
   complexity: 3 unit(s) in 1 file(s); conventions cyclomatic/1, cognitive/1, nesting/1, npath/1; 0 NPath saturated; advisory (CPLX001-CPLX004 and CPLX006 are warnings)
   graph: call edges 2 resolved, 1 probable, 1 unresolved; module edges 0 resolved, 2 external, 0 unresolved; 0 cycle(s); 0 shared mutable binding(s)
 gate: FAIL (exit 1)

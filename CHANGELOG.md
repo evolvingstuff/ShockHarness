@@ -20,6 +20,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   schema is "12".
 
 ### Added
+- `MAGIC002` (`rules.magic_strings`, review, Python, JavaScript and TypeScript):
+  a string literal written out at least 3 times in at least 2 files and compared
+  (`==`, `in`, `===`, `case`) in at least 2 of them, reported once at its first
+  use with the other places (decision 31). Messages of log calls and exceptions,
+  docstrings, f-string and template parts, annotations, TypeScript literal types,
+  import specifiers and UPPER_SNAKE_CASE definitions are never counted. New keys:
+  `roles`, `min_length`, `min_occurrences`, `min_files`, `min_compared_files`,
+  `kinds`, `message_callees`, `allowed`. No rule is left unimplemented:
+  `coverage.rules_not_implemented` is `[]`, and the text report omits the line
+  when the list is empty. The cache schema is "13".
 - `DOM001` (`rules.dom`, warning, JavaScript and TypeScript): a delegated event
   handler that tests `event.target instanceof HTMLElement` before
   `event.target.closest(...)`, which silently drops clicks on SVG icons inside

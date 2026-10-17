@@ -525,6 +525,7 @@ GUARDRAIL_RULES = {
     "consistency": "PROV001, GUARD001",
     "sentinels": "MAGIC003",
     "dom": "DOM001",
+    "magic_strings": "MAGIC002",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -567,6 +568,8 @@ GUARDRAIL_CATALOGS = (
     ("sentinels", "values"),
     ("dom", "roles"),
     ("dom", "classes"),
+    ("magic_strings", "roles"),
+    ("magic_strings", "kinds"),
 )
 TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
@@ -578,6 +581,8 @@ GUARDRAIL_PERMISSIONS = (
     ("input", "javascript_validators"),
     ("sentinels", "python_index_callees"),
     ("sentinels", "javascript_index_callees"),
+    ("magic_strings", "message_callees"),
+    ("magic_strings", "allowed"),
 )
 REVIEW = "review"
 
@@ -587,6 +592,8 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
     every declared module-state binding."""
     found: list[str] = []
     for section, rule_ids in GUARDRAIL_RULES.items():
+        if "severity" not in rules[section]:
+            continue  # rules.magic_strings sets its severity with `mode` (since 0.1.0)
         if rules[section]["severity"] == REVIEW and strict[section]["severity"] != REVIEW:
             found.append(
                 f"rules.{section}.severity is 'review'; {rule_ids} findings are reported as review"
@@ -594,7 +601,12 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
     found.extend(_guardrail_list_deviations(rules, strict))
     found.extend(
         _input_deviations(
-            rules["input"], strict["input"], rules["consistency"], strict["consistency"]
+            rules["input"],
+            strict["input"],
+            rules["consistency"],
+            strict["consistency"],
+            rules["magic_strings"],
+            strict["magic_strings"],
         )
     )
     for key in TYPE_SWITCHES:
@@ -638,17 +650,30 @@ def _sink_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     return issues
 
 
+def _threshold_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
+    """MAGIC002: a higher bar (length, occurrences, files) reports fewer repeated strings."""
+    return [
+        f"rules.magic_strings.{key} is {rules[key]} (strict: {strict[key]}); MAGIC002 "
+        "reports fewer repeated strings"
+        for key in ("min_length", "min_occurrences", "min_files", "min_compared_files")
+        if rules[key] > strict[key]
+    ]
+
+
 def _input_deviations(
     rules: Mapping[str, Any],
     strict: Mapping[str, Any],
     consistency: Mapping[str, Any],
     strict_consistency: Mapping[str, Any],
+    magic_strings: Mapping[str, Any],
+    strict_magic_strings: Mapping[str, Any],
 ) -> list[str]:
     """H6: INPUT002's own severity lowered to review, a shallower INPUT001 search, and
     GUARD001 thresholds raised."""
     found: list[str] = []
     if rules["input002_severity"] == REVIEW and strict["input002_severity"] != REVIEW:
         found.append("rules.input.input002_severity is 'review'; INPUT002 findings are review")
+    found.extend(_threshold_deviations(magic_strings, strict_magic_strings))
     for key in ("guard_min_sites", "guard_min_percent"):
         if consistency[key] > strict_consistency[key]:
             found.append(

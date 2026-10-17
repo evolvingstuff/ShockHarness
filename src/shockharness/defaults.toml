@@ -137,9 +137,30 @@ javascript_index_callees = [
   ".codePointAt", ".indexOf", ".lastIndexOf", ".includes", ".subarray",
 ]
 
-[tool.shockharness.rules.magic_strings]
+[tool.shockharness.rules.magic_strings]    # MAGIC002 (decision 31)
 enabled = true
+# "review" (the default) or "fail" (MAGIC002 findings are errors).
 mode = "review"
+roles = ["production"]
+# A value is reported when it is at least min_length characters long (whitespace aside),
+# appears at least min_occurrences times in at least min_files files...
+min_length = 4
+min_occurrences = 3
+min_files = 2
+# ...and is compared (==, in, case) in at least this many files: a decision string, not a
+# word that happens to repeat. 0 reports every repeated value (noisy).
+min_compared_files = 2
+# The positions counted: "argument", "subscript", "compare", "value"; "key" (dict and
+# object keys) and "jsx" (JSX attribute values) are opt-in.
+kinds = ["argument", "subscript", "compare", "value"]
+# Calls whose string arguments are messages, not constants (the last name of the callee);
+# a callee ending in Error, Exception or Warning is one too.
+message_callees = [
+  "debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log",
+  "print", "trace", "fail", "skip", "xfail",
+]
+# Values never reported. Adding one is a deviation.
+allowed = ["utf-8", "utf8", "__main__", "strict", "replace", "ignore", "ascii"]
 
 [tool.shockharness.rules.exceptions]
 enabled = true

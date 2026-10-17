@@ -4,13 +4,13 @@ Stated so that a clean report is never read as more than it is.
 
 ## Coverage
 
-* Only `MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`, `CPLX001`-`CPLX006`,
-  `SUPP001`, and `SUPP002` produce findings; `MAGIC002` is listed in
-  `coverage.rules_not_implemented` in each report. A passing gate today means
-  "no magic numbers, no unapproved or suppressing catches, no over-wide
-  approved try blocks, no recognized default or fallback shapes, and no bad
-  suppressions", nothing more: the complexity family is advisory and a
-  passing gate says nothing about it.
+* Only the error-severity rules (`MAGIC001`, `EXC001`-`EXC003`, `DEF001`-`DEF006`
+  outside their review shapes, `SUPP001`) fail a gate under the defaults. A passing
+  gate means "no magic numbers, no unapproved or suppressing catches, no
+  over-wide approved try blocks, no recognized default or fallback shapes, and no
+  bad suppressions", nothing more: the complexity family and every guardrail
+  rule are advisory (warning or review) and a passing gate says nothing about
+  them.
 * Python syntax coverage is exactly the host interpreter's `ast`. Running on
   3.11 cannot parse 3.12-only syntax; such files are parse failures, not clean.
   The same holds for a tree the host's parser cannot build: on CPython 3.11 an
@@ -456,6 +456,18 @@ Stated so that a clean report is never read as more than it is.
 * Index callees are matched by name (`.pop` on any receiver); a project method
   that takes an index needs adding to the catalog.
 
+## MAGIC002
+
+* Equal strings are grouped by value only: two copies that mean different
+  things (a column name and a CLI word) are reported together, and two spellings
+  of one meaning (`"Pending"`, `"pending"`) are not linked.
+* Strings built at run time, f-string and template parts, and the values of
+  UPPER_SNAKE_CASE definitions are not seen; a status kept in a lowercase module
+  variable is counted like any other value.
+* A message is recognized by its callee's last name (`message_callees`, or a
+  name ending in `Error` / `Exception` / `Warning`); a message passed through a
+  project helper is counted.
+
 ## DOM001
 
 * Syntax only: a guard through a helper (`isHtml(target)`), a target stored on
@@ -485,7 +497,7 @@ Stated so that a clean report is never read as more than it is.
 
 ## Not yet built (see the specification)
 
-`MAGIC002`, the
+The
 remaining advanced-guardrail rules of specification section 21, per-function
 churn and rename following, change-impact radius,
 and `.gitignore` awareness. Unknown CLI commands are argparse

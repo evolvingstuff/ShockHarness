@@ -85,12 +85,13 @@ IMPLEMENTED = {
     "GUARD001",
     "MAGIC003",
     "DOM001",
+    "MAGIC002",
 }
 
 
 def test_implemented_rules_are_exactly_the_h6_set() -> None:
     assert {r.rule_id for r in registry.implemented_rules()} == IMPLEMENTED
-    assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
+    assert {r.rule_id for r in registry.RULES if not r.implemented} == set()
 
 
 def test_verification_rules_need_a_base_revision_and_are_policy_integrity() -> None:

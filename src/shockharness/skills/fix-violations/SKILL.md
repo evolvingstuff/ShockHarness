@@ -47,7 +47,7 @@ Each finding line is `path:line:col: RULE severity: message  [evidence]`; an
 `approximate`, `unresolved`) and, for `EXC001`, why no boundary applies.
 The `unknown:` trailer line counts unknown findings and names the families
 whose `fail_on_unknown` makes them gate. Also read the
-`config:` line (profile, deviations) and the `rules not implemented (not
+`config:` line (profile, deviations) and any `rules not implemented (not
 analyzed)` line, so you know what was not checked.
 
 ### 2. For each finding, identify the intended contract
