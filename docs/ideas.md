@@ -14,6 +14,7 @@ worth it yet), **declined** (with the reason).
 
 | Idea | Source | Status | Notes / next step |
 |---|---|---|---|
+| The hook misses edits made through the shell: in the under-the-gate experiment every builder (8 of 8) wrote its files with `cat > file <<EOF` and Python patch scripts, never Edit/Write, so the PostToolUse hook never fired | under-the-gate experiment (2026-10-17) | open | Match `Bash` too and analyze the source files `git status` shows as changed since the last hook run (slopwatch's hook works from git status); keep a per-session record of what was already reported so a long session is not re-told the same findings |
 | Edit-time feedback: run the checker on each file the agent edits, and have `skills install` offer it | Fable review; Tom ("the main product surface" on greenfield) | **done** (4583bee) | `shockharness hook claude-code post-edit`, `skills install --agent claude --hook`. Next: a Stop hook that blocks finishing while the *diff* has findings (needs a base revision; dunnit uses a Stop hook with exit 2) |
 | Separate "agent can fix" from "human must decide": a `decision: human` field on findings and a `shockharness questions` command listing the contract decisions a person must make | Fable review | open | The agent fixes the mechanical findings, then stops with a short list of questions instead of inventing contracts |
 | Treat remediation text as prompts: evaluate whether each wording produces the right fix or a workaround, A/B in the eval corpus | Fable review | open | Needs the behavior suite first |
