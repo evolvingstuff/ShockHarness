@@ -4117,3 +4117,18 @@ defect: contactclean r3 pads short rows with `""` and silently drops all-empty r
 spec says to reject. Recommendations are rows in `docs/ideas.md` (decision 35, drafted in
 `docs/proposal-gate-loosening.md`: tests exempt by default, overrides need sign-off; MAGIC001 seeing numbers in other forms, data files next to tests, MAGIC001 in
 tests, padding external records, I/O-failure skill wording, `SystemExit` subclasses).
+
+## Decision 35: tests exempt by default, no rule switched off unasked — ACCEPTED, not built (2026-10-17)
+
+Drafting the sign-off design for round 2's overrides showed they were the test exemption
+six shipped skills recommend and ShockHarness's own configuration has, while `init` and
+the experiment's configuration leave it out. Tom's answers (`docs/proposal-gate-loosening.md`,
+spec 21.1 decision 35):
+1. `init` and `skills install` write the test exemption; the bundled default changes
+   only after a measurement.
+2. Every loosening except a catch boundary naming one file is "switching a rule off";
+   a glob boundary counts.
+3. A person committing the change is approval; `--lock` is opt-in.
+4. Rule-switching VERIFY003 findings are errors in CI.
+
+The round-2 write-up is corrected: those two overrides are not evasions.

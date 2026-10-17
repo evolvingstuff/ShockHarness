@@ -1,7 +1,8 @@
-# Proposal: tests exempt by default, and no rule switched off unasked (decision 35, draft)
+# Decision 35: tests exempt by default, and no rule switched off unasked
 
-Status: **draft, waiting on Tom.** From the under-the-gate experiment, round 2
-(`evals/under-the-gate/RESULTS-round2.md`, finding 3). Nothing here is built.
+Status: **accepted (Tom, 2026-10-17), not built.** From the under-the-gate experiment,
+round 2 (`evals/under-the-gate/RESULTS-round2.md`, finding 3). Tom's answers are under
+"Decisions" below.
 
 ## What happened
 
@@ -60,7 +61,7 @@ Options:
   wants tests held to the full standard adds `test` back, which is a tightening. This
   changes the strict profile for everyone, so it needs the measurement below first.
 
-**Recommendation: (a) now, then (b) if the measurement supports it.** (a) is one change
+**Decided: (a) now; (b) only if the measurement supports it.** (a) is one change
 to `init` and `skills install`, plus wording in the six skills ("`init` has done this").
 It only puts our own practice where new projects get it.
 
@@ -103,8 +104,11 @@ The 12 gated configurations held 32 deviation lines: 30 catch boundaries and 2 o
   No finding's remediation asks for any of these. `loosening.py` already detects each
   one.
 
-Part 2 only concerns the second kind. Narrowing a boundary to one function is a
-separate idea in the backlog.
+Part 2 only concerns the second kind, plus one kind of boundary: a boundary whose
+`path` is a glob (it contains `*`, `?` or `[`) covers many files. That is close to
+switching EXC001 off for them, so it counts as switching a rule off. A boundary naming
+one file does not. Round 2's 29 boundary paths all named one file. Narrowing a boundary
+to one function is a separate idea in the backlog.
 
 ### What a local check can and cannot do
 
@@ -129,7 +133,7 @@ configuration**:
   project, like the experiment's builds).
 
 Every rule-switching change relative to that is a **VERIFY003 error**, so the gate
-fails. Boundaries are not counted. The hook feeds it back right after the edit. The
+fails. Boundaries naming one file are not counted. The hook feeds it back right after the edit. The
 message says what to do:
 
 > VERIFY003 .shockharness.toml: overrides[0] disables MAGIC001, DEF001 for file role(s)
@@ -173,25 +177,24 @@ With both parts:
 * all 12 builds would have started with the test exemption;
 * neither override would have been needed;
 * any override would have been fed back as an error the moment it was written;
-* none of the 30 boundaries would have been flagged.
+* none of the 30 boundaries would have been flagged (none uses a glob).
 
 The next round would show whether the test-value disguises in finding 4 go away. Not
 built, so not run. The check is cheap: re-run `check` on the 12 trees in
 `evals/under-the-gate/round2/builds/`.
 
-## Questions for Tom
+## Decisions (Tom, 2026-10-17)
 
-1. **Tests.** Part 1 (a) now (`init` and `skills install` write the test exemption),
-   and (b) (the bundled default) only after the measurement?
-2. **The split.** Do boundaries stay outside the sign-off, with only rule-switching
-   changes needing it? Or should a boundary covering a whole directory (a `**` glob)
-   count as switching a rule off?
-3. **Approval.** Is "a person commits it" enough as the default, with `--lock` opt-in?
-   Or should `skills install --hook` lock by default?
-4. **CI.** Raise rule-switching VERIFY003 findings to `error` by default? This changes
-   decision 9 for this one class.
+1. **Tests:** part 1 (a). `init` and `skills install` write the test exemption. The
+   bundled default (b) changes only if the measurement supports it.
+2. **The split:** boundaries naming one file stay outside the sign-off. A boundary whose
+   path is a glob counts as switching a rule off.
+3. **Approval:** a person committing the change is approval. `skills install --hook
+   --lock` is opt-in.
+4. **CI:** rule-switching VERIFY003 findings are `error` by default. This narrows decision
+   9 for this class only. Workflow and baseline findings stay `warning`.
 
-## Work, once agreed
+## Work
 
 **Part 1 (a):**
 * `init` and `skills install` write the exemption;
@@ -200,7 +203,8 @@ built, so not run. The check is cheap: re-run `check` on the 12 trees in
 * re-run the experiment's gated configuration with it.
 
 **Part 2:**
-* `loosening.py` tags each loosening as remedy (boundary) or rule-switching.
+* `loosening.py` tags each loosening as remedy (a boundary naming one file) or
+  rule-switching (everything else, glob boundaries included).
 * The VERIFY003 comparison: the accepted-configuration lookup (merge base, `HEAD`, or the
   profile), reusing the revision snapshot `diff` already takes. Then run it in `check`
   and the hook.
@@ -209,7 +213,7 @@ built, so not run. The check is cheap: re-run `check` on the 12 trees in
 * The CI severity default and a changelog note.
 * Tests:
   * an override added after the last commit fails `check` and is fed back by the hook;
-  * a boundary does not;
+  * a one-file boundary does not; a glob boundary does;
   * a committed override passes locally and still fails `gate --base`;
   * there is no commit;
   * `--lock`.
