@@ -10,7 +10,8 @@ Syntax only:
   declared inside the clause. Nested functions, arrows, methods and classes are skipped;
 * **placeholders**: ``throw new SomeError("not implemented")`` where the constructor name
   ends in ``Error`` and the first argument is a string saying "not implemented", "not yet
-  implemented", "unimplemented" or starting with "TODO" (any case);
+  implemented", "unimplemented", or starting with a TODO marker: ``TODO`` in capitals, or
+  ``todo`` in any case followed by ``:`` or ``(`` (not ``"Todo toggle missing"``, a name);
 * **Boolean arguments**: a ``true``/``false`` literal passed positionally to a call with
   more than one argument and no spread;
 * **import-time calls**: calls in the module's top level, class static blocks and static
@@ -73,7 +74,10 @@ COMMENT = "comment"
 FIELDS = frozenset({"field_definition", "public_field_definition"})
 STATIC = "static"
 ERROR_SUFFIX = "Error"
-NOT_IMPLEMENTED = re.compile(r"\bnot\s+(yet\s+)?implemented\b|\bunimplemented\b|^\s*todo\b", re.I)
+NOT_IMPLEMENTED = re.compile(
+    r"\bnot\s+(yet\s+)?implemented\b|\bunimplemented\b|^\s*todo\s*[:(]", re.I
+)
+TODO_MARKER = re.compile(r"^\s*TODO\b")
 
 
 def _excerpt(node: Node) -> str:
@@ -171,7 +175,9 @@ def _not_implemented(throw: Node) -> bool:
     if len(arguments) == 0:
         return False
     message = _string_value(arguments[0])
-    return message is not None and NOT_IMPLEMENTED.search(message) is not None
+    if message is None:
+        return False
+    return NOT_IMPLEMENTED.search(message) is not None or TODO_MARKER.match(message) is not None
 
 
 def _scope_name(node: Node, scope: str) -> str:

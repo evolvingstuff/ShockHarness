@@ -253,6 +253,10 @@ allowed = []
 enabled = true
 severity = "warning"
 roles = ["production"]
+# Scripts do their work at the top level: IMPORT001 does not apply to a file whose first
+# line is a shebang (#!), nor to a file these globs match that no analyzed file imports.
+# Adding a glob is a policy deviation.
+script_files = ["scripts/**", "bin/**"]
 # Qualified callees that must not run at import time; removing one is a policy deviation.
 python_operations = [
   "subprocess.run",

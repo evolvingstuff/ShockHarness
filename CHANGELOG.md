@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (feedback)
+- STUB001: a JavaScript error message is a TODO placeholder only when it opens
+  with `TODO` in capitals or `todo` followed by `:` or `(`; `"Todo toggle
+  missing"` (a name) no longer is. `rules.stubs.markers` match only a comment
+  line that opens with the marker, not the word inside a sentence.
+- IMPORT001 does not apply to scripts run directly: a file whose first line is a
+  shebang, or one the new `rules.import_effects.script_files` (`scripts/**`,
+  `bin/**`; adding a glob is a deviation) matches that no analyzed file imports.
+  The exemption is listed in `files[].rules_disabled` (origin `script`).
+
 ### Fixed
 - A Python file with a very long expression (about 1000 terms or more, such as a
   long string concatenation) crashed the analysis with an internal error (exit

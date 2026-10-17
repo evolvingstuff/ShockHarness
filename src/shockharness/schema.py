@@ -311,6 +311,7 @@ CONFIG_SCHEMA = TableField(
                         **GUARDRAIL_COMMON,
                         "python_operations": ListField(StrField(allow_empty=False)),
                         "javascript_operations": ListField(StrField(allow_empty=False)),
+                        "script_files": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

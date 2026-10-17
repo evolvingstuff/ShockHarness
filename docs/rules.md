@@ -774,8 +774,12 @@ approve.
 is reported in any function: `NotImplemented` is not an exception, and raising
 it is a `TypeError`. A function whose body is only a docstring is not reported
 (it needs a `pass` or `...`); empty JavaScript functions are not reported
-(no-op callbacks are idiomatic). `rules.stubs.markers` (empty by default) adds
-comments containing a listed word (`["TODO", "FIXME"]`, matched as whole words).
+(no-op callbacks are idiomatic). A JavaScript message starts with a TODO
+marker when it opens with `TODO` in capitals or with `todo` (any case) followed
+by `:` or `(`; `"Todo toggle missing"` names a component and is not one.
+`rules.stubs.markers` (empty by default) adds comment lines that open with a
+listed word (`["TODO", "FIXME"]`; `# TODO: x`, `// FIXME`, ` * TODO(a)`), not
+the same word inside a sentence.
 
 **STUB002.** Python: the module of every `import` / `from ... import` is
 compared with `rules.stubs.mock_modules` (the module itself or one below it,
@@ -822,6 +826,12 @@ and static field initializers), not under `if __name__ == "__main__":` or
 `rules.import_effects.python_operations` / `javascript_operations`. An
 unresolved framework call (`app.run()`, `server.listen()`) is not reported;
 calls reached through a function called at import time are not followed.
+Scripts do their work at the top level, so IMPORT001 does not apply to a file
+whose first line is a shebang (`#!`), nor to one that
+`rules.import_effects.script_files` (`scripts/**`, `bin/**`) matches and that no
+analyzed file imports through a resolved module edge (a script another module
+imports runs its effects there, and stays reported). The exemption is listed in
+`files[].rules_disabled` with origin `script`.
 
 ### ASYNC001-ASYNC003: async lifecycle (H4; warning)
 

@@ -561,6 +561,7 @@ GUARDRAIL_PERMISSIONS = (
     ("boolean_arguments", "allowed_callees"),
     ("async_lifecycle", "supervisors"),
     ("role_integrity", "support_files"),
+    ("import_effects", "script_files"),
     ("input", "python_validators"),
     ("input", "javascript_validators"),
 )
@@ -593,12 +594,13 @@ SINK_ENTRY = re.compile(r"[^:\s]+:[0-9]+")
 
 
 def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
-    """ROLE001's support globs and H6's sink entries."""
+    """ROLE001's support globs, IMPORT001's script globs and H6's sink entries."""
     issues: list[ConfigIssue] = []
-    for index, pattern in enumerate(rules["role_integrity"]["support_files"]):
-        problem = validate_glob(pattern)
-        if problem is not None:
-            issues.append(ConfigIssue(f"rules.role_integrity.support_files[{index}]", problem))
+    for section, key in (("role_integrity", "support_files"), ("import_effects", "script_files")):
+        for index, pattern in enumerate(rules[section][key]):
+            problem = validate_glob(pattern)
+            if problem is not None:
+                issues.append(ConfigIssue(f"rules.{section}.{key}[{index}]", problem))
     issues.extend(_sink_issues(rules["input"]))
     return issues
 

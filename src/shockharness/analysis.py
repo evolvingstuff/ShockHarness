@@ -23,7 +23,12 @@ from typing import Any
 from shockharness.cache.codec import from_plain, to_plain
 from shockharness.cache.store import FileCache
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
-from shockharness.complexity.callgraph import CallGraph, ModuleInput, build_call_graph
+from shockharness.complexity.callgraph import (
+    CONFIDENCE_RESOLVED,
+    CallGraph,
+    ModuleInput,
+    build_call_graph,
+)
 from shockharness.complexity.metrics import UnitMetrics, measure_units
 from shockharness.config import UNSUPPORTED_FAIL, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
@@ -62,6 +67,9 @@ FAILURE_STATUSES = frozenset(
 ORIGIN_CONFIG = "config"
 ORIGIN_OVERRIDE = "override"
 ORIGIN_CONFIGURATION_FILE = "configuration_file"
+ORIGIN_SCRIPT = "script"
+SHEBANG = "#!"
+FIRST_LINE_NUMBER = 1
 
 COMPLEXITY_SECTION = "complexity"
 UNIT_RULES = (
@@ -238,6 +246,54 @@ def _disabled_rules(
     return tuple(disabled[key] for key in sorted(disabled))
 
 
+def _script_disable(
+    source: SourceText, disabled: tuple[RuleDisable, ...]
+) -> tuple[RuleDisable, ...]:
+    """IMPORT001 does not apply to a script run directly: its first line is a shebang."""
+    if any(d.rule_id == registry.IMPORT001.rule_id for d in disabled):
+        return disabled
+    if not source.line_text(FIRST_LINE_NUMBER).startswith(SHEBANG):
+        return disabled
+    reason = "a script run directly (#! on line 1) does its work at the top level"
+    return (*disabled, RuleDisable(registry.IMPORT001.rule_id, reason, ORIGIN_SCRIPT))
+
+
+def _unimported_scripts(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph
+) -> list[PendingFile]:
+    """IMPORT001 does not apply to a file rules.import_effects.script_files matches that
+    no other analyzed file imports (through a resolved module edge)."""
+    globs = config.section(registry.IMPORT_EFFECTS_SECTION)["script_files"]
+    scripts = compile_globset([str(g) for g in globs])
+    imported = {
+        edge.target
+        for edge in graph.module_edges
+        if edge.confidence == CONFIDENCE_RESOLVED
+        and edge.target is not None
+        and edge.target != edge.source
+    }
+    updated: list[PendingFile] = []
+    for pending in pendings:
+        exempt = (
+            registry.IMPORT001.rule_id in pending.rules_applied
+            and scripts.matches(pending.path)
+            and pending.path not in imported
+        )
+        updated.append(_without_import001(pending) if exempt else pending)
+    return updated
+
+
+def _without_import001(pending: PendingFile) -> PendingFile:
+    rule = registry.IMPORT001.rule_id
+    reason = "a script (rules.import_effects.script_files) that no analyzed file imports"
+    return replace(
+        pending,
+        rules_applied=tuple(r for r in pending.rules_applied if r != rule),
+        rules_disabled=(*pending.rules_disabled, RuleDisable(rule, reason, ORIGIN_SCRIPT)),
+        findings=tuple(f for f in pending.findings if f.rule_id != rule),
+    )
+
+
 def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) -> bool:
     """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
     scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
@@ -369,7 +425,7 @@ def prepare_text(
     source = SourceText.from_text(text)
     facts = _extract(language, source, relative_path)
     role = file_role(relative_path, config)
-    disabled = _disabled_rules(relative_path, role, config)
+    disabled = _script_disable(source, _disabled_rules(relative_path, role, config))
     disabled_ids = {d.rule_id for d in disabled}
 
     if facts.parse_failure is not None:
@@ -710,11 +766,13 @@ def complete(
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
-    graph_rules = (*ASYNC_RULES, registry.ROLE001, registry.INPUT001)
+    graph_rules = (*ASYNC_RULES, registry.ROLE001, registry.INPUT001, registry.IMPORT001)
     if graph is None and any(
         rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
     ):
         graph = build_call_graph(_module_inputs(pendings))
+    if graph is not None:
+        pendings = _unimported_scripts(pendings, config, graph)
     asynchrony = async_findings(pendings, config, graph)
     roles = role_findings(pendings, config, graph)
     inputs = input_findings(pendings, config, graph)

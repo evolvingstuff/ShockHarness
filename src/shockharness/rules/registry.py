@@ -1259,8 +1259,10 @@ STUB001 = RuleSpec(
         "... and a docstring. Not reported: functions decorated @abstractmethod or @overload, "
         "and every method of a class deriving from ABC or Protocol or using ABCMeta. "
         "JavaScript: throw new XError('...') where the constructor name ends in Error and the "
-        "message says not implemented, not yet implemented, unimplemented, or starts with "
-        "TODO. Both: a comment containing one of rules.stubs.markers (none by default). Only "
+        "message says not implemented, not yet implemented, unimplemented, or starts with a "
+        "TODO marker (TODO in capitals, or todo followed by : or (; not 'Todo toggle "
+        "missing', a name). Both: a comment line that opens with one of rules.stubs.markers "
+        "(none by default). Only "
         "in files whose role is in rules.stubs.roles (production by default). Exact."
     ),
     limitations=(
@@ -1467,7 +1469,10 @@ IMPORT001 = RuleSpec(
         "or javascript_operations (subprocess, os.system, socket, threading.Thread, "
         "urllib/requests/httpx requests, asyncio.run, shutil.rmtree, os.remove; "
         "child_process, fetch, fs deletion and writes, net connections, setInterval). Not under "
-        "if __name__ == '__main__' or if TYPE_CHECKING. Only in files whose role is in "
+        "if __name__ == '__main__' or if TYPE_CHECKING. Not in a script run directly: a file "
+        "whose first line is a shebang, or one rules.import_effects.script_files matches "
+        "(scripts/**, bin/**) that no analyzed file imports; the exemption is listed in "
+        "files[].rules_disabled. Only in files whose role is in "
         "rules.import_effects.roles. Exact for the listed operations."
     ),
     limitations=(

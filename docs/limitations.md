@@ -328,7 +328,10 @@ Stated so that a clean report is never read as more than it is.
   through the file's own imports; framework calls on objects (`app.run()`,
   `server.listen()`) and effects reached through a function called at import
   time are not reported. A local function that shadows a global such as `fetch`
-  is still matched.
+  is still matched. The script exemption trusts a shebang even in a file that
+  is also imported, and decides "nothing imports it" from resolved module edges
+  among the analyzed files only (a `runpy` or subprocess invocation is not an
+  import).
 * JavaScript has no removable `assert`, so `ASSERT001` is Python only; empty
   JavaScript functions are not `STUB001` findings.
 

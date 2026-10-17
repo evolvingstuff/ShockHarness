@@ -133,7 +133,12 @@ def _stub001(
         )
     markers = [str(m) for m in settings["markers"]]
     if len(markers) > 0:
-        pattern = re.compile(r"\b(" + "|".join(re.escape(m) for m in markers) + r")\b")
+        # A marker opens a comment line (`# TODO: x`, `// FIXME`, ` * TODO(a)`), after the
+        # comment syntax; the same word inside a sentence is not one.
+        pattern = re.compile(
+            r"^\s*(?:#+|//+|/\*+|\*+)?\s*(" + "|".join(re.escape(m) for m in markers) + r")\b",
+            re.M,
+        )
         for comment in facts.comments:
             match = pattern.search(comment.text)
             if match is not None:

@@ -662,6 +662,7 @@ severity = "warning"
 roles = ["production"]
 python_operations = ["subprocess.run", "os.system", "socket.socket", "requests.get", ...]
 javascript_operations = ["child_process.exec", "fs.rmSync", "fetch", "setInterval", ...]
+script_files = ["scripts/**", "bin/**"]    # scripts IMPORT001 skips when nothing imports them
 ```
 
 The full lists are in the bundled `defaults.toml` (`shockharness config
@@ -672,12 +673,13 @@ switch and `severity` cap) and applies to every role.
 |---|---|---|
 | `severity` | the severity of every finding of the section's rules, as in `rules.verification`: `warning` by default (`review` for BOOL001, decision 9), `error` to gate | lowered to `review` |
 | `roles` | the file roles the rules apply to; a rule is not applied to (and not listed in `rules_applied` of) a file of another role | a default role is removed |
-| `markers` | STUB001 also reports comments containing one of these whole words | never (adding tightens) |
+| `markers` | STUB001 also reports comment lines that open with one of these words | never (adding tightens) |
 | `test_path_segments`, `mock_modules` | what STUB002 treats as test code | an entry is removed |
 | `allow_type_narrowing` | ASSERT001 skips asserts that only narrow types | never (`false` tightens) |
 | `allowed_callees` | BOOL001 skips calls whose last callee segment is listed | an entry is added |
 | `allowed` | STATE001 skips `name` in files matching `path` | always, one line per entry, with its `reason` |
 | `python_operations`, `javascript_operations` | the qualified callees IMPORT001 reports at import time | an entry is removed |
+| `script_files` | globs of scripts IMPORT001 skips when no analyzed file imports them (a shebang file is always skipped) | a glob is added |
 
 The same loosenings are what `VERIFY003` reports in a revision diff and what a
 `--policy` file protects.

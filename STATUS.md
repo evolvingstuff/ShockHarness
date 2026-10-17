@@ -3596,3 +3596,29 @@ of its cases fail against the previous code. Self-diff in a scratch clone agains
 (H6 part one): `gate: PASS (exit 0)`, no complexity regressions; its one new
 finding is the intended VERIFY003 report of the new `RecursionError` boundary in
 `.shockharness.toml` (an approved catch is a loosening, and is meant to be seen).
+
+## Feedback: STUB001 TODO markers and IMPORT001 scripts — DONE (2026-10-16)
+
+From an agent working on MetaList; two sources of noise, no new rule.
+
+* **STUB001.** A JavaScript `throw new Error("...")` was a placeholder when the
+  message started with "todo" in any case, so `"Todo toggle missing ..."` (a
+  component name) was reported. The message now has to open with `TODO` in
+  capitals, or `todo` in any case followed by `:` or `(`. The opt-in
+  `rules.stubs.markers` now match only a comment line that opens with the
+  marker (after `#`, `//`, `/*` or `*`), not the word inside a sentence.
+* **IMPORT001.** Scripts do their work at the top level. The rule no longer
+  applies to a file whose first line is a shebang (decided per file), nor to a
+  file the new `rules.import_effects.script_files` (`scripts/**`, `bin/**`)
+  matches that no analyzed file imports through a resolved module edge (decided
+  in the cross-file phase, with the module graph). A script another module
+  imports stays reported: its effects run in the importer. Each exemption is in
+  `files[].rules_disabled` with origin `script`; adding a glob is a deviation.
+
+Evidence: `tests/unit/test_guardrails.py` gains the message shapes, a sentence
+comment, and a tree with a shebang script, a JavaScript bin script, an
+unimported and an imported `scripts/` file. 1133 tests pass on CPython 3.14 and
+3.11.11; the self-gate passes; verdicts against 0.6.0 are identical on the
+self-scan, the golden fixtures and both examples, in all three profiles (none of
+them has a TODO-shaped message or a script); self-diff against ed8881b: no new
+findings, no complexity regressions (after splitting the script filter).

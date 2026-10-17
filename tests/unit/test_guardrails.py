@@ -1,10 +1,12 @@
 """H3 guardrails: EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001."""
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from shockharness.analysis import CACHE_BYPASSED, AnalysisOptions, FileResult, analyze_text
+from shockharness.api import analyze_paths
 from shockharness.config import EffectiveConfig
 from shockharness.errors import ConfigError
 
@@ -131,12 +133,18 @@ def test_stub001_javascript_not_implemented_throws(strict_config: EffectiveConfi
         'export function e() { throw new Error("implemented elsewhere"); }\n'
         'export function f() { throw new Failure("not implemented"); }\n'
         "export function g() {}\n"
+        'export function h() { throw new Error("Todo toggle missing from the toolbar"); }\n'
+        'export function i() { throw new Error("todo(alice): later"); }\n'  # 9
+        'export function j() { throw new Error("TODO"); }\n'  # 10
     )
-    assert [r[1] for r in rows(run(strict_config, "src/a.js", text))] == [1, 2, 3, 4]
+    assert [r[1] for r in rows(run(strict_config, "src/a.js", text))] == [1, 2, 3, 4, 9, 10]
 
 
 def test_stub001_markers_are_opt_in(make_config: Callable[[str], EffectiveConfig]) -> None:
-    text = "x = compute()  # TODO: remove\ny = other()  # TODOS are fine\n# FIXME later\n"
+    text = (
+        "x = compute()  # TODO: remove\ny = other()  # TODOS are fine\n# FIXME later\n"
+        "z = 1  # calls the TODO service, not a marker\n"
+    )
     assert rows(run(make_config(""), "src/a.py", text)) == []
     config = make_config('[tool.shockharness.rules.stubs]\nmarkers = ["TODO", "FIXME"]\n')
     assert rows(run(config, "src/a.py", text)) == [
@@ -333,6 +341,41 @@ def test_import001_operations_are_configurable(
     assert any(
         "python_operations no longer lists 'subprocess.run'" in d for d in narrowed.deviations
     )
+
+
+def test_import001_skips_scripts_run_directly(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    effect = "import subprocess\nsubprocess.run(['make'], check=True)\n"
+    files = {
+        "tools.py": "#!/usr/bin/env python3\n" + effect,  # a shebang
+        "bin/cli.mjs": '#!/usr/bin/env node\nimport { execSync } from "node:child_process";\n'
+        'execSync("ls");\n',
+        "scripts/__init__.py": "",
+        "scripts/build.py": effect,  # nothing imports it
+        "scripts/shared.py": effect,  # app/use.py imports it: its effects run there
+        "app/__init__.py": "",
+        "app/use.py": "from scripts import shared\n",
+        "app/eager.py": effect,
+    }
+    for name, body in files.items():
+        (empty_root / name).parent.mkdir(parents=True, exist_ok=True)
+        (empty_root / name).write_text(body, encoding="utf-8")
+    report = analyze_paths([empty_root], empty_root, make_config(""), OPTIONS)
+    found = [(f.path, f.span.line) for f in report.findings if f.rule_id == "IMPORT001"]
+    assert found == [("app/eager.py", 2), ("scripts/shared.py", 2)]
+    exempt = {
+        file.path: disable.reason
+        for file in report.files
+        for disable in file.rules_disabled
+        if disable.rule_id == "IMPORT001"
+    }
+    assert exempt["tools.py"].startswith("a script run directly (#! on line 1)")
+    assert exempt["bin/cli.mjs"].startswith("a script run directly")
+    assert exempt["scripts/build.py"].startswith("a script (rules.import_effects.script_files)")
+    assert "scripts/shared.py" not in exempt
+    widened = make_config('[tool.shockharness.rules.import_effects]\nscript_files = ["tools/**"]\n')
+    assert any("script_files also permits 'tools/**'" in d for d in widened.deviations)
 
 
 # -- configuration -----------------------------------------------------------------------
