@@ -2028,7 +2028,6 @@ ROLE001 = RuleSpec(
 
 INPUT_SECTION = "rules.input"
 INPUT_FAMILY = "input"
-DATAFLOW_SECTIONS = (INPUT_SECTION,)
 
 INPUT001 = RuleSpec(
     rule_id="INPUT001",
@@ -2132,6 +2131,105 @@ INPUT002 = RuleSpec(
     ),
 )
 
+# --- H6 part two: cross-site consistency (decisions 20, 21, 29) ---------------------------
+
+CONSISTENCY_SECTION = "rules.consistency"
+CONSISTENCY_FAMILY = "consistency"
+DATAFLOW_SECTIONS = (INPUT_SECTION, CONSISTENCY_SECTION)
+
+PROV001 = RuleSpec(
+    rule_id="PROV001",
+    version="1",
+    name="made-up identifier where identifiers are issued",
+    family=CONSISTENCY_FAMILY,
+    config_section=CONSISTENCY_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A function's parameter is filled with an identifier the program issued "
+        "(store.start_run(), createSession()) at some call sites and with a freshly made one "
+        "(uuid4(), crypto.randomUUID()) at another: the made-up identifier names nothing the "
+        "program knows."
+    ),
+    rationale=(
+        "An agent that does not find where an identifier comes from invents one: the call "
+        "type-checks and runs, and the record it refers to does not exist. The other call "
+        "sites already show where the identifier should come from."
+    ),
+    guarantees=(
+        "Call sites of one project function, resolved through the call graph (resolved and "
+        "probable sites, in files whose role is in rules.consistency.roles). An argument is "
+        "issued when its value comes, as INPUT001 follows values (attributes, str(...), "
+        "helper functions up to rules.input.max_depth crossings), from a call whose name "
+        "opens with one of rules.consistency.issuer_prefixes (start, create, new, register, "
+        "open, begin, issue, allocate, insert); fabricated when it comes from "
+        "rules.consistency.python_fabricators / javascript_fabricators (uuid.uuid4, "
+        "secrets.token_hex, crypto.randomUUID, uuid.v4, nanoid). A fabricated-only argument "
+        "is reported when another site passes an issued one for the same parameter."
+    ),
+    limitations=(
+        "Intent is not known: a parameter that legitimately accepts both (a new record or an "
+        "existing one) is reported too. Issuers are recognized by name only; an identifier "
+        "that arrives as the caller's parameter is not classified."
+    ),
+    remediation=(
+        "Use the identifier the program issued (start the run, create the record, and pass "
+        "what that returned). If a new identifier is really wanted, create it where the "
+        "other identifiers come from."
+    ),
+    noncompliant_example=(
+        "run = store.start_run()\nrecord(run.id, step)\n...\nrecord(str(uuid4()), step)"
+    ),
+    compliant_example="run = store.start_run()\nrecord(run.id, step)",
+)
+
+GUARD001 = RuleSpec(
+    rule_id="GUARD001",
+    version="1",
+    name="call left unguarded where most sites guard it",
+    family=CONSISTENCY_FAMILY,
+    config_section=CONSISTENCY_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "Most call sites of a function check their argument first (if has_hash(x): "
+        "remove_hash(x)), and this one does not."
+    ),
+    rationale=(
+        "When nearly every caller guards an operation, the operation probably fails without "
+        "the guard; the caller that forgot it fails on exactly the input the others "
+        "anticipated."
+    ),
+    guarantees=(
+        "Call sites of one project function, resolved through the call graph (resolved and "
+        "probable, in files whose role is in rules.consistency.roles), that pass a first "
+        "argument. A site is guarded by g when g(...) with the same first argument (by text) "
+        "holds where the call runs: inside if g(x) / if (g(x)), after if not g(x): return / "
+        "raise / continue / break (and the JavaScript equivalents), after assert g(x), and "
+        "through and / && (and not ... or not ...). When at least "
+        "rules.consistency.guard_min_sites (3) sites exist and at least guard_min_percent "
+        "(75) of them are guarded, the sites with no guard on that argument are reported "
+        "(any check counts: isdir where the others use exists); the message names the most "
+        "common guard."
+    ),
+    limitations=(
+        "Guards are recognized as calls on the same argument text: a check through another "
+        "variable, a try/except around the call, or a check in the caller's caller is not "
+        "seen. The rule cannot know that the operation fails without the guard."
+    ),
+    remediation=(
+        "Add the check the other callers make, or handle the failure the operation raises; "
+        "if this site cannot reach the failing case, say why in a comment."
+    ),
+    noncompliant_example=(
+        "if store.has_hash(note.id):\n    store.remove_hash(note.id)\n...\n"
+        "store.remove_hash(note.id)  # the third caller forgot the check"
+    ),
+    compliant_example="if store.has_hash(note.id):\n    store.remove_hash(note.id)",
+)
+
 
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
@@ -2185,6 +2283,8 @@ RULES: tuple[RuleSpec, ...] = (
     ROLE001,
     INPUT001,
     INPUT002,
+    PROV001,
+    GUARD001,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -2239,6 +2339,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "batches": CATEGORY_CONTRACT,
     ROLE_INTEGRITY_FAMILY: CATEGORY_POLICY,
     INPUT_FAMILY: CATEGORY_CONTRACT,
+    CONSISTENCY_FAMILY: CATEGORY_CONTRACT,
 }
 
 

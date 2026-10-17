@@ -522,6 +522,7 @@ GUARDRAIL_RULES = {
     "batches": "BATCH001",
     "role_integrity": "ROLE001",
     "input": "INPUT001",
+    "consistency": "PROV001, GUARD001",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -556,6 +557,10 @@ GUARDRAIL_CATALOGS = (
     ("input", "javascript_sinks"),
     ("input", "python_config_reads"),
     ("input", "javascript_config_reads"),
+    ("consistency", "roles"),
+    ("consistency", "python_fabricators"),
+    ("consistency", "javascript_fabricators"),
+    ("consistency", "issuer_prefixes"),
 )
 TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
@@ -579,7 +584,11 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
                 f"rules.{section}.severity is 'review'; {rule_ids} findings are reported as review"
             )
     found.extend(_guardrail_list_deviations(rules, strict))
-    found.extend(_input_deviations(rules["input"], strict["input"]))
+    found.extend(
+        _input_deviations(
+            rules["input"], strict["input"], rules["consistency"], strict["consistency"]
+        )
+    )
     for key in TYPE_SWITCHES:
         if rules["types"][key] is False and strict["types"][key] is True:
             found.append(f"rules.types.{key} is false; TYPE001 does not report that escape hatch")
@@ -621,11 +630,23 @@ def _sink_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     return issues
 
 
-def _input_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
-    """H6: INPUT002's own severity lowered to review, and a shallower INPUT001 search."""
+def _input_deviations(
+    rules: Mapping[str, Any],
+    strict: Mapping[str, Any],
+    consistency: Mapping[str, Any],
+    strict_consistency: Mapping[str, Any],
+) -> list[str]:
+    """H6: INPUT002's own severity lowered to review, a shallower INPUT001 search, and
+    GUARD001 thresholds raised."""
     found: list[str] = []
     if rules["input002_severity"] == REVIEW and strict["input002_severity"] != REVIEW:
         found.append("rules.input.input002_severity is 'review'; INPUT002 findings are review")
+    for key in ("guard_min_sites", "guard_min_percent"):
+        if consistency[key] > strict_consistency[key]:
+            found.append(
+                f"rules.consistency.{key} is {consistency[key]} (strict: "
+                f"{strict_consistency[key]}); GUARD001 asks for more agreement before it reports"
+            )
     if rules["max_depth"] < strict["max_depth"]:
         found.append(
             f"rules.input.max_depth is {rules['max_depth']} (strict: {strict['max_depth']}); "

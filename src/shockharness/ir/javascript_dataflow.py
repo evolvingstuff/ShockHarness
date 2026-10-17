@@ -36,6 +36,7 @@ from shockharness.ir.model import (
     ORIGIN_READ,
     DataflowFacts,
     FlowCall,
+    FlowGuard,
     FlowRead,
     FlowReturn,
     FlowStore,
@@ -66,6 +67,10 @@ DECLARED_FIELDS = {
 TESTING_OPERATORS = frozenset({"&&", "||", "??"})
 LOGICAL_ASSIGNMENTS = frozenset({"&&=", "||=", "??="})
 COMPARISONS = frozenset({"===", "!==", "==", "!=", "<", ">", "<=", ">=", "instanceof", "in"})
+NOT = "!"
+AND = "&&"
+JUNCTIONS = frozenset({AND, "||"})
+EXITS = frozenset({"return_statement", "throw_statement", "continue_statement", "break_statement"})
 TESTING = "testing"
 COMPARING = "comparing"
 COMBINING = "combining"
@@ -197,6 +202,7 @@ class _Unit:
         self.returns: list[FlowReturn] = []
         self.tested: set[str] = set()
         self.mentions: list[set[str]] = []
+        self.guards: list[FlowGuard] = []
         self.depth = 0
         self.truncated = False
 
@@ -251,14 +257,44 @@ class _Unit:
                     self.statements(_named(body))
 
     def statements(self, body: Iterable[Node]) -> None:
+        """A block; guards established in it (an early exit) end with it."""
         if not self.enter():
             return
+        held = len(self.guards)
         for statement in body:
             if statement.type in STATEMENTS:
                 STATEMENTS[statement.type](self, statement)
             elif statement.type not in NESTED_DECLARATIONS:
                 self.expr(statement)
+        del self.guards[held:]
         self.leave()
+
+    def guarded(self, node: Node | None, guards: Iterable[FlowGuard]) -> None:
+        """A branch that runs only while ``guards`` hold."""
+        held = len(self.guards)
+        self.guards.extend(guards)
+        self.branch(node)
+        del self.guards[held:]
+
+    def holding(self, test: Node | None, when_true: bool) -> list[FlowGuard]:
+        """The calls of ``test`` known to be true when ``test`` is ``when_true``."""
+        found: list[FlowGuard] = []
+        stack: list[tuple[Node, bool]] = []
+        if test is not None:
+            stack.append((test, when_true))
+        while len(stack) > 0:
+            node, truth = stack.pop()
+            if node.type in WRAPPERS:
+                stack.extend((child, truth) for child in _named(node))
+            elif node.type == "unary_expression" and _unary_operator(node) == NOT:
+                stack.extend((child, not truth) for child in _named(node))
+            elif node.type == "binary_expression" and _operator(node) in JUNCTIONS:
+                # `a && b` true: both are; `a || b` false: neither is.
+                if (_operator(node) == AND) == truth:
+                    stack.extend((child, truth) for child in _named(node))
+            elif node.type == "call_expression" and truth:
+                found.extend(_guard(node))
+        return found
 
     def block(self, node: Node | None) -> None:
         if node is None:
@@ -412,6 +448,8 @@ class _Unit:
                 receiver=_sorted(receiver),
                 arguments=arguments,
                 keywords=(),
+                first_argument=_first_argument(node),
+                guards=tuple(self.guards),
             )
         )
         return frozenset({origin(ORIGIN_CALL, len(self.calls) - 1)})
@@ -447,9 +485,56 @@ def _return(unit: _Unit, node: Node) -> None:
 
 
 def _if(unit: _Unit, node: Node) -> None:
-    unit.test(node.child_by_field_name("condition"))
-    unit.branch(node.child_by_field_name("consequence"))
-    unit.branch(node.child_by_field_name("alternative"))
+    condition = node.child_by_field_name("condition")
+    unit.test(condition)
+    consequence = node.child_by_field_name("consequence")
+    alternative = node.child_by_field_name("alternative")
+    unit.guarded(consequence, unit.holding(condition, when_true=True))
+    otherwise = unit.holding(condition, when_true=False)
+    unit.guarded(alternative, otherwise)
+    if alternative is None and _exits(consequence):
+        unit.guards.extend(otherwise)  # `if (!has(x)) return;` guards the rest
+
+
+def _exits(node: Node | None) -> bool:
+    """The branch ends by leaving: return, throw, continue or break."""
+    if node is None:
+        return False
+    last = node
+    if node.type == "statement_block":
+        statements = _named(node)
+        if len(statements) == 0:
+            return False
+        last = statements[len(statements) - 1]
+    return last.type in EXITS
+
+
+def _first_argument(call: Node) -> str:
+    arguments = call.child_by_field_name("arguments")
+    if arguments is None or arguments.type != "arguments":
+        return ""
+    given = _named(arguments)
+    if len(given) == 0:
+        return ""
+    return _excerpt(given[0])
+
+
+def _guard(call: Node) -> list[FlowGuard]:
+    function = call.child_by_field_name("function")
+    argument = _first_argument(call)
+    if function is None or argument == "":
+        return []
+    dotted = dotted_name(function)
+    if dotted is None:
+        return []
+    return [FlowGuard(dotted, argument)]
+
+
+def _unary_operator(node: Node) -> str:
+    operator = node.child_by_field_name("operator")
+    if operator is None:
+        return ""
+    return node_text(operator)
 
 
 def _loop(unit: _Unit, node: Node) -> None:

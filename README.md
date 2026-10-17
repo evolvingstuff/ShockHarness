@@ -102,6 +102,8 @@ Implemented rules:
 | `ROLE001` | a test-role file that production code imports, or that holds no test (in a diff: a file newly classified as a test) | warning / review |
 | `INPUT001` | request data reaching a shell, query, file path, redirect or `eval` without a validator, traced across functions | warning |
 | `INPUT002` | `os.getenv("X")` / `process.env.X` passed on, returned or stored with no check | review |
+| `PROV001` | a made-up identifier (`uuid4()`) where the other call sites pass one the program issued (`store.start_run()`) | review |
+| `GUARD001` | a call made without the check its other callers make first (`if has(x): remove(x)`) | review |
 
 ## Install
 

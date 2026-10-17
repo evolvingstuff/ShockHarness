@@ -434,6 +434,19 @@ Stated so that a clean report is never read as more than it is.
   unit's facts are marked truncated); long operator chains are flattened and
   never count against that depth.
 
+## PROV001, GUARD001 (H6 part two)
+
+* Intent is not known: a parameter that legitimately takes a new identifier or
+  an existing one is reported, and so is a call whose guard is unnecessary at
+  that site (the caller already knows the value is present).
+* Issuers are recognized by name; an identifier that arrives as the caller's own
+  parameter is not classified.
+* A guard is a call on the same argument text: a check through another variable
+  or attribute, a `try`/`except` around the call, a guard in the caller's caller,
+  or a comparison that is not a call (`if key in table:`) is not seen.
+* Only call sites the call graph resolves to one project function are compared;
+  method calls on objects the graph cannot type are not.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
@@ -451,15 +464,16 @@ Stated so that a clean report is never read as more than it is.
   ignored and shell commands built from data (`PROCESS001`), and since H-TS
   all of it for TypeScript too, with its type escapes (`TYPE001`), and since
   H6 request data reaching a shell, query, file path or redirect unvalidated
-  (`INPUT001`) and unchecked optional configuration reads (`INPUT002`).
+  (`INPUT001`), unchecked optional configuration reads (`INPUT002`), made-up
+  identifiers where issued ones are expected (`PROV001`) and calls left
+  unguarded where the other callers check (`GUARD001`).
 
 ## Not yet built (see the specification)
 
 `MAGIC002`, the
 remaining advanced-guardrail rules of specification section 21, per-function
 churn and rename following, change-impact radius,
-the H6 cross-site consistency rules (decisions 20 and 21), and `.gitignore`
-awareness. Unknown CLI commands are argparse
+and `.gitignore` awareness. Unknown CLI commands are argparse
 errors (exit 2). Profiles exist but are limited to the three built-in
 ones (no user-defined or remote profiles), and the only command-line overrides
 are `--profile` and `--parse-errors`. The publish workflow and the reusable

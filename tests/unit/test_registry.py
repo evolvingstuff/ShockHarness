@@ -81,6 +81,8 @@ def test_implemented_rules_are_exactly_the_h6_set() -> None:
         "ROLE001",
         "INPUT001",
         "INPUT002",
+        "PROV001",
+        "GUARD001",
     }
     assert {r.rule_id for r in registry.RULES if not r.implemented} == {"MAGIC002"}
 

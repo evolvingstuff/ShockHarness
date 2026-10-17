@@ -805,6 +805,24 @@ its own validator (`"app.validate.command"`). Command-line programs that take
 arguments from untrusted callers add `"sys.argv"`, `"input"` or
 `"process.argv"`.
 
+## Cross-site consistency (PROV001, GUARD001)
+
+```toml
+[tool.shockharness.rules.consistency]
+enabled = true
+severity = "review"
+roles = ["production"]
+python_fabricators = ["uuid.uuid4", "uuid.uuid1", "secrets.token_hex", "secrets.token_urlsafe"]
+javascript_fabricators = ["crypto.randomUUID", "uuid.v4", "uuid.v1", "nanoid.nanoid"]
+issuer_prefixes = ["start", "create", "new", "register", "open", "begin", "issue", "allocate", "insert"]
+guard_min_sites = 3
+guard_min_percent = 75
+```
+
+Removing a fabricator or an issuer word, and raising either GUARD001 threshold,
+are policy deviations. Values are followed across at most
+`rules.input.max_depth` function boundaries, as for INPUT001.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

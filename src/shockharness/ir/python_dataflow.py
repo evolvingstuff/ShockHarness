@@ -19,6 +19,7 @@ from shockharness.ir.model import (
     DataflowFacts,
     FlowAssert,
     FlowCall,
+    FlowGuard,
     FlowRead,
     FlowReturn,
     FlowStore,
@@ -225,6 +226,7 @@ class _Unit:
         self.tested: set[str] = set()
         self.asserts: list[FlowAssert] = []
         self.mentions: list[set[str]] = []
+        self.guards: list[FlowGuard] = []
         self.depth = 0
         self.truncated = False
 
@@ -251,11 +253,14 @@ class _Unit:
         )
 
     def statements(self, body: Iterable[ast.stmt]) -> None:
+        """A block; guards established in it (an early exit, an assert) end with it."""
         if not self.enter():
             return
+        held = len(self.guards)
         for statement in body:
             if type(statement) in STATEMENTS:
                 STATEMENTS[type(statement)](self, statement)
+        del self.guards[held:]
         self.leave()
 
     def branch(self, body: Iterable[ast.stmt]) -> None:
@@ -263,6 +268,31 @@ class _Unit:
         self.weak += 1
         self.statements(body)
         self.weak -= 1
+
+    def guarded(self, body: Iterable[ast.stmt], guards: Iterable[FlowGuard]) -> None:
+        """A branch that runs only while ``guards`` hold."""
+        held = len(self.guards)
+        self.guards.extend(guards)
+        self.branch(body)
+        del self.guards[held:]
+
+    def holding(self, test: ast.expr, when_true: bool) -> list[FlowGuard]:
+        """The calls of ``test`` known to be true when ``test`` is ``when_true``."""
+        found: list[FlowGuard] = []
+        stack: list[tuple[ast.expr, bool]] = [(test, when_true)]
+        while len(stack) > 0:
+            node, truth = stack.pop()
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+                stack.append((node.operand, not truth))
+            elif isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And) == truth:
+                # `a and b` true: both are; `a or b` false: neither is (so `not a or
+                # not b` false means both a and b are true).
+                stack.extend((value, truth) for value in node.values)
+            elif isinstance(node, ast.Call) and truth and len(node.args) > 0:
+                dotted = _dotted(node.func)
+                if dotted is not None:
+                    found.append(FlowGuard(dotted, _excerpt(self.source, node.args[0])))
+        return found
 
     def test(self, node: ast.expr) -> Origins:
         return self.tests(node)[0]
@@ -377,6 +407,9 @@ class _Unit:
             callee = dotted
         arguments = tuple(_sorted(self.expr(argument)) for argument in node.args)
         keywords = tuple(self.keyword(keyword) for keyword in node.keywords)
+        first = ""
+        if len(node.args) > 0:
+            first = _excerpt(self.source, node.args[0])
         self.calls.append(
             FlowCall(
                 span=node_span(self.source, node),
@@ -385,6 +418,8 @@ class _Unit:
                 receiver=_sorted(receiver),
                 arguments=arguments,
                 keywords=keywords,
+                first_argument=first,
+                guards=tuple(self.guards),
             )
         )
         return frozenset({origin(ORIGIN_CALL, len(self.calls) - 1)})
@@ -445,8 +480,18 @@ def _return(unit: _Unit, node: ast.stmt) -> None:
 def _if(unit: _Unit, node: ast.stmt) -> None:
     assert isinstance(node, ast.If | ast.While)
     unit.test(node.test)
-    unit.branch(node.body)
-    unit.branch(node.orelse)
+    unit.guarded(node.body, unit.holding(node.test, when_true=True))
+    otherwise = unit.holding(node.test, when_true=False)
+    unit.guarded(node.orelse, otherwise)
+    if isinstance(node, ast.If) and len(node.orelse) == 0 and _exits(node.body):
+        unit.guards.extend(otherwise)  # `if not has(x): return` guards the rest
+
+
+def _exits(body: list[ast.stmt]) -> bool:
+    """The block ends by leaving: return, raise, continue or break."""
+    return len(body) > 0 and isinstance(
+        body[len(body) - 1], ast.Return | ast.Raise | ast.Continue | ast.Break
+    )
 
 
 def _for(unit: _Unit, node: ast.stmt) -> None:
@@ -504,6 +549,7 @@ def _assert(unit: _Unit, node: ast.stmt) -> None:
     _value, mentioned = unit.tests(node.test)
     unit.asserts.append(FlowAssert(node_span(unit.source, node), _sorted(mentioned)))
     unit.expr(node.msg)
+    unit.guards.extend(unit.holding(node.test, when_true=True))
 
 
 def _definition(unit: _Unit, node: ast.stmt) -> None:

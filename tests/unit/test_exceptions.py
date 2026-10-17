@@ -431,6 +431,51 @@ def test_exception_rules_share_one_enabled_switch(
     assert "rules.exceptions is disabled" in config.deviations
 
 
+# The rules expected, as one constant (the list grows with every rule).
+OVERRIDE_APPLIED = (
+    "ASSERT001",
+    "ASSERT002",
+    "ASYNC001",
+    "ASYNC002",
+    "ASYNC003",
+    "BATCH001",
+    "BOOL001",
+    "CPLX001",
+    "CPLX002",
+    "CPLX003",
+    "CPLX004",
+    "CPLX005",
+    "CPLX006",
+    "DEF001",
+    "DEF002",
+    "DEF003",
+    "DEF004",
+    "DEF005",
+    "DEF006",
+    "EXC001",
+    "EXC003",
+    "EXC004",
+    "GUARD001",
+    "IMPORT001",
+    "INPUT001",
+    "INPUT002",
+    "MAGIC001",
+    "PROCESS001",
+    "PROV001",
+    "RESULT001",
+    "RETRY001",
+    "ROLE001",
+    "SLEEP001",
+    "STATE001",
+    "STUB001",
+    "STUB002",
+    "STUB003",
+    "SUPP001",
+    "SUPP002",
+    "TYPE001",
+)
+
+
 def test_single_exception_rule_can_be_disabled_by_override(
     make_config: Callable[[str], EffectiveConfig],
 ) -> None:
@@ -440,46 +485,7 @@ def test_single_exception_rule_can_be_disabled_by_override(
     )
     result = _run(config, "legacy/a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert [f.rule_id for f in result.findings] == ["EXC001"]
-    assert result.rules_applied == (
-        "ASSERT001",
-        "ASSERT002",
-        "ASYNC001",
-        "ASYNC002",
-        "ASYNC003",
-        "BATCH001",
-        "BOOL001",
-        "CPLX001",
-        "CPLX002",
-        "CPLX003",
-        "CPLX004",
-        "CPLX005",
-        "CPLX006",
-        "DEF001",
-        "DEF002",
-        "DEF003",
-        "DEF004",
-        "DEF005",
-        "DEF006",
-        "EXC001",
-        "EXC003",
-        "EXC004",
-        "IMPORT001",
-        "INPUT001",
-        "INPUT002",
-        "MAGIC001",
-        "PROCESS001",
-        "RESULT001",
-        "RETRY001",
-        "ROLE001",
-        "SLEEP001",
-        "STATE001",
-        "STUB001",
-        "STUB002",
-        "STUB003",
-        "SUPP001",
-        "SUPP002",
-        "TYPE001",
-    )
+    assert result.rules_applied == OVERRIDE_APPLIED
 
 
 def test_boundaries_are_reported_as_deviations(

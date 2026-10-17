@@ -153,7 +153,8 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `ir/python_defaults.py` | Python parameter/dataclass defaults, mapping/attribute fallbacks, `or`/`is None` fallbacks, environment fallbacks, DEF005 traces |
 | `ir/javascript_defaults.py` | JavaScript parameter/destructuring defaults, `||`/`??`/ternary fallbacks, `process.env` fallbacks, DEF005 traces |
 | `ir/python_dataflow.py`, `ir/javascript_dataflow.py` | H6: each unit's value dependencies (reads, calls with their arguments' origins, stores, returns, tested origins), flow-sensitive in source order |
-| `rules/dataflow.py` | INPUT001 (return summaries to a fixed point, parameter-to-sink reach through the call graph's sites) and INPUT002 |
+| `rules/dataflow.py` | The taint engine (return summaries to a fixed point, parameter-to-sink reach through the call graph's sites) with its modes: INPUT001, ASSERT001; and INPUT002, ASSERT002 |
+| `rules/consistency.py` | PROV001 (the engine with fabricators and issuers as sources, compared per parameter) and GUARD001 (the guards recorded on each call, compared per resolved function) |
 | `rules/registry.py` | Every rule ID with metadata and implementation status |
 | `rules/severity.py` | The per-section `severity` cap shared by the rule families |
 | `rules/magic_numbers.py` | MAGIC001 |

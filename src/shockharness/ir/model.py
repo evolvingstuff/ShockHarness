@@ -835,6 +835,16 @@ class FlowRead:
 
 
 @dataclass(frozen=True)
+class FlowGuard:
+    """A call known to have returned a true value where another call runs (GUARD001):
+    ``if has(x): ...``, ``if not has(x): return`` before it, ``assert has(x)`` before
+    it. ``argument`` is the text of the guard's first argument."""
+
+    callee: str
+    argument: str
+
+
+@dataclass(frozen=True)
 class FlowCall:
     """A call (or construction) and the origins of what it is given. ``callee`` is the
     dotted text as written (the CallSite convention; ``"<dynamic>"`` otherwise), so the
@@ -846,6 +856,8 @@ class FlowCall:
     receiver: tuple[str, ...]
     arguments: tuple[tuple[str, ...], ...]
     keywords: tuple[tuple[str, tuple[str, ...]], ...]
+    first_argument: str
+    guards: tuple[FlowGuard, ...]
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H6, part two (decision 29): cross-site consistency. Both rules are
+review findings (decision 9), so no gate verdict changes.
+
+### Added (H6 part two)
+- `PROV001` (`rules.consistency`): a parameter filled with a made-up identifier
+  (`uuid4()`, `crypto.randomUUID()`) at one call site while other sites pass an
+  identifier the program issued (`store.start_run()`, `createSession()`),
+  followed through attributes, `str(...)` and helper functions.
+- `GUARD001` (`rules.consistency`): a call made without the check of its
+  argument that at least 75 percent of the function's call sites (and at least 3)
+  make first (`if has(x): remove(x)`, `if (!has(x)) return;`, `assert has(x)`).
+- Dataflow facts record each call's first argument and the guards in effect.
+- The cache schema is "9".
+
 ### Changed (asserts, decision 28)
 - **ASSERT001 version 2 reports only an assert that checks external input**: one
   whose test depends, followed like INPUT001 (across functions too), on request

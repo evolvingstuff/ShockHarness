@@ -18,6 +18,7 @@ everything it is given (receiver and arguments): ``json.loads(body)`` is as tain
 ``body``.
 """
 
+import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
@@ -53,6 +54,7 @@ METHOD_PREFIX = "."
 SINK_SEPARATOR = ":"
 CROSSING = " -> "
 ASSERT_TARGET = "assert"
+FIRST_WORD = re.compile(r"_*[A-Za-z][a-z0-9]*")
 BELOW = ".*"
 OPTIMIZE_FLAG = "sys.flags.optimize"
 # Decoders that a ".parse" validator entry must not match: they parse, they do not check.
@@ -81,9 +83,13 @@ def _prefix(language: str) -> str:
 
 @dataclass(frozen=True)
 class Catalog:
+    """``issuer_prefixes`` (PROV001 only): a call whose name starts with one of these words
+    (``start_run``, ``createSession``) is a source labelled with its callee."""
+
     sources: frozenset[str]
     sinks: Mapping[str, frozenset[int]]
     validators: frozenset[str]
+    issuer_prefixes: frozenset[str]
 
 
 def _sinks(entries: Sequence[Any]) -> dict[str, frozenset[int]]:
@@ -103,6 +109,7 @@ def catalog_for(settings: Mapping[str, Any], language: str) -> Catalog:
         sources=frozenset(str(s) for s in settings[f"{prefix}_sources"]),
         sinks=_sinks(settings[f"{prefix}_sinks"]),
         validators=frozenset(str(v) for v in settings[f"{prefix}_validators"]),
+        issuer_prefixes=frozenset(),
     )
 
 
@@ -126,6 +133,16 @@ def _method(callee: str, aliases: Mapping[str, str]) -> str | None:
     if dot == "" or receiver == "" or root in aliases:
         return None
     return METHOD_PREFIX + name
+
+
+def issued_by(callee: str, prefixes: frozenset[str]) -> bool:
+    """``store.start_run`` / ``createSession``: the callee's name opens with an issuing
+    word."""
+    if len(prefixes) == 0:
+        return False
+    _receiver, _dot, name = callee.rpartition(METHOD_PREFIX)
+    word = FIRST_WORD.match(name)
+    return word is not None and word.group(0).lstrip("_").lower() in prefixes
 
 
 def is_validator(callee: str, aliases: Mapping[str, str], catalog: Catalog) -> bool:
@@ -222,12 +239,14 @@ class Mode:
 
 @dataclass(frozen=True)
 class Passed:
-    """A value passed into a project function's parameter."""
+    """A value passed into a project function's parameter, at a call site."""
 
     value: Value
     target: Located
     parameter: int
     exact: bool
+    span: Span
+    text: str
 
 
 def _index(files: Sequence[FlowFile]) -> dict[str, Located]:
@@ -240,10 +259,10 @@ def _index(files: Sequence[FlowFile]) -> dict[str, Located]:
     return located
 
 
-class _Evaluation:
+class Evaluation:
     """One unit's values under the analysis' current return summaries."""
 
-    def __init__(self, analysis: "_Analysis", located: Located) -> None:
+    def __init__(self, analysis: "Analysis", located: Located) -> None:
         self.analysis = analysis
         self.located = located
         self.unit = located.unit
@@ -279,19 +298,37 @@ class _Evaluation:
             return EMPTY
         return frozenset({Taint(label, self.path, read.span, exact=exact, via=())})
 
-    def call(self, call: FlowCall) -> Value:
+    def source(self, call: FlowCall) -> Value | None:
+        """The call's result when the call itself is a catalog source, else None."""
         qualified = qualified_callee(call.callee, self.aliases)
         if qualified in self.catalog.sources:
             return frozenset({Taint(qualified, self.path, call.span, exact=True, via=())})
         method = _method(call.callee, self.aliases)
         if method is not None and method in self.catalog.sources:
             return frozenset({Taint(method, self.path, call.span, exact=False, via=())})
+        return None
+
+    def call(self, call: FlowCall) -> Value:
+        source = self.source(call)
+        if source is not None:
+            return source
         if is_validator(call.callee, self.aliases, self.catalog):
             return EMPTY
+        issued = issued_by(call.callee, self.catalog.issuer_prefixes)
         resolved = self.analysis.target(self.located, call)
         if resolved is not None:
             target, exact = resolved
-            return self.substitute(call, target, exact)
+            summary = self.substitute(call, target, exact)
+            # A project function is known by its body before its name: one that returns a
+            # source (a made-up uuid4()) is that, whatever it is called.
+            if not issued or any(isinstance(e, Taint) for e in summary):
+                return summary
+        if issued:
+            return frozenset({Taint(call.callee, self.path, call.span, exact=False, via=())})
+        return self.passed_on(call)
+
+    def passed_on(self, call: FlowCall) -> Value:
+        """An unknown call's result: everything it was given."""
         found: set[Element] = set(self.value(call.receiver))
         for argument in call.arguments:
             found.update(self.value(argument))
@@ -355,14 +392,15 @@ class _Evaluation:
             for parameter in range(len(target.unit.parameters)):
                 origins = self.argument(call, target.unit, parameter)
                 if len(origins) > 0:
-                    yield Passed(self.value(origins), target, parameter, exact)
+                    value = self.value(origins)
+                    yield Passed(value, target, parameter, exact, call.span, call.text)
 
 
 Reach = dict[tuple[str, int], list[SinkHit]]
 Edges = dict[tuple[str, int], list[tuple[Located, int, bool]]]
 
 
-class _Analysis:
+class Analysis:
     """INPUT001 over every file: return summaries to a fixed point, then sinks."""
 
     def __init__(self, files: Sequence[FlowFile], graph: CallGraph, mode: Mode) -> None:
@@ -395,7 +433,7 @@ class _Analysis:
         for _round in range(self.max_depth + 1):
             changed = False
             for key, located in sorted(self.units.items()):
-                evaluation = _Evaluation(self, located)
+                evaluation = Evaluation(self, located)
                 found: set[Element] = set()
                 for returned in located.unit.returns:
                     found.update(evaluation.value(returned.origins))
@@ -410,7 +448,7 @@ class _Analysis:
         direct: Reach = {}
         edges: Edges = {}
         for key, located in sorted(self.units.items()):
-            _parameter_flows(_Evaluation(self, located), key, direct, edges)
+            _parameter_flows(Evaluation(self, located), key, direct, edges)
         return _closure(direct, edges, self.max_depth)
 
     def report(self, taint: Taint, hit: SinkHit) -> None:
@@ -425,7 +463,7 @@ class _Analysis:
         self.summarize()
         reach = self.reach()
         for _key, located in sorted(self.units.items()):
-            evaluation = _Evaluation(self, located)
+            evaluation = Evaluation(self, located)
             for value, hit in evaluation.sink_hits():
                 for element in value:
                     if isinstance(element, Taint):
@@ -482,7 +520,7 @@ class _Analysis:
         )
 
 
-def _parameter_flows(evaluation: _Evaluation, key: str, direct: Reach, edges: Edges) -> None:
+def _parameter_flows(evaluation: Evaluation, key: str, direct: Reach, edges: Edges) -> None:
     """One unit's parameters that reach a sink here, or a project function's parameter."""
     for value, hit in evaluation.sink_hits():
         for element in value:
@@ -574,7 +612,7 @@ def run_input001(
         assert_sinks=False,
         skipped_asserts={},
     )
-    return _Analysis(files, graph, mode).run()
+    return Analysis(files, graph, mode).run()
 
 
 def _assert_catalog(
@@ -588,7 +626,9 @@ def _assert_catalog(
     sources.update(str(r) for r in inputs[f"{prefix}_config_reads"])
     if language == PYTHON:
         sources.update(str(r) for r in assertions["external_reads"])
-    return Catalog(sources=frozenset(sources), sinks={}, validators=frozenset())
+    return Catalog(
+        sources=frozenset(sources), sinks={}, validators=frozenset(), issuer_prefixes=frozenset()
+    )
 
 
 def run_assert001(
@@ -615,7 +655,7 @@ def run_assert001(
             for f in files
         },
     )
-    return _Analysis(files, graph, mode).run()
+    return Analysis(files, graph, mode).run()
 
 
 def _reads_optimize_flag(file: FlowFile) -> bool:

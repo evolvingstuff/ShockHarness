@@ -371,6 +371,17 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "batches": TableField(fields=dict(GUARDRAIL_COMMON), required=()),
+                "consistency": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "python_fabricators": ListField(StrField(allow_empty=False)),
+                        "javascript_fabricators": ListField(StrField(allow_empty=False)),
+                        "issuer_prefixes": ListField(StrField(allow_empty=False)),
+                        "guard_min_sites": IntField(minimum=1),
+                        "guard_min_percent": IntField(minimum=1),
+                    },
+                    required=(),
+                ),
                 "input": TableField(
                     fields={
                         **GUARDRAIL_COMMON,

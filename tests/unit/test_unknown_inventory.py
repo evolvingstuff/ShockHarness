@@ -124,6 +124,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "ROLE001: violation (imports through resolved module edges only)",
     ),
+    # H6 part two: call sites of one function that disagree with the others: always a
+    # violation, approximate (intent is not known).
+    ("rules/consistency.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "PROV001, GUARD001: violation (approximate; review)",
+    ),
     # H6: a traced source at a sink, or an unchecked optional read: always a violation
     # (confidence approximate when a crossing is probable or a match is by name).
     ("rules/dataflow.py", "_finding"): (

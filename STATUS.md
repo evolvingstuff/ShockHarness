@@ -3679,3 +3679,53 @@ parameters) is now an ASSERT002 finding instead of ASSERT001. Verdicts against
 Self-diff against 6c820ca: no new findings, no complexity regressions. The
 TSX parity rerun shows no differences (its own dataclass comparison recurses on
 the new deep-source fixtures, a limit of the scratch plugin, not of the tool).
+
+## Milestone H6, part two: PROV001 and GUARD001 — DONE (2026-10-16)
+
+Cross-site consistency rules, decisions 20 and 21, as shaped in decision 29.
+Milestone H6 is complete. Implemented in the lead session; not released.
+
+### What was built
+
+* **Facts**: every `FlowCall` records its first argument's text and the
+  `FlowGuard`s in effect: calls known true where it runs (inside `if g(x)`, in
+  `else` of `if not g(x)`, after `if not g(x): return/raise/continue/break`,
+  after `assert g(x)`, through `and`/`&&` and `not a or not b`), scoped to the
+  block. Cache schema "9".
+* **PROV001** (`rules/consistency.py`): the taint engine with fabricators and
+  issuing calls as labelled sources (`Catalog.issuer_prefixes`, `issued_by`);
+  per (project function, parameter), a site passing only a made-up identifier is
+  reported when another applying site passes an issued one. A resolved project
+  function is judged by its return summary before its name.
+* **GUARD001**: applying call sites with a first argument, grouped by the
+  function the call graph resolves them to; a site is guarded when a guard shares
+  its argument text; with at least `guard_min_sites` sites and at least
+  `guard_min_percent` guarded, the unguarded ones are reported.
+* **Config**: `rules.consistency` (review, production, fabricators per language,
+  issuer words, the two thresholds); deviations for removed entries and raised
+  thresholds.
+* **Engine**: `Analysis`/`Evaluation` are public for the new module; `Passed`
+  carries the call site.
+
+### Decisions (mine; review these)
+
+1. **Any guard counts.** pip's `rmtree(new_path)` under `elif
+   os.path.isdir(new_path)` was reported against the `exists` the other sites
+   use; the rule now asks whether a site checks its argument at all, and the
+   threshold counts guarded sites (the message names the most common guard).
+2. **Issuers by name, project functions by body.** A `new_trace_id()` that
+   returns `str(uuid4())` is a fabricator; a `start_run()` whose body shows no
+   source is an issuer by its name.
+3. **Only applying sites count**, so test code that fabricates identifiers on
+   purpose neither triggers nor hides a finding.
+
+### Evidence (2026-10-16, macOS)
+
+`tests/unit/test_consistency.py` (4: made-up identifiers through `str(...)` and a
+helper, the need for an issued site in JavaScript, GUARD001 thresholds in
+JavaScript and Python). 1139 tests pass on CPython 3.14 and 3.11.11; ruff clean;
+the self-gate passes; verdicts against 0.6.0 (H4-H6 and ASSERT rule IDs
+excluded) are identical on all twelve runs. On the 790-file corpus neither rule
+reports anything (after decision 1). Self-diff against 192145b: no new findings,
+no complexity regressions, after splitting `_sites` and `Evaluation.call` and
+moving two long expected rule lists in tests to module constants.

@@ -556,6 +556,20 @@ javascript_validators = [
 python_config_reads = ["os.getenv", "os.environ.get"]
 javascript_config_reads = ["process.env"]
 
+[tool.shockharness.rules.consistency]      # PROV001, GUARD001 (H6 part two)
+enabled = true
+severity = "review"                        # intent cannot be known
+roles = ["production"]
+# PROV001: a value from one of these is a made-up identifier; one from a call whose name
+# opens with an issuer word is an identifier the program issued.
+python_fabricators = ["uuid.uuid4", "uuid.uuid1", "secrets.token_hex", "secrets.token_urlsafe"]
+javascript_fabricators = ["crypto.randomUUID", "uuid.v4", "uuid.v1", "nanoid.nanoid"]
+issuer_prefixes = ["start", "create", "new", "register", "open", "begin", "issue", "allocate", "insert"]
+# GUARD001: report the unguarded sites when at least guard_min_sites call sites exist and
+# at least guard_min_percent of them share one guard. Raising either is a deviation.
+guard_min_sites = 3
+guard_min_percent = 75
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

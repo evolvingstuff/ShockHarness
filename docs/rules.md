@@ -1001,6 +1001,32 @@ Neither rule sees a guard (`if not cmd.isalnum(): raise`), values stored on
 objects or in module state, closures or callbacks; see
 [limitations.md](limitations.md#input001-input002-h6).
 
+### PROV001, GUARD001: cross-site consistency (H6 part two; review)
+
+Both compare the call sites of one project function, as the call graph resolves
+them (resolved and probable sites, in files whose role is in
+`rules.consistency.roles`), and report the sites that disagree with the others.
+They cannot know intent, so they ship at `review` (spec 21.1 decisions 20, 21
+and 29).
+
+* **PROV001**: a parameter that other call sites fill with an identifier the
+  program issued, and this site fills with a freshly made one. Issued: the value
+  comes (followed as INPUT001 follows values: attributes, `str(...)`, helper
+  functions) from a call whose name opens with an `issuer_prefixes` word
+  (`start_run`, `createSession`, `new_order`, `register`, `open`, `begin`,
+  `issue`, `allocate`, `insert`). Made up: it comes from a fabricator
+  (`uuid.uuid4`, `secrets.token_hex`, `crypto.randomUUID`, `uuid.v4`, `nanoid`).
+  A project function is judged by its body before its name: a `new_trace_id()`
+  that returns `str(uuid4())` makes up its identifier.
+* **GUARD001**: a call that most sites make only after checking their argument
+  (`if has_hash(x): remove_hash(x)`, `if (!hasHash(x)) return;`, `assert
+  exists(x)`, `if not ok(x): raise`), made here with no check of that argument.
+  A guard is a call with the same first argument (by text) known true where the
+  call runs; any check counts (`isdir` where the others use `exists`). Reported
+  when at least `guard_min_sites` (3) sites exist, at least `guard_min_percent`
+  (75) of them are guarded, and some are not; the message names the most common
+  guard.
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are

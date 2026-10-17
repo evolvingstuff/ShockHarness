@@ -43,6 +43,7 @@ from shockharness.rules import registry
 from shockharness.rules.api_catalog import CATALOG_RULES, run_catalog_rules
 from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
+from shockharness.rules.consistency import run_guard001, run_prov001
 from shockharness.rules.dataflow import (
     INPUT_RULES,
     FlowFile,
@@ -335,6 +336,8 @@ def _units(
         registry.ASYNC001.rule_id,
         registry.INPUT001.rule_id,
         registry.ASSERT001.rule_id,
+        registry.PROV001.rule_id,
+        registry.GUARD001.rule_id,
     )
     if complexity["enabled"] is True or any(rule in applied for rule in graph_rules):
         return measure_units(relative_path, facts.functions, complexity)
@@ -357,7 +360,7 @@ def _policy_rules(
     guardrails = _active_guardrails(language, role, config, disabled_ids)
     catalog = frozenset(
         rule.rule_id
-        for rule in (*CATALOG_RULES, *INPUT_RULES)
+        for rule in (*CATALOG_RULES, *INPUT_RULES, registry.PROV001, registry.GUARD001)
         if rule.rule_id not in disabled_ids
         and language in rule.languages
         and _in_scope(rule, role, config)
@@ -798,6 +801,23 @@ def assert_findings(
     return found
 
 
+def consistency_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """PROV001 and GUARD001 (H6 part two): call sites of one function that disagree."""
+    if graph is None:
+        return {}
+    settings = config.section(registry.CONSISTENCY_SECTION)
+    depth = int(config.section(registry.INPUT_SECTION)["max_depth"])
+    found: dict[str, list[Finding]] = {}
+    for rule, run in ((registry.PROV001, run_prov001), (registry.GUARD001, run_guard001)):
+        for path, findings in run(_flow_files(pendings, rule), graph, settings, depth).items():
+            if path not in found:
+                found[path] = []
+            found[path].extend(findings)
+    return found
+
+
 def complete(
     pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
 ) -> AnalysisOutcome:
@@ -809,6 +829,8 @@ def complete(
         registry.INPUT001,
         registry.IMPORT001,
         registry.ASSERT001,
+        registry.PROV001,
+        registry.GUARD001,
     )
     if graph is None and any(
         rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
@@ -820,10 +842,11 @@ def complete(
     roles = role_findings(pendings, config, graph)
     inputs = input_findings(pendings, config, graph)
     asserts = assert_findings(pendings, config, graph)
+    consistency = consistency_findings(pendings, config, graph)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        for found in (outcome.graph_findings, asynchrony, roles, inputs, asserts):
+        for found in (outcome.graph_findings, asynchrony, roles, inputs, asserts, consistency):
             if pending.path in found:
                 extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))
