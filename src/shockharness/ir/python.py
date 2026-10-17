@@ -172,6 +172,13 @@ def _parse(source: SourceText, filename: str) -> ast.Module | ParseFailure:
     except ValueError as exc:
         # Python 3.11 raises ValueError (not SyntaxError) for NUL bytes in source.
         return ParseFailure(span=None, message=f"ValueError: {exc}")
+    except RecursionError as exc:
+        # A very long or deeply nested expression can exceed what the host interpreter's
+        # parser builds (CPython 3.11 counts the caller's frames toward its limit).
+        return ParseFailure(
+            span=None,
+            message=f"RecursionError: nested too deeply for this interpreter's parser ({exc})",
+        )
 
 
 def _comments(source: SourceText) -> tuple[Comment, ...] | ParseFailure:

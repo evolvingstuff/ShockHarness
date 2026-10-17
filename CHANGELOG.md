@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Fixed
+- A Python file with a very long expression (about 1000 terms or more, such as a
+  long string concatenation) crashed the analysis with an internal error (exit
+  3): the H3 stub collector recursed once per tree level. It now walks with an
+  explicit stack. On CPython 3.11, where `ast.parse` itself cannot build such a
+  tree inside the tool, the file is a parse failure with the reason, governed by
+  `parse_errors` like any unparseable file. 0.6.0 is affected.
+
 Milestone H6, part one (specification section 21, decision 26): external input.
 Both rules are advisory (decision 9), so no gate verdict changes.
 

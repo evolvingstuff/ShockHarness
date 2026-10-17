@@ -3566,3 +3566,33 @@ JavaScript, INPUT002 in both languages, sink validation).
   crashes `ir/python_guardrails.py` (H3) with a RecursionError; 0.6.0 crashes
   the same way.
 
+## Fix: RecursionError on very long Python expressions — DONE (2026-10-16)
+
+Found while building H6: a Python expression of about 2000 terms crashed
+`shockharness check` with an internal error (exit 3); 0.6.0 crashes the same way.
+
+### What was done
+
+* `ir/python_guardrails._Placeholders` (H3: STUB001's placeholder facts) recursed
+  once per AST level. It now walks with an explicit stack of (node, scope,
+  abstract) and returns the same facts (sorted as before).
+* `ir/python._parse` turns a `RecursionError` from `ast.parse` into a parse
+  failure (a declared boundary in `.shockharness.toml`). CPython 3.11 counts the
+  caller's frames toward its parser limit, so inside the tool it cannot build an
+  expression of roughly 2900 terms that a bare interpreter can; 3.12 and later
+  can.
+* Every other collector already walked iteratively: thirteen deep Python shapes
+  (operator, Boolean and comparison chains, nested calls, lists, attributes,
+  subscripts, `if`s, lambdas, ternaries, unary signs, string concatenation) at
+  the largest size each interpreter parses, and ten JavaScript/TypeScript shapes
+  at depth 5000, are analyzed without error.
+
+### Evidence (2026-10-16, macOS)
+
+`tests/unit/test_deep_sources.py` (19 cases: ten Python shapes at 1500 terms or
+90 levels, four JavaScript and TypeScript shapes at depth 2000, and a parser that
+raises RecursionError) passes on CPython 3.11.11, 3.12.8, 3.13.1 and 3.14.7; six
+of its cases fail against the previous code. Self-diff in a scratch clone against ed16372
+(H6 part one): `gate: PASS (exit 0)`, no complexity regressions; its one new
+finding is the intended VERIFY003 report of the new `RecursionError` boundary in
+`.shockharness.toml` (an approved catch is a loosening, and is meant to be seen).

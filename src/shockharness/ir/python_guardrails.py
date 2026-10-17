@@ -175,28 +175,38 @@ def _qualified(scope: str, name: str) -> str:
     return name if scope == MODULE_SCOPE else f"{scope}.{name}"
 
 
+# A node to visit, the scope it is in, and whether stubs there are abstract (exempt).
+_Visit = tuple[ast.AST, str, bool]
+
+
 class _Placeholders:
+    """Walks the module with an explicit stack: a long expression is a deep tree, and
+    recursing once per level would overflow the interpreter's stack."""
+
     def __init__(self, source: SourceText) -> None:
         self.source = source
         self.found: list[Placeholder] = []
 
-    def visit(self, node: ast.AST, scope: str, *, abstract: bool) -> None:
+    def walk(self, module: ast.Module) -> None:
+        stack: list[_Visit] = [(s, MODULE_SCOPE, False) for s in reversed(module.body)]
+        while len(stack) > 0:
+            node, scope, abstract = stack.pop()
+            stack.extend(reversed(self._visit(node, scope, abstract=abstract)))
+
+    def _visit(self, node: ast.AST, scope: str, *, abstract: bool) -> list[_Visit]:
+        """Record what ``node`` is and return the nodes to visit inside it."""
         if isinstance(node, ast.ClassDef):
             inner = _qualified(scope, node.name)
-            for child in node.body:
-                self.visit(child, inner, abstract=_is_abstract_class(node))
-            return
+            return [(child, inner, _is_abstract_class(node)) for child in node.body]
         if isinstance(node, FUNCTIONS):
-            self._function(node, scope, abstract=abstract)
-            return
+            return self._function(node, scope, abstract=abstract)
         if isinstance(node, ast.Raise) and not abstract:
             self._raise(node, scope)
-        for child in ast.iter_child_nodes(node):
-            self.visit(child, scope, abstract=abstract)
+        return [(child, scope, abstract) for child in ast.iter_child_nodes(node)]
 
     def _function(
         self, node: ast.FunctionDef | ast.AsyncFunctionDef, scope: str, *, abstract: bool
-    ) -> None:
+    ) -> list[_Visit]:
         inner = _qualified(scope, node.name)
         skip = abstract
         if _is_abstract_function(node):
@@ -210,8 +220,7 @@ class _Placeholders:
                     node_span(self.source, node),
                 )
             )
-        for child in node.body:
-            self.visit(child, inner, abstract=skip)
+        return [(child, inner, skip) for child in node.body]
 
     def _raise(self, node: ast.Raise, scope: str) -> None:
         name = _raised_name(node)
@@ -318,8 +327,7 @@ def _import_time_calls(source: SourceText, module: ast.Module) -> list[ImportTim
 
 def collect_python_guardrails(source: SourceText, module: ast.Module) -> GuardrailFacts:
     placeholders = _Placeholders(source)
-    for statement in module.body:
-        placeholders.visit(statement, MODULE_SCOPE, abstract=False)
+    placeholders.walk(module)
     return GuardrailFacts(
         finally_exits=tuple(sorted(_finally_exits(source, module), key=lambda f: f.span)),
         placeholders=tuple(sorted(placeholders.found, key=lambda p: (p.span, p.kind))),

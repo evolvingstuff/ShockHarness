@@ -124,6 +124,12 @@ reason = "ast.parse raises ValueError for NUL bytes on 3.11 and tokenize raises 
 [[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/ir/python.py"
 language = "python"
+exception = "RecursionError"
+reason = "ast.parse cannot build a tree nested past the host interpreter's limit (CPython 3.11 counts the caller's frames); the file becomes a ParseFailure, like syntax the host cannot parse, instead of an internal error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/ir/python.py"
+language = "python"
 exception = "tokenize.TokenError"
 reason = "Comment extraction tokenizes external source; failure becomes a ParseFailure fact"
 

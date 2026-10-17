@@ -13,7 +13,10 @@ Stated so that a clean report is never read as more than it is.
   passing gate says nothing about it.
 * Python syntax coverage is exactly the host interpreter's `ast`. Running on
   3.11 cannot parse 3.12-only syntax; such files are parse failures, not clean.
-  The report records `coverage.host_python`.
+  The same holds for a tree the host's parser cannot build: on CPython 3.11 an
+  expression a few thousand terms long raises `RecursionError` inside `ast.parse`
+  and the file is a parse failure (`RecursionError: nested too deeply ...`);
+  3.12 and later parse it. The report records `coverage.host_python`.
 * JavaScript coverage is the pinned `tree-sitter-javascript` grammar (ESM,
   CommonJS, JSX). TypeScript coverage (H-TS) is the pinned
   `tree-sitter-typescript` grammar (`.ts`, `.mts`, `.cts`; `.tsx` with its TSX
