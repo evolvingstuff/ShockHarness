@@ -118,6 +118,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "unresolved) when the base version could not be analyzed, or when rename detection "
         "failed and the file has no base version under its own path",
     ),
+    # ROLE001: an import resolved through the module graph, or the absence of test cases:
+    # always a violation.
+    ("rules/role_integrity.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "ROLE001: violation (imports through resolved module edges only)",
+    ),
     # H5: every API-catalog finding is a violation (method-name matches are approximate).
     ("rules/api_catalog.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),

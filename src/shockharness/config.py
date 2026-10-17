@@ -359,6 +359,10 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                         f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
                     )
                 )
+    for index, pattern in enumerate(values["rules"]["role_integrity"]["support_files"]):
+        problem = validate_glob(pattern)
+        if problem is not None:
+            issues.append(ConfigIssue(f"rules.role_integrity.support_files[{index}]", problem))
     for index, allowed in enumerate(values["rules"]["module_state"]["allowed"]):
         problem = validate_glob(allowed["path"])
         if problem is not None:
@@ -515,6 +519,7 @@ GUARDRAIL_RULES = {
     "sleep": "SLEEP001",
     "retry": "RETRY001",
     "batches": "BATCH001",
+    "role_integrity": "ROLE001",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -546,6 +551,7 @@ TYPE_SWITCHES = ("report_any", "report_cast", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
     ("boolean_arguments", "allowed_callees"),
     ("async_lifecycle", "supervisors"),
+    ("role_integrity", "support_files"),
 )
 REVIEW = "review"
 

@@ -363,6 +363,16 @@ Stated so that a clean report is never read as more than it is.
   ever reported. `SLEEP001` cannot tell pacing from synchronization.
 * `TYPE001`'s TypeScript half (`any`, `as any`, `@ts-ignore`) arrives with H-TS.
 
+## ROLE001
+
+* Only resolved module edges count: an import the module graph cannot resolve
+  (a computed specifier, a re-export it does not follow) is not seen.
+* A helper that only tests import but that holds real logic is not judged; the
+  empty-test check recognizes test cases syntactically (the VERIFY test-case
+  facts) and support files by glob.
+* The diff side compares roles of files that exist at both revisions (renames
+  followed); a new file added directly under `tests/` is not a reclassification.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits

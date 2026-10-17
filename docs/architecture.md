@@ -166,6 +166,7 @@ CPython 3.14 with 0.25.2 both work. A 300-deep nesting test guards this.
 | `rules/async_lifecycle.py` | ASYNC001-ASYNC003; ASYNC001 resolves project callees through the call graph's per-site resolutions |
 | `ir/python_catalog.py`, `ir/javascript_catalog.py` | H5 facts: process calls, sleeps, retries, batch loops, type escapes, constant predicates |
 | `rules/api_catalog.py` | PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003 |
+| `rules/role_integrity.py` | ROLE001: production imports of test-role files (module graph), test-role files without test cases; the diff side is in `rules/policy_integrity.py` |
 | `loosening.py` | What makes one configuration looser than another (shared by `--policy` and VERIFY003) |
 | `inventory.py` | `shockharness exceptions`: inline suppressions, configuration exceptions with their source, policy attempts, baseline contents |
 | `suppressions.py` | Inline suppression parsing and SUPP001/SUPP002 |

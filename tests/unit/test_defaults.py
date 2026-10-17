@@ -568,7 +568,7 @@ def test_overrides_can_disable_one_default_rule(
         'reason = "fixture signatures"\n'
     )
     text = "def f(x=1):\n    return x or 0\n"
-    inside = analyze_text("tests/t.py", PY, text, config, OPTIONS)
+    inside = analyze_text("tests/t.py", PY, text + "\n\ndef test_f():\n    f()\n", config, OPTIONS)
     assert _ids(inside) == ["DEF003"]
     assert [d.rule_id for d in inside.rules_disabled] == ["DEF001"]
     outside = analyze_text("src/t.py", PY, text, config, OPTIONS)

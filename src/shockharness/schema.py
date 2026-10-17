@@ -364,6 +364,15 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "batches": TableField(fields=dict(GUARDRAIL_COMMON), required=()),
+                "role_integrity": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "empty_test_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "support_files": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
                 "verification": TableField(
                     fields={
                         "enabled": BoolField(),

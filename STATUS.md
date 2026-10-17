@@ -3282,3 +3282,87 @@ updated rule lists, inventory, regression and the split report test.
 * A scripted rewrite of an expected rule list found the wrong closing bracket
   and mangled a test; the file was restored and patched by hand.
 
+## ROLE001: is code classified as a test really a test? — DONE (2026-10-16)
+
+From the maintainer's question: when a repository shields code by classifying it
+as a test, can the claim be checked? Spec 21.1 decision 24. Implemented in the
+lead session as its own change after H5; not released.
+
+### What was built
+
+* **ROLE001** (`rules/role_integrity.py`, category `policy_integrity`), run in
+  the cross-file phase with the module graph (built for it when complexity is
+  disabled, shared with ASYNC001): a production-role file importing a test-role
+  file through a resolved module edge (exact, at the import, `severity`
+  warning); a test-role file with no test case (the VERIFY test-case facts) that
+  matches none of `support_files` (approximate, at line 1,
+  `empty_test_severity` review).
+* **VERIFY003** (`rules/policy_integrity.py:_role_findings`): in a revision
+  diff, a file analyzed at both revisions (renames followed) that the base's
+  `file_roles` classified as production and the head's classifies as test. Each
+  snapshot now records the files its own configuration analyzes (`own_scope`).
+* **Config**: `rules.role_integrity` (enabled, severity, empty_test_severity,
+  support_files with glob validation); lowering a severity or adding a support
+  glob is a deviation; both severities are in the loosening order.
+
+### Decisions (mine; review these)
+
+1. **The import check is the proof; the content check is evidence.** Test code
+   is a dead end, so a production import of a test-role file is reported as a
+   violation at warning (decision 9 for new rules), and a test file without
+   tests only at review.
+2. **Not role-scoped**: ROLE001 is about the role claim itself, so it applies to
+   every file (production files carry the import findings, test files the empty
+   ones).
+3. **Support files by glob**, with generous defaults (`conftest.py`,
+   `__init__.py`, fixtures, helpers, mocks, factories, testing, setup files),
+   because a missing exemption here costs only a review finding.
+4. **Reclassification is VERIFY003, not ROLE001**: it needs a base revision and
+   it is a policy loosening like the others in that rule.
+5. **New files added under `tests/` are not reclassifications**; only files that
+   exist at both revisions (renames followed) are compared.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+136 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  190 findings  (cache hits 0 / misses 139, then 139 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1078 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1
+1077 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+This repository has no ROLE001 finding: every file under `tests/` holds test
+cases or matches a support glob. Verdicts against `shockharness==0.6.0` (its
+configuration without the `rules.types` key), all three profiles, H3-H5 and
+ROLE001 findings excluded: identical on the self-scan, the golden fixtures and
+both examples. Self-diff in a scratch clone against 9768a19 (H5): 140 files
+compared (2 new), `gate: PASS (exit 0)`, no new findings, after splitting
+`take_snapshot`'s scope computation (`_scopes`) and moving ROLE001's
+applicability into `_policy_rules`, which the first self-diff flagged.
+
+New tests: `tests/cli/test_role_integrity.py` (3: production imports and empty
+test files, support files and severities, and a diff that re-globs one file and
+moves another under `tests/`). Nine existing tests used samples under `tests/`
+with no test function; they now hold one, so they stay honest test files and
+keep testing what they were written for.
+
+### Failures observed during development (and what was done)
+
+* A test asserted `finding.category`, which is not a field of `Finding` (the
+  category is derived from the registry); it now uses `registry.category_of`.
+

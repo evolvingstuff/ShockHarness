@@ -467,6 +467,7 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "PROCESS001",
         "RESULT001",
         "RETRY001",
+        "ROLE001",
         "SLEEP001",
         "STATE001",
         "STUB001",

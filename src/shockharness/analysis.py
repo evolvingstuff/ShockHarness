@@ -43,6 +43,7 @@ from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
 from shockharness.rules.registry import CATALOG_SECTIONS, GUARDRAIL_SECTIONS
+from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -278,7 +279,7 @@ def _policy_rules(
 ) -> tuple[list[str], list[Finding]]:
     """The H3-H5 rules for one file: (rule IDs applied, findings). ASYNC001-ASYNC003 run
     in the cross-file phase (ASYNC001 needs the call graph); here they are only recorded
-    as applied when they apply to the file."""
+    as applied when they apply to the file, and so is ROLE001."""
     rules = config.values["rules"]
     guardrails = _active_guardrails(language, role, config, disabled_ids)
     catalog = frozenset(
@@ -293,6 +294,8 @@ def _policy_rules(
         *sorted(catalog),
         *sorted(_active_async(language, role, config, disabled_ids)),
     ]
+    if registry.ROLE001.rule_id not in disabled_ids:
+        applied.append(registry.ROLE001.rule_id)  # findings come from the cross-file phase
     findings = [
         *run_guardrail_rules(facts, source, rules, relative_path, language, guardrails),
         *run_catalog_rules(facts, source, rules, relative_path, language, catalog),
@@ -649,18 +652,46 @@ def async_findings(
     return found
 
 
+def role_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """ROLE001 for every file that applies it: imports of test-role files from production
+    files (through the module graph) and test-role files with no test case."""
+    if graph is None:
+        return {}
+    files = [
+        RoleFile(
+            path=p.path,
+            role=p.role,
+            role_pattern=p.role_pattern,
+            facts=p.facts,
+            source=p.source,
+            applies=registry.ROLE001.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    return run_role_integrity(files, graph, config.section(registry.ROLE_INTEGRITY_SECTION))
+
+
 def complete(
     pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
-    asynchrony = async_findings(pendings, config, outcome.call_graph)
+    graph = outcome.call_graph
+    graph_rules = (*ASYNC_RULES, registry.ROLE001)
+    if graph is None and any(
+        rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
+    ):
+        graph = build_call_graph(_module_inputs(pendings))
+    asynchrony = async_findings(pendings, config, graph)
+    roles = role_findings(pendings, config, graph)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        if pending.path in outcome.graph_findings:
-            extra.extend(outcome.graph_findings[pending.path])
-        if pending.path in asynchrony:
-            extra.extend(asynchrony[pending.path])
+        for found in (outcome.graph_findings, asynchrony, roles):
+            if pending.path in found:
+                extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))
     return AnalysisOutcome(
         files=tuple(results),

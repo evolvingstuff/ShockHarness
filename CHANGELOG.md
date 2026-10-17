@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added (ROLE001, spec 21.1 decision 24)
+- `ROLE001` (`rules.role_integrity`, category `policy_integrity`): a
+  production-role file that imports a test-role file through the module graph
+  (warning, exact: shipped code shielded from the production rules), and a
+  test-role file with no test case that matches none of `support_files`
+  (`empty_test_severity`, review by default).
+- `VERIFY003` also reports, in a revision diff, a file the base classified as
+  production that the head classifies as test (a new `file_roles` glob, or a
+  move under one).
+
 Milestone H5 of specification section 21: API-catalog rules. Seven new rules
 ship at `warning` or `review` (decision 9), so no gate verdict changes; the
 golden corpus has no H5 findings, and the 0.3.0 regression runs with them off.

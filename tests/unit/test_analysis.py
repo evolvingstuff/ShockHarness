@@ -12,7 +12,11 @@ def test_override_disables_rule_with_origin(make_config: Callable[[str], Effecti
         'paths = ["tests/**"]\ndisable = ["MAGIC001"]\nreason = "fixtures encode literals"\n'
     )
     inside = analyze_text(
-        "tests/t.py", "python", "x = 42\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
+        "tests/t.py",
+        "python",
+        "x = 42\n\n\ndef test_x():\n    assert x\n",
+        config,
+        AnalysisOptions(True, CACHE_CONFIGURED),
     )
     outside = analyze_text(
         "src/t.py", "python", "x = 42\n", config, AnalysisOptions(True, CACHE_CONFIGURED)
@@ -155,6 +159,7 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
         "PROCESS001",
         "RESULT001",
         "RETRY001",
+        "ROLE001",
         "SLEEP001",
         "STATE001",
         "STUB001",

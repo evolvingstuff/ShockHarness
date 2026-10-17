@@ -1908,6 +1908,58 @@ STUB003 = RuleSpec(
 )
 
 
+# --- ROLE001: is shielded code really a test? (spec 21.1 decision 24) ----------------------
+
+ROLE_INTEGRITY_SECTION = "rules.role_integrity"
+ROLE_INTEGRITY_FAMILY = "role_integrity"
+
+ROLE001 = RuleSpec(
+    rule_id="ROLE001",
+    version="1",
+    name="test role that does not hold",
+    family=ROLE_INTEGRITY_FAMILY,
+    config_section=ROLE_INTEGRITY_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A file classified as a test is imported by production code (so it ships, yet the "
+        "production rules do not apply to it), or contains no test cases at all."
+    ),
+    rationale=(
+        "The test role switches rules off: STUB, ASSERT, BOOL, STATE and IMPORT apply to "
+        "production files only. Classifying a file as a test is therefore an exemption, and "
+        "the cheapest way to shield code is to move it under tests/ or widen the test globs. "
+        "Test code is a dead end: test runners import it, production code never does."
+    ),
+    guarantees=(
+        "An import, resolved through the cross-file module graph, from a production-role file "
+        "to a test-role file: exact, at the import. A test-role file whose verification facts "
+        "hold no test case (test_* functions and methods; describe/it/test calls) and that "
+        "matches none of rules.role_integrity.support_files (conftest, fixtures, helpers, "
+        "mocks, __init__.py, ...): reported at rules.role_integrity.empty_test_severity "
+        "(review by default). In a revision diff, a file the base revision classified as "
+        "production that the head classifies as test (re-globbed or renamed under tests/) is "
+        "a VERIFY003 finding."
+    ),
+    limitations=(
+        "Only resolved module edges count; an import the graph cannot resolve (dynamic, "
+        "through a package re-export it does not follow) is not seen. A helper that only "
+        "tests import but that holds real logic is not judged."
+    ),
+    remediation=(
+        "Move the shared code out of the test tree into production (where the rules apply), "
+        "or stop importing it from production. A test file without tests is either support "
+        "code (add it to support_files, a reviewed deviation) or should not be classified as "
+        "a test."
+    ),
+    noncompliant_example=(
+        "# src/app/payments.py\nfrom tests.helpers import charge  # shipped code under tests/"
+    ),
+    compliant_example="# src/app/payments.py\nfrom app.billing import charge",
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -1956,6 +2008,7 @@ RULES: tuple[RuleSpec, ...] = (
     RETRY001,
     BATCH001,
     STUB003,
+    ROLE001,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -2008,6 +2061,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "sleep": CATEGORY_CONTRACT,
     "retry": CATEGORY_CONTRACT,
     "batches": CATEGORY_CONTRACT,
+    ROLE_INTEGRITY_FAMILY: CATEGORY_POLICY,
 }
 
 

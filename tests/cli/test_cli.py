@@ -980,7 +980,7 @@ def test_check_summary_ends_with_the_same_gate_line(
     """0.2.0 item 4: --summary prints the overview and the unchanged trailer and gate."""
     write(empty_root, "src/a.py", "x = 2\ny = 3\n\n\ndef f(a, b=1):\n    return a or 1\n")
     write(empty_root, "src/pkg/b.py", "z = 4\n")
-    write(empty_root, "tests/test_a.py", "assert 5 == 5\n")
+    write(empty_root, "tests/test_a.py", "def test_a():\n    assert 5 == 5\n")
     write(empty_root, "root.py", "r = 6\n")
     write(empty_root, "src/bad.js", "function (\n")
     root = ["--root", str(empty_root)]
@@ -1012,7 +1012,7 @@ def test_check_summary_ends_with_the_same_gate_line(
         "         4  src/a.py\n         2  tests/test_a.py\n         1  root.py\n"
         "         1  src/pkg/b.py\n"
     ) in summary
-    assert "  complexity: 5 unit(s) analyzed; over cyclomatic_warn = 15: 0, " in summary
+    assert "  complexity: 6 unit(s) analyzed; over cyclomatic_warn = 15: 0, " in summary
     assert "0 import cycle(s); 0 unit(s) over fan_out_warn = 20" in summary
     assert "  parse failures: 1" in summary
     assert "src/bad.js:1:1: parse_error:" in summary
@@ -1042,7 +1042,7 @@ def test_check_summary_ends_with_the_same_gate_line(
     assert data["summary"]["files"] == data["execution_summary"]["files"] == 5
     assert data["summary"]["parse_failures"] == data["coverage"]["files_failed"] == 1
     assert data["summary"]["top_files"][0] == {"path": "src/a.py", "policy_findings": 4}
-    assert data["summary"]["complexity"]["units"] == 5
+    assert data["summary"]["complexity"]["units"] == 6
     assert "elapsed_seconds" not in data["summary"]  # JSON stays byte-identical across runs
     assert data["schema_version"] == "1"
 

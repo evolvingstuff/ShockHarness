@@ -752,6 +752,22 @@ deviation, reported by VERIFY003 and protected by `--policy`. Adding entries
 tightens: a project lists its own wrappers (`app.shell.run`, `app.retry`) so the
 rules see them. The full default lists are in `defaults.toml`.
 
+## Role integrity (ROLE001)
+
+```toml
+[tool.shockharness.rules.role_integrity]
+enabled = true
+severity = "warning"              # a production file importing a test-role file
+empty_test_severity = "review"    # a test-role file with no test case
+support_files = ["**/conftest.py", "**/__init__.py", "**/fixtures/**", "**/helpers/**", "**/*helpers*", ...]
+```
+
+Lowering either severity to `review` (or below the default), and adding a
+`support_files` glob, is a policy deviation, so `VERIFY003` reports it and
+`--policy` can pin it. A file that is genuinely test support but matches none of
+the defaults goes in `support_files`; a file that production code imports does
+not belong in the test role at all.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

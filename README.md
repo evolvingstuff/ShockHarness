@@ -97,6 +97,7 @@ Implemented rules:
 | `RETRY001` | a retry with no limit (endless loop, unbounded `@retry`) | warning |
 | `BATCH001` | a loop that drops per-item failures | warning |
 | `STUB003` | a check (`is_admin`, `canEdit`) that always returns `True` | review |
+| `ROLE001` | a test-role file that production code imports, or that holds no test (in a diff: a file newly classified as a test) | warning / review |
 
 ## Install
 

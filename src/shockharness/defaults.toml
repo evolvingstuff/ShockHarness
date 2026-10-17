@@ -441,6 +441,30 @@ enabled = true
 severity = "warning"
 roles = ["production"]
 
+# ROLE001: is code classified as a test really a test? A production file importing a
+# test-role file is a finding (severity); a test-role file with no test cases is one at
+# empty_test_severity, unless it matches support_files (adding a glob is a deviation).
+[tool.shockharness.rules.role_integrity]
+enabled = true
+severity = "warning"
+empty_test_severity = "review"
+support_files = [
+  "**/conftest.py",
+  "**/__init__.py",
+  "**/fixtures/**",
+  "**/__fixtures__/**",
+  "**/helpers/**",
+  "**/mocks/**",
+  "**/__mocks__/**",
+  "**/factories/**",
+  "**/testing/**",
+  "**/*fixtures*",
+  "**/*helpers*",
+  "**/*_utils.*",
+  "**/*.setup.*",
+  "**/setup*.*",
+]
+
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each
 # threshold is compared per unit (function, method, lambda, class body, module body).

@@ -21,6 +21,7 @@ fix.** Never make a check pass by weakening it.
 | `VERIFY002` | a blanket suppression comment (`# noqa`, `# type: ignore`, `// eslint-disable`, `// @ts-ignore`, `# pragma: no cover`, ...) | fix what the tool reports; if a suppression is genuinely right, name the exact code (`# noqa: E501`) and say why in the review |
 | `VERIFY003` | a looser policy: a disabled rule, a raised threshold, a wider `exclude`, baseline fingerprints, `continue-on-error`, `--exit-zero`, an ignored ruff code, a deselected test, a lowered `fail_under`; or a key that loosens the organization's `--policy` file | revert it; if the policy really should change, propose it as its own change, with the reason, for the owners to review |
 | `VERIFY004` | an assertion that cannot fail (`assert True`, `expect(1).toBe(1)`), a test whose assertions were all removed, a test emptied to `pass` | restore the assertion that was removed; if the expected value changed, assert the new value and explain why |
+| `ROLE001` | code classified as a test that production imports, a test file with no tests, or (in a diff) a production file newly classified as a test | keep shipped code out of the test tree; give a test file real tests or list it as support code; never move code under `tests/` or widen the test globs to escape the production rules |
 
 These findings are **not suppressible inline**: `# shockharness: ignore[VERIFY001]` is
 itself an error (SUPP001). A change cannot grant itself permission with a comment it

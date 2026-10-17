@@ -52,6 +52,7 @@ from shockharness.findings import (
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.ir.model import Span
 from shockharness.loosening import loosenings
+from shockharness.roles import FILE_ROLES_KEY, ROLE_PRODUCTION, ROLE_TEST, role_classifier
 from shockharness.rules.registry import VERIFY003
 from shockharness.rules.tool_configs import TOOL_CONFIG_FILES, read_tool_settings, tool_loosenings
 from shockharness.rules.workflows import (
@@ -92,6 +93,9 @@ class PolicySnapshot:
     errors: Mapping[str, str]
     scope_under_base: frozenset[str] | None
     scope_under_own: frozenset[str] | None
+    # The files this revision's own configuration analyzes in its own tree (both
+    # revisions; None when its configuration could not be loaded). ROLE001's diff side.
+    own_scope: frozenset[str] | None
 
 
 @dataclass(frozen=True)
@@ -228,6 +232,22 @@ def _scope(export_root: Path, config: EffectiveConfig) -> frozenset[str]:
     return frozenset(f.relative for f in found.files)
 
 
+def _scopes(
+    export_root: Path,
+    config: EffectiveConfig | None,
+    base_config: EffectiveConfig | None,
+    is_head: bool,
+) -> tuple[frozenset[str] | None, frozenset[str] | None, frozenset[str] | None]:
+    """(scope under the base configuration, under its own, own scope): the first two for
+    the head revision only, the last for both."""
+    if config is None:
+        return None, None, None
+    own_scope = _scope(export_root, config)
+    if not is_head or base_config is None:
+        return None, None, own_scope
+    return _scope(export_root, base_config), own_scope, own_scope
+
+
 def take_snapshot(
     export_root: Path,
     toplevel: Path,
@@ -253,11 +273,9 @@ def take_snapshot(
             _read_into(path, f"{WORKFLOW_DIRECTORY}/{path.name}", texts, errors)
     baselines, baseline_errors = _baselines(export_root)
     errors.update(baseline_errors)
-    scope_under_base: frozenset[str] | None = None
-    scope_under_own: frozenset[str] | None = None
-    if is_head and base_config is not None and config is not None:
-        scope_under_base = _scope(export_root, base_config)
-        scope_under_own = _scope(export_root, config)
+    scope_under_base, scope_under_own, own_scope = _scopes(
+        export_root, config, base_config, is_head
+    )
     return PolicySnapshot(
         config=config,
         config_error=config_error,
@@ -268,6 +286,7 @@ def take_snapshot(
         errors=errors,
         scope_under_base=scope_under_base,
         scope_under_own=scope_under_own,
+        own_scope=own_scope,
     )
 
 
@@ -614,6 +633,46 @@ def _baseline_findings(
     return findings
 
 
+def _role_findings(
+    base: PolicySnapshot,
+    head: PolicySnapshot,
+    renames: Mapping[str, str],
+    short: str,
+    severity: str,
+) -> list[Finding]:
+    """Files the base classified as production that the head classifies as test (by a new
+    glob, or by moving them under one): the production rules no longer apply (ROLE001's
+    diff side, spec 21.1 decision 24)."""
+    if base.config is None or head.config is None:
+        return []
+    if base.own_scope is None or head.own_scope is None:
+        return []
+    before = role_classifier(base.config.values[FILE_ROLES_KEY])
+    after = role_classifier(head.config.values[FILE_ROLES_KEY])
+    found: list[Finding] = []
+    for path in sorted(head.own_scope):
+        base_path = _base_path(renames, path)
+        if base_path not in base.own_scope:
+            continue
+        old, new = before.classify(base_path), after.classify(path)
+        if old.role != ROLE_PRODUCTION or new.role != ROLE_TEST:
+            continue
+        moved = "" if base_path == path else f" (moved from {base_path})"
+        found.append(
+            _finding(
+                path,
+                FIRST_LINE,
+                f"{path} was a production file at base {short} and is now classified as a test "
+                f"file by {new.pattern!r}{moved}: the production rules no longer apply to it",
+                f"role: {path} production -> test",
+                "file_roles",
+                None,
+                severity,
+            )
+        )
+    return found
+
+
 def compare_policy(
     base: PolicySnapshot,
     head: PolicySnapshot,
@@ -645,5 +704,6 @@ def compare_policy(
         *_tool_findings(base, head, short, severity),
         *_workflow_findings(base, head, renames, short, severity),
         *_baseline_findings(base, head, renames, short, severity),
+        *_role_findings(base, head, renames, short, severity),
     ]
     return PolicyResult(findings=tuple(findings), coverage=coverage)

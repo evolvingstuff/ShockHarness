@@ -68,7 +68,7 @@ weakened" without a separate exit code: a gating finding of any category exits
 
 | Category | Families | Meaning |
 |---|---|---|
-| `policy_integrity` | `VERIFY*` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
+| `policy_integrity` | `VERIFY*`, `ROLE001` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
 | `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001`, `ASYNC*`, `PROCESS001`, `RESULT001`, `TYPE001`, `SLEEP001`, `RETRY001`, `BATCH001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
 | `structural` | `CPLX*`, `BOOL001`, `STATE001` | complexity, coupling, unreadable call sites and shared state (advisory) |
 
@@ -902,6 +902,27 @@ not reported. The catch itself is also judged by EXC001/EXC002.
 name starting with `check`, `validate`, `verify`, `authorize`, `authenticate`,
 `allow`, whose body (docstring aside) only returns `True` / `true`. Severity
 `rules.stubs.stub003_severity` (`review` by default).
+
+### ROLE001: is code classified as a test really a test? (warning; review for empty test files)
+
+The test role is an exemption: the H3 and H5 rules apply to production files
+only. ROLE001 checks the claim from two directions in every run (spec 21.1
+decision 24):
+
+* **Who imports it (exact).** A production-role file that imports a test-role
+  file, through a resolved edge of the module graph, ships that code while the
+  production rules skip it. Reported at the import, at `rules.role_integrity.severity`.
+* **What it contains (approximate).** A test-role file with no test case
+  (`test_*` functions and methods; `describe`/`it`/`test` calls) that matches
+  none of `rules.role_integrity.support_files` (conftest, `__init__.py`,
+  fixtures, helpers, mocks, factories, ...). Reported at line 1, at
+  `empty_test_severity` (`review` by default).
+
+The third direction needs a base revision and is a `VERIFY003` finding: a file
+the base classified as production that the head classifies as test, by a new
+`file_roles` glob or by moving it under one ("moved from ..."). ROLE001's
+category is `policy_integrity`. Unresolved imports are not seen, and a helper
+that only tests import is not judged.
 
 ## Registered, not implemented
 

@@ -135,7 +135,7 @@ def test_invalid_role_glob_is_a_config_error(
 
 def test_report_carries_roles(empty_root: Path, strict_config: EffectiveConfig) -> None:
     write(empty_root, "src/app.py", "x = 2\n")
-    write(empty_root, "tests/test_app.py", "y = 3\nz = 4\n")
+    write(empty_root, "tests/test_app.py", "y = 3\nz = 4\n\n\ndef test_app():\n    assert y\n")
     write(empty_root, "docs/conf.py", "w = 5\n")
     write(empty_root, "setup.py", "v = 6\n")
     write(empty_root, "vendor/lib.js", "function (\n")
@@ -192,7 +192,9 @@ def test_override_by_role(make_config: Callable[[str], EffectiveConfig]) -> None
         "[[tool.shockharness.overrides]]\n"
         'roles = ["test"]\ndisable = ["MAGIC001"]\nreason = "tests hold expected literals"\n'
     )
-    in_tests = analyze_text("tests/test_a.py", "python", "x = 2\n", config, OPTIONS)
+    in_tests = analyze_text(
+        "tests/test_a.py", "python", "x = 2\n\n\ndef test_x():\n    assert x\n", config, OPTIONS
+    )
     assert in_tests.findings == ()
     assert [d.to_json_dict() for d in in_tests.rules_disabled] == [
         {"rule_id": "MAGIC001", "reason": "tests hold expected literals", "origin": "overrides[0]"}
@@ -209,7 +211,9 @@ def test_override_by_path_still_works(make_config: Callable[[str], EffectiveConf
         "[[tool.shockharness.overrides]]\n"
         'paths = ["tests/**"]\ndisable = ["MAGIC001"]\nreason = "tests hold expected literals"\n'
     )
-    result = analyze_text("tests/test_a.py", "python", "x = 2\n", config, OPTIONS)
+    result = analyze_text(
+        "tests/test_a.py", "python", "x = 2\n\n\ndef test_x():\n    assert x\n", config, OPTIONS
+    )
     assert result.findings == ()
     assert result.rules_disabled[0].origin == "overrides[0]"
     assert config.deviations == (
@@ -243,7 +247,9 @@ def test_override_by_production_role(make_config: Callable[[str], EffectiveConfi
     )
     source = "def f(a=None):\n    return a\n"
     assert analyze_text("src/a.py", "python", source, config, OPTIONS).findings == ()
-    tests = analyze_text("tests/a.py", "python", source, config, OPTIONS)
+    tests = analyze_text(
+        "tests/a.py", "python", source + "\n\ndef test_f():\n    f()\n", config, OPTIONS
+    )
     assert [f.rule_id for f in tests.findings] == ["DEF001"]
 
 
