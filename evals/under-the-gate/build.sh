@@ -4,12 +4,12 @@
 # configuration, skills, edit-time hook) and once without. The builder sees only
 # SPEC.md (and, gated, the ShockHarness files); never this script or the review rubric.
 #
-#   evals/under-the-gate/build.sh OUT_DIR SHOCKHARNESS_BIN_DIR CLAUDE_BIN MODEL
+#   evals/under-the-gate/build.sh OUT_DIR SHOCKHARNESS_BIN_DIR CLAUDE_BIN MODEL RUNS
 #
 # Each builder starts with a clean environment (HOME, USER, TERM, PATH only), so a
 # Claude desktop app's session variables cannot redirect its authentication.
 #
-# OUT_DIR/<spec>-<variant>/ is the build; OUT_DIR/logs/<spec>-<variant>.jsonl is the
+# OUT_DIR/<spec>-r<k>-<variant>/ is the build; OUT_DIR/logs/<same>.jsonl is the
 # builder's tool-call stream (stream-json), from which hook blocks are extracted.
 set -euo pipefail
 
@@ -17,6 +17,7 @@ out="$1"
 shockharness_bin="$2"
 claude_bin="$3"
 model="$4"
+runs="$5"
 # The PATH builders get: system tools and node, never ShockHarness (unless gated).
 BASE_PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -26,7 +27,7 @@ prompt_ungated="Build what SPEC.md describes, in this directory. You are done wh
 prompt_gated="$prompt_ungated This repository uses ShockHarness: \`shockharness check .\` must report \`gate: PASS\` before you are done."
 
 prepare() {
-  local spec="$1" variant="$2" dir="$out/$(basename "$spec" .md)-$variant"
+  local spec="$1" variant="$2" run="$3" dir="$out/$(basename "$spec" .md)-r$run-$variant"
   rm -rf "$dir"
   mkdir -p "$dir"
   cp "$spec" "$dir/SPEC.md"
@@ -67,8 +68,10 @@ export out shockharness_bin claude_bin model BASE_PATH prompt_gated prompt_ungat
 
 dirs=()
 for spec in "$here"/specs/*.md; do
-  for variant in gated ungated; do
-    dirs+=("$(prepare "$spec" "$variant")")
+  for run in $(seq 1 "$runs"); do
+    for variant in gated ungated; do
+      dirs+=("$(prepare "$spec" "$variant" "$run")")
+    done
   done
 done
 if [ "${DRY_RUN:-0}" = 1 ]; then printf "%s\n" "${dirs[@]}"; exit 0; fi

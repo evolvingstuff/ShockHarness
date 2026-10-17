@@ -172,45 +172,54 @@ def evasions(tree: Path, run) -> dict:
     return {kind: hits[:8] for kind, hits in fired.items()}
 
 
+def _tool_uses(event: dict) -> list[dict]:
+    message = event.get("message", {})
+    content = message.get("content", []) if isinstance(message, dict) else []
+    if not isinstance(content, list):
+        return []
+    return [p for p in content if isinstance(p, dict) and p.get("type") == "tool_use"]
+
+
 def hook_blocks(log: Path) -> list[dict]:
-    """Edits the hook fed findings back on, and the next edit of that file."""
-    calls: dict[str, dict] = {}
-    order: list[dict] = []
+    """Each time the hook fed findings back: the tool call it followed, the findings,
+    and the agent's next tool call (any tool: agents edit through Bash too). Only tool
+    calls and tool results are kept, never text the builder wrote to explain itself."""
+    events = []
     for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
-            event = json.loads(line)
+            events.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-        message = event.get("message", {})
-        content = message.get("content", []) if isinstance(message, dict) else []
-        for part in content if isinstance(content, list) else []:
-            if part.get("type") == "tool_use" and part.get("name") in EDIT_TOOLS:
-                call = {"id": part["id"], "tool": part["name"], "input": part["input"]}
-                calls[part["id"]] = call
-                order.append(call)
-            if part.get("type") == "tool_result" and part.get("tool_use_id") in calls:
-                text = json.dumps(part.get("content"))
-                calls[part["tool_use_id"]]["result"] = text
-        if event.get("type") == "system" and HOOK_MARKER in json.dumps(event):
-            order.append({"system": json.dumps(event)[:4000]})
     blocks = []
-    for index, call in enumerate(order):
-        text = call.get("result", "") + call.get("system", "")
-        if HOOK_MARKER not in text:
+    last_call = None
+    for index, event in enumerate(events):
+        uses = _tool_uses(event)
+        if uses:
+            last_call = uses[-1]
             continue
-        path = call.get("input", {}).get("file_path", "")
-        following = next(
-            (c for c in order[index + 1 :] if c.get("input", {}).get("file_path") == path), None
-        )
+        text = json.dumps(event)
+        if HOOK_MARKER not in text or event.get("type") == "assistant":
+            continue
+        following = next((u for e in events[index + 1 :] for u in _tool_uses(e)), None)
         blocks.append(
             {
-                "file": path,
-                "edit": call.get("input"),
-                "feedback": text[:3000],
-                "next_edit_of_that_file": following and following.get("input"),
+                "after": last_call
+                and {"tool": last_call.get("name"), "input": last_call.get("input")},
+                "feedback": text[:4000],
+                "next_call": following
+                and {"tool": following.get("name"), "input": following.get("input")},
             }
         )
     return blocks
+
+
+def hook_runs(tree: Path) -> dict:
+    """The hook's own run log: how often it ran, and how often it fed findings back."""
+    log = tree / ".shockharness-cache" / "hook" / "runs.jsonl"
+    if not log.is_file():
+        return {"runs": 0, "feedback": 0}
+    runs = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line]
+    return {"runs": len(runs), "feedback": len([r for r in runs if r["exit"] == 2])}
 
 
 def main(builds: Path, out: Path, shockharness: str) -> None:
@@ -228,6 +237,7 @@ def main(builds: Path, out: Path, shockharness: str) -> None:
         if tree.name.endswith("-gated") and log.exists():
             blocks = hook_blocks(log)
             results[tree.name]["hook_blocks"] = len(blocks)
+            results[tree.name]["hook_log"] = hook_runs(tree)
             (out / f"{tree.name}-blocks.json").write_text(
                 json.dumps(blocks, indent=2), encoding="utf-8"
             )
