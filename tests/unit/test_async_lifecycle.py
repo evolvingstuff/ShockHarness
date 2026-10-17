@@ -89,6 +89,32 @@ def test_async001_javascript_void_and_entry_points(
     assert "discarded with void" in voided.message
 
 
+def test_async001_void_with_a_global_rejection_reporter(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # MetaList: `void` hands the failure to an unhandledrejection listener that reports it.
+    app = (
+        "async function writeRecord(r) { return r; }\n"
+        "export function save(r) {\n"
+        "  writeRecord(r);\n"  # 3: still dropped by accident
+        "  void writeRecord(r);\n"
+        "}\n"
+    )
+    write(empty_root, "src/app.js", app)
+    write(
+        empty_root,
+        "src/overlay.js",
+        "window.addEventListener('unhandledrejection', (event) => {\n"
+        "  event.preventDefault();\n  showOverlay(event.reason);\n});\n",
+    )
+    assert [r[2] for r in rows(analyze(empty_root, strict_config))] == [3]
+    silent = "window.addEventListener('unhandledrejection', (e) => { e.preventDefault(); });\n"
+    write(empty_root, "src/overlay.js", silent)
+    assert [r[2] for r in rows(analyze(empty_root, strict_config))] == [3, 4]
+    write(empty_root, "src/overlay.js", "process.on('unhandledRejection', crash);\n")
+    assert [r[2] for r in rows(analyze(empty_root, strict_config))] == [3]
+
+
 def test_async001_probable_edge_is_unknown(
     empty_root: Path, make_config: Callable[[str], EffectiveConfig]
 ) -> None:

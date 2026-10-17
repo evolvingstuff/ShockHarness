@@ -40,7 +40,12 @@ from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
-from shockharness.rules.api_catalog import CATALOG_RULES, run_catalog_rules
+from shockharness.rules.api_catalog import (
+    CATALOG_RULES,
+    PredicateFile,
+    run_catalog_rules,
+    run_stub003,
+)
 from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.consistency import run_guard001, run_prov001
@@ -721,6 +726,16 @@ def cross_file(pendings: Sequence[PendingFile], config: EffectiveConfig) -> Comp
     return assemble(_module_inputs(pendings), sources, config, frozenset(cplx005_paths))
 
 
+def _rejections_reported(pendings: Sequence[PendingFile]) -> bool:
+    """Some file registers a global unhandled-rejection listener that reports (ASYNC001)."""
+    return any(
+        handler.reports
+        for pending in pendings
+        if pending.facts is not None
+        for handler in pending.facts.asynchrony.rejection_handlers
+    )
+
+
 def async_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -738,6 +753,7 @@ def async_findings(
     async_units = frozenset(
         unit.key for pending in pendings for unit in pending.units if unit.fact.is_async
     )
+    reported = _rejections_reported(pendings)
     found: dict[str, list[Finding]] = {}
     for pending in applying:
         assert pending.facts is not None and pending.source is not None
@@ -750,6 +766,7 @@ def async_findings(
             frozenset(r.rule_id for r in ASYNC_RULES if r.rule_id in pending.rules_applied),
             graph.sites,
             async_units,
+            reported,
         )
     return found
 
@@ -842,6 +859,29 @@ def string_findings(
     return run_magic002(files, config.section(registry.MAGIC_STRINGS_SECTION))
 
 
+def stub_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """STUB003: checks that always answer yes, told apart from base-class hook defaults
+    by the classes of every file and the module graph's import edges."""
+    if graph is None:
+        return {}
+    files = [
+        PredicateFile(
+            path=p.path,
+            catalog=p.facts.catalog,
+            imports=p.facts.imports,
+            source=p.source,
+            applies=registry.STUB003.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    return run_stub003(files, graph.module_edges, config.section(registry.STUBS_SECTION))
+
+
 def consistency_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -872,6 +912,7 @@ def complete(
         registry.ASSERT001,
         registry.PROV001,
         registry.GUARD001,
+        registry.STUB003,
     )
     if graph is None and any(
         rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
@@ -885,6 +926,7 @@ def complete(
     asserts = assert_findings(pendings, config, graph)
     consistency = consistency_findings(pendings, config, graph)
     strings = string_findings(pendings, config)
+    stubs = stub_findings(pendings, config, graph)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
@@ -896,6 +938,7 @@ def complete(
             asserts,
             consistency,
             strings,
+            stubs,
         ):
             if pending.path in found:
                 extra.extend(found[pending.path])

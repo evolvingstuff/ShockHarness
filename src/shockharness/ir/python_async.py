@@ -91,6 +91,15 @@ def _returns_exceptions(call: ast.Call) -> bool:
     )
 
 
+def _argument_count(call: ast.Call) -> int | None:
+    """Positional arguments, or None when some are unpacked (``*args``, ``**kw``)."""
+    if any(isinstance(argument, ast.Starred) for argument in call.args):
+        return None
+    if any(keyword.arg is None for keyword in call.keywords):
+        return None
+    return len(call.args)
+
+
 class _Scope:
     def __init__(self, source: SourceText, scope: ast.AST) -> None:
         self.source = source
@@ -116,6 +125,17 @@ class _Scope:
                 return True
             if isinstance(parent, ast.Try | ast.TryStar) and current in parent.finalbody:
                 return True
+            current = parent
+        return False
+
+    def in_try_body(self, node: ast.AST) -> bool:
+        """In the body of a ``try`` of this scope that has an ``except`` handler."""
+        current = node
+        while id(current) in self.parents:
+            parent = self.parents[id(current)]
+            if isinstance(parent, ast.Try | ast.TryStar) and len(parent.handlers) > 0:
+                if any(statement is current for statement in parent.body):
+                    return True
             current = parent
         return False
 
@@ -151,6 +171,8 @@ class _Scope:
                     void=False,
                     in_async=self.in_async,
                     bound_by=bound_by,
+                    arguments=_argument_count(node),
+                    in_try=self.in_try_body(parent),
                     span=node_span(self.source, node),
                 )
             )
@@ -196,4 +218,5 @@ def collect_python_async(source: SourceText, module: ast.Module) -> AsyncFacts:
     return AsyncFacts(
         discarded_calls=tuple(sorted(discarded, key=lambda d: (d.span, d.callee))),
         settled_batches=tuple(sorted(settled, key=lambda s: (s.span, s.callee))),
+        rejection_handlers=(),  # a dropped coroutine never runs: there is nothing to report
     )

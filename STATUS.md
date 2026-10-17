@@ -3919,3 +3919,38 @@ owner is the schema, and `"isinstance"` and `"body"` are names of Python's own
 Evidence: findings on the 790-file corpus are identical before and after (31412,
 same rule, place, severity and message); 1154 tests pass on 3.14 and 3.11; the
 self-gate passes.
+
+## Feedback on 0.7.0 from MetaList, second round — DONE (2026-10-17)
+
+MetaList reported five rules' false alarms. Measured on MetaList (read-only, the
+tree before and after this change): RESULT001 27 → 3, ASYNC001 63 → 4, GUARD001
+4 → 3, STUB003 2 → 0, ROLE001 1 → 0.
+
+* **RESULT001**: `DiscardedCall.arguments` (positional count; None when
+  unpacked) and `in_try`. Catalog entries take `/N` or `/N-M`
+  (`schema.MUST_USE_ENTRY`); an entry without a count covers the counted default
+  when deviations are computed. On the corpus 25 → 5: the 20 removed were thread
+  and queue joins, encode/decode run to validate inside `try`, a formatter that
+  writes, and rich's `Layout.split(*layouts)`. Kept: three `.map` used for
+  effect in npm and rich's in-place `Text.rstrip()` (a false alarm by name).
+  `.join` left the Python defaults: MetaList's 3 remaining were `thread.join(3)`,
+  and no measured case was str.join.
+* **ASYNC001**: `AsyncFacts.rejection_handlers` (JavaScript); a reporting one in
+  any file exempts `void` calls. MetaList's 4 left are dropped without `void`.
+* **GUARD001**: `FlowUnit.checks`, the guards of a unit's leading
+  `if not g(x): <exit>` / `assert g(x)` statements; a callee that checks the
+  parameter its first argument binds is skipped.
+* **STUB003**: moved to the cross-file phase. `ConstantPredicate.class_name`,
+  `CatalogFacts.classes`; bases resolve through the module graph's import edges
+  (own classes, imported names, `module.Class`). Matching by bare name first cost
+  a true finding (distlib's `Wheel.is_mountable`, "for now", exempted because
+  pip's unrelated `metadata.base.Wheel` has subclasses); resolving through
+  imports keeps it. Corpus: 7 → 7.
+* **ROLE001**: `support_files` defaults widened (singular fixture, helper,
+  support modules).
+
+Decision (mine): rule versions are not bumped, as in the first feedback round.
+
+Evidence: tests for each fix in test_api_catalog, test_async_lifecycle,
+test_consistency and cli/test_role_integrity; corpus findings otherwise
+identical (only the 20 RESULT001 removed).

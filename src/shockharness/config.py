@@ -26,7 +26,7 @@ import hashlib
 import json
 import re
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -39,6 +39,7 @@ from shockharness.roles import CLASSIFIED_ROLES, FILE_ROLES_KEY, ROLE_CONFIG
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
 from shockharness.schema import (
+    MUST_USE_ENTRY,
     NAMED_CONSTANT_MODES,
     PROFILE_STRICT,
     PROFILES,
@@ -510,6 +511,8 @@ def _unknown_deviations(values: Mapping[str, Any], strict_values: Mapping[str, A
 
 # H3 guardrail sections: which rules each one carries, which of its lists are catalogs
 # (removing an entry loosens) and which are permissions (adding one loosens).
+# RESULT001's section: its catalog entries may carry an argument count.
+RESULTS_SECTION = "results"
 GUARDRAIL_RULES = {
     "stubs": "STUB001, STUB002",
     "assertions": "ASSERT001",
@@ -691,11 +694,22 @@ def _input_deviations(
     return found
 
 
+def _listed(section: str, value: Any, entries: Sequence[Any]) -> bool:
+    """``value`` is in ``entries``; a RESULT001 entry with an argument count
+    (``.join/1``) is also covered by the same callee without one (``.join``)."""
+    if value in entries:
+        return True
+    if section != RESULTS_SECTION:
+        return False
+    match = MUST_USE_ENTRY.fullmatch(str(value))
+    return match is not None and match.group("name") in entries
+
+
 def _guardrail_list_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -> list[str]:
     """A catalog entry removed, a permission added."""
     found: list[str] = []
     for section, key in GUARDRAIL_CATALOGS:
-        removed = [v for v in strict[section][key] if v not in rules[section][key]]
+        removed = [v for v in strict[section][key] if not _listed(section, v, rules[section][key])]
         if len(removed) > 0:
             found.append(
                 f"rules.{section}.{key} no longer lists "

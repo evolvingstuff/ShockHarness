@@ -239,6 +239,9 @@ class _Unit:
             self.returns.append(FlowReturn(node_span(self.source, node.body), _sorted(body)))
         elif isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             self.statements(node.body)
+        checks: list[FlowGuard] = []
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            checks = self.entry_checks(node.body)
         return FlowUnit(
             name=self.info.name,
             parameters=tuple(self.parameters),
@@ -249,8 +252,26 @@ class _Unit:
             returns=tuple(self.returns),
             tested=tuple(sorted(self.tested)),
             asserts=tuple(self.asserts),
+            checks=tuple(checks),
             truncated=self.truncated,
         )
+
+    def entry_checks(self, body: list[ast.stmt]) -> list[FlowGuard]:
+        """The guards of the leading ``if not g(x): <exit>`` and ``assert g(x)``
+        statements, after an optional docstring."""
+        found: list[FlowGuard] = []
+        for index, statement in enumerate(body):
+            if index == 0 and _is_docstring(statement):
+                continue
+            if isinstance(statement, ast.If) and len(statement.orelse) == 0:
+                if not _exits(statement.body):
+                    break
+                found.extend(self.holding(statement.test, when_true=False))
+            elif isinstance(statement, ast.Assert):
+                found.extend(self.holding(statement.test, when_true=True))
+            else:
+                break
+        return found
 
     def statements(self, body: Iterable[ast.stmt]) -> None:
         """A block; guards established in it (an early exit, an assert) end with it."""
@@ -489,6 +510,10 @@ def _if(unit: _Unit, node: ast.stmt) -> None:
     unit.guarded(node.orelse, otherwise)
     if isinstance(node, ast.If) and len(node.orelse) == 0 and _exits(node.body):
         unit.guards.extend(otherwise)  # `if not has(x): return` guards the rest
+
+
+def _is_docstring(statement: ast.stmt) -> bool:
+    return isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant)
 
 
 def _exits(body: list[ast.stmt]) -> bool:

@@ -6,9 +6,11 @@ discarded calls for RESULT001); this module applies the catalogs in each rule's 
 resolving callees through the file's own imports (rules/guardrails.py).
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
+from shockharness.complexity.callgraph import ModuleEdge
 from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.model import (
     CHECK_TRUE,
@@ -18,6 +20,9 @@ from shockharness.ir.model import (
     TYPE_ESCAPE_ANY,
     TYPE_ESCAPE_CAST,
     TYPE_ESCAPE_NON_NULL,
+    CatalogFacts,
+    ConstantPredicate,
+    ImportFact,
     ModuleFacts,
     ProcessCall,
     Span,
@@ -41,6 +46,7 @@ from shockharness.rules.registry import (
     TYPESCRIPT,
     RuleSpec,
 )
+from shockharness.schema import MUST_USE_ENTRY
 from shockharness.source import SourceText
 
 CATALOG_RULES = (PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003)
@@ -163,25 +169,60 @@ def _process001(
 # -- RESULT001 ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class MustUse:
+    """A RESULT001 catalog entry: the arguments the pure callee takes, when given."""
+
+    low: int | None
+    high: int | None
+
+    def accepts(self, arguments: int | None) -> bool:
+        if self.low is None:
+            return True
+        if arguments is None:
+            return False  # an unpacked argument list: the count is not known
+        if self.high is None:
+            return arguments == self.low
+        return self.low <= arguments <= self.high
+
+
+def _must_use(entries: Sequence[str]) -> dict[str, MustUse]:
+    found: dict[str, MustUse] = {}
+    for entry in entries:
+        match = MUST_USE_ENTRY.fullmatch(entry)
+        assert match is not None, f"the schema admits only valid entries: {entry!r}"
+        found[match.group("name")] = MustUse(
+            low=_count(match.group("low")), high=_count(match.group("high"))
+        )
+    return found
+
+
+def _count(text: str | None) -> int | None:
+    if text is None:
+        return None
+    return int(text)
+
+
 def _result001(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
     key = "python_must_use" if language == PYTHON else "javascript_must_use"
-    entries = [str(e) for e in settings[key]]
-    functions = {e for e in entries if not e.startswith(METHOD_PREFIX)}
-    methods = {e[len(METHOD_PREFIX) :] for e in entries if e.startswith(METHOD_PREFIX)}
+    entries = _must_use([str(e) for e in settings[key]])
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for call in facts.asynchrony.discarded_calls:
-        if call.callee == DYNAMIC:
-            continue
+        if call.callee == DYNAMIC or call.in_try:
+            continue  # in a try with a handler, the call may run for what it raises
         qualified = qualified_callee(call.callee, aliases)
         receiver, dot, last = call.callee.rpartition(".")
         root, _dot, _rest = receiver.partition(".")
-        if qualified in functions:
+        method = METHOD_PREFIX + last
+        if qualified in entries and entries[qualified].accepts(call.arguments):
             confidence = CONFIDENCE_EXACT
-        elif dot != "" and receiver != "" and root not in aliases and last in methods:
+        elif dot != "" and receiver != "" and root not in aliases and method in entries:
             # A method by name; a function of an imported module (os.replace) is not one.
+            if not entries[method].accepts(call.arguments):
+                continue  # another method of that name (Thread.join(), location.replace(u))
             confidence = CONFIDENCE_APPROXIMATE  # matched by method name, receiver untyped
         else:
             continue
@@ -320,21 +361,127 @@ def _batch001(
     ]
 
 
+@dataclass(frozen=True)
+class PredicateFile:
+    path: str
+    catalog: CatalogFacts
+    imports: tuple[ImportFact, ...]
+    source: SourceText
+    applies: bool
+
+
+# A class: (the path that defines it, its name).
+ClassKey = tuple[str, str]
+
+
+def _import_targets(
+    files: Sequence[PredicateFile], module_edges: Sequence[ModuleEdge]
+) -> dict[tuple[str, str], ClassKey]:
+    """(path, local name) -> (the file it comes from, the name there), for every name a
+    file imports from an analyzed file; a whole-module import maps to (file, "")."""
+    targets = {
+        (edge.source, edge.span): edge.target for edge in module_edges if edge.target is not None
+    }
+    found: dict[tuple[str, str], ClassKey] = {}
+    for file in files:
+        for fact in file.imports:
+            if (file.path, fact.span) not in targets:
+                continue
+            target = targets[(file.path, fact.span)]
+            for imported, local in fact.names:
+                if imported != "*":
+                    found[(file.path, local)] = (target, imported)
+    return found
+
+
+def _resolve_base(
+    path: str, base: str, defined: set[ClassKey], imported: Mapping[tuple[str, str], ClassKey]
+) -> ClassKey | None:
+    """The project class a base names: one of the file's own classes, a class it imports
+    (``from base_modal import BaseModal``), or a class of a module it imports whole
+    (``modals.BaseModal``)."""
+    root, _dot, rest = base.partition(".")
+    if rest == "" and (path, base) in defined:
+        return (path, base)
+    if rest == "" and (path, base) in imported:
+        return imported[(path, base)]
+    if rest != "" and "." not in rest and (path, root) in imported:
+        module, name = imported[(path, root)]
+        if (module, name) not in defined:  # the name is a module (import x; from p import m)
+            return (module, rest)
+    return None
+
+
+def _class_bases(
+    files: Sequence[PredicateFile], module_edges: Sequence[ModuleEdge]
+) -> dict[ClassKey, list[ClassKey]]:
+    """Every class and the project classes its bases resolve to."""
+    defined = {(file.path, c.name) for file in files for c in file.catalog.classes}
+    imported = _import_targets(files, module_edges)
+    bases: dict[ClassKey, list[ClassKey]] = {}
+    for file in files:
+        for declared in file.catalog.classes:
+            resolved = [_resolve_base(file.path, b, defined, imported) for b in declared.bases]
+            bases[(file.path, declared.name)] = [r for r in resolved if r is not None]
+    return bases
+
+
+def run_stub003(
+    files: Sequence[PredicateFile], module_edges: Sequence[ModuleEdge], settings: Mapping[str, Any]
+) -> dict[str, list[Finding]]:
+    """STUB003 across files. A base-class hook default (a class some project class
+    extends) is not reported; an override that repeats an always-yes method of the base
+    it extends is reported as redundant. Bases are resolved through each file's imports."""
+    bases = _class_bases(files, module_edges)
+    extended = {base for found in bases.values() for base in found}
+    yes = {
+        (file.path, p.class_name, p.name)
+        for file in files
+        for p in file.catalog.constant_predicates
+        if p.class_name is not None
+    }
+    found: dict[str, list[Finding]] = {}
+    for file in files:
+        if not file.applies:
+            continue
+        for predicate in file.catalog.constant_predicates:
+            finding = _stub003(file, predicate, bases, extended, yes, settings)
+            if finding is None:
+                continue
+            if file.path not in found:
+                found[file.path] = []
+            found[file.path].append(finding)
+    return found
+
+
 def _stub003(
-    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
-) -> list[Finding]:
-    return [
-        _finding(
-            STUB003,
-            str(settings["stub003_severity"]),
-            path,
-            predicate.span,
-            f"{predicate.name} is named as a check and always answers yes",
-            source,
-            CONFIDENCE_APPROXIMATE,
-        )
-        for predicate in facts.catalog.constant_predicates
-    ]
+    file: PredicateFile,
+    predicate: ConstantPredicate,
+    bases: Mapping[ClassKey, Sequence[ClassKey]],
+    extended: set[ClassKey],
+    yes: set[tuple[str, str | None, str]],
+    settings: Mapping[str, Any],
+) -> Finding | None:
+    message = f"{predicate.name} is named as a check and always answers yes"
+    if predicate.class_name is not None:
+        own = (file.path, predicate.class_name)
+        repeated = [b for b in bases[own] if (b[0], b[1], predicate.name) in yes]
+        if len(repeated) > 0:
+            message = (
+                f"{predicate.class_name}.{predicate.name} repeats {repeated[0][1]}."
+                f"{predicate.name}, which already answers yes: remove the override"
+            )
+        elif own in extended:
+            return None  # a default for subclasses to override
+    return _finding(
+        STUB003,
+        str(settings["stub003_severity"]),
+        file.path,
+        predicate.span,
+        message,
+        file.source,
+        CONFIDENCE_APPROXIMATE,
+    )
 
 
 def run_catalog_rules(
@@ -359,6 +506,4 @@ def run_catalog_rules(
         found.extend(_retry001(facts, source, path, language, rules["retry"]))
     if BATCH001.rule_id in active:
         found.extend(_batch001(facts, source, path, rules["batches"]))
-    if STUB003.rule_id in active:
-        found.extend(_stub003(facts, source, path, rules["stubs"]))
     return found

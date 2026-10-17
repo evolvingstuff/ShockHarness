@@ -231,6 +231,10 @@ class _Unit:
                 self.class_members(_named(body))
         else:
             self.function_body(node)
+        checks: list[FlowGuard] = []
+        body = node.child_by_field_name(Field.BODY)
+        if not self.module and node.type not in CLASS_TYPES and body is not None:
+            checks = self.entry_checks(body)
         return FlowUnit(
             name=self.info.name,
             parameters=tuple(self.parameters),
@@ -241,8 +245,25 @@ class _Unit:
             returns=tuple(self.returns),
             tested=tuple(sorted(self.tested)),
             asserts=(),
+            checks=tuple(checks),
             truncated=self.truncated,
         )
+
+    def entry_checks(self, body: Node) -> list[FlowGuard]:
+        """The guards of the leading ``if (!g(x)) <exit>`` statements of a function body."""
+        found: list[FlowGuard] = []
+        if body.type != Kind.STATEMENT_BLOCK:
+            return found
+        for statement in _named(body):
+            consequence = statement.child_by_field_name(Field.CONSEQUENCE)
+            alternative = statement.child_by_field_name(Field.ALTERNATIVE)
+            if statement.type != Kind.IF_STATEMENT or alternative is not None:
+                break
+            if not _exits(consequence):
+                break
+            condition = statement.child_by_field_name(Field.CONDITION)
+            found.extend(self.holding(condition, when_true=False))
+        return found
 
     def function_body(self, node: Node) -> None:
         for parameter in _parameter_nodes(node):

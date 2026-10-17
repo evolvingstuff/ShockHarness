@@ -868,7 +868,12 @@ precision is measured (decision 9).
 the file's own imports. Project callees are resolved by the cross-file call
 graph, the same resolution `metrics.graph` reports: `await save(r)` in one file
 and `save(r)` as a statement in another, where `save` is `async def` in a third,
-reports the second. `void` is not treated as handling a rejection. The call
+reports the second. `void` is not treated as handling a rejection, unless some
+file of the project registers a global listener that reports unhandled
+rejections (`window.addEventListener("unhandledrejection", h)`,
+`process.on("unhandledRejection", h)`, `window.onunhandledrejection = h`, with a
+handler that does more than `preventDefault()`): `void` then hands the failure
+to it on purpose. A dropped call without `void` is still reported. The call
 graph is built for ASYNC001 even when `complexity.enabled = false`.
 
 **ASYNC002.** A supervisor is a `with`/`async with` manager listed in
@@ -916,8 +921,15 @@ name the function returns) is the caller's to check and is not reported. Whether
 **RESULT001.** Uses H4's discarded-call facts. An entry in
 `python_must_use` / `javascript_must_use` is a qualified function (`sorted`,
 `copy.deepcopy`, `structuredClone`; exact) or `.name` for a method on any
-receiver (`.strip`, `.map`; approximate). A function of an imported module
-(`os.replace`) never matches a method entry.
+receiver (`.strip`, `.map`; approximate). `/N` or `/N-M` after an entry is the
+number of positional arguments the pure callee takes (`.replace/2-3`, JavaScript
+`.replace/2`): a call with another count is a different method of the same name
+(`location.replace(url)`, `Path.replace(p)`, `store.replaceAll({...})`) and is not
+reported, nor is one with unpacked arguments. `.join` is not in the defaults: as
+a statement on a name it was `Thread.join` in every case measured, and the
+`", ".join(x)` mistake has a literal receiver, which is not recorded. A call in the body of a `try` that has a handler is not reported
+either: it may run for what it raises (`host.encode("idna")` to validate). A
+function of an imported module (`os.replace`) never matches a method entry.
 
 **TYPE001.** `report_any`, `report_cast`, `report_non_null` (TypeScript `x!`)
 and `report_type_ignore` switch each kind off (a deviation). In TypeScript,
@@ -938,8 +950,14 @@ not reported. The catch itself is also judged by EXC001/EXC002.
 
 **STUB003.** `is_`/`has_`/`can_`/`should_` (JavaScript `isX`, `hasX`, ...) or a
 name starting with `check`, `validate`, `verify`, `authorize`, `authenticate`,
-`allow`, whose body (docstring aside) only returns `True` / `true`. Severity
-`rules.stubs.stub003_severity` (`review` by default).
+`allow`, whose body (docstring aside) only returns `True` / `true`. Across
+files: a method of a class that some project class extends is a default for
+subclasses to override (`BaseModal.shouldCloseOnClickOutside`) and is not
+reported; a method that repeats an always-yes method of its base is reported as
+redundant (`HelpModal.shouldCloseOnClickOutside repeats
+BaseModal.shouldCloseOnClickOutside, which already answers yes: remove the
+override`). Classes are matched by the last name of each base (approximate).
+Severity `rules.stubs.stub003_severity` (`review` by default).
 
 ### ROLE001: is code classified as a test really a test? (warning; review for empty test files)
 
@@ -953,7 +971,7 @@ decision 24):
 * **What it contains (approximate).** A test-role file with no test case
   (`test_*` functions and methods; `describe`/`it`/`test` calls) that matches
   none of `rules.role_integrity.support_files` (conftest, `__init__.py`,
-  fixtures, helpers, mocks, factories, ...). Reported at line 1, at
+  fixture and helper files, support modules, mocks, factories, ...). Reported at line 1, at
   `empty_test_severity` (`review` by default).
 
 The third direction needs a base revision and is a `VERIFY003` finding: a file
@@ -1032,7 +1050,10 @@ and 29).
   call runs; any check counts (`isdir` where the others use `exists`). Reported
   when at least `guard_min_sites` (3) sites exist, at least `guard_min_percent`
   (75) of them are guarded, and some are not; the message names the most common
-  guard.
+  guard. Not reported when the callee checks that parameter itself before
+  anything else (`if not isinstance(tags, str): raise TypeError(...)`, `assert
+  has(x)`, `if (!isNote(n)) throw ...`): a call without the check fails loudly
+  there.
 
 ### MAGIC002: one string repeated across files (review)
 

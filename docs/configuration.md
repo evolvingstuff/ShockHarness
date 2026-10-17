@@ -762,7 +762,7 @@ rules see them. The full default lists are in `defaults.toml`.
 enabled = true
 severity = "warning"              # a production file importing a test-role file
 empty_test_severity = "review"    # a test-role file with no test case
-support_files = ["**/conftest.py", "**/__init__.py", "**/fixtures/**", "**/helpers/**", "**/*helpers*", ...]
+support_files = ["**/conftest.py", "**/__init__.py", "**/fixtures/**", "**/support/**", "**/*fixture*", "**/*helper*", "**/*_support.*", ...]
 ```
 
 Lowering either severity to `review` (or below the default), and adding a

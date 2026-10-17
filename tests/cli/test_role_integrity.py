@@ -67,6 +67,18 @@ def test_production_imports_of_test_files_and_empty_tests(
     assert registry.category_of(first.rule_id) == "policy_integrity"
 
 
+def test_singular_fixture_and_support_modules_are_support_files(
+    empty_root: Path, make_config: Callable[[str], EffectiveConfig]
+) -> None:
+    # MetaList: one shared fixture record (singular), and support modules.
+    write(empty_root, "tests/unit/snapshot_note_fixture.py", "NOTE = {}\n")
+    write(empty_root, "tests/db_support.py", "def connect():\n    return None\n")
+    write(empty_root, "tests/support/clock.py", "def now():\n    return None\n")
+    write(empty_root, "tests/unit/notes.py", "def note():\n    return None\n")
+    report = analyze(empty_root, make_config('include = ["tests/**/*.py"]\n'))
+    assert rows(report) == [("tests/unit/notes.py", 1, "review")]
+
+
 def test_support_files_and_severities_are_configurable(
     empty_root: Path, make_config: Callable[[str], EffectiveConfig]
 ) -> None:
@@ -75,7 +87,7 @@ def test_support_files_and_severities_are_configurable(
         'include = ["src/**/*.py", "tests/**/*.py"]\n'
         "[tool.shockharness.rules.role_integrity]\n"
         'severity = "error"\nempty_test_severity = "warning"\n'
-        'support_files = ["**/conftest.py", "**/__init__.py", "**/*helpers*", "tests/billing.py"]\n'
+        'support_files = ["**/conftest.py", "**/__init__.py", "**/*helper*", "tests/billing.py"]\n'
     )
     assert rows(analyze(empty_root, config)) == [
         ("src/app/payments.py", 1, "error"),

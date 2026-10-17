@@ -6,12 +6,21 @@ error format. Semantic checks that need other modules (rule IDs, glob validity,
 supported languages) live in :mod:`shockharness.config`.
 """
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from shockharness.roles import CLASSIFIED_ROLES, ROLES
+
+# A RESULT001 catalog entry: a qualified function or ".method", optionally with the number
+# of positional arguments the pure callee takes (".replace/2-3", ".join/1"); a call with
+# another count is some other method of that name (Thread.join(), location.replace(url)).
+MUST_USE_ENTRY = re.compile(
+    r"(?P<name>\.?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)(?:/(?P<low>\d+)(?:-(?P<high>\d+))?)?"
+)
+MUST_USE = "a callee or .method, optionally /N or /N-M arguments (.replace/2-3)"
 
 
 @dataclass(frozen=True)
@@ -46,6 +55,22 @@ class StrField(Field):
 
     def describe(self) -> str:
         return "string"
+
+
+class PatternField(Field):
+    def __init__(self, pattern: re.Pattern[str], description: str) -> None:
+        self.pattern = pattern
+        self.description = description
+
+    def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None:
+        if not isinstance(value, str):
+            issues.append(ConfigIssue(key_path, f"expected a string, got {type_name(value)}"))
+            return
+        if self.pattern.fullmatch(value) is None:
+            issues.append(ConfigIssue(key_path, f"expected {self.description}, got {value!r}"))
+
+    def describe(self) -> str:
+        return self.description
 
 
 class BoolField(Field):
@@ -358,8 +383,8 @@ CONFIG_SCHEMA = TableField(
                 "results": TableField(
                     fields={
                         **GUARDRAIL_COMMON,
-                        "python_must_use": ListField(StrField(allow_empty=False)),
-                        "javascript_must_use": ListField(StrField(allow_empty=False)),
+                        "python_must_use": ListField(PatternField(MUST_USE_ENTRY, MUST_USE)),
+                        "javascript_must_use": ListField(PatternField(MUST_USE_ENTRY, MUST_USE)),
                     },
                     required=(),
                 ),

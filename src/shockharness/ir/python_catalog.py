@@ -34,6 +34,7 @@ from shockharness.ir.model import (
     TYPE_ESCAPE_CAST,
     BatchLoop,
     CatalogFacts,
+    ClassDecl,
     ConstantPredicate,
     ProcessCall,
     RetryFact,
@@ -327,14 +328,37 @@ def _is_docstring(statement: ast.stmt) -> bool:
     )
 
 
+def _method_owners(module: ast.Module) -> dict[int, str]:
+    """The class of every function defined directly in a class body."""
+    owners: dict[int, str] = {}
+    for node in ast.walk(module):
+        if isinstance(node, ast.ClassDef):
+            owners.update((id(member), node.name) for member in node.body)
+    return owners
+
+
 def _constant_predicates(source: SourceText, module: ast.Module) -> list[ConstantPredicate]:
+    owners = _method_owners(module)
     found: list[ConstantPredicate] = []
     for node in ast.walk(module):
         if not isinstance(node, FUNCTIONS) or PREDICATE.match(node.name) is None:
             continue
         body = [s for s in node.body if not _is_docstring(s)]
         if len(body) == 1 and isinstance(body[0], ast.Return) and _is_true(body[0].value):
-            found.append(ConstantPredicate(node.name, node_span(source, node)))
+            owner: str | None = None
+            if id(node) in owners:
+                owner = owners[id(node)]
+            found.append(ConstantPredicate(node.name, owner, node_span(source, node)))
+    return found
+
+
+def _classes(source: SourceText, module: ast.Module) -> list[ClassDecl]:
+    found: list[ClassDecl] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.ClassDef):
+            bases = [dotted_name(base) for base in node.bases]
+            names = tuple(base for base in bases if base is not None)
+            found.append(ClassDecl(node.name, names, node_span(source, node)))
     return found
 
 
@@ -364,4 +388,5 @@ def collect_python_catalog(source: SourceText, module: ast.Module) -> CatalogFac
         constant_predicates=tuple(
             sorted(_constant_predicates(source, module), key=lambda c: c.span)
         ),
+        classes=tuple(sorted(_classes(source, module), key=lambda c: c.span)),
     )

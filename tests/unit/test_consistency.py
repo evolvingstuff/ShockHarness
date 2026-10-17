@@ -81,7 +81,7 @@ def test_prov001_needs_an_issued_site(empty_root: Path, strict_config: Effective
 
 NOTES = (
     "export function hasNoteHash(id) { return id.length > 0; }\n"
-    "export function removeNoteHash(id) { if (!hasNoteHash(id)) { throw new Error(id); } }\n"
+    "export function removeNoteHash(id) { hashes.delete(id); }\n"  # no check of its own
     "export function a(id) { if (hasNoteHash(id)) { removeNoteHash(id); } }\n"
     "export function b(id) { if (!hasNoteHash(id)) return; removeNoteHash(id); }\n"
     "export function c(note) {\n"
@@ -126,3 +126,40 @@ def test_guard001_python_and_thresholds(
     strict = make_config("[tool.shockharness.rules.consistency]\nguard_min_sites = 7\n")
     assert rows(project(empty_root, strict, {}), "GUARD001") == []
     assert any("guard_min_sites is 7 (strict: 3)" in d for d in strict.deviations)
+
+
+def test_guard001_skips_a_callee_that_checks_its_argument(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # MetaList: note_tags_include raises on the check its callers make first.
+    checked = (
+        "def note_tags_include(tags, tag):\n"
+        '    """Whether tags lists tag."""\n'
+        "    if not isinstance(tags, str):\n"
+        "        raise TypeError(tags)\n"
+        "    return tag in tags.split()\n\n\n"
+    )
+    unchecked = "def includes(tags, tag):\n    return tag in tags.split()\n\n\n"
+    sites = (
+        "".join(
+            f"def site{i}(tags):\n    if isinstance(tags, str):\n"
+            "        {callee}(tags, 'a')\n\n\n"
+            for i in range(4)
+        )
+        + "def bare(tags):\n    {callee}(tags, 'a')\n"
+    )
+    files = {"src/tags.py": checked + sites.format(callee="note_tags_include")}
+    assert rows(project(empty_root, strict_config, files), "GUARD001") == []
+    other = empty_root / "other"
+    other.mkdir()
+    files = {"src/tags.py": unchecked + sites.format(callee="includes")}
+    assert rows(project(other, strict_config, files), "GUARD001") == [("src/tags.py", 26)]
+    js = (
+        "function show(note) {\n  if (!isNote(note)) {\n    throw new TypeError('note');\n  }\n"
+        "  return note;\n}\n"
+        + "".join(f"export function s{i}(n) {{\n  if (isNote(n)) show(n);\n}}\n" for i in range(4))
+        + "export function bare(n) {\n  show(n);\n}\n"
+    )
+    third = empty_root / "third"
+    third.mkdir()
+    assert rows(project(third, strict_config, {"src/notes.js": js}), "GUARD001") == []

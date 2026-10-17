@@ -348,7 +348,10 @@ Stated so that a clean report is never read as more than it is.
   information an arbitrary library call is not assumed to return a Promise:
   only the configured catalog and project functions declared `async` count.
   A function that returns a Promise without being declared `async` is not
-  recognized.
+  recognized. A global unhandled-rejection listener exempts every `void` call
+  of the project, whatever the listener does beyond `preventDefault()`; a
+  listener registered through a helper, or on an object other than `window`,
+  `self`, `globalThis` or `process`, is not seen.
 * `ASYNC002` recognizes a supervisor only by the `with`/`async with` that bound
   the receiver in the same function; a `TaskGroup` passed in as a parameter is
   not recognized, so `group.create_task(...)` there is reported (approximate).
@@ -366,7 +369,12 @@ Stated so that a clean report is never read as more than it is.
   at `review` because the pattern is often deliberate.
 * Catalogs, not types: a callee counts only when it resolves through the file's
   imports to a listed name; a wrapper the project wrote is invisible until it is
-  listed. `RESULT001`'s method entries match any receiver by name.
+  listed. `RESULT001`'s method entries match any receiver by name and argument
+  count: a project method with the same name and count as a pure one
+  (`rich`'s in-place `Text.rstrip()`) is still reported, and a must-use call in a
+  `try` with a handler is never reported, whether or not it can raise.
+* `STUB003` matches classes by name, not through imports: two classes of one
+  name in different modules are treated as one.
 * `PROCESS001` does not trace whether interpolated data can contain shell syntax
   (H6), counts a status read anywhere in the function as checking it, and does
   not judge `Popen` / `spawn` exit handling.
@@ -446,6 +454,8 @@ Stated so that a clean report is never read as more than it is.
   or a comparison that is not a call (`if key in table:`) is not seen.
 * Only call sites the call graph resolves to one project function are compared;
   method calls on objects the graph cannot type are not.
+* A callee's own check counts only among its leading statements and only on the
+  parameter the first argument binds; a check further down is not seen.
 
 ## MAGIC003
 

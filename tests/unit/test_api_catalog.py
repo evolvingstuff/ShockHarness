@@ -2,8 +2,10 @@
 STUB003."""
 
 from collections.abc import Callable
+from pathlib import Path
 
 from shockharness.analysis import CACHE_BYPASSED, AnalysisOptions, FileResult, analyze_text
+from shockharness.api import analyze_paths
 from shockharness.config import EffectiveConfig
 
 OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED)
@@ -101,6 +103,47 @@ def test_result001(strict_config: EffectiveConfig) -> None:
         "}\n"
     )
     assert [r[0] for r in rows(run(strict_config, "tests/a.test.js", js), "RESULT001")] == [2, 3, 5]
+
+
+def test_result001_counts_arguments_and_skips_validation(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    # MetaList: methods of other classes that share a name with a pure one.
+    py = (
+        "def f(name, worker, path, target, parts, host):\n"
+        "    name.replace('a', 'b')\n"  # 2: str.replace takes 2-3 arguments
+        "    worker.join(timeout=5)\n"  # Thread.join: no positional argument
+        "    worker.join()\n"  # Thread.join(): str.join needs 1
+        "    path.replace(target)\n"  # Path.replace renames
+        "    ', '.join(parts)\n"  # 6: a computed receiver is not recorded (<dynamic>)
+        "    name.join(parts)\n"  # 7: .join is not in the defaults (Thread.join(3))
+        "    layout.split(*parts)\n"  # unpacked: the count is unknown
+        "    try:\n"
+        "        host.encode('idna')\n"  # run for what it raises
+        "    except UnicodeError:\n"
+        "        return None\n"
+        "    return name\n"
+    )
+    config = make_config("")
+    assert [r[0] for r in rows(run(config, "src/a.py", py), "RESULT001")] == [2]
+    js = (
+        "export function f(name, store, tab) {\n"
+        "  window.location.replace(url);\n"  # navigation
+        "  tab.location.replace(url);\n"
+        "  store.replaceAll({ a: 1 });\n"  # a project method
+        "  name.replace('a', 'b');\n"  # 5
+        "  try { name.trim(); } catch (error) { return null; }\n"
+        "  return name;\n"
+        "}\n"
+    )
+    assert [r[0] for r in rows(run(config, "src/a.js", js), "RESULT001")] == [5]
+    wider = make_config(
+        '[tool.shockharness.rules.results]\npython_must_use = [".join/1", ".replace"]\n'
+    )
+    assert [r[0] for r in rows(run(wider, "src/a.py", py), "RESULT001")] == [2, 5, 7]
+    removed = next(d for d in wider.deviations if "python_must_use no longer lists" in d)
+    assert "'sorted'" in removed
+    assert "'.replace/2-3'" not in removed  # ".replace" covers it: any number of arguments
 
 
 def test_type001_kinds_and_switches(make_config: Callable[[str], EffectiveConfig]) -> None:
@@ -251,3 +294,45 @@ def test_process001_hands_a_returned_result_to_the_caller(strict_config: Effecti
         "export function d(c) { const r = spawnSync(c, []); return c; }\n"  # 4
     )
     assert [r[0] for r in rows(run(strict_config, "src/a.js", js), "PROCESS001")] == [4]
+
+
+def test_stub003_hook_defaults_and_redundant_overrides(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # MetaList: BaseModal's documented default, and subclasses that repeat it.
+    files = {
+        "src/base-modal.js": (
+            "export class BaseModal {\n"
+            "  // Override in subclasses to disable.\n"
+            "  shouldCloseOnClickOutside() { return true; }\n"
+            "}\n"
+        ),
+        "src/help.js": (
+            "import { BaseModal } from './base-modal.js';\n"
+            "export class HelpModal extends BaseModal {\n"
+            "  shouldCloseOnClickOutside() { return true; }\n"  # 3: repeats the default
+            "}\n"
+            "export class Login extends BaseModal {\n"
+            "  isAllowed() { return true; }\n"  # 6: a check of its own that says yes
+            "}\n"
+        ),
+        "src/perms.py": (
+            "class Permission:\n    def has_permission(self):\n        return True\n\n\n"
+            "class Open(Permission):\n    def has_permission(self):\n        return True\n"
+        ),  # 7: repeats the base
+    }
+    for name, body in files.items():
+        (empty_root / name).parent.mkdir(parents=True, exist_ok=True)
+        (empty_root / name).write_text(body, encoding="utf-8")
+    report = analyze_paths([empty_root], empty_root, strict_config, OPTIONS)
+    found = [(f.path, f.span.line, f.message) for f in report.findings if f.rule_id == "STUB003"]
+    assert [(path, line) for path, line, _message in found] == [
+        ("src/help.js", 3),
+        ("src/help.js", 6),
+        ("src/perms.py", 7),
+    ]
+    assert found[0][2] == (
+        "HelpModal.shouldCloseOnClickOutside repeats BaseModal.shouldCloseOnClickOutside, "
+        "which already answers yes: remove the override"
+    )
+    assert found[1][2] == "isAllowed is named as a check and always answers yes"

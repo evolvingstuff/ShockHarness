@@ -110,6 +110,7 @@ def _async001(
     settings: Mapping[str, Any],
     sites: Mapping[tuple[str, Span], SiteResolution],
     async_units: frozenset[str],
+    rejections_reported: bool,
 ) -> list[Finding]:
     severity = str(settings["severity"])
     key = "python_coroutine_apis" if language == PYTHON else "javascript_promise_apis"
@@ -118,6 +119,8 @@ def _async001(
     kind = "coroutine" if language == PYTHON else "Promise"
     found: list[Finding] = []
     for call in facts.asynchrony.discarded_calls:
+        if call.void and rejections_reported:
+            continue  # handed on deliberately, to a global handler that reports it
         qualified = qualified_callee(call.callee, aliases)
         if qualified in apis:
             message = f"the {kind} from {qualified}(...) {_dropped(call)}: {call.text}"
@@ -227,12 +230,19 @@ def run_async_rules(
     active: frozenset[str],
     sites: Mapping[tuple[str, Span], SiteResolution],
     async_units: frozenset[str],
+    rejections_reported: bool,
 ) -> list[Finding]:
     """Findings of the active ASYNC rules for one file. ``sites`` and ``async_units`` come
-    from the call graph (every file's call sites; the keys of ``async`` units)."""
+    from the call graph (every file's call sites; the keys of ``async`` units);
+    ``rejections_reported``: some file registers a global unhandled-rejection listener
+    that reports, so a ``void`` call hands its failure on rather than hiding it."""
     found: list[Finding] = []
     if ASYNC001.rule_id in active:
-        found.extend(_async001(facts, source, path, language, settings, sites, async_units))
+        found.extend(
+            _async001(
+                facts, source, path, language, settings, sites, async_units, rejections_reported
+            )
+        )
     if ASYNC002.rule_id in active and language == PYTHON:
         found.extend(_async002(facts, source, path, settings))
     if ASYNC003.rule_id in active:

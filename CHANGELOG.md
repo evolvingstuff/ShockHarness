@@ -5,6 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (feedback from MetaList on 0.7.0, second round)
+- `RESULT001`: a catalog entry can give the number of positional arguments the
+  pure callee takes (`.replace/2-3`, JavaScript `.replace/2`); a call with
+  another count is a different method of that name (`location.replace(url)`,
+  `Path.replace(p)`, `store.replaceAll({...})`) and is not reported. A call in a
+  `try` body with a handler is not reported (`host.encode("idna")` run to
+  validate). `.join` left the Python defaults: on a name it was `Thread.join`
+  in every case measured. On the 790-file corpus 25 findings became 5.
+- `ASYNC001`: a `void` call is not reported when the project registers a global
+  unhandled-rejection listener that reports (`window.addEventListener(
+  "unhandledrejection", ...)`, `process.on("unhandledRejection", ...)`).
+- `GUARD001`: not reported when the callee checks that argument itself among its
+  leading statements (`if not isinstance(tags, str): raise TypeError(...)`).
+- `STUB003` runs across files: a method of a class some project class extends is
+  a hook default and is not reported; an override that repeats an always-yes
+  base method is reported as redundant. Bases are resolved through imports.
+- `ROLE001`: the default `support_files` cover `**/*fixture*` (singular),
+  `**/*helper*`, `**/support/**` and `**/*_support.*`.
+- The cache schema is "14".
+
 ### Changed (feedback from MetaList on 0.7.0)
 - `ASYNC003` does not report a Python `gather(..., return_exceptions=True)` in a
   `finally` / `except` block of a function that cancelled tasks before it (the

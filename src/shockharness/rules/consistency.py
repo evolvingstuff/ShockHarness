@@ -21,7 +21,7 @@ from typing import Any
 from shockharness.complexity.callgraph import CallGraph
 from shockharness.constants import PERCENT
 from shockharness.findings import STATUS_VIOLATION, Finding
-from shockharness.ir.model import CONFIDENCE_APPROXIMATE, FlowCall, FlowGuard, Span
+from shockharness.ir.model import CONFIDENCE_APPROXIMATE, FlowCall, FlowGuard, FlowUnit, Span
 from shockharness.rules.dataflow import (
     METHOD_PREFIX,
     Analysis,
@@ -216,6 +216,18 @@ def _usual_guard(calls: Sequence[Call], settings: Mapping[str, Any]) -> tuple[st
     return name, len(guarded)
 
 
+def _checks_itself(unit: FlowUnit) -> bool:
+    """The callee checks the parameter its first argument binds before anything else
+    (``if not isinstance(tags, str): raise``): a call without the check is safe."""
+    index = 0
+    if unit.bound_receiver:
+        index = 1
+    if len(unit.parameters) <= index:
+        return False
+    parameter = unit.parameters[index]
+    return any(check.argument == parameter for check in unit.checks)
+
+
 def run_guard001(
     files: Sequence[FlowFile], graph: CallGraph, settings: Mapping[str, Any], max_depth: int
 ) -> dict[str, list[Finding]]:
@@ -233,7 +245,7 @@ def run_guard001(
     found: list[Finding] = []
     for key, calls in sorted(_calls(analysis).items()):
         usual = _usual_guard(calls, settings)
-        if usual is None:
+        if usual is None or _checks_itself(analysis.units[key].unit):
             continue
         name, count = usual
         target = analysis.units[key].unit.name

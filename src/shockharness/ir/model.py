@@ -686,13 +686,19 @@ class DiscardedCall:
     JavaScript ``f();``) or a JavaScript ``void f()``. ``callee`` is the dotted callee as
     written; ``span`` is the call's span (the same as its ``CallSite``). ``bound_by`` is,
     for ``name.method(...)``, the dotted callee of the ``with``/``async with`` that bound
-    ``name`` in the enclosing function (``asyncio.TaskGroup`` for ``tg.create_task``)."""
+    ``name`` in the enclosing function (``asyncio.TaskGroup`` for ``tg.create_task``).
+    ``arguments`` counts the positional arguments, None when some are unpacked
+    (``*args``, ``**kw``, ``...xs``) or the call is a tagged template. ``in_try``: the
+    statement is in the body of a ``try`` that has a handler, so it may run for what it
+    raises (``host.encode("idna")`` to validate)."""
 
     callee: str
     text: str
     void: bool
     in_async: bool
     bound_by: str | None
+    arguments: int | None
+    in_try: bool
     span: Span
 
 
@@ -715,12 +721,24 @@ class SettledBatch:
 
 
 @dataclass(frozen=True)
+class RejectionHandler:
+    """A global listener for unhandled Promise rejections (JavaScript):
+    ``window.addEventListener("unhandledrejection", h)``, ``process.on("unhandledRejection",
+    h)``, ``window.onunhandledrejection = h``. ``reports``: the handler does more than
+    ``preventDefault()`` (a named handler is assumed to)."""
+
+    span: Span
+    reports: bool
+
+
+@dataclass(frozen=True)
 class AsyncFacts:
     discarded_calls: tuple[DiscardedCall, ...]
     settled_batches: tuple[SettledBatch, ...]
+    rejection_handlers: tuple[RejectionHandler, ...]
 
 
-NO_ASYNC = AsyncFacts(discarded_calls=(), settled_batches=())
+NO_ASYNC = AsyncFacts(discarded_calls=(), settled_batches=(), rejection_handlers=())
 
 
 # --- API-catalog facts (H5) -------------------------------------------------------------
@@ -807,9 +825,20 @@ class TypeEscape:
 class ConstantPredicate:
     """A function named as a check (``is_*``, ``has_*``, ``can_*``, ``check*``,
     ``validate*``, ``verify*``, ``authorize*``, ``authenticate*``, ``allow*``) whose whole
-    body returns the literal ``True`` / ``true``."""
+    body returns the literal ``True`` / ``true``. ``class_name``: the class whose body
+    defines it, for a method (STUB003 tells a base-class hook default from an override)."""
 
     name: str
+    class_name: str | None
+    span: Span
+
+
+@dataclass(frozen=True)
+class ClassDecl:
+    """A class and the names of its bases as written (``modals.BaseModal``)."""
+
+    name: str
+    bases: tuple[str, ...]
     span: Span
 
 
@@ -821,6 +850,7 @@ class CatalogFacts:
     batch_loops: tuple[BatchLoop, ...]
     type_escapes: tuple[TypeEscape, ...]
     constant_predicates: tuple[ConstantPredicate, ...]
+    classes: tuple[ClassDecl, ...]
 
 
 NO_CATALOG = CatalogFacts(
@@ -830,6 +860,7 @@ NO_CATALOG = CatalogFacts(
     batch_loops=(),
     type_escapes=(),
     constant_predicates=(),
+    classes=(),
 )
 
 
@@ -913,6 +944,8 @@ class FlowUnit:
     every origin a condition of the unit looks at (if, while, assert, ternary and
     Boolean-operator tests). ``bound_receiver``: a Python method whose first parameter
     receives the instance (``self``/``cls``), so call arguments shift by one.
+    ``checks``: the guards the unit's leading statements establish before anything else
+    runs (``if not isinstance(tags, str): raise ...``, ``assert has(x)``; GUARD001).
     ``truncated``: code nested past DATAFLOW_MAX_DEPTH was not followed."""
 
     name: str
@@ -924,6 +957,7 @@ class FlowUnit:
     returns: tuple[FlowReturn, ...]
     tested: tuple[str, ...]
     asserts: tuple[FlowAssert, ...]
+    checks: tuple[FlowGuard, ...]
     truncated: bool
 
 

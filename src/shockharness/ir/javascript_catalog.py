@@ -35,6 +35,7 @@ from shockharness.ir.model import (
     TYPE_ESCAPE_NON_NULL,
     BatchLoop,
     CatalogFacts,
+    ClassDecl,
     ConstantPredicate,
     ProcessCall,
     RetryFact,
@@ -44,6 +45,7 @@ from shockharness.ir.model import (
 from shockharness.source import SourceText
 
 PROCESS_NAMES = frozenset({"exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync"})
+CLASSES = frozenset({Kind.CLASS_DECLARATION, Kind.ABSTRACT_CLASS_DECLARATION, Kind.CLASS})
 FUNCTIONS = frozenset(
     {
         Kind.FUNCTION_DECLARATION,
@@ -382,13 +384,58 @@ def _type_escape(source: SourceText, node: Node) -> list[TypeEscape]:
     return []
 
 
+def _class_name(node: Node) -> str | None:
+    """A class's name, or the variable an anonymous class expression is assigned to."""
+    name = node.child_by_field_name(Field.NAME)
+    parent = node.parent
+    if name is None and parent is not None and parent.type == Kind.VARIABLE_DECLARATOR:
+        name = parent.child_by_field_name(Field.NAME)
+    if name is None:
+        return None
+    return node_text(name)
+
+
+def _owner(method: Node) -> str | None:
+    """The class whose body defines ``method``."""
+    body = method.parent
+    if method.type != Kind.METHOD_DEFINITION or body is None or body.parent is None:
+        return None
+    if body.parent.type not in CLASSES:
+        return None
+    return _class_name(body.parent)
+
+
 def _predicate(source: SourceText, node: Node) -> list[ConstantPredicate]:
     if node.type not in FUNCTIONS:
         return []
     name = _predicate_name(node)
     if name is None or PREDICATE.match(name) is None or not _returns_true(node):
         return []
-    return [ConstantPredicate(name, node_span(source, node))]
+    return [ConstantPredicate(name, _owner(node), node_span(source, node))]
+
+
+def _bases(node: Node) -> tuple[str, ...]:
+    """``extends X`` of a class (JavaScript, and TypeScript's extends clause)."""
+    for heritage in node.named_children:
+        if heritage.type != Kind.CLASS_HERITAGE:
+            continue
+        for part in heritage.named_children:
+            if part.type == Kind.EXTENDS_CLAUSE:
+                value = part.child_by_field_name(Field.VALUE)
+                if value is not None:
+                    return (node_text(value),)
+            elif part.type != Kind.IMPLEMENTS_CLAUSE and part.type != Kind.COMMENT:
+                return (node_text(part),)
+    return ()
+
+
+def _class(source: SourceText, node: Node) -> list[ClassDecl]:
+    if node.type not in CLASSES:
+        return []
+    name = _class_name(node)
+    if name is None:
+        return []
+    return [ClassDecl(name, _bases(node), node_span(source, node))]
 
 
 def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
@@ -397,6 +444,7 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
     retries: list[RetryFact] = []
     batches: list[BatchLoop] = []
     predicates: list[ConstantPredicate] = []
+    classes: list[ClassDecl] = []
     escapes: list[TypeEscape] = []
     stack: list[Node] = [root]
     while len(stack) > 0:
@@ -411,6 +459,7 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
         retries.extend(_retry_loop(source, node))
         batches.extend(_batch_loop(source, node))
         predicates.extend(_predicate(source, node))
+        classes.extend(_class(source, node))
         escapes.extend(_type_escape(source, node))
     return CatalogFacts(
         process_calls=tuple(sorted(processes, key=lambda p: (p.span, p.callee))),
@@ -419,4 +468,5 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
         batch_loops=tuple(sorted(batches, key=lambda b: b.span)),
         type_escapes=tuple(sorted(escapes, key=lambda t: (t.span, t.kind))),
         constant_predicates=tuple(sorted(predicates, key=lambda c: c.span)),
+        classes=tuple(sorted(classes, key=lambda c: c.span)),
     )
