@@ -16,7 +16,7 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
+from shockharness.constants import EVIDENCE_MAX_CHARS, LISTENER_ARGUMENTS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_functions import string_value
 from shockharness.ir.javascript_guardrails import dotted_callee
@@ -64,7 +64,6 @@ REJECTION_REGISTRATIONS = frozenset(
 REJECTION_PROPERTIES = frozenset(
     f"{target}.onunhandledrejection" for target in ("window", "self", "globalThis")
 )
-REJECTION_ARGUMENTS = ("event", "handler")
 # Calls on the event that only silence it.
 SILENCERS = frozenset({"preventDefault", "stopPropagation", "stopImmediatePropagation"})
 INSPECTION = re.compile(r"\.status\b|\.reason\b|[\"'`]rejected[\"'`]")
@@ -210,7 +209,7 @@ def _registered_handler(call: Node) -> Node | None:
     if function is None or arguments is None:
         return None
     named = [child for child in arguments.named_children if child.type != Kind.COMMENT]
-    if len(named) < len(REJECTION_ARGUMENTS):
+    if len(named) < LISTENER_ARGUMENTS:
         return None
     event = string_value(named[0])
     if event is None or (node_text(function), event) not in REJECTION_REGISTRATIONS:

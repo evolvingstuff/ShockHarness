@@ -35,6 +35,9 @@ EVIDENCE_MAX_CHARS: Final[int] = 120
 DATAFLOW_MAX_DEPTH: Final[int] = 100
 # GUARD001's rules.consistency.guard_min_percent is a percentage of call sites.
 PERCENT: Final[int] = 100
+# A listener registration's arguments before its options: the event name and the handler
+# (addEventListener("unhandledrejection", h), process.on("unhandledRejection", h)).
+LISTENER_ARGUMENTS: Final[int] = 2
 # MAGIC002 messages: the other places named, and the characters of a value shown.
 STRING_PLACES_SHOWN: Final[int] = 3
 STRING_VALUE_SHOWN: Final[int] = 60
