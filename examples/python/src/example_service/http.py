@@ -6,7 +6,7 @@ finding stays in every report (with the suppression attached); only the gate
 ignores it.
 """
 
-NOT_FOUND = 404  # shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.5"
+NOT_FOUND = 404  # RFC 9110 section 15.5.5
 
 
 def is_missing(status: int) -> bool:

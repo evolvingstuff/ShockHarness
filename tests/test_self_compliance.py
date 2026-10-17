@@ -29,6 +29,8 @@ def test_tool_source_passes_its_own_gate() -> None:
     assert report.metrics["complexity"]["status"] == "available"
     assert report.metrics["graph"]["summary"]["cycles"] == 0, report.metrics["graph"]["cycles"]
     assert report.analysis_status == "complete"
-    exempt = [f for f in report.files if f.path == "src/shockharness/constants.py"]
-    assert len(exempt) == 1
-    assert [d.rule_id for d in exempt[0].rules_disabled] == ["MAGIC001"]
+    # constants.py needs no MAGIC001 exemption since decision 36: it holds only named
+    # module-level constants, which MAGIC001 accepts.
+    constants = [f for f in report.files if f.path == "src/shockharness/constants.py"]
+    assert len(constants) == 1
+    assert [d.rule_id for d in constants[0].rules_disabled] == []

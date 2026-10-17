@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 MIN_PORT = 1
 # The TCP port range is defined by RFC 793 section 3.1 (16-bit port numbers).
-MAX_PORT = 65535  # shockharness: ignore[MAGIC001] reason="RFC 793 section 3.1: 16-bit port field"
+MAX_PORT = 65535  # RFC 793 section 3.1: 16-bit port field
 
 
 @dataclass(frozen=True)

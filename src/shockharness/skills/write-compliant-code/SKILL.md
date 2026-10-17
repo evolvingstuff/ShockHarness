@@ -69,23 +69,21 @@ a plain `check`; see the `refactor-complexity` skill.
    missing value fails loudly, once, at load time.
 4. **No numeric literal other than 0, 1 or -1.** A number in code needs a contract:
    variable policy (timeouts, limits, page sizes) becomes a required,
-   validated configuration parameter; invariant mathematics or a published
-   protocol value becomes a named constant that cites its source, kept in a
-   designated constants module or suppressed inline with the citation as the
-   reason. Never move a number into an unexplained constant.
+   validated configuration parameter; a fixed value (a spec's exit code, a
+   protocol value) becomes a module-level named constant that says what it is
+   for and cites its source (`EXIT_USAGE = 2  # SPEC.md`), with no suppression.
+   Never name it after its value (`TWO = 2`, MAGIC004) or disguise it (`1 + 1`,
+   `len("  ")`, a string, a data file).
 5. **Name a 0, 1 or -1 that carries meaning.** The rule permits them, it does
    not recommend them. An exit code, a sentinel ("nothing selected"), a flag, a
    first page, a protocol value: give it a name (`EXIT_OK = 0`, `NO_SELECTION =
    -1`). Plain arithmetic and indexing stay literal: `i + 1`, `items[-1]`,
    `text[:-1]`, `indexOf(x) === -1`, `range(0, n)`, `start = 0`.
 6. **Separate source from data, configuration and specification.** Numbers
-   belong in `.toml`, `.json`, `.env.example`, a schema, or a constants module
-   that is declared as such. In the tool's own repository the single
-   `MAGIC001` exemption is `src/shockharness/constants.py`, declared as an
-   `[[tool.shockharness.overrides]]` entry with a reason. Build-tool
-   configuration files (`conftest.py`, `*.config.js`, `.eslintrc.js`, listed
-   under `rules.magic_numbers.configuration_files`) are exempt from `MAGIC001`
-   and the report says so per file.
+   belong in `.toml`, `.json`, `.env.example`, a schema, or named constants.
+   Build-tool configuration files (`conftest.py`, `*.config.js`, `.eslintrc.js`,
+   listed under `rules.magic_numbers.configuration_files`) are exempt from
+   `MAGIC001` and the report says so per file.
 7. **Validate what you return, not only what you receive.** When a function's
    contract promises something about its result (non-empty, sorted, within a
    range, exactly the expected keys), check it before returning and raise on

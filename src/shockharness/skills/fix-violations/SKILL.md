@@ -28,8 +28,9 @@ preventive one and `pre-commit-review` is the final check.
   error; one that silences nothing is a `SUPP002` warning.
 - **Never widen a boundary, loosen a profile or lower a severity to get green.**
   Those are policy changes; propose them with a recorded rationale.
-- **Never move a number into an unexplained constant** (`THIRTY = 30`). The
-  name must say what the value means and where it comes from.
+- **Never move a number into an unexplained constant** (`THIRTY = 30`, which
+  MAGIC004 reports). The name must say what the value means and where it comes
+  from; a module-level named constant then needs no suppression.
 
 ## Workflow
 
@@ -56,7 +57,7 @@ Ask what the code promises when the value is absent or the operation fails.
 
 | Finding | Question | Typical answer |
 |---|---|---|
-| `MAGIC001` | Why this number? Who decides it? | Variable policy: a required, validated configuration parameter. Invariant or protocol value: a named constant with a cited source, in a designated constants module or with an inline suppression quoting the source. |
+| `MAGIC001` | Why this number? Who decides it? | Variable policy: a required, validated configuration parameter. Invariant or protocol value: a module-level named constant with a cited source (no suppression needed; decision 36). Never disguise it as arithmetic, a length, a string or a data file. |
 | `DEF001` | May the caller really omit this argument? | Usually no: make it required and update the callers. If yes: the type is `T \| None`, and the body branches on `None` by name. |
 | `DEF002`, `DEF004`, `DEF003` | Is the key or value required? Is absence a normal state? | Required: index it, let `KeyError`/`TypeError` surface at load time, or validate once at the boundary. Absence is a normal state (an empty view has no root entry, an unused tag has no posting): branch where the absence matters and do the absent case's own work there (`if tag not in index: continue`); do not force an index there, that turns a normal state into a crash. A helper that returns a stand-in (`if k in m: return m[k]` then `return []`) is the fallback again, and one that takes the default as a parameter (`value_or(mapping, key, default)`) is `.get` under another name. A stand-in that really is the meaning gets a suppression with the reason, once. From outside (configuration, a request): validate where it enters. |
 | `DEF006` | Where is configuration validated? | In one load function that reads required keys, validates them and raises on a missing or invalid value. Nothing downstream reads the environment. |

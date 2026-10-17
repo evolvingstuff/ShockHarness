@@ -52,6 +52,16 @@ class NumericLiteral:
 
 
 @dataclass(frozen=True)
+class ConstantDefinition:
+    """A module-level named constant whose value is a numeric literal or literal
+    arithmetic: the definitions ``named_constant_definitions`` covers (``MAX_PAGES = 8``,
+    ``const SETTLE_MS = 400``). ``span`` is the name's. MAGIC004 reads the name."""
+
+    name: str
+    span: Span
+
+
+@dataclass(frozen=True)
 class Comment:
     span: Span
     text: str
@@ -1092,6 +1102,7 @@ class ModuleFacts:
     language: str
     parser: str
     numeric_literals: tuple[NumericLiteral, ...]
+    constants: tuple[ConstantDefinition, ...]
     comments: tuple[Comment, ...]
     catches: tuple[CatchFact, ...]
     managers: tuple[ManagerFact, ...]
@@ -1116,6 +1127,7 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         language=language,
         parser=parser,
         numeric_literals=(),
+        constants=(),
         comments=(),
         catches=(),
         managers=(),

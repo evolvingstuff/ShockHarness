@@ -98,9 +98,13 @@ def test_annotation_literals_are_flagged_and_labelled(
     assert "type annotation" in finding.message
 
 
-def test_named_constant_is_still_a_literal(analyze: Callable[[str, str], FileResult]) -> None:
-    result = analyze("ITERATIONS = 2\nMAX_RETRIES = 5\n", "python")
-    assert [f.span.line for f in result.findings] == [1, 2]
+def test_a_named_constant_needs_no_justification(
+    analyze: Callable[[str, str], FileResult],
+) -> None:
+    # Spec 21.1 decision 36: the definition is the name MAGIC001 asks for; the literal
+    # where a number is used is still reported.
+    result = analyze("ITERATIONS = 2\nMAX_RETRIES = 5\nwait = 7 * ITERATIONS\n", "python")
+    assert [(f.rule_id, f.span.line) for f in result.findings] == [("MAGIC001", 3)]
 
 
 def test_stdlib_constants_are_fine(analyze: Callable[[str, str], FileResult]) -> None:
@@ -122,7 +126,10 @@ def test_disabled_rule_produces_nothing_and_is_recorded(
     )
     assert result.findings == ()
     assert "MAGIC001" not in result.rules_applied
-    assert [(d.rule_id, d.origin) for d in result.rules_disabled] == [("MAGIC001", "config")]
+    assert [(d.rule_id, d.origin) for d in result.rules_disabled] == [
+        ("MAGIC001", "config"),
+        ("MAGIC004", "config"),
+    ]
     assert "rules.magic_numbers is disabled" in config.deviations
 
 
@@ -190,52 +197,35 @@ def test_constant_definitions_are_marked_in_the_ir() -> None:
     assert marked == [1, 2, 3, 3]
 
 
-def test_strict_reports_constant_definitions_and_allow_is_a_deviation(
+def test_every_profile_allows_constant_definitions_and_report_is_a_tightening(
     strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
 ) -> None:
-    assert strict_config.values["rules"]["magic_numbers"]["named_constant_definitions"] == "report"
-    assert _magic_lines(strict_config, PY_CONSTANTS, "python") == sorted(
-        PY_DEFINITION_LINES + PY_OTHER_LINES
-    )
-    assert _magic_lines(strict_config, JS_CONSTANTS, "javascript") == sorted(
-        JS_DEFINITION_LINES + JS_OTHER_LINES
-    )
-    allowed = make_config(
-        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "allow"\n'
-    )
-    assert allowed.values["profile"] == "strict"
-    assert allowed.deviations == (
-        "rules.magic_numbers.named_constant_definitions is 'allow'; a numeric literal that is "
-        "the whole value of a module-level named constant definition is not reported",
-    )
-    assert _magic_lines(allowed, PY_CONSTANTS, "python") == PY_OTHER_LINES
-    assert _magic_lines(allowed, JS_CONSTANTS, "javascript") == JS_OTHER_LINES
-    # the acceptance examples, one by one
-    assert _magic_lines(allowed, "MAX_PAGES = 8\n", "python") == []
-    assert _magic_lines(allowed, "_PORT_WAIT_SECONDS = 10.0\n", "python") == []
-    assert _magic_lines(allowed, "def f():\n    x = 8\n    return x\n", "python") == [2]
-    assert _magic_lines(allowed, "const MAX_PAGES = 8;\n", "javascript") == []
-    assert _magic_lines(allowed, "export const MAX_PAGES = 8;\n", "javascript") == []
-    assert _magic_lines(allowed, "let maxPages = 8;\n", "javascript") == [1]
-    assert _magic_lines(allowed, "LIMITS = {'retries': 3}\n", "python") == [1]
-    explicit_report = make_config(
-        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "report"\n'
-    )
-    assert explicit_report.deviations == ()
-    assert _magic_lines(explicit_report, "MAX_PAGES = 8\n", "python") == [1]
-
-
-def test_recommended_and_minimal_allow_constant_definitions(
-    make_config: Callable[[str], EffectiveConfig],
-) -> None:
-    for profile in ("recommended", "minimal"):
+    # Spec 21.1 decision 36: "allow" in every profile, so it is no deviation; "report"
+    # (every definition needs a suppression) is a tightening, no deviation either.
+    for profile in ("strict", "recommended", "minimal"):
         config = make_config(f'profile = "{profile}"\n')
         assert config.values["rules"]["magic_numbers"]["named_constant_definitions"] == "allow"
+        assert not any("named_constant_definitions" in d for d in config.deviations)
         assert _magic_lines(config, PY_CONSTANTS, "python") == PY_OTHER_LINES
         assert _magic_lines(config, JS_CONSTANTS, "javascript") == JS_OTHER_LINES
-        assert "rules.magic_numbers.named_constant_definitions is 'allow'" in "\n".join(
-            config.deviations
-        )
+    # the acceptance examples, one by one
+    assert _magic_lines(strict_config, "MAX_PAGES = 8\n", "python") == []
+    assert _magic_lines(strict_config, "_PORT_WAIT_SECONDS = 10.0\n", "python") == []
+    assert _magic_lines(strict_config, "def f():\n    x = 8\n    return x\n", "python") == [2]
+    assert _magic_lines(strict_config, "const MAX_PAGES = 8;\n", "javascript") == []
+    assert _magic_lines(strict_config, "export const MAX_PAGES = 8;\n", "javascript") == []
+    assert _magic_lines(strict_config, "let maxPages = 8;\n", "javascript") == [1]
+    assert _magic_lines(strict_config, "LIMITS = {'retries': 3}\n", "python") == [1]
+    reported = make_config(
+        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "report"\n'
+    )
+    assert reported.deviations == ()
+    assert _magic_lines(reported, PY_CONSTANTS, "python") == sorted(
+        PY_DEFINITION_LINES + PY_OTHER_LINES
+    )
+    assert _magic_lines(reported, JS_CONSTANTS, "javascript") == sorted(
+        JS_DEFINITION_LINES + JS_OTHER_LINES
+    )
 
 
 def test_named_constant_mode_is_validated(make_config: Callable[[str], EffectiveConfig]) -> None:
@@ -249,8 +239,9 @@ def test_named_constant_mode_is_validated(make_config: Callable[[str], Effective
 def test_literal_arithmetic_in_a_named_constant_is_a_definition(
     strict_config: EffectiveConfig, make_config: Callable[[str], EffectiveConfig]
 ) -> None:
-    allowed = make_config(
-        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "allow"\n'
+    allowed = strict_config  # "allow" is the default since decision 36
+    reported = make_config(
+        '[tool.shockharness.rules.magic_numbers]\nnamed_constant_definitions = "report"\n'
     )
     # the acceptance examples
     assert _magic_lines(allowed, "CHUNK_BYTES = 64 * 1024\n", "python") == []
@@ -258,7 +249,7 @@ def test_literal_arithmetic_in_a_named_constant_is_a_definition(
     assert _magic_lines(allowed, "TIMEOUT = BASE * 2\n", "python") == [1]
     assert _magic_lines(allowed, "SIZE = int(x) * 2\n", "python") == [1]
     assert _magic_lines(allowed, "LIMITS = [8, 16]\n", "python") == [1, 1]
-    assert _magic_lines(strict_config, "CHUNK_BYTES = 64 * 1024\n", "python") == [1, 1]
+    assert _magic_lines(reported, "CHUNK_BYTES = 64 * 1024\n", "python") == [1, 1]
     assert _magic_lines(allowed, "def f():\n    K = 64 * 1024\n    return K\n", "python") == [
         2,
         2,
@@ -266,10 +257,10 @@ def test_literal_arithmetic_in_a_named_constant_is_a_definition(
     # the whole operator set, unary signs and parentheses, in both languages
     full = "P = -(30 * 60) / 2 + (2 ** 10) // 3 % 7 - +4\n"
     assert _magic_lines(allowed, full, "python") == []
-    assert len(_magic_lines(strict_config, full, "python")) == 8
+    assert len(_magic_lines(reported, full, "python")) == 8
     js_full = "export const P = -(30 * 60) / 2 + (2 ** 10) % 7 - +4;\n"
     assert _magic_lines(allowed, js_full, "javascript") == []
-    assert len(_magic_lines(strict_config, js_full, "javascript")) == 7
+    assert len(_magic_lines(reported, js_full, "javascript")) == 7
     assert _magic_lines(allowed, "F: float = 2.5 * 4\nwait: Final = 3 * 5\n", "python") == []
     # anything else in the expression keeps every literal reported
     for text in (
@@ -282,7 +273,7 @@ def test_literal_arithmetic_in_a_named_constant_is_a_definition(
         "G = 2 if x else 3\n",
     ):
         assert len(_magic_lines(allowed, text, "python")) == len(
-            _magic_lines(strict_config, text, "python")
+            _magic_lines(reported, text, "python")
         ), text
         assert len(_magic_lines(allowed, text, "python")) > 0, text
     for text in (
@@ -293,7 +284,7 @@ def test_literal_arithmetic_in_a_named_constant_is_a_definition(
         "const E = 2 * (x, 3);\n",
     ):
         assert len(_magic_lines(allowed, text, "javascript")) == len(
-            _magic_lines(strict_config, text, "javascript")
+            _magic_lines(reported, text, "javascript")
         ), text
         assert len(_magic_lines(allowed, text, "javascript")) > 0, text
     # a comment inside the parentheses does not disqualify a JavaScript definition

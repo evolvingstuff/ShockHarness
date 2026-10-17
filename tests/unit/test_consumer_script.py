@@ -54,11 +54,8 @@ def test_examples_pass_clean_and_fail_after_the_injected_violation(
     )
     assert report.gate.status == "pass", report.gate.reasons
     assert report.analysis_status == "complete"
-    suppressed = [f for f in report.findings if f.is_suppressed]
-    assert [(f.rule_id, f.evidence.split()[0]) for f in suppressed] == [
-        ("MAGIC001", "NOT_FOUND" if example == "python" else "export")
-    ]
-    assert all(f.is_suppressed for f in report.findings)
+    # The cited status constant is a named constant: no finding, no suppression (decision 36).
+    assert [f.rule_id for f in report.findings] == []
 
     changed = script.introduce_violation(repo, example)
     report = analyze_paths(

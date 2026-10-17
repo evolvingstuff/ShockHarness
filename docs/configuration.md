@@ -54,8 +54,8 @@ versioned with the tool; no profile is ever fetched remotely). Select one with
 | Profile | What it is | Gate behaviour |
 |---|---|---|
 | `strict` (default) | The bundled defaults: every rule at its documented severity, `parse_errors = "fail"`, complexity enabled | Hard violations and unparseable files fail |
-| `recommended` | `strict`, except: `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review`; `MAGIC001` does not report module-level named constant definitions (`named_constant_definitions = "allow"`); `CPLX005` fan-out fires above 30 distinct call targets instead of 20 (`fan_out_warn = 30`) and as a `review` finding instead of a warning (`fan_out_severity = "review"`), because the units over 20 on real codebases are orchestrators (login, streaming, restore); `DEF001`-`DEF006` findings whose status is `unknown` do not gate (`rules.defaults.fail_on_unknown = false`, 0.5.0) | As strict minus `DEF004` and unknown `DEF*` findings |
-| `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `named_constant_definitions = "allow"`, `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
+| `recommended` | `strict`, except: `DEF003` (truthiness fallbacks, already `review` in strict) and `DEF004` (nullish fallbacks) are `review`; `CPLX005` fan-out fires above 30 distinct call targets instead of 20 (`fan_out_warn = 30`) and as a `review` finding instead of a warning (`fan_out_severity = "review"`), because the units over 20 on real codebases are orchestrators (login, streaming, restore); `DEF001`-`DEF006` findings whose status is `unknown` do not gate (`rules.defaults.fail_on_unknown = false`, 0.5.0) | As strict minus `DEF004` and unknown `DEF*` findings |
+| `minimal` | `MAGIC001`, `EXC001`-`EXC003` and `DEF001`-`DEF006` all capped at `review` (`rules.<section>.severity = "review"`), `parse_errors = "warn"`, complexity disabled; `SUPP001` still fails | Only malformed suppressions fail; everything is still reported |
 
 Any profile below `strict` prints a `policy deviation` line in every report
 (text, JSON `config.deviations`, SARIF run `properties.config_deviations`)
@@ -186,7 +186,8 @@ severity = "error"                      # "review" caps MAGIC001 at review (repo
 fail_on_unknown = false                 # H1: whether unknown findings gate (MAGIC001 produces none today); see Unknown findings
 allowed_values = [0, 1]                 # value-based; extra values are reported as deviations
 allow_unary_negative_one = true         # -1 passes (items[-1], indexOf() === -1); false reports it; -0 always fails
-named_constant_definitions = "report"   # MAX_PAGES = 8 / CHUNK_BYTES = 64 * 1024 / const SETTLE_MS = 400 at module scope: "report" (strict) or "allow" (recommended, minimal)
+named_constant_definitions = "allow"    # MAX_PAGES = 8 / CHUNK_BYTES = 64 * 1024 / const SETTLE_MS = 400 at module scope: not reported (every profile, decision 36); "report" tightens
+magic004_severity = "review"            # MAGIC004: a constant whose name only spells a number (TWO = 2)
 exclude_configuration_files = true      # files the config role's globs match skip MAGIC001 (reported per file)
 configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
                        "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",
@@ -1041,8 +1042,7 @@ Everything that loosens the strict profile is surfaced, never silent:
 * `config.deviations` lists the profile when it is below `strict`, disabled
   rules (complexity included), `cyclomatic_counts_boolean_operators = false`,
   every `rules.<section>.severity = "review"`
-  cap, extra `allowed_values`, `allow_unary_negative_one`,
-  `named_constant_definitions = "allow"`, `parse_errors = "warn"`,
+  cap, extra `allowed_values`, `allow_unary_negative_one`, `parse_errors = "warn"`,
   `unsupported_sources = "ignore"`, `transparent_rethrow`, every transparent
   guard, every capture manager, every exception boundary
   (once, listing every class it approves), every `rules.defaults` mode looser

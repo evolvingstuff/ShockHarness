@@ -10,7 +10,6 @@ unsupported_sources = "ignore"
 
 [tool.shockharness.rules.magic_numbers]
 severity = "review"
-named_constant_definitions = "allow"
 
 [tool.shockharness.rules.exceptions]
 severity = "review"

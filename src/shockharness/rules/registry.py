@@ -78,10 +78,11 @@ MAGIC001 = RuleSpec(
     summary="Every numeric literal in executable code must be exactly 0, 1 or -1.",
     rationale=(
         "A bare number carries no contract: nobody can tell whether 30 is a timeout, a "
-        "retry budget, or a protocol code, or why it is 30. Naming it is not enough on its "
-        "own either; the value has to come from a validated configuration parameter or an "
-        "authoritative specification constant. The analyzer does not invent exemptions for "
-        "2, 10, 24, 60, or any other 'obvious' number."
+        "retry budget, or a protocol code, or why it is 30. A module-level named constant "
+        "(REQUEST_TIMEOUT_SECONDS = 30) is the remedy and is not reported (spec 21.1 "
+        "decision 36); variable policy still belongs in validated configuration. The "
+        "analyzer does not invent exemptions for 2, 10, 24, 60, or any other 'obvious' "
+        "number written where it is used."
     ),
     guarantees=(
         "Exact on numeric AST nodes: int, float, complex (Python) and number/bigint "
@@ -89,7 +90,11 @@ MAGIC001 = RuleSpec(
         "separators). Value-based: 0x1, 1.0, 1e0, 0b0 and 1n pass as 0 or 1. Unary minus "
         "over a literal is checked as one unit: -1 passes while allow_unary_negative_one is "
         "true (the default: items[-1], indexOf(...) === -1); -0 and -0.0 always fail. Python "
-        "booleans are never flagged. Numeric literals in Python type annotations are flagged."
+        "booleans are never flagged. Numeric literals in Python type annotations are flagged. "
+        "A literal that is the whole value of a module-level named constant definition "
+        "(MAX_PAGES = 8, const SETTLE_MS = 400, CHUNK_BYTES = 64 * 1024) is not reported "
+        "while rules.magic_numbers.named_constant_definitions is 'allow', the default of "
+        "every profile since 0.9.0; 'report' is a tightening."
     ),
     limitations=(
         "Does not look inside strings or regular-expression literals; '30' and /\\d{3}/ are "
@@ -2312,6 +2317,50 @@ MAGIC003 = RuleSpec(
 )
 
 
+# --- MAGIC004 (decision 36) ------------------------------------------------------------
+
+MAGIC004 = RuleSpec(
+    rule_id="MAGIC004",
+    version="1",
+    name="constant name that only spells a number",
+    family="magic_numbers",
+    config_section="rules.magic_numbers",
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A module-level named constant whose name is only number words or digits (TWO = 2, "
+        "ONE_HUNDRED = 100, VALUE_100 = 100): the name restates the value."
+    ),
+    rationale=(
+        "MAGIC001 accepts a named constant because the name is supposed to say what the "
+        "number is for. A name that spells the number says nothing more than the literal "
+        "did, and it hides the literal from MAGIC001 (spec 21.1 decision 36)."
+    ),
+    guarantees=(
+        "The constant definitions MAGIC001's named_constant_definitions covers (Python "
+        "NAME = <numeric literal or literal arithmetic>, NAME: Final = ...; JavaScript and "
+        "TypeScript const / export const NAME = ...). Reported when every word of the name, "
+        "split at underscores, is a number word (ZERO to NINETEEN, the tens, HUNDRED, "
+        "THOUSAND, MILLION, BILLION, DOZEN) or digits, after dropping filler words (NUMBER, "
+        "NUM, VALUE, CONST, CONSTANT, INT, AND). Severity "
+        "rules.magic_numbers.magic004_severity (review by default)."
+    ),
+    limitations=(
+        "A name with any other word is not reported, even when the other word adds little "
+        "(SPACES_TWO = 2). Ordinals (FIRST, SECOND) and other languages' number words are "
+        "not number words here. Constants in classes, functions and containers are not "
+        "constant definitions and are left to MAGIC001."
+    ),
+    remediation=(
+        "Name what the number is for (INDENT_SPACES = 2, MAX_RETRIES = 3, EXIT_USAGE = 2). "
+        "If it has no meaning beyond arithmetic, write the literal where it is used."
+    ),
+    noncompliant_example="TWO = 2\nindent = TWO",
+    compliant_example="INDENT_SPACES = 2  # the report's JSON indent\nindent = INDENT_SPACES",
+)
+
+
 # --- DOM001 (decision 27) ---------------------------------------------------------------
 
 DOM001 = RuleSpec(
@@ -2524,6 +2573,7 @@ RULES: tuple[RuleSpec, ...] = (
     PROV001,
     GUARD001,
     MAGIC003,
+    MAGIC004,
     DOM001,
     DOM002,
 )

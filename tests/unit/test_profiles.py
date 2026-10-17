@@ -90,7 +90,6 @@ def test_recommended_profile_values_and_deviations(
         "profile",
         "rules.defaults.nullish_fallbacks",
         "rules.defaults.fail_on_unknown",
-        "rules.magic_numbers.named_constant_definitions",
         "complexity.fan_out_warn",
         "complexity.fan_out_severity",
     }
@@ -98,7 +97,7 @@ def test_recommended_profile_values_and_deviations(
     assert config.origins["profile"] == "dedicated"
     assert strict["rules"]["defaults"]["nullish_fallbacks"] == "forbid"
     assert strict["rules"]["magic_numbers"]["allow_unary_negative_one"] is True
-    assert strict["rules"]["magic_numbers"]["named_constant_definitions"] == "report"
+    assert strict["rules"]["magic_numbers"]["named_constant_definitions"] == "allow"  # decision 36
     assert strict["complexity"]["fan_out_warn"] == 20
     assert strict["complexity"]["fan_out_severity"] == "warning"
     assert severities(config) == {
@@ -119,8 +118,6 @@ def test_recommended_profile_deviations(
     assert config.deviations == (
         "profile is 'recommended', below 'strict'; the lines that follow are what it changes "
         "(see docs/configuration.md, Profiles)",
-        "rules.magic_numbers.named_constant_definitions is 'allow'; a numeric literal that is "
-        "the whole value of a module-level named constant definition is not reported",
         "rules.defaults.nullish_fallbacks is 'review' (strict profile: 'forbid'); DEF004 "
         "findings of that kind are reported as review",
         "rules.defaults.fail_on_unknown is false (profile 'strict': true); DEF001-DEF006 "
@@ -169,7 +166,6 @@ def test_minimal_reports_everything_at_review_and_never_fails(
         "unsupported_sources",
         "complexity.enabled",
         "rules.magic_numbers.severity",
-        "rules.magic_numbers.named_constant_definitions",
         "rules.exceptions.severity",
         "rules.defaults.severity",
     }
@@ -188,7 +184,7 @@ def test_minimal_reports_everything_at_review_and_never_fails(
     assert "rules.defaults.severity is 'review'; DEF001-DEF006 findings" in joined
     assert "complexity is disabled" in joined
     assert "parse_errors is 'warn'" in joined
-    assert "rules.magic_numbers.named_constant_definitions is 'allow'" in joined
+    assert "named_constant_definitions" not in joined  # the default since decision 36
     assert "unsupported_sources is 'ignore'" in joined
 
     (empty_root / "src").mkdir()

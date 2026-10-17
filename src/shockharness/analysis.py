@@ -61,7 +61,7 @@ from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
-from shockharness.rules.magic_numbers import run_magic001
+from shockharness.rules.magic_numbers import run_magic001, run_magic004
 from shockharness.rules.registry import (
     CATALOG_SECTIONS,
     DATAFLOW_SECTIONS,
@@ -461,6 +461,26 @@ def _failed(
     )
 
 
+def _magic_rules(
+    facts: ModuleFacts,
+    source: SourceText,
+    config: EffectiveConfig,
+    relative_path: str,
+    disabled_ids: set[str],
+) -> tuple[list[str], list[Finding]]:
+    """MAGIC001 and MAGIC004 (both read rules.magic_numbers): applied IDs and findings."""
+    settings = config.section(str(registry.MAGIC001.config_section))
+    applied: list[str] = []
+    findings: list[Finding] = []
+    if registry.MAGIC001.rule_id not in disabled_ids:
+        applied.append(registry.MAGIC001.rule_id)
+        findings.extend(run_magic001(facts, source, settings, relative_path))
+    if registry.MAGIC004.rule_id not in disabled_ids:
+        applied.append(registry.MAGIC004.rule_id)
+        findings.extend(run_magic004(facts, source, settings, relative_path))
+    return applied, findings
+
+
 def prepare_text(
     relative_path: str, language: str, text: str, config: EffectiveConfig
 ) -> PendingFile:
@@ -484,15 +504,7 @@ def prepare_text(
             facts.parse_failure.message,
         )
 
-    applied: list[str] = []
-    findings: list[Finding] = []
-    if registry.MAGIC001.rule_id not in disabled_ids:
-        applied.append(registry.MAGIC001.rule_id)
-        findings.extend(
-            run_magic001(
-                facts, source, config.section(str(registry.MAGIC001.config_section)), relative_path
-            )
-        )
+    applied, findings = _magic_rules(facts, source, config, relative_path, disabled_ids)
 
     active_default_rules = frozenset(
         rule.rule_id for rule in DEFAULT_RULES if rule.rule_id not in disabled_ids

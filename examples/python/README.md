@@ -10,8 +10,8 @@ after one injected violation.
   Dependabot (`.github/dependabot.yml`) opens a PR when a new version is released.
 * `.shockharness.toml` selects the `strict` profile, analyzes `src/` and
   `tests/`, and exempts tests from `MAGIC001`/`DEF001` with a stated reason.
-* `src/example_service/http.py` carries the one deliberate, suppressed finding:
-  an HTTP status literal with an RFC citation.
+* `src/example_service/http.py` names an HTTP status as a module-level constant with
+  its RFC citation; a named constant needs no suppression (spec 21.1 decision 36).
 * `.github/workflows/shockharness.yml` calls the reusable workflow; its
   `shockharness-version` input must equal the pin in `pyproject.toml`.
 

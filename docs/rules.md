@@ -124,18 +124,25 @@ non-numeric literal anywhere in the expression (`BASE * 2`, `int(x) * 2`,
 Under `"report"` every literal is reported as before.
 
 `rules.magic_numbers.named_constant_definitions` decides what the mark means.
-`"report"` (the `strict` default) keeps the specification's reading: a named
-constant is not automatically justified, and `ITERATIONS = 2` is a finding like
-any other. `"allow"` (the `recommended` and `minimal` default) does not report
-the definition. The reasoning, from the first run on a real codebase: 143 of
-the 2,074 application-code MAGIC001 findings there were definitions such as
-`MAX_WEB_PAGES_PER_CALL = 8` or `const SETTLE_MS = 400;`, and that definition
-is exactly the remedy the rule asks for; reporting it forces every adopter to
-keep one exempt constants file, as ShockHarness itself does with
-`constants.py`. The strict profile keeps reporting them because the
-specification's semantics (section 5) are unchanged there; `"allow"` under
-`strict` is a reported policy deviation, and under the other profiles it is one
-of the lines that follow the profile's own deviation line.
+`"allow"`, the default of every profile since 0.9.0 (spec 21.1 decision 36), does
+not report the definition: the name is the remedy the rule asks for. `"report"`
+is a tightening that reports `ITERATIONS = 2` like any other literal, so every
+definition needs a suppression. The reasoning:
+* The first run on a real codebase found 143 of the 2,074 application-code
+  MAGIC001 findings there were definitions such as `MAX_WEB_PAGES_PER_CALL = 8` or
+  `const SETTLE_MS = 400;`.
+* Before decision 36, strict reported them anyway, and its users kept an exempt
+  constants file (ShockHarness's own `constants.py`) or turned the option on by
+  hand (MetaList did).
+* In the under-the-gate experiment, coding agents under strict disguised the
+  numbers instead (`HEADER_ROW + 1` for 2, `"  "` for an indent of 2,
+  `len(calendar.month_name)` for 12).
+* Measured before the change, allowing named constants removed 965 MetaList
+  findings (843 constants), all 35 in ShockHarness's own `src`, and 58 in the
+  experiment's agent-written builds; no constant name in any of them only spelled
+  a number.
+
+MAGIC004 reports that case if it appears.
 
 **Configuration.** `rules.magic_numbers.*`; see `docs/configuration.md`.
 Files whose role is `config` (`file_roles.config`, legacy spelling
@@ -1154,6 +1161,19 @@ direction). On pip, pytest,
 hypothesis, build, hatchling and npm it gives 42 findings where 0.6.0 reported
 543 for `-1` (`sys.exit(-1)`, `return -1` for "not found", `lineno = -1`,
 `max(..., default=-1)`, click's `nargs=-1`).
+
+### MAGIC004: a constant name that only spells a number (review)
+
+Allowing named constants (decision 36) invites one evasion: a name that says
+nothing more than the literal (`TWO = 2`). MAGIC004 reports a module-level
+constant definition, the ones `named_constant_definitions` covers, whose name,
+split at underscores, is only number words (`ZERO` to `NINETEEN`, the tens,
+`HUNDRED`, `THOUSAND`, `MILLION`, `BILLION`, `DOZEN`) or digits, after dropping
+filler (`NUMBER`, `NUM`, `VALUE`, `CONST`, `CONSTANT`, `INT`, `AND`): `TWO`,
+`ONE_HUNDRED`, `VALUE_100`. A name with any other word (`TIMEOUT_30`,
+`INDENT_SPACES`) is not reported. Severity
+`rules.magic_numbers.magic004_severity`, `review` by default. On the measurement
+above it reported nothing.
 
 ### DOM001: a delegated handler that drops SVG targets (warning)
 

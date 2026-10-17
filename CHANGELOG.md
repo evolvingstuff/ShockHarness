@@ -5,6 +5,31 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+**Upgrading from 0.8.0.** Spec 21.1 decision 36: MAGIC001 no longer reports the literal
+of a module-level named constant definition (`MAX_PAGES = 8`, `const SETTLE_MS = 400`,
+`CHUNK_BYTES = 64 * 1024`) in any profile. `named_constant_definitions = "allow"` is now
+the strict default too; `"report"` is a tightening. A gate can only get greener, but an
+existing `# shockharness: ignore[MAGIC001]` on such a line now matches nothing and is a
+SUPP002 warning: delete the comment and keep the citation as a plain comment.
+
+### Added
+- `MAGIC004` (`rules.magic_numbers`, review, Python, JavaScript and TypeScript): a
+  named constant whose name only spells a number (`TWO = 2`, `ONE_HUNDRED = 100`,
+  `VALUE_100 = 100`). Severity `rules.magic_numbers.magic004_severity`.
+
+### Changed
+- MAGIC001 under `strict`: named constant definitions are allowed (decision 36). The
+  `recommended` and `minimal` profiles no longer set the option, since it is the
+  default. Measured before the change: 965 MetaList findings, all 35 in
+  ShockHarness's own `src`, and 58 in the under-the-gate experiment's agent-written
+  builds go away, and no constant name among them only spells a number.
+- The skills say a fixed value is a module-level named constant that cites its
+  source, with no suppression, never named after its value or disguised.
+- ShockHarness's own configuration drops its `constants.py` MAGIC001 override.
+- The consumer upgrade check injects a literal in an expression, and the examples
+  keep their RFC citations as plain comments.
+- The cache schema is "18".
+
 ## [0.8.0] - 2026-10-17
 
 The edit-time hook for Claude Code, decisions 34 and 35, MAGIC002, DOM001 and DOM002,

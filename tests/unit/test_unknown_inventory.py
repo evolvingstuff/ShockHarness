@@ -106,6 +106,10 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "MAGIC001 is exact: violation",
     ),
+    ("rules/magic_numbers.py", "_magic004_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "MAGIC004 is exact on the name (every word a number word or digits): violation",
+    ),
     ("rules/complexity.py", "_finding_at"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "CPLX001-CPLX006 measure what was resolved: violation (unresolved calls are listed "

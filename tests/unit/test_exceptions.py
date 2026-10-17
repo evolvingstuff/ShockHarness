@@ -462,6 +462,7 @@ OVERRIDE_APPLIED = (
     "MAGIC001",
     "MAGIC002",
     "MAGIC003",
+    "MAGIC004",
     "PROCESS001",
     "PROV001",
     "RESULT001",

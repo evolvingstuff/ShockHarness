@@ -15,6 +15,7 @@ from shockharness.ir.model import (
     MODULE_SCOPE,
     NO_DOM,
     Comment,
+    ConstantDefinition,
     ModuleFacts,
     NumericLiteral,
     ParseFailure,
@@ -109,8 +110,8 @@ def _is_constant_value(value: ast.expr | None) -> bool:
     return True
 
 
-def _constant_definition_values(module: ast.Module) -> set[int]:
-    """``id()`` of every literal node of a module-level named constant definition.
+def _constant_definitions(module: ast.Module) -> list[tuple[ast.Name, ast.expr]]:
+    """(name, value) of every module-level named constant definition.
 
     A statement of the module body itself (not nested in an ``if``/``try``/loop):
     ``NAME = <value>`` with one simple UPPER_SNAKE_CASE target, or
@@ -118,23 +119,50 @@ def _constant_definition_values(module: ast.Module) -> set[int]:
     literal or literal arithmetic (see :func:`_is_constant_value`). Containers, other
     expressions, chained targets, class bodies and function bodies are not covered.
     """
-    values: set[int] = set()
+    found: list[tuple[ast.Name, ast.expr]] = []
     for stmt in module.body:
         if isinstance(stmt, ast.Assign):
-            if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
-                continue
-            if CONSTANT_NAME.fullmatch(stmt.targets[0].id) is None:
-                continue
-            if _is_constant_value(stmt.value):
-                values.update(_literal_ids(stmt.value))
+            found.extend(_assigned_constant(stmt))
         elif isinstance(stmt, ast.AnnAssign):
-            if not isinstance(stmt.target, ast.Name) or not _is_constant_value(stmt.value):
-                continue
-            named = CONSTANT_NAME.fullmatch(stmt.target.id) is not None
-            if named or _is_final_annotation(stmt.annotation):
-                assert stmt.value is not None
-                values.update(_literal_ids(stmt.value))
+            found.extend(_annotated_constant(stmt))
+    return found
+
+
+def _assigned_constant(stmt: ast.Assign) -> list[tuple[ast.Name, ast.expr]]:
+    """``NAME = <value>``: one UPPER_SNAKE_CASE target and a constant value."""
+    if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+        return []
+    if CONSTANT_NAME.fullmatch(stmt.targets[0].id) is None or not _is_constant_value(stmt.value):
+        return []
+    return [(stmt.targets[0], stmt.value)]
+
+
+def _annotated_constant(stmt: ast.AnnAssign) -> list[tuple[ast.Name, ast.expr]]:
+    """``NAME: <annotation> = <value>``, or any name annotated ``Final``."""
+    if not isinstance(stmt.target, ast.Name) or not _is_constant_value(stmt.value):
+        return []
+    named = CONSTANT_NAME.fullmatch(stmt.target.id) is not None
+    if not (named or _is_final_annotation(stmt.annotation)):
+        return []
+    assert stmt.value is not None
+    return [(stmt.target, stmt.value)]
+
+
+def _constant_definition_values(module: ast.Module) -> set[int]:
+    """``id()`` of every literal node of a module-level named constant definition."""
+    values: set[int] = set()
+    for _name, value in _constant_definitions(module):
+        values.update(_literal_ids(value))
     return values
+
+
+def collect_python_constants(
+    source: SourceText, module: ast.Module
+) -> tuple[ConstantDefinition, ...]:
+    return tuple(
+        ConstantDefinition(name=name.id, span=node_span(source, name))
+        for name, _value in _constant_definitions(module)
+    )
 
 
 def _literal_ids(value: ast.expr) -> set[int]:
@@ -282,6 +310,7 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         language="python",
         parser=PARSER_NAME,
         numeric_literals=_collect_literals(source, parsed),
+        constants=collect_python_constants(source, parsed),
         comments=comments,
         catches=collect_python_catches(source, parsed, filename),
         managers=collect_python_managers(source, parsed, filename),

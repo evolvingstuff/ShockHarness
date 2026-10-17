@@ -84,10 +84,14 @@ allowed_values = [0, 1]
 allow_unary_negative_one = true
 # A numeric literal that is the whole value of a module-level constant definition
 # (MAX_PAGES = 8, _WAIT: Final = 10.0, const SETTLE_MS = 400, export const N = 3):
-# "report" (strict: a named constant is not automatically justified) or "allow" (the
-# name is the remedy MAGIC001 asks for; the recommended and minimal profiles). Literals
-# inside containers, expressions, functions and class bodies are reported either way.
-named_constant_definitions = "report"
+# "allow" (every profile since 0.9.0, spec 21.1 decision 36: the name is the remedy
+# MAGIC001 asks for) or "report" (a tightening: every such literal needs a suppression).
+# Literals inside containers, expressions, functions and class bodies are reported
+# either way.
+named_constant_definitions = "allow"
+# MAGIC004 (decision 36): a constant whose name only spells a number (TWO = 2). "review"
+# (default), "warning" or "error"; lower than review is not possible.
+magic004_severity = "review"
 # A finding with status "unknown" is one where the rule could not establish the property
 # (an unresolved identity, an unproven receiver type). false: unknown findings are
 # reported and counted (gate.unknown) but never fail the gate; true: they gate by their

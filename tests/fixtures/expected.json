@@ -1167,13 +1167,6 @@
     "findings": [
       [
         "MAGIC001",
-        1,
-        17,
-        "30",
-        false
-      ],
-      [
-        "MAGIC001",
         3,
         21,
         "2",
@@ -1368,15 +1361,7 @@
   },
   "javascript/module.mjs": {
     "status": "analyzed",
-    "findings": [
-      [
-        "MAGIC001",
-        1,
-        22,
-        "50",
-        false
-      ]
-    ]
+    "findings": []
   },
   "javascript/scopes.js": {
     "status": "analyzed",
@@ -1672,13 +1657,6 @@
   "python/def_exception_default.py": {
     "status": "analyzed",
     "findings": [
-      [
-        "MAGIC001",
-        4,
-        14,
-        "100",
-        false
-      ],
       [
         "DEF005",
         20,
@@ -2765,13 +2743,6 @@
   "python/magic_basic.py": {
     "status": "analyzed",
     "findings": [
-      [
-        "MAGIC001",
-        2,
-        11,
-        "30",
-        false
-      ],
       [
         "MAGIC001",
         5,

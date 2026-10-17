@@ -26,7 +26,7 @@ disable = ["MAGIC001"]
 reason = "generated tables"
 """
 APP = """\
-LIMIT = 3  # shockharness: ignore[MAGIC001] reason="documented limit"
+limit = 3  # shockharness: ignore[MAGIC001] reason="documented limit"
 x = 1  # shockharness: ignore[DEF002] reason="nothing to silence"
 y = 2  # shockharness: ignore[MAGIC001]
 """

@@ -44,10 +44,17 @@ GIT_IDENTITY = (
 COPY_IGNORE = ("node_modules", ".venv", "__pycache__", ".git", ".pytest_cache", "dist")
 PARENT_REVISION = "HEAD~1"
 
-# One deliberate violation per example: a numeric literal appended to an analyzed file.
+# One deliberate violation per example: a numeric literal in an expression appended to an
+# analyzed file (a named constant definition is allowed since 0.9.0, decision 36).
 VIOLATIONS: dict[str, tuple[str, str]] = {
-    "python": ("src/example_service/pages.py", "\nDEFAULT_PAGE_SIZE = 25\n"),
-    "js": ("src/pages.js", "\nexport const DEFAULT_PAGE_SIZE = 25;\n"),
+    "python": (
+        "src/example_service/pages.py",
+        "\n\ndef page_count(total: int) -> int:\n    return -(-total // 25)\n",
+    ),
+    "js": (
+        "src/pages.js",
+        "\nexport function pageCount(total) {\n  return Math.ceil(total / 25);\n}\n",
+    ),
 }
 # Where each example pins the analyzer; both pins must name the same version.
 PYPROJECT_PIN = re.compile(r'"shockharness==([^"]+)"')

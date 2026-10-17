@@ -111,14 +111,20 @@ H3_OFF = (
             "sentinels",
         )
     )
-    + '[[tool.shockharness.overrides]]\npaths = ["**"]\ndisable = ["EXC004"]\nreason = "0.3.0"\n'
+    + '[[tool.shockharness.overrides]]\npaths = ["**"]\n'
+    + 'disable = ["EXC004", "MAGIC004"]\nreason = "0.3.0"\n'
 )
 
 
 # 0.3.0 reported -1 in the strict and minimal profiles; the default allows it since the
-# H6 feedback round (MetaList), so the comparison pins the 0.3.0 value there.
+# H6 feedback round (MetaList), so the comparison pins the 0.3.0 value there. 0.3.0's
+# strict also reported named constant definitions; every profile allows them since
+# decision 36 (0.9.0), so strict pins "report" too.
 NEGATIVE_ONE_AS_IN_0_3_0 = {
-    "strict": "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n",
+    "strict": (
+        "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n"
+        'named_constant_definitions = "report"\n'
+    ),
     "recommended": "",
     "minimal": "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n",
 }

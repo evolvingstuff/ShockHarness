@@ -21,7 +21,8 @@ node --test              # or: npm test
 
 * `.shockharness.toml` selects the `strict` profile, analyzes `src/` and
   `test/`, and exempts tests from `MAGIC001` with a stated reason.
-* `src/http.js` carries the one deliberate, suppressed finding.
+* `src/http.js` names an HTTP status as a module-level constant with its RFC
+  citation; a named constant needs no suppression (spec 21.1 decision 36).
 * `.github/workflows/shockharness.yml` calls the reusable workflow. In CI the
   analyzer pin is the `shockharness-version` input; Dependabot's
   `github-actions` ecosystem bumps the workflow ref, not that input, so bump the

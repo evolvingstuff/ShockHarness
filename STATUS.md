@@ -4285,3 +4285,42 @@ Verified after publication: PyPI lists `0.8.0` as the latest release, with a whe
 an sdist. `pip install shockharness==0.8.0` into a fresh environment works, and
 `shockharness version` prints `shockharness 0.8.0`. uv's cached index did not see the
 release yet; pip installed it.
+
+## Decision 36: strict MAGIC001 allows named constants; MAGIC004 — DONE (2026-10-17)
+
+On Tom's go-ahead, after three under-the-gate rounds pointed at it.
+
+**Measured first**, strict MAGIC001 with `named_constant_definitions` reported vs allowed,
+source files only, copied to scratch:
+
+| Tree | Findings that go away | Constants | Names spelling their value |
+|---|---|---|---|
+| MetaList (which already set `allow` by hand) | 965 | 843 | 0 |
+| ShockHarness `src` | 35 | 35 | 0 |
+| Skill-eval reference solutions | 5 | 5 | 0 |
+| Experiment builds, ungated | 41 | 15 | 0 |
+| Experiment builds, gated | 17 | 12 | 0 |
+
+No third-party corpus was measured: the old clones were gone, and recloning is a
+download.
+
+**Built:**
+* `named_constant_definitions = "allow"` in the bundled defaults. `report` is an ordered
+  tightening, no longer a deviation for `allow`; the profiles drop the redundant key.
+* The adapters record `ConstantDefinition` facts (name, span) from the same pass that
+  marks constant literals; the cache schema is "18".
+* MAGIC004 (`rules/magic_numbers.py`, review, `magic004_severity`) reports a name that is
+  only number words or digits after filler. Inventory site `_magic004_finding`: exact on
+  the name, violation.
+* ShockHarness's `constants.py` override is dropped (a tightening; the file passes
+  without it). The behavior runner keeps its override, because it holds a number-word
+  table.
+* Skills (write-compliant-code principles 4 and 6, fix-violations), rules.md,
+  configuration.md, README, the spec (decision 36; the §5 principle and §19 decision 15
+  marked superseded) and CHANGELOG.
+
+**Tests:** `tests/unit/test_magic004.py` (4); rewritten named-constant tests in
+`test_magic001.py`; the profile regression pins 0.3.0's strict meaning (`report`) and
+leaves MAGIC004 out, like the other new rules. Goldens lose four constant-definition
+findings. The consumer check injects a literal in an expression, and the
+examples' and eval references' unneeded suppressions became plain comments.

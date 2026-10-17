@@ -40,7 +40,6 @@ from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
 from shockharness.schema import (
     MUST_USE_ENTRY,
-    NAMED_CONSTANT_MODES,
     PROFILE_STRICT,
     PROFILES,
     SECTION_SEVERITIES,
@@ -87,7 +86,6 @@ FILE_ROLES_CONFIG = f"{FILE_ROLES_KEY}.{ROLE_CONFIG}"
 # A boundary names one exception class: a dotted identifier path, never a wildcard.
 EXCEPTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*")
 
-NAMED_CONSTANT_ALLOW = NAMED_CONSTANT_MODES[1]
 VERIFICATION_REVIEW = "review"
 VERIFICATION_ERROR = "error"
 
@@ -787,12 +785,6 @@ def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> 
     extra = sorted({str(v) for v in allowed if v != 0 and v != 1})
     if len(extra) > 0:
         found.append("rules.magic_numbers.allowed_values permits " + ", ".join(extra))
-    if rules["magic_numbers"]["named_constant_definitions"] == NAMED_CONSTANT_ALLOW:
-        found.append(
-            f"rules.magic_numbers.named_constant_definitions is {NAMED_CONSTANT_ALLOW!r}; a "
-            "numeric literal that is the whole value of a module-level named constant "
-            "definition is not reported"
-        )
     if values[PARSE_ERRORS_KEY] != PARSE_ERRORS_FAIL:
         found.append(
             f"parse_errors is {values['parse_errors']!r}; syntax failures do not fail the gate"

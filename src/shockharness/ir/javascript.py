@@ -42,6 +42,7 @@ from shockharness.ir.model import (
     AsyncFacts,
     CatalogFacts,
     Comment,
+    ConstantDefinition,
     GuardrailFacts,
     ModuleFacts,
     NumericLiteral,
@@ -192,30 +193,50 @@ def _const_declaration(statement: Node) -> Node | None:
     return declaration
 
 
-def _constant_definition_values(root: Node) -> set[int]:
-    """Node ids of every literal of a module-level named constant definition: each
-    declarator of a ``const``/``export const`` statement of the program itself whose
-    name is UPPER_SNAKE_CASE and whose value is a numeric literal or literal arithmetic
-    (see :func:`_is_constant_value`). ``let``/``var``, block-nested declarations,
-    containers and other expressions are not covered."""
-    values: set[int] = set()
+def _constant_definitions(root: Node) -> list[tuple[Node, Node]]:
+    """(name, value) of every module-level named constant definition: each declarator of
+    a ``const``/``export const`` statement of the program itself whose name is
+    UPPER_SNAKE_CASE and whose value is a numeric literal or literal arithmetic (see
+    :func:`_is_constant_value`). ``let``/``var``, block-nested declarations, containers
+    and other expressions are not covered."""
+    found: list[tuple[Node, Node]] = []
     for statement in root.named_children:
         declaration = _const_declaration(statement)
         if declaration is None:
             continue
         for declarator in declaration.named_children:
-            if declarator.type != VARIABLE_DECLARATOR:
-                continue
-            name = declarator.child_by_field_name(Field.NAME)
-            value = declarator.child_by_field_name(Field.VALUE)
-            if name is None or name.type != Kind.IDENTIFIER:
-                continue
-            if CONSTANT_NAME.fullmatch(node_text(name)) is None:
-                continue
-            if _is_constant_value(value):
-                assert value is not None
-                values.update(_literal_ids(value))
+            found.extend(_constant_declarator(declarator))
+    return found
+
+
+def _constant_declarator(declarator: Node) -> list[tuple[Node, Node]]:
+    """``NAME = <value>`` of a ``const`` declaration: an UPPER_SNAKE_CASE identifier and a
+    constant value."""
+    if declarator.type != VARIABLE_DECLARATOR:
+        return []
+    name = declarator.child_by_field_name(Field.NAME)
+    value = declarator.child_by_field_name(Field.VALUE)
+    if name is None or name.type != Kind.IDENTIFIER:
+        return []
+    if CONSTANT_NAME.fullmatch(node_text(name)) is None or not _is_constant_value(value):
+        return []
+    assert value is not None
+    return [(name, value)]
+
+
+def _constant_definition_values(root: Node) -> set[int]:
+    """Node ids of every literal of a module-level named constant definition."""
+    values: set[int] = set()
+    for _name, value in _constant_definitions(root):
+        values.update(_literal_ids(value))
     return values
+
+
+def collect_javascript_constants(source: SourceText, root: Node) -> tuple[ConstantDefinition, ...]:
+    return tuple(
+        ConstantDefinition(name=node_text(name), span=node_span(source, name))
+        for name, _value in _constant_definitions(root)
+    )
 
 
 def _first_error(root: Node) -> Node | None:
@@ -254,6 +275,7 @@ def _extract_facts(
         language=language,
         parser=parser_name,
         numeric_literals=literals,
+        constants=collect_javascript_constants(source, root),
         comments=comments,
         catches=collect_javascript_catches(source, root),
         managers=(),  # JavaScript has no exception-capturing context manager idiom
