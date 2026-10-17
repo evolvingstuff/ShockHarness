@@ -213,6 +213,42 @@ def hook_blocks(log: Path) -> list[dict]:
     return blocks
 
 
+CHANGING_TOOLS = {"Edit", "Write", "MultiEdit", "Bash"}
+
+
+def blocks_from_run_log(tree: Path, log: Path) -> list[dict]:
+    """Newer Claude Code versions do not put hook feedback in the stream. The hook's own
+    run log has one line per Edit/Write/MultiEdit/Bash call, in order, so the k-th run is
+    the k-th such call: each run that fed findings back is paired with the call it
+    followed and the agent's next call."""
+    runs_path = tree / ".shockharness-cache" / "hook" / "runs.jsonl"
+    if not runs_path.is_file():
+        return []
+    runs = [json.loads(line) for line in runs_path.read_text(encoding="utf-8").splitlines() if line]
+    calls = []
+    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        calls.extend(u for u in _tool_uses(event) if u.get("name") in CHANGING_TOOLS)
+    blocks = []
+    for index, run in enumerate(runs):
+        if run["exit"] != 2 or index >= len(calls):
+            continue
+        after, following = calls[index], calls[index + 1] if index + 1 < len(calls) else None
+        blocks.append(
+            {
+                "after": {"tool": after.get("name"), "input": after.get("input")},
+                "feedback": {k: run[k] for k in ("files", "findings") if k in run}
+                | {k: run[k] for k in ("details",) if k in run},
+                "next_call": following
+                and {"tool": following.get("name"), "input": following.get("input")},
+            }
+        )
+    return blocks
+
+
 def hook_runs(tree: Path) -> dict:
     """The hook's own run log: how often it ran, and how often it fed findings back."""
     log = tree / ".shockharness-cache" / "hook" / "runs.jsonl"
@@ -236,6 +272,8 @@ def main(builds: Path, out: Path, shockharness: str) -> None:
         log = builds / "logs" / f"{tree.name}.jsonl"
         if tree.name.endswith("-gated") and log.exists():
             blocks = hook_blocks(log)
+            if len(blocks) == 0:
+                blocks = blocks_from_run_log(tree, log)
             results[tree.name]["hook_blocks"] = len(blocks)
             results[tree.name]["hook_log"] = hook_runs(tree)
             (out / f"{tree.name}-blocks.json").write_text(

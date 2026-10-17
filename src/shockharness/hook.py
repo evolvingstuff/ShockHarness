@@ -187,17 +187,18 @@ def _feedback(
     config: EffectiveConfig,
     options: AnalysisOptions,
     fail_on: str,
-) -> tuple[str, int]:
-    """The message for the files' findings at ``fail_on`` or worse, and their count."""
+) -> tuple[str, list[str]]:
+    """The message for the files' findings at ``fail_on`` or worse, and one short line
+    per finding (rule, place) for the run log."""
     report = analyze_paths([root / name for name in files], root, config, options)
     parts: list[str] = []
-    count = 0
+    details: list[str] = []
     for name in files:
         shown = _fed_back([f for f in report.findings if f.path == name], fail_on)
         if len(shown) > 0:
             parts.append(_message(name, shown))
-            count += len(shown)
-    return "".join(parts), count
+            details.extend(f"{f.rule_id} {f.path}:{f.span.line}" for f in shown)
+    return "".join(parts), details
 
 
 def run_post_edit(
@@ -220,22 +221,29 @@ def run_post_edit(
     candidates = _candidates(event.value, root)
     state = store.load_state()
     changed = _changed(root, candidates.files, state, store)
-    message, count = "", 0
+    message, details = "", []
     if len(changed) > 0:
-        message, count = _feedback(root, sorted(changed), config, options, fail_on)
+        message, details = _feedback(root, sorted(changed), config, options, fail_on)
         store.save_state({**state, **changed})
-    return _finish(store, tool, sorted(changed), count, message, candidates.note)
+    return _finish(store, tool, sorted(changed), details, message, candidates.note)
 
 
 def _finish(
-    store: HookStore, tool: str, files: list[str], count: int, message: str, note: str
+    store: HookStore, tool: str, files: list[str], details: list[str], message: str, note: str
 ) -> HookResult:
     """Log the run; feedback for the agent first, then a notice when the hook's own
     files could not be kept (the user sees it, the agent does not act on it)."""
     exit_code = HOOK_CLEAN
-    if count > 0:
+    if len(details) > 0:
         exit_code = HOOK_FEEDBACK
-    record = {"tool": tool, "files": files, "findings": count, "exit": exit_code, "note": note}
+    record = {
+        "tool": tool,
+        "files": files,
+        "findings": len(details),
+        "details": details,
+        "exit": exit_code,
+        "note": note,
+    }
     logged = store.log_run(record)
     if exit_code == HOOK_CLEAN and (not logged or len(store.problems) > 0):
         return HookResult(HOOK_NOTICE, f"shockharness hook: {'; '.join(store.problems)}\n")
