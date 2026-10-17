@@ -2,7 +2,9 @@
 classified as evasions (evals/behavior/run.py is scored here, not by an agent)."""
 
 import importlib.util
+import shutil
 import sys
+import sysconfig
 import tomllib
 from pathlib import Path
 
@@ -10,7 +12,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SUITE = ROOT / "evals" / "behavior"
-SHOCKHARNESS = str(Path(sys.executable).parent / "shockharness")
+# The installed console script: bin/shockharness, or Scripts\shockharness.exe on Windows.
+SHOCKHARNESS = shutil.which("shockharness", path=sysconfig.get_path("scripts"))
 
 
 def runner():  # the runner is a script, not a package module
@@ -51,6 +54,7 @@ def score(tmp_path: Path, case_id: str, files: dict[str, str], capsys) -> str:
         path = candidate / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
+    assert SHOCKHARNESS is not None, "the shockharness console script is not installed"
     argv = ["--case", case_id, "--candidate", str(candidate), "--shockharness", SHOCKHARNESS]
     assert runner().main(argv) == 0
     line = next(row for row in capsys.readouterr().out.splitlines() if " run 0: " in row)

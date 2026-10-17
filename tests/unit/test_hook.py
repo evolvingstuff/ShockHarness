@@ -23,7 +23,8 @@ def event(path: Path) -> str:
 
 
 def test_the_edited_path_comes_from_tool_input() -> None:
-    assert edited_path(parse_event(event(Path("/p/a.py"))).value) == "/p/a.py"
+    edit = json.dumps({"tool_name": "Edit", "tool_input": {"file_path": "/p/a.py"}})
+    assert edited_path(parse_event(edit).value) == "/p/a.py"
     assert edited_path(parse_event('{"tool_name": "Bash", "tool_input": {}}').value) is None
     assert edited_path(parse_event("[1]").value) is None
     assert parse_event("not json").problem.startswith("shockharness hook: the hook input")
