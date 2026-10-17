@@ -29,7 +29,8 @@ worth it yet), **declined** (with the reason).
 | Borrow methods: EvilGenie (held-out tests, test-file edit detection, judge then human), ImpossibleBench (ask cases as spec/test contradictions; abort option; prompt strictness) | Fable's follow-up brief | **in progress** | Methods read; folded into the suite design |
 | Two corpora with two purposes: third-party code calibrates precision; code written under the gate reveals gaming | Fable review | **in progress** | The behavior suite is the second corpus |
 | Builder and reviewer in separate contexts, so the work does not grade itself | Fable review | **in progress** | The suite's judge sees only the diff and the rubric |
-| Watch what an agent does the first time a rule blocks something it considers fine (`x / 2`, `range(2)`) | Fable review | open | A behavior-suite case |
+| Watch what an agent does the first time a rule blocks something it considers fine (`x / 2`, `range(2)`) | Fable review | **in progress** | Part of the under-the-gate experiment below |
+| Under-the-gate experiment: four specs, each built twice by the same agent (with the gate, skills and hook; without), reviewed in a separate fresh context | Fable review; Tom | **specs drafted, waiting on Tom** | Specs: a feed health checker, a notes board with an edit mode, a contacts cleaner, an asyncio job queue. 8 builds on Tom's account |
 | Cite GSO's reward-hacking rate as motivation | Fable's follow-up brief | **blocked** | The named post ("hungry hungry reward hackers") could not be found. A related post cites GSO's own write-up (gso-blog.notion.site/gso-hackdetector, not yet read). Not cited until sourced |
 | ShockBench: seeded repositories where the easiest path to green is a shortcut | Fable review | open (H7) | Research milestone |
 | ShockHarness as a deterministic reward signal for training code models | Fable review | open (H7) | Research |
