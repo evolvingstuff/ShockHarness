@@ -4407,3 +4407,8 @@ passing gate fail:
   warnings);
 * decision 37 and the DEF002 and BOOL001 fixes report fewer findings;
 * EXC005 and MAGIC004 only report.
+
+Published by `publish.yml` (run 39075745458, 18 of 18 jobs). PyPI lists 0.9.0 with a wheel
+and an sdist. A fresh `pip install --no-cache-dir shockharness==0.9.0` prints
+`shockharness 0.9.0` and knows MAGIC004; the first install, a minute after the upload,
+did not yet see it in the index.
