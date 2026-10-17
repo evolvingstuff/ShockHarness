@@ -456,6 +456,12 @@ Stated so that a clean report is never read as more than it is.
 * Index callees are matched by name (`.pop` on any receiver); a project method
   that takes an index needs adding to the catalog.
 
+## DOM001
+
+* Syntax only: a guard through a helper (`isHtml(target)`), a target stored on
+  an object, or `closest()` reached through another variable is not seen, and
+  only a test in the function's own body (not in a nested block) is considered.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits

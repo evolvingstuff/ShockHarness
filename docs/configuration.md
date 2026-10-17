@@ -837,6 +837,19 @@ javascript_index_callees = [".slice", ".at", ".splice", ".substr", ".indexOf", .
 
 Removing a value or a role and adding an index callee are policy deviations.
 
+## Delegated handlers (DOM001)
+
+```toml
+[tool.shockharness.rules.dom]
+enabled = true
+severity = "warning"
+roles = ["production"]
+classes = ["HTMLElement"]
+```
+
+Removing a class or a role is a policy deviation; adding a narrower class
+(`HTMLButtonElement`) reports those filters too.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

@@ -3822,3 +3822,20 @@ TypeScript file is analyzed (TYPE001 reports `any` and an `as` assertion) with
 all 42 implemented rules applied; runtime dependencies are `tree-sitter`
 0.25.2, `tree-sitter-javascript` 0.25.0 and `tree-sitter-typescript` 0.23.2.
 PyPI lists `0.7.0` as the latest release, with a wheel and an sdist.
+
+## DOM001: a delegated handler that drops SVG targets — DONE (2026-10-17)
+
+Spec 21.1 decision 27 (from an agent). `ir/javascript_dom.py` records
+`ElementGuard` facts (`GuardrailFacts.element_guards`; Python has none): in a
+function body, `if (!(X instanceof C))` with an early exit followed in the same
+block by `X.closest(...)`, or `if (X instanceof C)` whose consequence calls
+`X.closest(...)`, where `X` is `<expr>.target` or a local assigned from one. The
+rule (`rules/guardrails._dom001`, section `rules.dom`, warning, production)
+reports the classes in `rules.dom.classes` (`HTMLElement`); a narrower class is a
+deliberate filter and `currentTarget` is never recorded.
+
+Decision (mine): the positive form is reported too, since it drops the same clicks.
+
+Evidence: `tests/unit/test_dom.py` (2: both forms in JavaScript and TypeScript,
+the narrower class, `Element`, `currentTarget`, a guard with no `closest`, the
+classes catalog, roles). 1144 tests pass.

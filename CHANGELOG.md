@@ -5,6 +5,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- `DOM001` (`rules.dom`, warning, JavaScript and TypeScript): a delegated event
+  handler that tests `event.target instanceof HTMLElement` before
+  `event.target.closest(...)`, which silently drops clicks on SVG icons inside
+  buttons (decision 27). The cache schema is "11".
+
 ## [0.7.0] - 2026-10-17
 
 Milestones H4, H5, H-TS and H6 of specification section 21, ROLE001, the assert

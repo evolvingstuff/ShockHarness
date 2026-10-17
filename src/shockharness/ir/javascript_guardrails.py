@@ -24,6 +24,7 @@ from tree_sitter import Node
 
 from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
+from shockharness.ir.javascript_dom import collect_element_guards
 from shockharness.ir.model import (
     EXIT_BREAK,
     EXIT_CONTINUE,
@@ -234,6 +235,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
         import_time_calls=tuple(
             sorted(_import_time(source, root), key=lambda c: (c.span, c.callee))
         ),
+        element_guards=collect_element_guards(source, root),
     )
 
 

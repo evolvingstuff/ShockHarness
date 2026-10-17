@@ -32,6 +32,7 @@ from shockharness.rules.registry import (
     ASSERT001,
     ASSERT002,
     BOOL001,
+    DOM001,
     EXC004,
     IMPORT001,
     JAVASCRIPT_FAMILY,
@@ -45,7 +46,17 @@ from shockharness.rules.severity import section_severity
 from shockharness.source import SourceText
 
 # ASSERT001 and ASSERT002 are applied here and run in the cross-file phase (rules/dataflow.py).
-GUARDRAIL_RULES = (EXC004, STUB001, STUB002, ASSERT001, ASSERT002, BOOL001, STATE001, IMPORT001)
+GUARDRAIL_RULES = (
+    EXC004,
+    STUB001,
+    STUB002,
+    ASSERT001,
+    ASSERT002,
+    BOOL001,
+    STATE001,
+    IMPORT001,
+    DOM001,
+)
 NODE_PREFIX = "node:"
 DEFAULT_EXPORT = "default"
 PLACEHOLDER_MESSAGES = {
@@ -404,4 +415,28 @@ def run_guardrail_rules(
         found.extend(_state001(facts, source, path, rules["module_state"]))
     if IMPORT001.rule_id in active:
         found.extend(_import001(facts, source, path, language, rules["import_effects"]))
+    if DOM001.rule_id in active:
+        found.extend(_dom001(facts, source, path, rules["dom"]))
     return found
+
+
+def _dom001(
+    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
+) -> list[Finding]:
+    classes = {str(c) for c in settings["classes"]}
+    return [
+        _finding(
+            DOM001,
+            str(settings["severity"]),
+            path,
+            guard.span,
+            f"{guard.subject} instanceof {guard.class_name} drops an event whose target is an "
+            f"SVG element (an icon inside a button) before {guard.subject}.closest(...) "
+            f"(line {guard.closest.line}), which works on any Element: test instanceof Element",
+            source,
+            None,
+            CONFIDENCE_EXACT,
+        )
+        for guard in facts.guardrails.element_guards
+        if guard.class_name in classes
+    ]

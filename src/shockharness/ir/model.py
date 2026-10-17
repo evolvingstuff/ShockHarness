@@ -644,16 +644,34 @@ class ImportTimeCall:
 
 
 @dataclass(frozen=True)
+class ElementGuard:
+    """DOM001: an ``instanceof`` test on an event target (``event.target instanceof
+    HTMLElement``) that guards a later ``.closest(...)`` on the same value (JavaScript and
+    TypeScript)."""
+
+    span: Span
+    subject: str
+    class_name: str
+    closest: Span
+
+
+@dataclass(frozen=True)
 class GuardrailFacts:
     finally_exits: tuple[FinallyExit, ...]
     placeholders: tuple[Placeholder, ...]
     asserts: tuple[AssertFact, ...]
     boolean_arguments: tuple[BooleanArgument, ...]
     import_time_calls: tuple[ImportTimeCall, ...]
+    element_guards: tuple[ElementGuard, ...]
 
 
 NO_GUARDRAILS = GuardrailFacts(
-    finally_exits=(), placeholders=(), asserts=(), boolean_arguments=(), import_time_calls=()
+    finally_exits=(),
+    placeholders=(),
+    asserts=(),
+    boolean_arguments=(),
+    import_time_calls=(),
+    element_guards=(),
 )
 
 

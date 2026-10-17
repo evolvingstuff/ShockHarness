@@ -156,6 +156,7 @@ IMPLEMENTED_IN_ORDER = (
     "PROV001",
     "GUARD001",
     "MAGIC003",
+    "DOM001",
 )
 
 

@@ -524,6 +524,7 @@ GUARDRAIL_RULES = {
     "input": "INPUT001",
     "consistency": "PROV001, GUARD001",
     "sentinels": "MAGIC003",
+    "dom": "DOM001",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -564,6 +565,8 @@ GUARDRAIL_CATALOGS = (
     ("consistency", "issuer_prefixes"),
     ("sentinels", "roles"),
     ("sentinels", "values"),
+    ("dom", "roles"),
+    ("dom", "classes"),
 )
 TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (

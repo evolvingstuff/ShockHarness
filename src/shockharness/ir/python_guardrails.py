@@ -338,4 +338,5 @@ def collect_python_guardrails(source: SourceText, module: ast.Module) -> Guardra
         import_time_calls=tuple(
             sorted(_import_time_calls(source, module), key=lambda c: (c.span, c.callee))
         ),
+        element_guards=(),  # DOM001 is JavaScript and TypeScript only
     )

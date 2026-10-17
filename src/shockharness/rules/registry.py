@@ -1185,12 +1185,14 @@ ASSERTIONS_SECTION = "rules.assertions"
 BOOLEAN_ARGUMENTS_SECTION = "rules.boolean_arguments"
 MODULE_STATE_SECTION = "rules.module_state"
 IMPORT_EFFECTS_SECTION = "rules.import_effects"
+DOM_SECTION = "rules.dom"
 GUARDRAIL_SECTIONS = (
     STUBS_SECTION,
     ASSERTIONS_SECTION,
     BOOLEAN_ARGUMENTS_SECTION,
     MODULE_STATE_SECTION,
     IMPORT_EFFECTS_SECTION,
+    DOM_SECTION,
 )
 
 EXC004 = RuleSpec(
@@ -2286,6 +2288,60 @@ MAGIC003 = RuleSpec(
 )
 
 
+# --- DOM001 (decision 27) ---------------------------------------------------------------
+
+DOM001 = RuleSpec(
+    rule_id="DOM001",
+    version="1",
+    name="delegated handler that drops SVG targets",
+    family="dom",
+    config_section=DOM_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(JAVASCRIPT, TYPESCRIPT),
+    summary=(
+        "A delegated event handler tests event.target instanceof HTMLElement before "
+        "event.target.closest(...): a click on an icon inside a button targets an SVG "
+        "element, fails the test and is silently dropped."
+    ),
+    rationale=(
+        "Delegated handlers find the element they care about with closest(), which every "
+        "Element has. Narrowing the target to HTMLElement first is a type-checker habit "
+        "that excludes SVG (and MathML) targets: the handler works when the text is "
+        "clicked and does nothing when the icon is."
+    ),
+    guarantees=(
+        "In one function body: if (!(X instanceof C)) followed by an early return, throw, "
+        "continue or break and, later in the same block, X.closest(...); or "
+        "if (X instanceof C) whose consequence calls X.closest(...). X is <expr>.target or a "
+        "local assigned from one (never currentTarget, which is the element the listener is "
+        "on); C is in rules.dom.classes (HTMLElement). A narrower class (HTMLButtonElement, "
+        "HTMLInputElement) is a deliberate filter and not reported. Exact."
+    ),
+    limitations=(
+        "Syntax only: a guard through a helper (isHtml(target)), a target stored on an "
+        "object, or closest() reached through another variable is not seen."
+    ),
+    remediation=(
+        "Test instanceof Element (closest is defined there), or call closest() first and "
+        "narrow its result: const button = target instanceof Element ? "
+        "target.closest('button') : null."
+    ),
+    noncompliant_example=(
+        "list.addEventListener('click', (event) => {\n"
+        "  if (!(event.target instanceof HTMLElement)) return;\n"
+        "  const item = event.target.closest('li');\n"
+        "});"
+    ),
+    compliant_example=(
+        "list.addEventListener('click', (event) => {\n"
+        "  if (!(event.target instanceof Element)) return;\n"
+        "  const item = event.target.closest('li');\n"
+        "});"
+    ),
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -2341,6 +2397,7 @@ RULES: tuple[RuleSpec, ...] = (
     PROV001,
     GUARD001,
     MAGIC003,
+    DOM001,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -2397,6 +2454,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     INPUT_FAMILY: CATEGORY_CONTRACT,
     CONSISTENCY_FAMILY: CATEGORY_CONTRACT,
     SENTINELS_FAMILY: CATEGORY_CONTRACT,
+    "dom": CATEGORY_CONTRACT,
 }
 
 

@@ -96,8 +96,9 @@ ELAPSED_DECIMALS: Final[int] = 3
 # Bumped on an incompatible change; a cache written by another version is invalidated.
 # "2": finding status and file role (H1); "3": verification facts (H2); "7": TypeScript
 # facts, and JavaScript parameters counted as a unit's locals (H-TS); "8": dataflow facts
-# (H6); "9": call guards (H6 part two); "10": sentinel facts (MAGIC003).
-CACHE_SCHEMA_VERSION: Final[str] = "10"
+# (H6); "9": call guards (H6 part two); "10": sentinel facts (MAGIC003); "11": element
+# guards (DOM001).
+CACHE_SCHEMA_VERSION: Final[str] = "11"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

@@ -64,6 +64,7 @@ Implemented rules:
 | ID | What it reports | Default |
 |---|---|---|
 | `MAGIC001` | numeric literal other than `0`, `1` or `-1` in executable code | error |
+| `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |

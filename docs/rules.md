@@ -1047,6 +1047,20 @@ hypothesis, build, hatchling and npm it gives 42 findings where 0.6.0 reported
 543 for `-1` (`sys.exit(-1)`, `return -1` for "not found", `lineno = -1`,
 `max(..., default=-1)`, click's `nargs=-1`).
 
+### DOM001: a delegated handler that drops SVG targets (warning)
+
+A delegated click handler that narrows `event.target` to `HTMLElement` before
+`event.target.closest(...)` silently ignores a click whose target is an SVG
+element, an icon inside a button, although `closest` is defined on every
+`Element` (spec 21.1 decision 27). Reported, in one function body: `if (!(X
+instanceof C))` followed by an early `return`, `throw`, `continue` or `break`
+and, later in the same block, `X.closest(...)`; or `if (X instanceof C)` whose
+consequence calls `X.closest(...)`. `X` is `<expr>.target` or a local assigned
+from one (never `currentTarget`, the element the listener is on); `C` is in
+`rules.dom.classes` (`HTMLElement`). A narrower class (`HTMLButtonElement`,
+`HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
+TypeScript; exact.
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are

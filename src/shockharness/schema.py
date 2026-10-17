@@ -300,6 +300,10 @@ CONFIG_SCHEMA = TableField(
                     },
                     required=(),
                 ),
+                "dom": TableField(
+                    fields={**GUARDRAIL_COMMON, "classes": ListField(StrField(allow_empty=False))},
+                    required=(),
+                ),
                 "boolean_arguments": TableField(
                     fields={
                         **GUARDRAIL_COMMON,

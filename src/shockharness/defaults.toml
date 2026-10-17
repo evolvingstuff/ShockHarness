@@ -266,6 +266,14 @@ external_reads = [
   ".recv",
 ]
 
+[tool.shockharness.rules.dom]               # DOM001 (decision 27), JavaScript and TypeScript
+enabled = true
+severity = "warning"
+roles = ["production"]
+# Classes whose instanceof test on an event target, before .closest(...), drops other
+# elements (SVG icons). A narrower class (HTMLButtonElement) is a deliberate filter.
+classes = ["HTMLElement"]
+
 [tool.shockharness.rules.boolean_arguments]
 enabled = true
 severity = "review"
