@@ -1,0 +1,67 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+# Exception boundaries: the only places where feedcheck meets the outside world.
+# Each try wraps exactly one operation; the handler names the failure for the caller.
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/config.py"
+language = "python"
+exception = "OSError"
+reason = "Reading the config file; an unreadable file becomes a ConfigError that stops the tool"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/config.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Decoding the config file; invalid UTF-8 becomes a ConfigError that stops the tool"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/config.py"
+language = "python"
+exception = "tomllib.TOMLDecodeError"
+reason = "Parsing the config file; invalid TOML becomes a ConfigError that stops the tool"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/http_fetch.py"
+language = "python"
+exception = "urllib.error.URLError"
+reason = "Network I/O to a feed; no answer becomes a NoAnswer outcome reported as unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/http_fetch.py"
+language = "python"
+exception = "TimeoutError"
+reason = "Network I/O to a feed; a read timeout becomes a NoAnswer outcome reported as unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/http_fetch.py"
+language = "python"
+exception = "ConnectionError"
+reason = "Network I/O to a feed; a reset connection becomes a NoAnswer outcome reported as unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/http_fetch.py"
+language = "python"
+exception = "http.client.HTTPException"
+reason = "Network I/O to a feed; a malformed HTTP answer becomes a NoAnswer outcome reported as unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/health.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "Parsing a feed body; invalid JSON becomes an unhealthy result naming the parse error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/health.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Decoding a feed body; undecodable bytes become an unhealthy result naming the error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/health.py"
+language = "python"
+exception = "ValueError"
+reason = "datetime.fromisoformat on a feed item's published field; a bad timestamp makes the feed unhealthy"

@@ -1,0 +1,15 @@
+# How long to wait for one answer from a feed, in seconds.
+timeout_seconds = 10
+# Attempts per feed when the server answers 5xx or does not answer at all.
+attempts = 3
+# Attempt n (counting from 0) first waits n * retry_delay_seconds.
+retry_delay_seconds = 1.0
+
+[[feeds]]
+name = "news"
+url = "https://example.com/news.json"
+max_age_hours = 24
+
+[[feeds]]
+name = "status"
+url = "https://example.com/status.json"

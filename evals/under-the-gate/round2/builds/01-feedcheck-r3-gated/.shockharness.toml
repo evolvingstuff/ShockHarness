@@ -1,0 +1,33 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/config.py"
+language = "python"
+exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"]
+reason = "Reading and decoding the user's config file; each failure becomes a ConfigError that stops the tool with a clear message"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/fetch.py"
+language = "python"
+exceptions = ["OSError", "http.client.HTTPException"]
+reason = "Network I/O to a feed; a server that does not answer becomes a NoAnswer result, reported as unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/check.py"
+language = "python"
+exceptions = ["json.JSONDecodeError", "UnicodeDecodeError", "ValueError"]
+reason = "Decoding a feed body and its ISO 8601 timestamps (external input); a failure becomes the 'unhealthy' reason for that feed"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/cli.py"
+language = "python"
+exception = "feedcheck.errors.ConfigError"
+reason = "Entry point; an invalid config stops the tool with a clear message (SystemExit chained to the ConfigError) before any feed is fetched"
+
+[[tool.shockharness.overrides]]
+roles = ["test"]
+disable = ["MAGIC001", "DEF001"]
+reason = "Test fixtures state literal HTTP statuses, counts and timings, and test helpers take keyword defaults; production code stays fully gated"

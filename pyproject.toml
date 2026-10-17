@@ -72,7 +72,7 @@ markers = ["slow: tests that run subprocesses or large inputs"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["tests/fixtures", "evals/tasks", "evals/behavior/cases", "evals/behavior/review_queue", "evals/under-the-gate/round1", "src/shockharness/skills"]  # non-compliant inputs; Markdown skill snippets
+extend-exclude = ["tests/fixtures", "evals/tasks", "evals/behavior/cases", "evals/behavior/review_queue", "evals/under-the-gate/round1", "evals/under-the-gate/round2", "src/shockharness/skills"]  # non-compliant inputs; Markdown skill snippets
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]

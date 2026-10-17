@@ -1,0 +1,14 @@
+[project]
+name = "contactclean"
+version = "0.1.0"
+description = "Clean a CSV export of contacts and report the rows it could not use"
+requires-python = ">=3.11"
+
+[project.scripts]
+contactclean = "contactclean.cli:run"
+
+[tool.setuptools]
+packages = ["contactclean"]
+
+[tool.setuptools.package-data]
+contactclean = ["phone_rules.json"]

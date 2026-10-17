@@ -4096,3 +4096,22 @@ unchanged content, the run log, no git, the I/O notice, the matcher upgrade. Liv
 headless Claude Code 2.0.55 (Sonnet 5.5) run told to write a file through a Bash heredoc
 received the hook's three findings word for word, and the run was logged. 1184 tests
 pass; the self-gate passes.
+
+## Under-the-gate experiment, round 2 — DONE (2026-10-17)
+
+On Tom's go-ahead, after `claude update` (Claude Code 2.1.302): Opus 5.5, the hook
+covering shell edits, three runs per spec and variant (24 builds, about $19.60), and one
+fresh reviewer per pair (12 reviews). Write-up in `evals/under-the-gate/RESULTS-round2.md`,
+evidence in `round2/`; every quoted evasion was checked in the code.
+
+The hook ran 135 times and fed back 17 times, mostly after a builder's first big write.
+All 24 builds' tests pass. Under the same strict configuration the ungated builds had
+25-174 findings and the gated ones 1-15, except feedcheck r3 (58) and contactclean r2
+(15). Both of those turned MAGIC001 off for their whole test role with an override
+(feedcheck r3 turned DEF001 off as well), and nothing asked anyone. Evasions are
+still about small numbers, now mostly as strings (`indent="  "` in 6 builds,
+`Number("3000")`), `len(...)` and data files next to tests. One shape caused a real
+defect: contactclean r3 pads short rows with `""` and silently drops all-empty rows the
+spec says to reject. Recommendations are rows in `docs/ideas.md` (overrides need
+sign-off, MAGIC001 seeing numbers in other forms, data files next to tests, MAGIC001 in
+tests, padding external records, I/O-failure skill wording, `SystemExit` subclasses).

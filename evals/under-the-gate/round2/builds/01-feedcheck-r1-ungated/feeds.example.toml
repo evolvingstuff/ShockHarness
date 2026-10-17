@@ -1,0 +1,15 @@
+# How long to wait for a feed before giving up, per attempt.
+timeout_seconds = 10
+# Attempts for a feed whose server answers 5xx or does not answer at all.
+attempts = 3
+# Wait before the 2nd attempt; doubles for each attempt after that (1s, 2s, 4s, ...).
+backoff_seconds = 1
+
+[[feeds]]
+name = "news"
+url = "https://example.com/news.json"
+max_age_hours = 24   # optional: stale if the newest item is older than this
+
+[[feeds]]
+name = "status"
+url = "https://example.com/status.json"

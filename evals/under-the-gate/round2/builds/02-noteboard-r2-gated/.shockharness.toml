@@ -1,0 +1,10 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/storage.js"
+language = "javascript"
+exception = "SyntaxError"
+reason = "JSON.parse of text read from localStorage, which the program does not control; the failure becomes a 'corrupt' load result that the board must report to the user"

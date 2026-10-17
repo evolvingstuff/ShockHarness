@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>noteboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <!-- data-toast-ms: how long the "Saved" toast stays visible, in milliseconds -->
+  <body data-toast-ms="3000">
+    <header>
+      <h1>noteboard</h1>
+      <button type="button" id="add-note">New note</button>
+    </header>
+    <ul id="notes" class="notes"></ul>
+    <script type="module">
+      import { start } from "./app.js";
+
+      start({
+        document,
+        storage: window.localStorage,
+        newId: () => crypto.randomUUID(),
+        now: () => Date.now(),
+      });
+    </script>
+  </body>
+</html>

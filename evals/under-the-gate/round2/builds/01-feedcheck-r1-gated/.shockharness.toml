@@ -1,0 +1,28 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/config.py"
+language = "python"
+exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"]
+reason = "Reading and parsing the user's config file; a failure becomes a ConfigError with its cause"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/cli.py"
+language = "python"
+exception = "feedcheck.config.ConfigError"
+reason = "Process boundary: an invalid config stops the tool with a clear message and exit code 2"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/fetch.py"
+language = "python"
+exceptions = ["urllib.error.HTTPError", "OSError", "http.client.HTTPException"]
+reason = "Network I/O: a non-2xx answer becomes an Answer with its status, no answer becomes NoAnswer with the reason"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck/health.py"
+language = "python"
+exceptions = ["json.JSONDecodeError", "UnicodeDecodeError", "ValueError"]
+reason = "Decoding external feed content (JSON body, ISO 8601 timestamps); a failure becomes a Problem the verdict reports"

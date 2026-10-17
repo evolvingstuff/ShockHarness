@@ -1,0 +1,1110 @@
+{
+  "01-feedcheck-r1-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 8,
+        "ROLE001": 1
+      },
+      "suppressed": 2
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "ahore-Desktop-ShockHarness/706bccae-1ae9-4595-8eeb-45abd594f5c1/scratchpad/utg-round2/01-feedcheck-r1-gated/tests/fake_server.py\", line 43, in do_GET\n    self.wfile.write(reply.body)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socketserver.py\", line 845, in write\n    self._sock.sendall(b)\n    ~~~~~~~~~~~~~~~~~~^^^\nBrokenPipeError: [Errno 32] Broken pipe\n----------------------------------------\n.........\n----------------------------------------------------------------------\nRan 22 tests in 10.091s\n\nOK\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 832,
+      "functions": 75,
+      "try_blocks": 7,
+      "frozen_dataclasses": 9,
+      "parameter_defaults": 0,
+      "module_constants": 12,
+      "inline_suppressions": 2
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_CONFIG_ERROR = 2  # shockharness: ignore[MAGIC001] reason=\"same status argparse uses for an invalid invocation (Python docs, ArgumentParser.error)\"",
+        "SERVER_ERROR_END = 600  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15: status codes are three digits; the 5xx class ends below 600\""
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item or not isinstance(item[\"published\"], str):"
+      ],
+      "catch_fallback": [
+        "except ConfigError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except urllib.error.HTTPError as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except (json.JSONDecodeError, UnicodeDecodeError) as exc:",
+        "except ValueError as exc:"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format: str, *args: object) -> None:"
+      ]
+    },
+    "hook_blocks": 2,
+    "hook_log": {
+      "runs": 10,
+      "feedback": 2
+    }
+  },
+  "01-feedcheck-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 3,
+        "CPLX002": 4,
+        "CPLX006": 1,
+        "DEF001": 16,
+        "DEF002": 4,
+        "DEF005": 2,
+        "EXC001": 18,
+        "EXC002": 10,
+        "MAGIC001": 91,
+        "ROLE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".....................................\n----------------------------------------------------------------------\nRan 37 tests in 2.333s\n\nOK\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 908,
+      "functions": 71,
+      "try_blocks": 13,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 12,
+      "module_constants": 15,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "timeout = data.get(\"timeout_seconds\", DEFAULT_TIMEOUT_SECONDS)",
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)",
+        "backoff = data.get(\"backoff_seconds\", DEFAULT_BACKOFF_SECONDS)"
+      ],
+      "mapping_get": [
+        "name = raw.get(\"name\")",
+        "url = raw.get(\"url\")",
+        "max_age = raw.get(\"max_age_hours\")"
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as exc:",
+        "except urllib.error.URLError as exc:",
+        "except (TimeoutError, socket.timeout):",
+        "except (http.client.HTTPException, OSError) as exc:",
+        "except (UnicodeDecodeError, json.JSONDecodeError) as exc:",
+        "except ValueError:",
+        "except _NoAnswer as exc:",
+        "except BaseException:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def check(self, path, *, attempts=3, timeout=1.0, backoff=0.5, max_age_hours=None, url=None):"
+      ],
+      "variadic_signature": [
+        "def check_all(config: Config, **kwargs) -> list[FeedResult]:",
+        "def log_message(self, format, *args):  # keep test output quiet"
+      ]
+    }
+  },
+  "01-feedcheck-r2-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 6
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...................\n----------------------------------------------------------------------\nRan 19 tests in 16.692s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 809,
+      "functions": 69,
+      "try_blocks": 6,
+      "frozen_dataclasses": 10,
+      "parameter_defaults": 0,
+      "module_constants": 12,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except (json.JSONDecodeError, UnicodeDecodeError) as exc:",
+        "except ValueError as exc:",
+        "except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException) as exc:"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format: str, *args: object) -> None:"
+      ]
+    },
+    "hook_blocks": 3,
+    "hook_log": {
+      "runs": 14,
+      "feedback": 3
+    }
+  },
+  "01-feedcheck-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 17,
+        "DEF002": 3,
+        "DEF005": 2,
+        "EXC001": 18,
+        "EXC002": 9,
+        "MAGIC001": 72,
+        "ROLE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".............................................\n----------------------------------------------------------------------\nRan 45 tests in 2.185s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 911,
+      "functions": 81,
+      "try_blocks": 11,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 12,
+      "module_constants": 15,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "backoff = data.get(\"backoff_seconds\", DEFAULT_BACKOFF_SECONDS)",
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)"
+      ],
+      "mapping_get": [
+        "raw_feeds = data.get(\"feeds\")",
+        "name = raw.get(\"name\")",
+        "url = raw.get(\"url\")",
+        "responses = server.routes.get(self.path)"
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:",
+        "code = main(list(args) or [\"--config\", self.config, \"--output\", self.output])"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as exc:",
+        "except (TimeoutError, urllib.error.URLError, http.client.HTTPException, OSError) as exc:",
+        "except UnicodeDecodeError:",
+        "except json.JSONDecodeError as exc:",
+        "except ValueError:",
+        "except _Final as exc:",
+        "except _Retryable as exc:",
+        "except BaseException:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def check(self, url, max_age=None, attempts=3, timeout=2.0, backoff=0.5):"
+      ],
+      "variadic_signature": [
+        "def check_all(config: Config, **kwargs) -> list[FeedResult]:",
+        "def log_message(self, *args):",
+        "def run_cli(self, *args):"
+      ]
+    }
+  },
+  "01-feedcheck-r3-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "EXC001": 7,
+        "MAGIC001": 46
+      },
+      "suppressed": 5
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "........................\n----------------------------------------------------------------------\nRan 24 tests in 9.881s\n\nOK\n"
+    },
+    "structure": {
+      "files": 13,
+      "lines": 764,
+      "functions": 73,
+      "try_blocks": 7,
+      "frozen_dataclasses": 6,
+      "parameter_defaults": 5,
+      "module_constants": 21,
+      "inline_suppressions": 5
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "OK = 200  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.3.1, 200 OK\"",
+        "REDIRECT_FIRST = 300  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.4, 3xx Redirection class\"",
+        "REDIRECT_LAST = 399  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.4, 3xx Redirection class\"",
+        "SERVER_ERROR_FIRST = 500  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.6, 5xx Server Error class\"",
+        "SERVER_ERROR_LAST = 599  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.6, 5xx Server Error class\""
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item or not isinstance(item[\"published\"], str):"
+      ],
+      "catch_fallback": [
+        "except (json.JSONDecodeError, UnicodeDecodeError) as exc:",
+        "except ValueError as exc:",
+        "except ConfigError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except (OSError, http.client.HTTPException) as exc:"
+      ],
+      "sentinel_default": [
+        "def check_one(self, path, max_age_hours=None, **settings):"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format, *args):"
+      ]
+    },
+    "hook_blocks": 3,
+    "hook_log": {
+      "runs": 13,
+      "feedback": 3
+    }
+  },
+  "01-feedcheck-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 3,
+        "CPLX006": 1,
+        "DEF001": 17,
+        "DEF002": 3,
+        "DEF005": 3,
+        "DEF006": 2,
+        "EXC001": 20,
+        "EXC002": 11,
+        "MAGIC001": 112,
+        "ROLE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "................................................\n----------------------------------------------------------------------\nRan 48 tests in 2.346s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 1043,
+      "functions": 86,
+      "try_blocks": 13,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 13,
+      "module_constants": 14,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "def do_GET(self):  # noqa: N802"
+      ],
+      "mapping_fallback": [
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)",
+        "n = server.hits.get(self.path, 0)"
+      ],
+      "mapping_get": [
+        "published = _parse_published(item.get(\"published\")) if isinstance(item, dict) else None",
+        "name = entry.get(\"name\")",
+        "url = entry.get(\"url\")",
+        "responses = server.routes.get(self.path)"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as exc:",
+        "except urllib.error.URLError as exc:",
+        "except (TimeoutError, socket.timeout):",
+        "except (ConnectionError, http.client.HTTPException, OSError) as exc:",
+        "except (TimeoutError, socket.timeout):",
+        "except (ConnectionError, http.client.HTTPException, OSError) as exc:",
+        "except ValueError:",
+        "except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def check(self, url, *, max_age_hours=None, attempts=3, timeout=2.0, backoff=0.5):"
+      ],
+      "variadic_signature": [
+        "def check_all(config: Config, **kwargs) -> list[FeedResult]:",
+        "def log_message(self, *args):"
+      ]
+    }
+  },
+  "02-noteboard-r1-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "d notes first and keeps order otherwise (0.456458ms)\n\u2714 no stored notes reads as an empty board (0.666709ms)\n\u2714 written notes read back unchanged (0.171375ms)\n\u2714 invalid JSON is reported as unreadable, with the raw text kept (0.121875ms)\n\u2714 valid JSON of the wrong shape is reported as unreadable (0.108458ms)\n\u2714 unreadable data is set aside, not discarded, and reported only once (0.089167ms)\n\u2714 setting aside never overwrites earlier kept data (0.10775ms)\n\u2714 writing invalid notes is refused (0.124833ms)\n\u2139 tests 19\n\u2139 suites 0\n\u2139 pass 19\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 60.700583\n"
+    },
+    "structure": {
+      "files": 16,
+      "lines": 804,
+      "functions": 111,
+      "try_blocks": 1,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "const element = elements.get(noteId);",
+        "const element = elements.get(note.id);",
+        "if (bodySignatures.get(note.id) !== signature) {",
+        "elements.get(id).remove();",
+        "elementFor: (noteId) => elements.get(noteId),",
+        "getItem: (key) => (items.has(key) ? items.get(key) : null),"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 12,
+      "feedback": 0
+    }
+  },
+  "02-noteboard-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 1,
+        "DEF001": 8,
+        "DEF002": 2,
+        "DEF003": 1,
+        "DEF005": 2,
+        "EXC001": 4,
+        "EXC002": 1,
+        "MAGIC001": 5,
+        "STATE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "JSON) is reported and preserved (0.141875ms)\n\u2714 unreadable data (wrong shape) is reported and preserved (0.05375ms)\n\u2714 unreadable data (null) is reported and preserved (0.051792ms)\n\u2714 unreadable data (bad note) is reported and preserved (0.046209ms)\n\u2714 unreadable data (unknown version) is reported and preserved (0.052833ms)\n\u2714 if backup fails, original data is left in place and still reported (0.096875ms)\n\u2714 storage access failure is reported (0.062292ms)\n\u2714 save failure returns a message (0.093167ms)\n\u2139 tests 20\n\u2139 suites 0\n\u2139 pass 20\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 45.228333\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 595,
+      "functions": 79,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "let el = existing.get(n.id);",
+        "getItem: (k) => (map.has(k) ? map.get(k) : null),"
+      ]
+    }
+  },
+  "02-noteboard-r2-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "91ms)\n\u2714 an entry without text is reported as corrupt (0.047041ms)\n\u2714 an entry without an id is reported as corrupt (0.047875ms)\n\u2714 an entry without a pinned flag is reported as corrupt (0.038208ms)\n\u2714 a null entry is reported as corrupt (0.084667ms)\n\u2714 duplicate ids is reported as corrupt (0.080958ms)\n\u2714 quarantining keeps the unreadable data and leaves an empty readable list (0.132833ms)\n\u2714 saving an invalid list is refused (0.239333ms)\n\u2714 a storage failure other than bad JSON propagates (0.067541ms)\n\u2139 tests 26\n\u2139 suites 0\n\u2139 pass 26\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 56.500625\n"
+    },
+    "structure": {
+      "files": 15,
+      "lines": 806,
+      "functions": 108,
+      "try_blocks": 1,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "const element = existing.has(note.id) ? existing.get(note.id) : createNoteElement(doc, note.id);",
+        "getItem: (key) => (data.has(key) ? data.get(key) : null),"
+      ],
+      "truthiness_fallback": [
+        "// NOT_EDITING or { noteId, draft }."
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 13,
+      "feedback": 1
+    }
+  },
+  "02-noteboard-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 1,
+        "DEF001": 16,
+        "DEF004": 1,
+        "DEF005": 3,
+        "EXC001": 4,
+        "MAGIC001": 10,
+        "STATE001": 3
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "shape) is reported and backed up, not silently discarded (0.055417ms)\n\u2714 unreadable data (null) is reported and backed up, not silently discarded (0.052417ms)\n\u2714 unreadable data (bad note) is reported and backed up, not silently discarded (0.046792ms)\n\u2714 unreadable data is reported once: the next load is clean (0.089334ms)\n\u2714 failure to back up is still reported (0.073833ms)\n\u2714 inaccessible storage is reported, not thrown (0.067375ms)\n\u2714 save failure returns a message instead of throwing (0.092125ms)\n\u2139 tests 22\n\u2139 suites 0\n\u2139 pass 22\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 46.105125\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 657,
+      "functions": 81,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "getItem: (k) => (data.has(k) ? data.get(k) : null),"
+      ]
+    }
+  },
+  "02-noteboard-r3-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "ateNote validates its input (0.063208ms)\n\u2714 displayOrder shows pinned notes first and keeps the rest in order (0.082ms)\n\u2714 parseToastMs accepts a positive integer (0.359875ms)\n\u2714 parseToastMs rejects missing or invalid values (0.2125ms)\n\u2714 an empty storage loads an empty board (0.637625ms)\n\u2714 saved notes load back unchanged (0.307792ms)\n\u2714 invalid JSON is set aside and reported (0.178417ms)\n\u2714 JSON of the wrong shape is set aside and reported (0.094667ms)\n\u2714 saveNotes refuses invalid notes (0.199042ms)\n\u2139 tests 19\n\u2139 suites 0\n\u2139 pass 19\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 53.333166\n"
+    },
+    "structure": {
+      "files": 15,
+      "lines": 740,
+      "functions": 105,
+      "try_blocks": 1,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "getItem: (key) => (items.has(key) ? items.get(key) : null),"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 9,
+      "feedback": 0
+    }
+  },
+  "02-noteboard-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 2,
+        "CPLX002": 1,
+        "DEF001": 22,
+        "DEF002": 3,
+        "DEF003": 2,
+        "EXC001": 5,
+        "MAGIC001": 11,
+        "STATE001": 5
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "0.052791ms)\n\u2714 unreadable data (duplicate ids) is reported, backed up, and starts empty (0.050041ms)\n\u2714 unreadable data (null) is reported, backed up, and starts empty (0.044583ms)\n\u2714 unreadable data is reported once, not on every load (0.1365ms)\n\u2714 existing backups are not overwritten (0.109041ms)\n\u2714 if the backup cannot be written, the original is left in place and still reported (0.075041ms)\n\u2714 storage that throws on read is reported (0.060667ms)\n\u2714 save failure is returned, not thrown (0.053167ms)\n\u2139 tests 25\n\u2139 suites 0\n\u2139 pass 25\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 55.473709\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 690,
+      "functions": 83,
+      "try_blocks": 5,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "return this.map.has(k) ? this.map.get(k) : null;"
+      ],
+      "truthiness_fallback": [
+        "* Returns 'save' (commit the draft and leave edit mode) or 'none'.",
+        "* A key press. Returns 'cancel' (leave edit mode, discard draft) or 'none'."
+      ]
+    }
+  },
+  "03-contactclean-r1-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 4
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "contactclean: /tmp/tmpyj8jzclq/input.csv is empty: it has no header row\ncontactclean: /tmp/tmpyj8jzclq/input.csv has no 'name' column\ncontactclean: /tmp/tmpyj8jzclq/input.csv is not UTF-8 text: invalid start byte\ncontactclean: /tmp/tmpyj8jzclq/input.csv is not valid CSV: unexpected end of data\n......contactclean: cannot read /tmp/tmpgdhrbpqg/missing.csv: No such file or directory\n...................\n----------------------------------------------------------------------\nRan 25 tests in 0.097s\n\nOK\n"
+    },
+    "structure": {
+      "files": 12,
+      "lines": 821,
+      "functions": 65,
+      "try_blocks": 4,
+      "frozen_dataclasses": 10,
+      "parameter_defaults": 0,
+      "module_constants": 23,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_UNREADABLE = 2  # shockharness: ignore[MAGIC001] reason=\"SPEC.md: exit 2 when the input cannot be read\""
+      ],
+      "truthiness_fallback": [
+        "if not EMAIL_PATTERN.fullmatch(email) or \"..\" in email or local_part.endswith(\".\"):"
+      ],
+      "catch_fallback": [
+        "except InputUnreadable as exc:",
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except csv.Error as exc:"
+      ]
+    },
+    "hook_blocks": 5,
+    "hook_log": {
+      "runs": 16,
+      "feedback": 5
+    }
+  },
+  "03-contactclean-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "CPLX004": 1,
+        "DEF001": 14,
+        "DEF002": 2,
+        "DEF003": 4,
+        "DEF005": 2,
+        "EXC001": 6,
+        "EXC002": 1,
+        "MAGIC001": 48
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...........contactclean: cannot read /tmp/tmpv5mmvc85/missing.csv: [Errno 2] No such file or directory: '/tmp/tmpv5mmvc85/missing.csv'\ncontactclean: cannot read /tmp/tmpv5mmvc85/in.csv: file is empty\ncontactclean: cannot read /tmp/tmpv5mmvc85/in.csv: missing required column 'name'\ncontactclean: cannot read /tmp/tmpv5mmvc85/bin.csv: 'utf-8' codec can't decode byte 0xff in position 5: invalid start byte\n....................\n----------------------------------------------------------------------\nRan 31 tests in 0.040s\n\nOK\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 694,
+      "functions": 57,
+      "try_blocks": 6,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 4,
+      "module_constants": 17,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "records.append((row_number, {col: record.get(col, \"\") for col in INPUT_COLUMNS}))"
+      ],
+      "mapping_get": [
+        "name = (record.get(\"name\") or \"\").strip()",
+        "contact = Contact(row=row, name=name, country=normalize_country(record.get(\"country\") or \"\"))",
+        "raw = record.get(field_name) or \"\"",
+        "rule = PHONE_RULES.get(country)"
+      ],
+      "truthiness_fallback": [
+        "name = (record.get(\"name\") or \"\").strip()",
+        "contact = Contact(row=row, name=name, country=normalize_country(record.get(\"country\") or \"\"))",
+        "raw = record.get(field_name) or \"\""
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError, csv.Error) as exc:",
+        "except BaseException:",
+        "except InputError as exc:",
+        "except OSError as exc:",
+        "except InvalidField as exc:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def normalize_birthday(raw: str, today: _dt.date | None = None) -> str:"
+      ],
+      "empty_string_miss": [
+        "return \"\"",
+        "return \"\""
+      ]
+    }
+  },
+  "03-contactclean-r2-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 2,
+        "MAGIC001": 13
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".....................\n----------------------------------------------------------------------\nRan 21 tests in 0.005s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 661,
+      "functions": 55,
+      "try_blocks": 2,
+      "frozen_dataclasses": 9,
+      "parameter_defaults": 0,
+      "module_constants": 22,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_INPUT_UNREADABLE = 2  # shockharness: ignore[MAGIC001] reason=\"SPEC.md: exit 2 when the input cannot be read\""
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except csv.Error as exc:"
+      ],
+      "empty_string_miss": [
+        "return \"\""
+      ]
+    },
+    "hook_blocks": 2,
+    "hook_log": {
+      "runs": 15,
+      "feedback": 2
+    }
+  },
+  "03-contactclean-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 18,
+        "DEF002": 2,
+        "DEF003": 4,
+        "DEF005": 2,
+        "EXC001": 5,
+        "EXC002": 1,
+        "MAGIC001": 50
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..................contactclean: cannot read /tmp/tmpnivoh61t/missing.csv: [Errno 2] No such file or directory: '/tmp/tmpnivoh61t/missing.csv'\ncontactclean: cannot read /tmp/tmpnivoh61t/input.csv: input is empty\ncontactclean: cannot read /tmp/tmpnivoh61t/input.csv: input has no 'name' column\ncontactclean: cannot read /tmp/tmpnivoh61t/latin1.csv: 'utf-8' codec can't decode byte 0xe9 in position 8: invalid continuation byte\n.......\n----------------------------------------------------------------------\nRan 25 tests in 0.035s\n\nOK\n"
+    },
+    "structure": {
+      "files": 7,
+      "lines": 676,
+      "functions": 57,
+      "try_blocks": 5,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 8,
+      "module_constants": 15,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "values = {name: clean_text(raw.get(name)) for name in INPUT_FIELDS}",
+        "rules = PHONE_RULES.get(country)"
+      ],
+      "truthiness_fallback": [
+        "reader.fieldnames = [(name or \"\").strip().lower() for name in reader.fieldnames]",
+        "return (value or \"\").strip()",
+        "# NANP: NPA-NXX-XXXX, area code and exchange cannot start with 0 or 1."
+      ],
+      "catch_fallback": [
+        "except InvalidValue as exc:",
+        "except (OSError, UnicodeDecodeError, csv.Error) as exc:",
+        "except InputError as exc:",
+        "except OSError as exc:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def clean_rows(rows, today: _dt.date | None = None) -> Result:",
+        "def main(argv: list[str] | None = None) -> int:",
+        "def normalize_birthday(value: str, today: _dt.date | None = None) -> str:"
+      ],
+      "empty_string_miss": [
+        "return \"\""
+      ]
+    }
+  },
+  "03-contactclean-r3-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 4
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".contactclean: /tmp/tmpl_1f4lio/input.csv is empty: it has no header row\n.....contactclean: /tmp/tmpcl6e53s_/input.csv is missing the column(s): phone, birthday, country\n.contactclean: cannot read /tmp/tmpr96xh7ch/absent.csv: [Errno 2] No such file or directory: '/tmp/tmpr96xh7ch/absent.csv'\n..contactclean: cannot read /tmp/tmpyd_4u_ks/input.csv: 'utf-8' codec can't decode byte 0xff in position 34: invalid start byte\n..........\n----------------------------------------------------------------------\nRan 19 tests in 0.007s\n\nOK\n"
+    },
+    "structure": {
+      "files": 12,
+      "lines": 763,
+      "functions": 49,
+      "try_blocks": 4,
+      "frozen_dataclasses": 11,
+      "parameter_defaults": 0,
+      "module_constants": 24,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_UNREADABLE = 2  # shockharness: ignore[MAGIC001] reason=\"SPEC.md: exit 2 when the input cannot be read\""
+      ],
+      "catch_fallback": [
+        "except InputError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except csv.Error as exc:",
+        "except OSError as exc:"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 10,
+      "feedback": 1
+    }
+  },
+  "03-contactclean-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "BATCH001": 1,
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 14,
+        "DEF002": 1,
+        "DEF003": 2,
+        "DEF004": 1,
+        "DEF005": 1,
+        "EXC001": 7,
+        "EXC002": 2,
+        "MAGIC001": 33
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "......................\n----------------------------------------------------------------------\nRan 22 tests in 0.182s\n\nOK\n"
+    },
+    "structure": {
+      "files": 7,
+      "lines": 553,
+      "functions": 42,
+      "try_blocks": 7,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 4,
+      "module_constants": 14,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "plan = _PHONE_PLANS.get(country)",
+        "values = {f: (record.get(f) or \"\").strip() for f in FIELDS}"
+      ],
+      "truthiness_fallback": [
+        "values = {f: (record.get(f) or \"\").strip() for f in FIELDS}"
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError, csv.Error) as exc:",
+        "except InputError as exc:",
+        "except ValueError:",
+        "except ValueError:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def normalize_birthday(value: str, today: _dt.date | None = None) -> str:",
+        "def clean(records, today: _dt.date | None = None) -> Result:",
+        "def run_cli(self, content, raw=None):"
+      ],
+      "empty_string_miss": [
+        "return \"\"",
+        "return \"\""
+      ]
+    }
+  },
+  "04-jobqueue-r1-gated": {
+    "check": {
+      "by_rule": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".............\n----------------------------------------------------------------------\nRan 13 tests in 0.631s\n\nOK\n"
+    },
+    "structure": {
+      "files": 6,
+      "lines": 583,
+      "functions": 48,
+      "try_blocks": 1,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 0,
+      "module_constants": 6,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: JobFunction, *args: object) -> int:"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 13,
+      "feedback": 0
+    }
+  },
+  "04-jobqueue-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "CPLX002": 1,
+        "DEF001": 20,
+        "EXC001": 8,
+        "MAGIC001": 79,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 6
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".......................\n----------------------------------------------------------------------\nRan 23 tests in 0.816s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 646,
+      "functions": 57,
+      "try_blocks": 4,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 11,
+      "module_constants": 1,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "catch_fallback": [
+        "except asyncio.QueueEmpty:",
+        "except Exception as exc:",
+        "except BaseException as exc:",
+        "except TimeoutError as exc:",
+        "except asyncio.CancelledError as exc:",
+        "except RetryableError as exc:",
+        "except Exception as exc:",
+        "except asyncio.CancelledError:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: Summary | None = None):",
+        "def _finish(self, job: _Job, state: JobState, *, result: Any = None,",
+        "def _raise_internal_errors(self, summary: Summary | None = None) -> None:",
+        "async def sleep_for(seconds, value=None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  },
+  "04-jobqueue-r2-gated": {
+    "check": {
+      "by_rule": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".............\n----------------------------------------------------------------------\nRan 13 tests in 0.815s\n\nOK\n"
+    },
+    "structure": {
+      "files": 5,
+      "lines": 552,
+      "functions": 39,
+      "try_blocks": 0,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 0,
+      "module_constants": 10,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[object]], *args: object) -> int:"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 1,
+      "feedback": 0
+    }
+  },
+  "04-jobqueue-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 16,
+        "DEF002": 1,
+        "EXC001": 9,
+        "MAGIC001": 80,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 5
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".............................\n----------------------------------------------------------------------\nRan 29 tests in 0.664s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 809,
+      "functions": 67,
+      "try_blocks": 6,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 8,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "raise ValueError(\"timeout must be > 0 or None\")",
+        "raise ValueError(\"max_delay must be >= 0 or None\")"
+      ],
+      "catch_fallback": [
+        "except asyncio.QueueEmpty:",
+        "except BaseException as finish_exc:  # pragma: no cover - last resort",
+        "except asyncio.CancelledError:",
+        "except Exception as exc:",
+        "except TimeoutError as exc:",
+        "except RetryableError as exc:",
+        "except asyncio.CancelledError as exc:",
+        "except Exception as exc:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: Summary | None = None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  },
+  "04-jobqueue-r3-gated": {
+    "check": {
+      "by_rule": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".................\n----------------------------------------------------------------------\nRan 17 tests in 1.088s\n\nOK\n"
+    },
+    "structure": {
+      "files": 5,
+      "lines": 601,
+      "functions": 54,
+      "try_blocks": 1,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 0,
+      "module_constants": 13,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[object]], *args: object) -> int:"
+      ],
+      "value_restating_constant": [
+        "ONE_JOB = 1"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 9,
+      "feedback": 0
+    }
+  },
+  "04-jobqueue-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "CPLX002": 1,
+        "DEF001": 16,
+        "EXC001": 10,
+        "MAGIC001": 66,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 5
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".......................\n----------------------------------------------------------------------\nRan 23 tests in 0.787s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 614,
+      "functions": 50,
+      "try_blocks": 5,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 8,
+      "module_constants": 1,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "job = self._jobs.get(job_id)"
+      ],
+      "truthiness_fallback": [
+        "raise ValueError(\"timeout must be positive or None\")"
+      ],
+      "catch_fallback": [
+        "except asyncio.QueueEmpty:",
+        "except asyncio.CancelledError:",
+        "except BaseException as exc:  # the queue's own code failed",
+        "except asyncio.CancelledError:",
+        "except BaseException as exc:",
+        "except TimeoutError as exc:",
+        "except asyncio.CancelledError as exc:",
+        "except RetryableError as exc:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: \"Summary | None\" = None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  }
+}

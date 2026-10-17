@@ -1,0 +1,6 @@
+# Values the tests use for configuration and expectations.
+timeout_seconds = 2.0
+short_timeout_seconds = 0.2
+retry_backoff_seconds = 0.5
+attempts = 3
+max_age_hours = 24

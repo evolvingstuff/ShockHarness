@@ -1,0 +1,28 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/csvfiles.py"
+language = "python"
+exception = "OSError"
+reason = "File I/O on user-supplied paths; a failure becomes InputError (read) or OutputError (write) with its cause"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/csvfiles.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Decoding an external file as UTF-8; a failure becomes InputError with its cause"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/csvfiles.py"
+language = "python"
+exception = "csv.Error"
+reason = "Parsing external CSV input; a failure becomes InputError with its cause"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/cli.py"
+language = "python"
+exception = "contactclean.errors.InputError"
+reason = "Process edge: unreadable input is reported on stderr and exits with code 2 as SPEC.md requires"

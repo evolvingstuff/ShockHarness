@@ -1,0 +1,16 @@
+[project]
+name = "feedcheck"
+version = "0.1.0"
+description = "Check whether a set of JSON feeds is healthy and write a report"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+feedcheck = "feedcheck.cli:run"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["feedcheck"]

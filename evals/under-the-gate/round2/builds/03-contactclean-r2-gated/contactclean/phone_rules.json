@@ -1,0 +1,49 @@
+{
+  "e164_max_digits": 15,
+  "unverified_min_digits": 3,
+  "countries": {
+    "US": {
+      "calling_code": "1",
+      "international_prefix": "011",
+      "trunk_prefix": "1",
+      "national_lengths": [
+        10
+      ],
+      "invalid_first_digits": "01"
+    },
+    "GB": {
+      "calling_code": "44",
+      "international_prefix": "00",
+      "trunk_prefix": "0",
+      "national_lengths": [
+        9,
+        10
+      ],
+      "invalid_first_digits": "0"
+    },
+    "DE": {
+      "calling_code": "49",
+      "international_prefix": "00",
+      "trunk_prefix": "0",
+      "national_lengths": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "invalid_first_digits": "0"
+    },
+    "FR": {
+      "calling_code": "33",
+      "international_prefix": "00",
+      "trunk_prefix": "0",
+      "national_lengths": [
+        9
+      ],
+      "invalid_first_digits": "0"
+    }
+  }
+}

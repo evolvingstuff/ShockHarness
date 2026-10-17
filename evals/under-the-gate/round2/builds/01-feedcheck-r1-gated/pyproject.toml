@@ -1,0 +1,11 @@
+[project]
+name = "feedcheck"
+version = "0.1.0"
+description = "Check whether a set of JSON feeds is healthy and write a report"
+requires-python = ">=3.11"
+
+[project.scripts]
+feedcheck = "feedcheck.cli:entry_point"
+
+[tool.setuptools]
+packages = ["feedcheck"]

@@ -1,0 +1,10 @@
+{
+  "US": {"calling_code": "1", "international_prefix": "011", "trunk_prefix": "1",
+         "national_lengths": [10], "national_first_digits": "23456789"},
+  "GB": {"calling_code": "44", "international_prefix": "00", "trunk_prefix": "0",
+         "national_lengths": [9, 10], "national_first_digits": "123578"},
+  "DE": {"calling_code": "49", "international_prefix": "00", "trunk_prefix": "0",
+         "national_lengths": [7, 8, 9, 10, 11], "national_first_digits": "123456789"},
+  "FR": {"calling_code": "33", "international_prefix": "00", "trunk_prefix": "0",
+         "national_lengths": [9], "national_first_digits": "123456789"}
+}

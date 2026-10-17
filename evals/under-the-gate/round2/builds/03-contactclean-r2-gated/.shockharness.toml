@@ -1,0 +1,21 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/cli.py"
+language = "python"
+exceptions = ["OSError", "UnicodeDecodeError"]
+reason = "Reading the input file: an unreadable or undecodable file ends the run with exit 2, as SPEC.md requires"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/cli.py"
+language = "python"
+exception = "csv.Error"
+reason = "Decoding the external CSV input: malformed CSV ends the run with exit 2, as SPEC.md requires"
+
+[[tool.shockharness.overrides]]
+roles = ["test"]
+disable = ["MAGIC001"]
+reason = "Tests assert concrete row numbers and exit codes taken from SPEC.md examples"

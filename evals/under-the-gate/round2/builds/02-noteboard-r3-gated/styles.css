@@ -1,0 +1,21 @@
+body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+header { display: flex; align-items: center; justify-content: space-between; }
+.notes { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+.note { display: flex; gap: 0.5rem; align-items: flex-start; border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem; cursor: text; background: #fff; }
+.note.pinned { border-color: #c90; background: #fffbea; }
+.note.editing { outline: 2px solid #36c; }
+.note .text { flex: 1; white-space: pre-wrap; min-height: 1.2em; }
+.note .text:empty::before { content: "Empty note"; color: #999; }
+.editor { flex: 1; min-height: 4rem; font: inherit; }
+.toolbar { display: flex; gap: 0.25rem; }
+.tool { border: none; background: none; padding: 0.25rem; cursor: pointer; border-radius: 4px; }
+.tool:hover { background: #eee; }
+.tool svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tool[aria-pressed="true"] svg { fill: #c90; stroke: #c90; }
+.toasts { position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); display: grid; gap: 0.5rem; }
+.toast { display: flex; gap: 0.75rem; align-items: center; background: #222; color: #fff; padding: 0.5rem 0.75rem; border-radius: 6px; max-width: 32rem; }
+.toast.sticky { background: #8a1c1c; }
+.toast-close { background: none; border: none; color: inherit; font-size: 1.1rem; cursor: pointer; }
+dialog.confirm { border: 1px solid #ccc; border-radius: 8px; }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.danger { background: #b00; color: #fff; border: none; padding: 0.3rem 0.7rem; border-radius: 4px; }

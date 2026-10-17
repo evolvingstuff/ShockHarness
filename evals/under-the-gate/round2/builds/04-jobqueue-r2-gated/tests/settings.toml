@@ -1,0 +1,19 @@
+# Numbers used by the jobqueue tests: queue settings and scenario sizes.
+# Kept small so the whole suite runs well under ten seconds.
+
+[queue]
+timeout = 0.2          # seconds per attempt
+retry_delay = 0.01     # seconds before the first retry
+backoff_factor = 2.0   # each later retry waits this many times longer
+workers = 2
+max_attempts = 3
+
+[scenarios]
+batch_jobs = 5
+pool_workers = 3
+pool_jobs = 9
+work_seconds = 0.02
+waiting_jobs = 3
+endless_failures = 10
+# Measured delays may be slightly shorter than requested on coarse clocks.
+timing_tolerance = 0.9

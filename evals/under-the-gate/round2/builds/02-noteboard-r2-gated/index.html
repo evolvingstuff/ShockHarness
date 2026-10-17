@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Noteboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-storage-key="noteboard.notes" data-backup-key="noteboard.notes.unreadable" data-toast-ms="3000">
+    <header>
+      <h1>Noteboard</h1>
+      <button type="button" id="add-note">New note</button>
+    </header>
+    <main>
+      <ul id="notes" class="notes" aria-label="Notes"></ul>
+    </main>
+    <script type="module">
+      import { start } from "./app.js";
+      start(document, window);
+    </script>
+  </body>
+</html>

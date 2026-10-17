@@ -1,0 +1,10 @@
+{
+  "workers": 2,
+  "single_worker": 1,
+  "timeout": 0.2,
+  "short_job": 0.01,
+  "long_job": 1.0,
+  "max_attempts": 3,
+  "retry_delay": 0.02,
+  "backoff_factor": 2.0
+}

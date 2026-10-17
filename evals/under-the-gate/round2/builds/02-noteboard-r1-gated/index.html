@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Noteboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-toast-ms="3000">
+    <header>
+      <h1>Noteboard</h1>
+      <button type="button" id="new-note">New note</button>
+    </header>
+    <main>
+      <p id="empty" hidden>No notes yet.</p>
+      <ul id="notes" class="notes"></ul>
+    </main>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <script type="module">
+      import { start } from "./app.js";
+      start(document, window.localStorage);
+    </script>
+  </body>
+</html>

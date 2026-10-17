@@ -1,0 +1,13 @@
+{
+  "workers": 2,
+  "timeout_seconds": 0.3,
+  "max_attempts": 3,
+  "retry_delay_seconds": 0.02,
+  "retry_backoff_factor": 3,
+  "quick_job_seconds": 0.01,
+  "slow_job_seconds": 0.1,
+  "hanging_job_seconds": 5,
+  "concurrency_job_count": 6,
+  "invalid_workers": 0,
+  "invalid_backoff_factor": 0.5
+}

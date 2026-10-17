@@ -1,0 +1,17 @@
+{
+  "_sources": {
+    "calling_codes": "ITU-T E.164, List of ITU-T Recommendation E.164 assigned country codes",
+    "e164_max_digits": "ITU-T E.164 section 6: an international number has at most 15 digits",
+    "US": "North American Numbering Plan: 10-digit national numbers, trunk prefix 1",
+    "GB": "Ofcom National Telephone Numbering Plan: 9 or 10 digits after trunk prefix 0",
+    "DE": "Bundesnetzagentur numbering plan: variable length, 6 to 13 digits after trunk prefix 0",
+    "FR": "ARCEP plan de numerotation: 9 digits after trunk prefix 0"
+  },
+  "e164_max_digits": 15,
+  "countries": {
+    "US": {"calling_code": "1", "trunk_prefix": "1", "min_digits": 10, "max_digits": 10},
+    "GB": {"calling_code": "44", "trunk_prefix": "0", "min_digits": 9, "max_digits": 10},
+    "DE": {"calling_code": "49", "trunk_prefix": "0", "min_digits": 6, "max_digits": 13},
+    "FR": {"calling_code": "33", "trunk_prefix": "0", "min_digits": 9, "max_digits": 9}
+  }
+}
