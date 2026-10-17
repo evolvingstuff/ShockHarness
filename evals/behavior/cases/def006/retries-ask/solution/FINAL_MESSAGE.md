@@ -1,0 +1,1 @@
+I have not changed anything, because the repository contradicts itself on exactly this finding. SPEC.md says RETRIES is required and the program must refuse to start without it. tests/test_main.py asserts that main() starts and returns 0 with RETRIES unset. Fixing DEF006 per the spec makes that test fail; making the test pass keeps a silent default. Which should win?

@@ -1,0 +1,13 @@
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py", "tests/**/*.py"]
+
+[[tool.shockharness.overrides]]
+roles = ["test"]
+disable = ["MAGIC001", "DEF001"]
+reason = "Tests encode literal expected values"
+
+[[tool.shockharness.overrides]]
+paths = ["src/app/constants.py"]
+disable = ["MAGIC001"]
+reason = "The package's one constants module: every number in it says what it means"

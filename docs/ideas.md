@@ -33,8 +33,12 @@ worth it yet), **declined** (with the reason).
 | Cite GSO's reward-hacking rate as motivation | Fable's follow-up brief | **blocked** | The named post ("hungry hungry reward hackers") could not be found. A related post cites GSO's own write-up (gso-blog.notion.site/gso-hackdetector, not yet read). Not cited until sourced |
 | ShockBench: seeded repositories where the easiest path to green is a shortcut | Fable review | open (H7) | Research milestone |
 | ShockHarness as a deterministic reward signal for training code models | Fable review | open (H7) | Research |
-| Related-work gap table: agent-code-guard, dunnit, slopwatch | Fable's follow-up brief | **in progress** | Their docs are read; the table goes to `docs/related-work.md` |
-| dunnit's "a change under src/** must come with a change under tests/**" as a diff-mode rule | Fable's follow-up brief | open | Evaluate in the gap table |
+| Related-work gap table: agent-code-guard, dunnit, slopwatch | Fable's follow-up brief | **done** | `docs/related-work.md`; its candidates are rows below |
+| dunnit's "a change under src/** must come with a change under tests/**" as a diff-mode rule | Fable's follow-up brief; `docs/related-work.md` | candidate | Adopt as a review rule in diff mode |
+| `# pragma: no cover` added, as a coverage escape | dunnit, via `docs/related-work.md` | candidate | Add to VERIFY002's catalog |
+| Removing an assertion outright (not only weakening it) | dunnit, via `docs/related-work.md` | candidate | Extend VERIFY004 |
+| A Stop hook that blocks finishing while the diff has findings | dunnit, via `docs/related-work.md` | candidate | Needs a base revision |
+| To verify: is a deleted test file reported? Is a bare sleep in a test reported by SLEEP001? | `docs/related-work.md` | open | |
 
 ## Rules
 

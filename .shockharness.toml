@@ -3,8 +3,8 @@
 
 [tool.shockharness]
 profile = "strict"
-include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "evals/*.py"]
-exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**"]
+include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "evals/*.py", "evals/behavior/*.py"]
+exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**", "evals/behavior/cases/**", "evals/behavior/review_queue/**"]
 parse_errors = "fail"
 
 # File roles: the bundled defaults, except that this repository has no tooling
@@ -275,6 +275,6 @@ disable = ["MAGIC001", "DEF001"]
 reason = "Test code encodes literal expected outputs and pytest fixture signatures"
 
 [[tool.shockharness.overrides]]
-paths = ["evals/run_evals.py"]
+paths = ["evals/run_evals.py", "evals/behavior/run.py"]
 disable = ["MAGIC001"]
 reason = "The eval runner is stdlib-only by design (it scores the analyzer from outside), so it cannot import shockharness.constants and holds its one JSON indent constant itself"

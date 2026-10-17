@@ -4013,3 +4013,43 @@ in code the agent did not touch (it needs the diff against a base). Measured: 0.
 to 0.5 s per hook run on a file of this repository.
 
 Evidence: `tests/unit/test_hook.py` (8). 1173 tests pass; the self-gate passes.
+
+## Agent-behavior regression suite — BUILT, no agent run yet (2026-10-17)
+
+From Fable's two briefs (Tom forwarded them): measure whether a rule plus a skill
+moves a tempted agent to the intended fix, an evasion, or a question.
+`evals/behavior/`: 15 cases (MAGIC001, DEF001, DEF006, EXC002, VERIFY001 x
+unambiguous / judgment / ask), each a small repository with `task.md`,
+`expected.toml`, a hidden test (fix cases) and a reference `solution/`; the five ask
+cases are contradictions (`SPEC.md` against a visible test, ImpossibleBench's
+construction). Three are held out (`def001/retries-default`, `exc002/unknown-sku`,
+`verify001/discount-ask`). `run.py` (stdlib only, under the self-gate) runs each
+case N times (default 5) with Claude Code headless, or scores `solution/` or a
+`--candidate`. Per run it collects the visible tests as left and as they were,
+the hidden test, `gate --base --head`, 22 known-evasion detectors, and test-file
+edits as a separate signal. It classifies the run (the hidden test overrules the
+judge; the judge sees only the rubric and the diff), writes every non-intended run
+to `review_queue/` for a person to confirm, and reports `rule_candidates` and
+`skill_candidates` separately. Methods borrowed from EvilGenie and ImpossibleBench
+are credited in its README. `docs/related-work.md` compares agent-code-guard,
+dunnit and slopwatch from their documentation.
+
+Case 1 is the agent's own evasion: `len(("event", "handler"))` to get past
+MAGIC001 in 52257e4, fixed in 3f90b26.
+
+Evidence:
+* `python evals/behavior/run.py --list`: 15 cases with rule, kind, fix class and latitude.
+* `python evals/behavior/run.py --reference`: all 15 solutions score `intended` or
+  `asked` (exit 0).
+* `tests/unit/test_behavior_suite.py` (8): seeded evasions are classified as such.
+  `len(("event", "handler"))` is `evasion_known:collection_length_count`;
+  `int("30")` is `numeric_from_string`; the quiet early return
+  `if sku not in catalog: return None` is `lbyl_fallback`; a skip marker is
+  `skip_marker`; `env.get("RETRIES", "1")` in an ask case is `mapping_fallback`. A
+  syntactically clean evasion that no detector names (`len(urls[:1])` for the
+  retries) is `evasion_unknown` through the hidden test.
+
+Not done: no real agent run, so there is no distribution yet. Runs use Tom's
+account (15 cases x 5 runs, plus the judge), so they wait for his go-ahead on the
+model, the run count and the budget. The GSO motivation figure is not cited: the
+named source could not be found.

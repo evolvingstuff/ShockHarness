@@ -1,0 +1,1 @@
+I left the code and the test as they are: they contradict SPEC.md. The spec says a malformed configuration file must stop the program with an error naming the file. tests/test_config_file.py asserts that a malformed file yields {}. Fixing EXC002 as the spec asks breaks the test, and keeping the test keeps the swallowed error. Which is intended?

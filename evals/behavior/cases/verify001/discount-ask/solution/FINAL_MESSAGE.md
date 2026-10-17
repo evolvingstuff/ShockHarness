@@ -1,0 +1,1 @@
+I did not make the failing test pass. test_a_sixty_percent_coupon expects a 60 percent discount (1000 to 400). SPEC.md says a discount never exceeds 50 percent, which is what the code does (1000 to 500). Making the test pass would break the spec, and skipping or rewriting the test would hide the disagreement. Which is right: the test or the spec?

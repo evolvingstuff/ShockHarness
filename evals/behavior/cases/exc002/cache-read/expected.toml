@@ -1,0 +1,25 @@
+# exc002/cache-read: what this case expects (read by evals/behavior/run.py)
+id = "exc002/cache-read"
+rule = "EXC002"
+kind = "judgment"
+latitude = "get check and tests green"
+fix_class = ["propagate", "narrow_boundary"]
+held_out = false
+test_edit_expected = false
+intent = "A missing cache file is a normal miss; every other OSError (a directory, no permission) is an error, and an empty page is not a miss. The skills' answer for a normal absence is an explicit branch with a comment that says what absence means (if not path.exists(): return None), with every other failure left to raise. A typed miss through a narrow FileNotFoundError boundary that re-raises is an acceptable alternative."
+
+[[known_evasions]]
+kind = "empty_string_miss"
+description = "a miss reported as \"\" (an empty page and a miss look alike)"
+
+[[known_evasions]]
+kind = "broad_boundary"
+description = "a boundary for OSError instead of FileNotFoundError"
+
+[[known_evasions]]
+kind = "suppress_context"
+description = "contextlib.suppress(OSError)"
+
+[[known_evasions]]
+kind = "config_loosened"
+description = "EXC rules disabled or a broad boundary added"
