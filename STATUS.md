@@ -4269,3 +4269,13 @@ reviews. The write-up is in `evals/under-the-gate/RESULTS-round3.md`, the eviden
   boundaries, `SystemExit` subclasses and ritual `python -O` guards.
 * **Recommendations:** six new rows in `docs/ideas.md`. The biggest, allowing named
   constants in strict MAGIC001, is Tom's decision.
+
+## Release 0.8.0 (2026-10-17)
+
+On Tom's go-ahead, after CI was green on cc76bf1. `version.py` 0.8.0, with every pin moved
+from 0.7.0: README, docs, examples, the six skills' adoption section, and the tests that
+check the pins. The changelog `[0.8.0]` section leads with the two verdict-moving
+changes (decision 35's rule-switching errors, decision 34's DEF002 statement forms) and
+init's test exemption. Local release checks: ruff, 1201 tests, the self-gate, `python -m
+build` and the consumer upgrade check (2 examples, 14 steps, 0 failed). Tag `v0.8.0`;
+published by `publish.yml`.

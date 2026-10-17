@@ -5,7 +5,27 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
-**Upgrading.** `DEF002` (version 2) now recognizes the `return` statement form of
+## [0.8.0] - 2026-10-17
+
+The edit-time hook for Claude Code, decisions 34 and 35, MAGIC002, DOM001 and DOM002,
+and two more rounds of MetaList feedback. New rules ship at `warning` or `review`
+(decision 9).
+
+**Upgrading from 0.7.0.** Two changes can move a gate verdict, and a third changes
+new projects:
+- **Switching a rule off is now an error (decision 35).** `check` and the edit
+  hook compare the configuration file with the accepted one (the merge base with
+  `origin/HEAD`, else `HEAD`). Every loosening except a catch boundary naming one
+  file is a `VERIFY003` error until a person commits it. In `diff` and `gate
+  --base`, the same changes since the base are errors too (they were warnings), so
+  a pull request that switches a rule off fails. Set
+  `rules.verification.rule_switching_severity = "warning"` for the old behavior;
+  that is itself a reported deviation.
+- **`DEF002` statement forms (decision 34)**, below.
+- `shockharness init` now writes the test exemption (`MAGIC001` and `DEF001` off for
+  the test role). Existing configuration files are not changed.
+
+**DEF002 statement forms.** `DEF002` (version 2) now recognizes the `return` statement form of
 the membership fallback in Python: `if k in m: return m[k]` followed by
 `return v`, and `if k not in m: return v` followed by `return m[k]`. It is an
 error under `missing_value_fallbacks = "forbid"`, like `m[k] if k in m else v`,
