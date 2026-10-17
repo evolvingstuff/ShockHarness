@@ -197,6 +197,27 @@ def test_async003_settled_batches(empty_root: Path, strict_config: EffectiveConf
     assert found == [("src/app.js", 1), ("src/app.js", 3), ("src/app.py", 5), ("src/app.py", 9)]
 
 
+def test_async003_a_top_level_batch_checked_in_its_block(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # MetaList (2026-10-17): a script's top-level allSettled, checked on the next line
+    # inside a top-level try, was reported because there is no enclosing function.
+    write(
+        empty_root,
+        "src/startup.mjs",
+        "const origins = ['a'];\n"
+        "try {\n"
+        "  const outcomes = await Promise.allSettled(origins.map(async (o) => o));\n"  # 3
+        "  for (const outcome of outcomes)\n"
+        "    if (outcome.status === 'rejected') throw outcome.reason;\n"
+        "} finally {\n  console.log('done');\n}\n"
+        "const results = await Promise.allSettled(origins.map(async (o) => o));\n"  # 9
+        "console.log(results.length);\n",
+    )
+    found = [(r[1], r[2]) for r in rows(analyze(empty_root, strict_config)) if r[0] == "ASYNC003"]
+    assert found == [("src/startup.mjs", 9)]
+
+
 def test_roles_and_deviations(
     empty_root: Path, make_config: Callable[[str], EffectiveConfig]
 ) -> None:

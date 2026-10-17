@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (feedback from MetaList on 0.9.0)
+- `ASYNC003`: a `Promise.allSettled(...)` at a script's top level is checked against
+  the statements that follow it in its block, as one inside a function is checked
+  against the function. A top-level batch checked on the next line, inside a
+  top-level `try`, is no longer reported; one that nothing after it checks still is.
+  The cache schema is "19".
+
 ## [0.9.0] - 2026-10-17
 
 Fewer reasons to work around the gate: the findings of the under-the-gate experiment

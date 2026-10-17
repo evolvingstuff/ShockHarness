@@ -89,6 +89,30 @@ def _enclosing_function(node: Node) -> Node | None:
     return None
 
 
+# Where a top-level batch's check is looked for: the nearest block, not the whole module.
+BLOCKS = frozenset({Kind.STATEMENT_BLOCK, Kind.PROGRAM})
+
+
+def _inspection_text(node: Node) -> str | None:
+    """Where a failure check counts: the enclosing function; at module top level (a
+    script's ``await``), the statement holding the batch and the statements after it in
+    the same block (MetaList: a check one line below, inside a top-level ``try``)."""
+    function = _enclosing_function(node)
+    if function is not None:
+        return node_text(function)
+    statement = node
+    while statement.parent is not None and statement.parent.type not in BLOCKS:
+        statement = statement.parent
+    if statement.parent is None:
+        return None
+    following: list[str] = []
+    current: Node | None = statement
+    while current is not None:
+        following.append(node_text(current))
+        current = current.next_named_sibling
+    return "\n".join(following)
+
+
 def _consumer(node: Node) -> Node | None:
     """The node that uses ``node``'s value, looking through ``await`` and parentheses."""
     current = node.parent
@@ -164,22 +188,23 @@ def _settled(source: SourceText, call: Node) -> SettledBatch | None:
         callee=ALL_SETTLED,
         text=_excerpt(call),
         discarded=consumer is not None and consumer.type == STATEMENT,
-        inspected=_inspected(consumer, _enclosing_function(call)),
+        inspected=_inspected(consumer, _enclosing_function(call), _inspection_text(call)),
         cancellation_wait=False,
         span=node_span(source, call),
     )
 
 
-def _inspected(consumer: Node | None, function: Node | None) -> bool:
-    """The batch is returned (or is a concise arrow's value), or the enclosing function
-    checks a result for failure."""
-    if consumer is None or function is None:
+def _inspected(consumer: Node | None, function: Node | None, scope: str | None) -> bool:
+    """The batch is returned (or is a concise arrow's value), or its scope (the enclosing
+    function, or at top level what follows it; see :func:`_inspection_text`) checks a
+    result for failure."""
+    if consumer is None or scope is None:
         return False
     if consumer.type == RETURN:
         return True
-    if function.type == Kind.ARROW_FUNCTION and consumer.id == function.id:
+    if function is not None and function.type == Kind.ARROW_FUNCTION and consumer.id == function.id:
         return True
-    return INSPECTION.search(node_text(function)) is not None
+    return INSPECTION.search(scope) is not None
 
 
 def _handler_reports(handler: Node) -> bool:

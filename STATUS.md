@@ -4412,3 +4412,21 @@ Published by `publish.yml` (run 39075745458, 18 of 18 jobs). PyPI lists 0.9.0 wi
 and an sdist. A fresh `pip install --no-cache-dir shockharness==0.9.0` prints
 `shockharness 0.9.0` and knows MAGIC004; the first install, a minute after the upload,
 did not yet see it in the index.
+
+## MetaList feedback on 0.9.0: three race rules recorded, an ASYNC003 false alarm fixed (2026-10-17)
+
+MetaList sent three rule proposals from races STATE001 led them to. STATE001 gave 45
+findings: 4 real races and a few minor issues; the other 44 are suppressed with their
+verified lock or single-context reason. The three proposals, recorded in `docs/ideas.md`:
+* **publish before initialize:** a global assigned a new object, then the object's fields
+  written;
+* **state checked outside the lock that guards its writes;**
+* **a read that writes shared state:** a `get_*` that calls `set_*`.
+
+Fixed: ASYNC003 reported a top-level `Promise.allSettled` in a script although the next
+line, inside a top-level `try`, threw the first rejected outcome. With no enclosing
+function the check had nothing to look in. It now looks at the statement holding the
+batch and the statements after it in the same block, not the whole module, so a
+top-level batch that nothing after it checks is still reported.
+`test_async003_a_top_level_batch_checked_in_its_block`; MetaList's file, with its
+suppression removed, gives no ASYNC003. The cache schema is "19".
