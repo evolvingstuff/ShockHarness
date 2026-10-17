@@ -113,9 +113,9 @@ Requires Python 3.11+. Runtime dependencies are `tree-sitter` and
 published to PyPI from `v*` tags (see `docs/releasing.md`).
 
 ```bash
-pip install "shockharness==0.6.0"          # Python project: put the pin in pyproject.toml
-uv tool install "shockharness==0.6.0"      # any project (JavaScript included): isolated tool env
-pipx install "shockharness==0.6.0"
+pip install "shockharness==0.7.0"          # Python project: put the pin in pyproject.toml
+uv tool install "shockharness==0.7.0"      # any project (JavaScript included): isolated tool env
+pipx install "shockharness==0.7.0"
 ```
 
 From a checkout:
@@ -177,7 +177,7 @@ src/client.py:18:15: DEF006 error: environment variable "RETRIES" falls back to 
 src/client.py:24:5: DEF005 error: except handler converts the exception into a fallback value: return None (EXC002 classification return_fallback; the handler is reported once, here)  [except OSError:]
 src/client.py:24:5: EXC001 error: except handler of 'OSError' is forbidden: catch of 'OSError' is not approved by any boundary for this file  [except OSError:]
 
-shockharness 0.6.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
+shockharness 0.7.0: 1 file(s), 1 analyzed, 0 failed; 5 finding(s), 0 suppressed
   by severity: error=5
   rules applied: MAGIC001, EXC001, EXC002, EXC003, DEF001, DEF002, DEF003, DEF004, DEF005, DEF006, CPLX001, CPLX002, CPLX003, CPLX004, CPLX005, CPLX006, SUPP001, SUPP002
   rules not implemented (not analyzed): MAGIC002
@@ -192,7 +192,7 @@ gate: FAIL (exit 1)
 Three built-in profiles ship with the package and are selected with
 `profile = "..."` (or `--profile`): **`strict`** (default: every rule at its
 documented severity, unparseable files fail), **`recommended`** (strict, but
-`DEF003`/`DEF004` fallbacks are `review`, `-1` and module-level named constant
+`DEF003`/`DEF004` fallbacks are `review`, module-level named constant
 definitions such as `MAX_PAGES = 8` pass `MAGIC001`, fan-out is `review`
 above 30, and `DEF*` findings the analyzer could not establish (`unknown`) are
 reported without gating; included files no adapter parses are warned about, as
@@ -217,9 +217,9 @@ root.
 The version is always an exact pin; nothing updates to `latest`. Pick one:
 
 ```bash
-uv tool install 'shockharness==0.6.0'                    # isolated tool environment; any repository, JavaScript included
-uvx --from 'shockharness==0.6.0' shockharness version     # one-off run, nothing installed
-pip install 'shockharness==0.6.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
+uv tool install 'shockharness==0.7.0'                    # isolated tool environment; any repository, JavaScript included
+uvx --from 'shockharness==0.7.0' shockharness version     # one-off run, nothing installed
+pip install 'shockharness==0.7.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
@@ -284,12 +284,12 @@ permissions:
   contents: read
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.6.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.7.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.6.0"
+      shockharness-version: "0.7.0"
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
 
@@ -338,7 +338,7 @@ Each command's output confirms one step.
 
 | Step | Command | Output that confirms it |
 |---|---|---|
-| Install | `shockharness version` | `shockharness 0.6.0` |
+| Install | `shockharness version` | `shockharness 0.7.0` |
 | Policy | `shockharness config validate` | a line starting `shockharness: configuration is valid` naming `profile strict`, exit 0 |
 | Analysis | `shockharness check .` | a report whose last lines start with `gate: PASS (exit 0)` or `gate: FAIL (exit 1)`; exit 2 or 3 means the setup is wrong, not the code |
 | Baseline, if used | `shockharness check . --baseline .shockharness-baseline.json` | `gate: PASS (exit 0)` followed by `N legacy finding(s) matched the baseline` |
@@ -415,12 +415,12 @@ SHA; the analyzer version is the `shockharness-version` input, not the ref:
 ```yaml
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.6.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.7.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.6.0"
+      shockharness-version: "0.7.0"
 ```
 
 It uploads SARIF to code scanning. Keep the version pin in `pyproject.toml`, a

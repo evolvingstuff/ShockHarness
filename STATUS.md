@@ -3748,8 +3748,8 @@ idioms (`items[-1]`, `text[:-1]`, `range(n - 1, -1, -1)`) and JavaScript's
 * Point 3 (accepting `16 * MIB` as a named definition) was implemented, then
   withdrawn by the MetaList session before commit: naming the 16 surfaced a
   duplicated limit, a byte unit labelling a character count, and undocumented
-  cache budgets. It is not in this change; the patch is kept aside pending the
-  maintainer's confirmation.
+  cache budgets. It is not in this change, and the maintainer confirmed on
+  2026-10-17 that it is dropped: the 16 in `16 * MIB` stays reported.
 
 Evidence: the golden fixtures lose exactly their six `-1` findings
 (`magic_negatives.py`/`.js`: `-1`, `-+1`, `-1n`; `exc_return_fallback.py:40`),

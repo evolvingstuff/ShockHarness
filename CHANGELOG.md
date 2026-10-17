@@ -5,6 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-17
+
+Milestones H4, H5, H-TS and H6 of specification section 21, ROLE001, the assert
+rework, MAGIC003, and feedback rounds from MetaList. Every new rule ships at
+`warning` or `review` (decision 9).
+
+**Upgrading from 0.6.0.** Three changes can move a gate verdict:
+- TypeScript (`.ts`, `.tsx`, `.mts`, `.cts`) is analyzed by default: a
+  TypeScript repository gets its MAGIC001, EXC and DEF findings (errors) instead
+  of unsupported-source warnings. Set `include` to the 0.6.0 globs to keep the
+  old scope.
+- `-1` is allowed by default (`allow_unary_negative_one = true`): fewer MAGIC001
+  errors in `strict` and `minimal`.
+- A very long Python expression is analyzed instead of crashing (or, on CPython
+  3.11, is a parse failure with its reason).
+
+Otherwise: ASSERT001 reports only asserts on external input (fewer warnings);
+the CLI refuses to run under `python -O`; existing configurations stay valid;
+caches are invalidated automatically (cache schema "10").
+
 ### Added (MAGIC003, decision 30)
 - `MAGIC003` (`rules.sentinels`, review): a `-1` standing for a value (assigned,
   returned, passed, a dict / object entry), where it often encodes a meaning of

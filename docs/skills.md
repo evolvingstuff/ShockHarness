@@ -24,7 +24,9 @@ pattern, why it is a bug, the rule, the expected false positives), and
 `write-compliant-code` asks for a check of a function's result where the
 contract promises something about it, and since 0.6.0 (principle 8) for immutable values:
 frozen records, tuples and frozensets, `Object.freeze`, and new values preferred
-over mutated inputs (discouraged, not forbidden; local mutation is fine). `pre-commit-review` reads `shockharness
+over mutated inputs (discouraged, not forbidden; local mutation is fine), and
+since 0.7.0 (principle 9) for asserting internal invariants where they must hold,
+with typed errors for expected failures and one startup refusal of `python -O`. `pre-commit-review` reads `shockharness
 exceptions .` as the reviewer's list of everything the code and configuration
 exempt.
 
@@ -87,7 +89,7 @@ Add this line to the agent's instruction file (for example AGENTS.md):
       "sha256": "<hex SHA-256 of the file as written>"
     }
   },
-  "tool_version": "0.6.0"
+  "tool_version": "0.7.0"
 }
 ```
 
