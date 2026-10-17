@@ -4,7 +4,10 @@
 # configuration, skills, edit-time hook) and once without. The builder sees only
 # SPEC.md (and, gated, the ShockHarness files); never this script or the review rubric.
 #
-#   evals/under-the-gate/build.sh OUT_DIR SHOCKHARNESS_BIN_DIR
+#   evals/under-the-gate/build.sh OUT_DIR SHOCKHARNESS_BIN_DIR CLAUDE_BIN MODEL
+#
+# Each builder starts with a clean environment (HOME, USER, TERM, PATH only), so a
+# Claude desktop app's session variables cannot redirect its authentication.
 #
 # OUT_DIR/<spec>-<variant>/ is the build; OUT_DIR/logs/<spec>-<variant>.jsonl is the
 # builder's tool-call stream (stream-json), from which hook blocks are extracted.
@@ -12,6 +15,10 @@ set -euo pipefail
 
 out="$1"
 shockharness_bin="$2"
+claude_bin="$3"
+model="$4"
+# The PATH builders get: system tools and node, never ShockHarness (unless gated).
+BASE_PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$out/logs"
 
@@ -42,20 +49,21 @@ build() {
   variant="${name##*-}"
   if [ "$variant" = gated ]; then
     prompt="$prompt_gated"
-    path="$shockharness_bin:$PATH"
+    path="$shockharness_bin:$BASE_PATH"
   else
     prompt="$prompt_ungated"
-    path="$PATH"
+    path="$BASE_PATH"
   fi
   local started
   started="$(date +%s)"
-  (cd "$dir" && PATH="$path" timeout 3600 claude -p "$prompt" --output-format stream-json \
+  (cd "$dir" && env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" TERM=xterm PATH="$path" \
+    timeout 3600 "$claude_bin" -p "$prompt" --model "$model" --output-format stream-json \
     --verbose --permission-mode bypassPermissions > "$out/logs/$name.jsonl" 2> "$out/logs/$name.err") \
     || echo "exit $?" > "$out/logs/$name.exit"
   echo "$name $(( $(date +%s) - started ))s" >> "$out/logs/durations.txt"
 }
 export -f build
-export out shockharness_bin prompt_gated prompt_ungated
+export out shockharness_bin claude_bin model BASE_PATH prompt_gated prompt_ungated
 
 dirs=()
 for spec in "$here"/specs/*.md; do
