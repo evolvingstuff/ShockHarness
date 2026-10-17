@@ -332,6 +332,9 @@ roles = ["production"]
 # [[tool.shockharness.rules.module_state.allowed]] entries (path glob, name, reason)
 # declare a deliberate process-wide binding; each is a policy deviation.
 allowed = []
+# STATE002: a shared object published before it is initialized (G = Thing() then
+# G.field = ...). "review" (default), "warning" or "error".
+state002_severity = "review"
 
 [tool.shockharness.rules.import_effects]
 enabled = true

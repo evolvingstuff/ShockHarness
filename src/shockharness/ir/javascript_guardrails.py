@@ -239,6 +239,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
             sorted(_import_time(source, root), key=lambda c: (c.span, c.callee))
         ),
         element_guards=collect_element_guards(source, root),
+        early_publications=(),  # STATE002 is Python only
     )
 
 

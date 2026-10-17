@@ -94,6 +94,7 @@ Implemented rules:
 | `ASSERT002` | asserts relied on in production while nothing refuses `python -O` | review |
 | `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
 | `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
+| `STATE002` | a shared object assigned before its fields are set (`G = Thing()` then `G.x = ...`) | review |
 | `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |
 | `ASYNC001` | a coroutine or Promise created and dropped (an async call as a statement, `void`), across files | warning |
 | `ASYNC002` | `asyncio.create_task(...)` with its handle dropped, outside a `TaskGroup` | warning |

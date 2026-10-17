@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- `STATE002` (`rules.module_state`, review, Python): a shared object published before
+  it is initialized. A global, or `self.<attr>` outside a constructor, is assigned a
+  new object and then has its fields set in the same function, so another thread can
+  read it half-built. Severity `rules.module_state.state002_severity`. From MetaList's
+  encryption-service race. Measured: exactly MetaList's two pre-fix functions, nothing
+  else in about 2,500 files. The cache schema is "20".
+
 ### Changed (feedback from MetaList on 0.9.0)
 - `ASYNC003`: a `Promise.allSettled(...)` at a script's top level is checked against
   the statements that follow it in its block, as one inside a function is checked

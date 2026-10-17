@@ -8,7 +8,7 @@ a file's role is listed as disabled for that file with origin ``role``.
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from shockharness.findings import STATUS_VIOLATION, Finding
@@ -38,6 +38,7 @@ from shockharness.rules.registry import (
     JAVASCRIPT_FAMILY,
     PYTHON,
     STATE001,
+    STATE002,
     STUB001,
     STUB002,
     RuleSpec,
@@ -54,6 +55,7 @@ GUARDRAIL_RULES = (
     ASSERT002,
     BOOL001,
     STATE001,
+    STATE002,
     IMPORT001,
     DOM001,
 )
@@ -332,6 +334,31 @@ def _state001(
     return found
 
 
+# -- STATE002 ----------------------------------------------------------------------------
+
+
+def _state002(
+    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
+) -> list[Finding]:
+    return [
+        _finding(
+            STATE002,
+            str(settings["state002_severity"]),
+            path,
+            publication.published,
+            f"{publication.name} is published before it is initialized: line "
+            f"{publication.published.line} assigns the new object, line "
+            f"{publication.written.line} then sets its attribute "
+            f"({publication.write_text.strip()}); a thread reading it in between sees it "
+            "half-built",
+            source,
+            None,
+            CONFIDENCE_EXACT,
+        )
+        for publication in facts.guardrails.early_publications
+    ]
+
+
 # -- IMPORT001 ---------------------------------------------------------------------------
 
 
@@ -413,22 +440,21 @@ def run_guardrail_rules(
     active: frozenset[str],
 ) -> list[Finding]:
     """Findings of the active H3 rules for one file; ``rules`` is the ``rules`` table."""
+    exc004 = section_severity(rules["exceptions"], EXC004.default_severity)
+    runners: tuple[tuple[RuleSpec, Callable[[], list[Finding]]], ...] = (
+        (EXC004, lambda: _exc004(facts, source, path, exc004)),
+        (STUB001, lambda: _stub001(facts, source, path, rules["stubs"])),
+        (STUB002, lambda: _stub002(facts, source, path, language, rules["stubs"])),
+        (BOOL001, lambda: _bool001(facts, source, path, rules["boolean_arguments"])),
+        (STATE001, lambda: _state001(facts, source, path, rules["module_state"])),
+        (STATE002, lambda: _state002(facts, source, path, rules["module_state"])),
+        (IMPORT001, lambda: _import001(facts, source, path, language, rules["import_effects"])),
+        (DOM001, lambda: _dom001(facts, source, path, rules["dom"])),
+    )
     found: list[Finding] = []
-    if EXC004.rule_id in active:
-        severity = section_severity(rules["exceptions"], EXC004.default_severity)
-        found.extend(_exc004(facts, source, path, severity))
-    if STUB001.rule_id in active:
-        found.extend(_stub001(facts, source, path, rules["stubs"]))
-    if STUB002.rule_id in active:
-        found.extend(_stub002(facts, source, path, language, rules["stubs"]))
-    if BOOL001.rule_id in active:
-        found.extend(_bool001(facts, source, path, rules["boolean_arguments"]))
-    if STATE001.rule_id in active:
-        found.extend(_state001(facts, source, path, rules["module_state"]))
-    if IMPORT001.rule_id in active:
-        found.extend(_import001(facts, source, path, language, rules["import_effects"]))
-    if DOM001.rule_id in active:
-        found.extend(_dom001(facts, source, path, rules["dom"]))
+    for rule, run in runners:
+        if rule.rule_id in active:
+            found.extend(run())
     return found
 
 

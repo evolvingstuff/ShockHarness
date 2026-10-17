@@ -111,8 +111,9 @@ ELAPSED_DECIMALS: Final[int] = 3
 # facts, and JavaScript parameters counted as a unit's locals (H-TS); "8": dataflow facts
 # (H6); "9": call guards (H6 part two); "10": sentinel facts (MAGIC003); "11": element
 # guards (DOM001); "12": cleanup and returned flags, computed-receiver callees; "18":
-# constant definitions (MAGIC004); "19": a top-level allSettled checked after it.
-CACHE_SCHEMA_VERSION: Final[str] = "19"
+# constant definitions (MAGIC004); "19": a top-level allSettled checked after it; "20":
+# early publications (STATE002).
+CACHE_SCHEMA_VERSION: Final[str] = "20"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

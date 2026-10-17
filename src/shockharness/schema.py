@@ -360,7 +360,11 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "module_state": TableField(
-                    fields={**GUARDRAIL_COMMON, "allowed": ListField(ALLOWED_STATE_SCHEMA)},
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "allowed": ListField(ALLOWED_STATE_SCHEMA),
+                        "state002_severity": EnumField(VERIFICATION_SEVERITIES),
+                    },
                     required=(),
                 ),
                 "import_effects": TableField(

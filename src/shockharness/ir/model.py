@@ -674,6 +674,20 @@ class ElementGuard:
 
 
 @dataclass(frozen=True)
+class EarlyPublication:
+    """STATE002: in one function, a shared object is published before it is initialized.
+    ``name`` (a ``global`` name, or ``self.<attr>`` outside a constructor) is assigned a
+    newly constructed object at ``published``; a later statement of the same function
+    writes one of its attributes at ``written``. Python only."""
+
+    name: str
+    published: Span
+    written: Span
+    publish_text: str
+    write_text: str
+
+
+@dataclass(frozen=True)
 class GuardrailFacts:
     finally_exits: tuple[FinallyExit, ...]
     placeholders: tuple[Placeholder, ...]
@@ -681,6 +695,7 @@ class GuardrailFacts:
     boolean_arguments: tuple[BooleanArgument, ...]
     import_time_calls: tuple[ImportTimeCall, ...]
     element_guards: tuple[ElementGuard, ...]
+    early_publications: tuple[EarlyPublication, ...]
 
 
 NO_GUARDRAILS = GuardrailFacts(
@@ -690,6 +705,7 @@ NO_GUARDRAILS = GuardrailFacts(
     boolean_arguments=(),
     import_time_calls=(),
     element_guards=(),
+    early_publications=(),
 )
 
 

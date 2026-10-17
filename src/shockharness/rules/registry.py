@@ -2365,6 +2365,52 @@ MAGIC004 = RuleSpec(
 )
 
 
+# --- STATE002 (MetaList, 2026-10-17) ----------------------------------------------------
+
+STATE002 = RuleSpec(
+    rule_id="STATE002",
+    version="1",
+    name="shared object published before it is initialized",
+    family="module_state",
+    config_section=MODULE_STATE_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A function assigns a newly constructed object to a shared name (a global, or a self "
+        "attribute outside a constructor) and then sets the object's attributes: another "
+        "thread reading the name in between gets a half-built object."
+    ),
+    rationale=(
+        "Publishing is the moment other code can see an object. In MetaList, "
+        "get_encryption_service_with_token assigned the cached service and then set its key, "
+        "so a concurrent request's cache hit got a service with no key and failed. Building "
+        "the object in a local and publishing it last removes the window."
+    ),
+    guarantees=(
+        "Python. In one function, statements in source order (nested functions and classes "
+        "excluded): an assignment of a call whose callee's last name is capitalized (a class) "
+        "to a name the function declares global, or to self.<attr> in a method other than "
+        "__init__, __new__, __post_init__, setUp or setup_method, followed by an assignment to "
+        "an attribute of that name before a return or a rebinding. Reported at the "
+        "publication. Severity rules.module_state.state002_severity (review by default)."
+    ),
+    limitations=(
+        "Whether other threads read the name is not known: a single-threaded module matches "
+        "too (the fix is still clearer). A factory function with a lowercase name, an object "
+        "built by another function, a mutation through a method call (G.configure(...)) and "
+        "JavaScript are not covered."
+    ),
+    remediation=(
+        "Build the object in a local, set its fields, and assign the shared name last "
+        "(service = EncryptionService(); service.dek = dek; _service = service). If the "
+        "object must be shared while it is built, hold the lock its readers take."
+    ),
+    noncompliant_example="_service = EncryptionService()\n_service.dek = dek",
+    compliant_example="service = EncryptionService()\nservice.dek = dek\n_service = service",
+)
+
+
 # --- EXC005 (0.9.0, under-the-gate round 3) ---------------------------------------------
 
 EXC005 = RuleSpec(
@@ -2629,6 +2675,7 @@ RULES: tuple[RuleSpec, ...] = (
     MAGIC003,
     MAGIC004,
     EXC005,
+    STATE002,
     DOM001,
     DOM002,
 )

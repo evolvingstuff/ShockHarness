@@ -787,6 +787,7 @@ deviation. Every finding is a `violation` (the facts are exact syntax).
 | `ASSERT002` | asserts relied on in production while no code reads `sys.flags.optimize` (one finding per run, review) | Python | `rules.assertions.roles` (production) |
 | `BOOL001` | a `True`/`False` literal passed positionally to a call with several arguments | Python, JavaScript | `rules.boolean_arguments.roles` (production) |
 | `STATE001` | a module-level mutable binding that a function assigns or mutates | Python, JavaScript | `rules.module_state.roles` (production) |
+| `STATE002` | a shared object (a global, or `self.<attr>` outside a constructor) assigned before its fields are set | Python | `rules.module_state.roles` (production) |
 | `IMPORT001` | a configured side-effecting call (processes, network, sockets, threads, deletion) executed at import time | Python, JavaScript | `rules.import_effects.roles` (production) |
 
 A rule whose section does not list a file's role is not applied to that file
@@ -878,6 +879,24 @@ seen, hence `approximate`. Local variables are never findings: mutating what a
 function creates is fine. The usual fix is an immutable value (a `tuple`,
 `frozenset` or frozen object nothing writes; `write-compliant-code`, principle
 8) or an owner passed in by the caller.
+
+**STATE002 (review, Python).** A shared object published before it is
+initialized:
+* **The shape.** In one function, a newly constructed object (a call whose callee's
+  last name is capitalized) is assigned to a name the function declares `global`, or to
+  `self.<attr>` in a method other than a constructor. A later statement of the same
+  function then sets one of its attributes, before a `return` or a rebinding.
+* **Why it matters.** A thread reading the name in between gets a half-built object.
+  MetaList's `get_encryption_service_with_token` assigned the cached service and then
+  set its key, so a concurrent cache hit got a service without one. The fix is to build
+  the object in a local and publish it last.
+* **Measured.** In MetaList's tree before the fix it reported exactly those two
+  functions (`get_encryption_service_with_token`, `set_session_dek`), and nothing after
+  it. Nothing in ShockHarness, the experiment's builds, or the 1,093 Python files of pip,
+  pytest, hypothesis, hatchling, packaging and their neighbours installed with
+  ShockHarness.
+* **Configuration.** Severity `rules.module_state.state002_severity`, `review` by
+  default; roles as STATE001.
 
 **IMPORT001.** Calls executed when the module is imported (module body, class
 bodies, decorators, default values; JavaScript top level, class static blocks

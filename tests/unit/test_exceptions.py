@@ -476,6 +476,7 @@ OVERRIDE_APPLIED = (
     "ROLE001",
     "SLEEP001",
     "STATE001",
+    "STATE002",
     "STUB001",
     "STUB002",
     "STUB003",

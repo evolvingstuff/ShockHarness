@@ -4430,3 +4430,30 @@ batch and the statements after it in the same block, not the whole module, so a
 top-level batch that nothing after it checks is still reported.
 `test_async003_a_top_level_batch_checked_in_its_block`; MetaList's file, with its
 suppression removed, gives no ASYNC003. The cache schema is "19".
+
+## STATE002: a shared object published before it is initialized — DONE (2026-10-17)
+
+MetaList's rule A, on Tom's go-ahead, at review severity.
+
+**Measured first** with a scratch prototype (Python AST):
+
+| Tree | Files | Reported |
+|---|---|---|
+| MetaList before the fix (bbc710aa^, app, scripts, tests) | 514 | the two functions MetaList fixed: `get_encryption_service_with_token`, `set_session_dek` |
+| MetaList HEAD | 554 | nothing |
+| ShockHarness `src` | 106 | nothing |
+| The experiment's builds | 305 | nothing |
+| Installed third-party packages (pip, pytest, hypothesis, hatchling, packaging, pygments, tomlkit, tree_sitter ...) | 1,093 | nothing |
+
+**Built:**
+* `ir/python_publications.py` gives `GuardrailFacts.early_publications`. A global (from
+  the function's `global` statement), or `self.<attr>` outside a constructor, is
+  assigned a call whose callee's last name is capitalized; a later statement of the same
+  function sets one of its attributes, before a return or a rebinding.
+* STATE002 is in `rules/guardrails.py` (module_state family, production role, severity
+  `state002_severity` = review).
+* The cache schema is "20". Python only; JavaScript is not covered.
+
+**Tests:** `tests/unit/test_state002.py` covers the global and self forms; a
+build-first, a rebinding, a lowercase factory and `__init__` are not reported. Also
+severity and roles. 1216 tests pass.
