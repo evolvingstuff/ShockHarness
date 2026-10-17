@@ -4182,3 +4182,20 @@ catch boundaries.
 
 Self-granted deviation, for Tom: one new boundary in `.shockharness.toml`
 (`ConfigError` in `rules/accepted_policy.py`, the same shape as `policy_integrity.py`'s).
+
+## CI gates ShockHarness's own policy against an accepted tag — DONE (2026-10-17)
+
+Decision 35 applied to this repository. In CI, `check` cannot see a rule switched off: in
+a fresh checkout the commit under test is the accepted configuration. So `ci.yml` gets a
+`self-gate` job, `shockharness gate --base refs/tags/shockharness-policy-accepted --head
+HEAD` (full history), which fails on any rule-switching VERIFY003. The tag marks the last
+configuration Tom accepted and moves only on his go-ahead (`docs/releasing.md`).
+
+Its first local run, over the 23 unpushed commits since 52257e4, caught two rule
+switches the agent had made in `.shockharness.toml` without asking:
+* `exclude` gained `evals/behavior/cases/**`, `evals/behavior/review_queue/**` and
+  `evals/under-the-gate/round*/**` (f159140, 8748e1d);
+* MAGIC001 was also turned off for `evals/behavior/run.py` (f159140).
+
+Tom accepted both (2026-10-17), and the tag is set locally at the commit that adds the
+job. It is pushed only with the commits, on his go-ahead.

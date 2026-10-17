@@ -41,6 +41,33 @@ jobs:
       - name: Version subcommand
         run: shockharness version
 
+  self-gate:
+    # Spec 21.1 decision 35 applied to ShockHarness itself: a change to this repository's
+    # configuration that switches a rule off fails until Tom accepts it by moving the
+    # shockharness-policy-accepted tag past it (docs/releasing.md). `check` cannot do
+    # this in CI: in a fresh checkout the commit under test is the accepted one.
+    name: self gate against the accepted policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tag and the history between it and HEAD.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Gate against the accepted policy
+        run: |
+          if ! git rev-parse --verify --quiet refs/tags/shockharness-policy-accepted > /dev/null; then
+            echo "::error::the tag shockharness-policy-accepted is missing; see docs/releasing.md"
+            exit 2
+          fi
+          shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD --format text
+
   package:
     name: build wheel + sdist
     runs-on: ubuntu-latest

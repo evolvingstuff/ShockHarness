@@ -84,3 +84,22 @@ publishing**. No API token is stored in the repository or in GitHub secrets.
 
 A failed step anywhere stops the release; a tag never publishes a partially
 checked build.
+
+## Accepting a change to ShockHarness's own policy
+
+CI's `self-gate` job runs `shockharness gate --base refs/tags/shockharness-policy-accepted
+--head HEAD` on this repository (spec 21.1 decision 35). A commit that switches a rule
+off in `.shockharness.toml` fails it: an `[[overrides]]` entry, a disabled rule, a lowered
+severity, a raised threshold, a new `exclude` pattern, or a boundary whose path is a
+glob. A catch boundary naming one file does not.
+
+The tag marks the last configuration Tom accepted. It moves only on his go-ahead, like
+any tag:
+
+```bash
+git tag -f shockharness-policy-accepted <commit>
+git push -f origin refs/tags/shockharness-policy-accepted
+```
+
+Before asking, the agent lists every `VERIFY003` error that `gate --base
+shockharness-policy-accepted --head HEAD` reports and why each change is needed.
