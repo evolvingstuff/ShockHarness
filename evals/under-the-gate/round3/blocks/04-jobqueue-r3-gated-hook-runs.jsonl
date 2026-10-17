@@ -1,0 +1,5 @@
+{"time": "2026-10-17T19:11:27+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:11:35+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:12:29+00:00", "tool": "Bash", "files": ["jobqueue/__init__.py", "jobqueue/queue.py", "tests/__init__.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:12:56+00:00", "tool": "Bash", "files": ["tests/test_jobqueue.py"], "findings": 1, "details": ["EXC001 tests/test_jobqueue.py:141"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:13:03+00:00", "tool": "Bash", "files": ["tests/test_jobqueue.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

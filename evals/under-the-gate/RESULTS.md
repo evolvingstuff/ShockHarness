@@ -1,7 +1,8 @@
 # Under-the-gate experiment: round 1 (2026-10-17)
 
 Round 2 (Opus 5.5, three runs per spec and variant, the hook covering shell edits) is in
-`RESULTS-round2.md`.
+`RESULTS-round2.md`; round 3 (decision 35: tests exempt, setup committed) in
+`RESULTS-round3.md`.
 
 **Question.** What does a coding agent build when ShockHarness blocks it, compared
 with the same agent building the same spec without the gate? Does it comply as

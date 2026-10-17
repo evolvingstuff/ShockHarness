@@ -1,0 +1,18 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..55ca2d9 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,12 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "feedcheck/config.py", language = "python", exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"], reason = "Reading and parsing the user's config file; each failure becomes a ConfigError carrying its cause" },
++  { path = "feedcheck/fetch.py", language = "python", exceptions = ["OSError", "http.client.HTTPException"], reason = "Network I/O to a feed; a failure to get an answer becomes a typed NoAnswer outcome reported as unreachable" },
++  { path = "feedcheck/health.py", language = "python", exception = "ValueError", reason = "Decoding external feed data (JSON body, ISO 8601 timestamps); a failure becomes a typed unhealthy verdict" },
++  { path = "feedcheck/cli.py", language = "python", exception = "feedcheck.config.ConfigError", reason = "Entry point: an invalid config stops the tool with a clear message and exit status 1" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true

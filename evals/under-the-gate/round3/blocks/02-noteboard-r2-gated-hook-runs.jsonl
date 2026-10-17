@@ -1,0 +1,9 @@
+{"time": "2026-10-17T19:01:12+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:01:15+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:02:25+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:02:48+00:00", "tool": "Bash", "files": ["src/config.js", "src/edit-mode.js", "src/load.js", "src/notes.js", "src/storage.js"], "findings": 2, "details": ["EXC001 src/load.js:13", "EXC001 src/storage.js:18"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:02:57+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:03:35+00:00", "tool": "Bash", "files": ["app.js", "src/board-view.js", "src/icons.js", "src/modal.js", "src/toast.js"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:03+00:00", "tool": "Bash", "files": ["app.js", "test/config.test.js", "test/edit-mode.test.js", "test/helpers.js", "test/load.test.js", "test/notes.test.js", "test/storage.test.js"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:08+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:12+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

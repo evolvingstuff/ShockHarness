@@ -1,0 +1,1289 @@
+{
+  "01-feedcheck-r1-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 4,
+        "EXC001": 10,
+        "MAGIC001": 51
+      },
+      "outside_tests": {
+        "EXC001": 10
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...................................\n----------------------------------------------------------------------\nRan 35 tests in 11.654s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 860,
+      "functions": 89,
+      "try_blocks": 10,
+      "frozen_dataclasses": 6,
+      "parameter_defaults": 4,
+      "module_constants": 15,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_CONFIG_ERROR = 2  # shockharness: ignore[MAGIC001] reason=\"Same status argparse uses for usage errors (Python docs, argparse.ArgumentParser.error)\""
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except FeedUnreachable as exc:",
+        "except ConfigError as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except OSError as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except InvalidFeed as exc:",
+        "except InvalidFeed as exc:"
+      ],
+      "sentinel_default": [
+        "def check(self, path: str, max_age_hours: float | None = None, **settings: float):"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format: str, *args: object) -> None:"
+      ],
+      "module_constant_default": [
+        "def _settings(*feeds: Feed, attempts: int = 1, backoff: float = 0.0, timeout: float = TIMEOUT_SECONDS) -> Settings:"
+      ]
+    },
+    "hook_blocks": 2,
+    "hook_log": {
+      "runs": 12,
+      "feedback": 2
+    }
+  },
+  "01-feedcheck-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 23,
+        "DEF002": 8,
+        "DEF005": 2,
+        "EXC001": 15,
+        "EXC002": 5,
+        "MAGIC001": 91
+      },
+      "outside_tests": {
+        "CPLX001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 16,
+        "DEF002": 6,
+        "DEF005": 2,
+        "EXC001": 14,
+        "EXC002": 4,
+        "MAGIC001": 10
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "./opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 502: 'Bad Gateway'>\n  _warnings.warn(self.warn_message, ResourceWarning)\n./opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>\n  _warnings.warn(self.warn_message, ResourceWarning)\n.............\n----------------------------------------------------------------------\nRan 34 tests in 0.964s\n\nOK\n"
+    },
+    "structure": {
+      "files": 7,
+      "lines": 808,
+      "functions": 68,
+      "try_blocks": 8,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 10,
+      "module_constants": 14,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "counts[r.status] = counts.get(r.status, 0) + 1",
+        "timeout = data.get(\"timeout_seconds\", DEFAULT_TIMEOUT_SECONDS)",
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)",
+        "backoff = data.get(\"backoff_seconds\", DEFAULT_BACKOFF_SECONDS)",
+        "server.hits[self.path] = server.hits.get(self.path, 0) + 1",
+        "queue = server.routes.get(self.path, [(404, \"not found\")])"
+      ],
+      "mapping_get": [
+        "published = item.get(\"published\")",
+        "raw_feeds = data.get(\"feeds\")",
+        "name = raw.get(\"name\")",
+        "url = raw.get(\"url\")",
+        "max_age = raw.get(\"max_age_hours\")"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as e:",
+        "except Exception:",
+        "except urllib.error.URLError as e:",
+        "except (TimeoutError, socket.timeout):",
+        "except (ConnectionError, OSError) as e:",
+        "except Exception as e:  # e.g. http.client.IncompleteRead, RemoteDisconnected",
+        "except (ValueError, UnicodeDecodeError) as e:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None, checker_factory=Checker) -> int:",
+        "def check(self, path, max_age_hours=None, attempts=3, timeout=2.0, url=None):",
+        "def run_cli(self, config_text=None, config_path=None):"
+      ],
+      "variadic_signature": [
+        "def log_message(self, *args):"
+      ]
+    }
+  },
+  "01-feedcheck-r2-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "EXC001": 8,
+        "MAGIC001": 65,
+        "SLEEP001": 1
+      },
+      "outside_tests": {
+        "EXC001": 8,
+        "SLEEP001": 1
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...................\n----------------------------------------------------------------------\nRan 19 tests in 5.740s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 796,
+      "functions": 60,
+      "try_blocks": 8,
+      "frozen_dataclasses": 6,
+      "parameter_defaults": 5,
+      "module_constants": 12,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "SERVER_ERROR_END = 600  # shockharness: ignore[MAGIC001] reason=\"RFC 9110 section 15.6: 5xx (Server Error) is 500-599\""
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except ValueError as exc:",
+        "except ValueError as exc:",
+        "except OSError as exc:",
+        "except FeedcheckError as exc:",
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except (OSError, http.client.HTTPException) as exc:"
+      ],
+      "variadic_signature": [
+        "def log_message(self, *args):"
+      ]
+    },
+    "hook_blocks": 2,
+    "hook_log": {
+      "runs": 11,
+      "feedback": 2
+    }
+  },
+  "01-feedcheck-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "CPLX006": 1,
+        "DEF001": 16,
+        "DEF002": 7,
+        "DEF005": 3,
+        "EXC001": 18,
+        "EXC002": 10,
+        "MAGIC001": 116,
+        "ROLE001": 1
+      },
+      "outside_tests": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "CPLX006": 1,
+        "DEF001": 12,
+        "DEF002": 6,
+        "DEF005": 3,
+        "EXC001": 17,
+        "EXC002": 9,
+        "MAGIC001": 13
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..............................................\n----------------------------------------------------------------------\nRan 46 tests in 1.294s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 1001,
+      "functions": 77,
+      "try_blocks": 11,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 8,
+      "module_constants": 10,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "summary[r.status] = summary.get(r.status, 0) + 1",
+        "timeout = data.get(\"timeout_seconds\", DEFAULT_TIMEOUT_SECONDS)",
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)",
+        "backoff = data.get(\"backoff_seconds\", DEFAULT_BACKOFF_SECONDS)"
+      ],
+      "mapping_get": [
+        "raw = item.get(\"published\") if isinstance(item, dict) else None",
+        "name = raw.get(\"name\")",
+        "url = raw.get(\"url\")",
+        "max_age = raw.get(\"max_age_hours\")",
+        "responses = server.routes.get(self.path)"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as e:",
+        "except urllib.error.URLError as e:",
+        "except (TimeoutError, socket.timeout):",
+        "except (ConnectionError, OSError) as e:",
+        "except Exception as e:  # http.client.HTTPException and friends",
+        "except ValueError:",
+        "except (UnicodeDecodeError, json.JSONDecodeError) as e:",
+        "except _Retryable as e:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, reason: str, http_status: int | None = None):",
+        "def main(argv: list[str] | None = None) -> int:",
+        "def check(self, path, *, max_age=None, attempts=3, timeout=2.0, url=None):"
+      ],
+      "variadic_signature": [
+        "def check_feeds(config: Config, **kwargs) -> list[FeedResult]:",
+        "def log_message(self, *args):"
+      ]
+    }
+  },
+  "01-feedcheck-r3-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "EXC001": 10,
+        "MAGIC001": 57
+      },
+      "outside_tests": {
+        "EXC001": 10
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "....................\n----------------------------------------------------------------------\nRan 20 tests in 6.556s\n\nOK\n"
+    },
+    "structure": {
+      "files": 9,
+      "lines": 795,
+      "functions": 63,
+      "try_blocks": 7,
+      "frozen_dataclasses": 9,
+      "parameter_defaults": 4,
+      "module_constants": 11,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except ConfigError as exc:",
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except tomllib.TOMLDecodeError as exc:",
+        "except OSError as exc:",
+        "except http.client.HTTPException as exc:",
+        "except OSError as exc:",
+        "except http.client.HTTPException as exc:"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format, *args):"
+      ]
+    },
+    "hook_blocks": 3,
+    "hook_log": {
+      "runs": 16,
+      "feedback": 3
+    }
+  },
+  "01-feedcheck-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 21,
+        "DEF002": 3,
+        "DEF003": 1,
+        "DEF005": 3,
+        "EXC001": 16,
+        "EXC002": 6,
+        "MAGIC001": 97,
+        "ROLE001": 1
+      },
+      "outside_tests": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 9,
+        "DEF002": 2,
+        "DEF003": 1,
+        "DEF005": 3,
+        "EXC001": 15,
+        "EXC002": 5,
+        "MAGIC001": 11
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "........................................\n----------------------------------------------------------------------\nRan 40 tests in 2.156s\n\nOK\n"
+    },
+    "structure": {
+      "files": 10,
+      "lines": 958,
+      "functions": 72,
+      "try_blocks": 10,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 17,
+      "module_constants": 16,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "attempts = data.get(\"attempts\", DEFAULT_ATTEMPTS)",
+        "backoff = data.get(\"backoff_seconds\", DEFAULT_BACKOFF_SECONDS)"
+      ],
+      "mapping_get": [
+        "name = entry.get(\"name\")",
+        "url = entry.get(\"url\")",
+        "route = server.routes.get(self.path)"
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except urllib.error.HTTPError as exc:",
+        "except urllib.error.URLError as exc:",
+        "except (TimeoutError, socket.timeout) as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except ValueError:",
+        "except (ValueError, UnicodeDecodeError):",
+        "except _Unreachable as exc:",
+        "except BaseException:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def __init__(self, body=None, statuses=(200,), delay=0.0, raw=None, drop=False):",
+        "def check(self, path, route=None, attempts=3, timeout=2.0, max_age_hours=None, url=None):"
+      ],
+      "variadic_signature": [
+        "def check_all(config: Config, **kwargs) -> list[FeedResult]:",
+        "def log_message(self, *args):"
+      ]
+    }
+  },
+  "02-noteboard-r1-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 2,
+        "MAGIC001": 1,
+        "MAGIC002": 1
+      },
+      "outside_tests": {
+        "EXC001": 2,
+        "MAGIC002": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "131084ms)\n\u2714 removing and changing an unknown note fails loudly (0.229583ms)\n\u2714 duplicate ids and invalid notes are refused (0.07325ms)\n\u2714 notes round-trip through storage (1.235625ms)\n\u2714 no stored data starts an empty board without a problem (0.064ms)\n\u2714 malformed JSON is a typed error with its cause (0.2125ms)\n\u2714 data of the wrong shape is refused (0.080667ms)\n\u2714 unreadable data is reported, kept under a backup key, and reported only once (0.603333ms)\n\u2714 encoding keeps only the note fields (0.04975ms)\n\u2139 tests 19\n\u2139 suites 0\n\u2139 pass 19\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 47.07725\n"
+    },
+    "structure": {
+      "files": 14,
+      "lines": 789,
+      "functions": 103,
+      "try_blocks": 2,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "return this.map.has(key) ? this.map.get(key) : null;"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 21,
+      "feedback": 1
+    }
+  },
+  "02-noteboard-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 12,
+        "DEF002": 1,
+        "DEF003": 2,
+        "DEF005": 2,
+        "EXC001": 4,
+        "EXC002": 1,
+        "MAGIC001": 16,
+        "STATE001": 6
+      },
+      "outside_tests": {
+        "BOOL001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 12,
+        "DEF002": 1,
+        "DEF003": 2,
+        "DEF005": 2,
+        "EXC001": 4,
+        "EXC002": 1,
+        "MAGIC001": 6,
+        "STATE001": 6
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": " reported, backed up, and reported only once (0.1315ms)\n\u2714 unreadable data (wrong shape) is reported, backed up, and reported only once (0.051709ms)\n\u2714 unreadable data (bad note) is reported, backed up, and reported only once (0.052166ms)\n\u2714 unreadable data (null) is reported, backed up, and reported only once (0.042167ms)\n\u2714 if backup fails, original data is left in place and still reported (0.093292ms)\n\u2714 getItem throwing is reported (0.100708ms)\n\u2714 save failure is reported, not thrown (0.089959ms)\n\u2139 tests 18\n\u2139 suites 0\n\u2139 pass 18\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 45.035958\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 561,
+      "functions": 70,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "getItem: (k) => (data.has(k) ? data.get(k) : null),"
+      ]
+    }
+  },
+  "02-noteboard-r2-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 2,
+        "MAGIC001": 11,
+        "MAGIC002": 1
+      },
+      "outside_tests": {
+        "EXC001": 2,
+        "MAGIC002": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": " a new list and leaves the input unchanged (0.289708ms)\n\u2714 togglePin flips pinned and displayOrder puts pinned notes first (0.45475ms)\n\u2714 removeNote removes, and operations on a missing id throw (0.215875ms)\n\u2714 notes round-trip through storage (1.15475ms)\n\u2714 nothing stored reads as an empty board (0.060875ms)\n\u2714 invalid JSON is an UnreadableNotesError that keeps the raw text and cause (0.198791ms)\n\u2714 wrong shapes are UnreadableNotesError (0.096541ms)\n\u2714 serialized format carries a version (0.057958ms)\n\u2139 tests 22\n\u2139 suites 0\n\u2139 pass 22\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 80.800292\n"
+    },
+    "structure": {
+      "files": 16,
+      "lines": 678,
+      "functions": 101,
+      "try_blocks": 2,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "const li = items.get(note.id);",
+        "if (signatures.get(li) !== signature) {",
+        "const editor = items.get(id).querySelector(\".note-editor\");",
+        "getItem: (key) => (map.has(key) ? map.get(key) : null),",
+        "assert.equal(storage.map.get(\"bad.42\"), \"garbage\");",
+        "assert.equal(storage.map.get(\"bad.42\"), \"garbage\");"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 9,
+      "feedback": 1
+    }
+  },
+  "02-noteboard-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 1,
+        "DEF001": 9,
+        "DEF002": 1,
+        "DEF003": 1,
+        "EXC001": 4,
+        "MAGIC001": 4,
+        "MAGIC002": 1,
+        "STATE001": 7
+      },
+      "outside_tests": {
+        "BOOL001": 1,
+        "DEF001": 8,
+        "DEF002": 1,
+        "DEF003": 1,
+        "EXC001": 4,
+        "MAGIC001": 3,
+        "MAGIC002": 1,
+        "STATE001": 7
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "3584ms)\n\u2714 empty storage loads an empty board without error (1.13275ms)\n\u2714 round-trips saved notes (0.118084ms)\n\u2714 invalid JSON: reported once, board starts empty, data kept (0.119833ms)\n\u2714 non-array JSON: reported once, board starts empty, data kept (0.050875ms)\n\u2714 malformed notes: reported once, board starts empty, data kept (0.050666ms)\n\u2714 still reports when the bad data cannot be backed up (0.063792ms)\n\u2714 storage access failure is reported (0.099125ms)\n\u2714 save failure returns a message (0.048709ms)\n\u2139 tests 21\n\u2139 suites 0\n\u2139 pass 21\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 52.567666\n"
+    },
+    "structure": {
+      "files": 11,
+      "lines": 602,
+      "functions": 69,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "let li = elements.get(note.id);",
+        "const ta = elements.get(id)?.querySelector('textarea');",
+        "const ta = elements.get(editingId)?.querySelector('textarea');",
+        "getItem: (k) => (data.has(k) ? data.get(k) : null),",
+        "assert.equal(s.data.get(CORRUPT_KEY), raw, 'unreadable data is preserved');"
+      ]
+    }
+  },
+  "02-noteboard-r3-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 1,
+        "MAGIC001": 4,
+        "MAGIC002": 1
+      },
+      "outside_tests": {
+        "EXC001": 1,
+        "MAGIC002": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "the board starts empty (0.049375ms)\n\u2714 a wrong version is reported, kept, and the board starts empty (0.048792ms)\n\u2714 missing notes is reported, kept, and the board starts empty (0.049292ms)\n\u2714 a malformed note is reported, kept, and the board starts empty (0.046041ms)\n\u2714 duplicate ids is reported, kept, and the board starts empty (0.047625ms)\n\u2714 unreadable data is reported once (0.078458ms)\n\u2714 decode returns an explicit failure for bad JSON (0.086958ms)\n\u2714 encode stores a versioned document (0.065209ms)\n\u2139 tests 25\n\u2139 suites 0\n\u2139 pass 25\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 53.3085\n"
+    },
+    "structure": {
+      "files": 14,
+      "lines": 825,
+      "functions": 108,
+      "try_blocks": 1,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "getItem: (key) => (data.has(key) ? data.get(key) : null),",
+        "assert.equal(storage.data.get(UNREADABLE_KEY), raw);",
+        "assert.equal(storage.data.get(UNREADABLE_KEY), \"garbage\");"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 13,
+      "feedback": 1
+    }
+  },
+  "02-noteboard-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "BOOL001": 2,
+        "DEF001": 11,
+        "DEF002": 3,
+        "DEF004": 1,
+        "EXC001": 4,
+        "MAGIC001": 6,
+        "STATE001": 4
+      },
+      "outside_tests": {
+        "BOOL001": 2,
+        "DEF001": 10,
+        "DEF002": 3,
+        "DEF004": 1,
+        "EXC001": 4,
+        "MAGIC001": 4,
+        "STATE001": 4
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ", and reported only once (0.158417ms)\n\u2714 unreadable data (not an array) is reported, backed up, and reported only once (0.082625ms)\n\u2714 unreadable data (bad entry) is reported, backed up, and reported only once (0.057791ms)\n\u2714 unreadable data (duplicate ids) is reported, backed up, and reported only once (0.057ms)\n\u2714 if the backup cannot be written, the original data is left alone (0.105375ms)\n\u2714 storage that throws on read is reported (0.061334ms)\n\u2714 save failure is returned as a message (0.063292ms)\n\u2139 tests 20\n\u2139 suites 0\n\u2139 pass 20\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 53.681166\n"
+    },
+    "structure": {
+      "files": 12,
+      "lines": 640,
+      "functions": 73,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "let li = existing.get(note.id);",
+        "getItem: (k) => (data.has(k) ? data.get(k) : null),"
+      ]
+    }
+  },
+  "03-contactclean-r1-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 2,
+        "EXC001": 2,
+        "MAGIC001": 15
+      },
+      "outside_tests": {
+        "EXC001": 2
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..contactclean: /tmp/tmpw59vpvc_/in.csv is empty: no header row\n..contactclean: cannot parse /tmp/tmpgcfpb5z_/in.csv as CSV: unexpected end of data\n...contactclean: cannot read /tmp/tmph4_m4ccz/absent.csv: [Errno 2] No such file or directory: '/tmp/tmph4_m4ccz/absent.csv'\n.contactclean: /tmp/tmpwf_fbu8z/in.csv header lacks column(s): name\n.contactclean: cannot read /tmp/tmpfp56gh42/in.csv: 'utf-8' codec can't decode byte 0xff in position 34: invalid start byte\n.....................\n----------------------------------------------------------------------\nRan 30 tests in 0.081s\n\nOK\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 764,
+      "functions": 68,
+      "try_blocks": 2,
+      "frozen_dataclasses": 8,
+      "parameter_defaults": 2,
+      "module_constants": 23,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_INPUT_UNREADABLE = 2  # shockharness: ignore[MAGIC001] reason=\"exit status for unreadable input, defined in SPEC.md\""
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except csv.Error as exc:"
+      ]
+    },
+    "hook_blocks": 5,
+    "hook_log": {
+      "runs": 17,
+      "feedback": 5
+    }
+  },
+  "03-contactclean-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 18,
+        "DEF002": 1,
+        "DEF003": 2,
+        "EXC001": 6,
+        "EXC002": 1,
+        "MAGIC001": 50
+      },
+      "outside_tests": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "DEF001": 15,
+        "DEF002": 1,
+        "DEF003": 2,
+        "EXC001": 6,
+        "EXC002": 1,
+        "MAGIC001": 22
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..................................\n----------------------------------------------------------------------\nRan 34 tests in 0.314s\n\nOK\n"
+    },
+    "structure": {
+      "files": 9,
+      "lines": 720,
+      "functions": 63,
+      "try_blocks": 6,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 7,
+      "module_constants": 13,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "rows.append((index, {key: raw.get(orig) for key, orig in headers.items()}))",
+        "return raw.get(col) or \"\"",
+        "rule = COUNTRY_RULES.get(country)"
+      ],
+      "truthiness_fallback": [
+        "return raw.get(col) or \"\"",
+        "if local.startswith(\".\") or local.endswith(\".\") or \"..\" in local:"
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError, csv.Error, ValueError) as exc:",
+        "except OSError as exc:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def normalize_birthday(raw: str, today: _dt.date | None = None) -> str:"
+      ],
+      "empty_string_miss": [
+        "return \"\"",
+        "return \"\""
+      ]
+    }
+  },
+  "03-contactclean-r2-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 1,
+        "EXC001": 4,
+        "MAGIC001": 11
+      },
+      "outside_tests": {
+        "EXC001": 4
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..........................\n----------------------------------------------------------------------\nRan 26 tests in 0.008s\n\nOK\n"
+    },
+    "structure": {
+      "files": 9,
+      "lines": 745,
+      "functions": 57,
+      "try_blocks": 4,
+      "frozen_dataclasses": 8,
+      "parameter_defaults": 1,
+      "module_constants": 27,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "collection_length_count": [
+        "if len(positions) != len([name for name in names if name in INPUT_COLUMNS]):"
+      ],
+      "new_suppression": [
+        "EXIT_UNREADABLE_INPUT = 2  # shockharness: ignore[MAGIC001] reason=\"SPEC.md: exit 2 when the input cannot be read\""
+      ],
+      "catch_fallback": [
+        "except UnreadableInputError as exc:",
+        "except InputFormatError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except csv.Error as exc:"
+      ],
+      "empty_string_miss": [
+        "return \"\""
+      ]
+    },
+    "hook_blocks": 3,
+    "hook_log": {
+      "runs": 13,
+      "feedback": 3
+    }
+  },
+  "03-contactclean-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "BATCH001": 1,
+        "BOOL001": 4,
+        "CPLX001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 20,
+        "DEF003": 2,
+        "DEF005": 1,
+        "EXC001": 7,
+        "EXC002": 2,
+        "MAGIC001": 47
+      },
+      "outside_tests": {
+        "BATCH001": 1,
+        "BOOL001": 4,
+        "CPLX001": 1,
+        "CPLX002": 1,
+        "CPLX004": 1,
+        "DEF001": 14,
+        "DEF003": 2,
+        "DEF005": 1,
+        "EXC001": 7,
+        "EXC002": 2,
+        "MAGIC001": 18
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".........................\n----------------------------------------------------------------------\nRan 25 tests in 0.039s\n\nOK\n"
+    },
+    "structure": {
+      "files": 9,
+      "lines": 692,
+      "functions": 47,
+      "try_blocks": 7,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 10,
+      "module_constants": 13,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "values = {k: (raw.get(k) or \"\").strip() for k in INPUT_FIELDS}"
+      ],
+      "truthiness_fallback": [
+        "values = {k: (raw.get(k) or \"\").strip() for k in INPUT_FIELDS}"
+      ],
+      "catch_fallback": [
+        "except InvalidValue as err:",
+        "except InvalidValue as err:",
+        "except InvalidValue as err:",
+        "except (OSError, UnicodeDecodeError, csv.Error) as err:",
+        "except InputError as err:",
+        "except ValueError:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def normalize_birthday(value: str, today: date | None = None) -> str:"
+      ]
+    }
+  },
+  "03-contactclean-r3-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 4,
+        "MAGIC001": 13
+      },
+      "outside_tests": {
+        "EXC001": 4
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".............................\n----------------------------------------------------------------------\nRan 29 tests in 0.010s\n\nOK\n"
+    },
+    "structure": {
+      "files": 13,
+      "lines": 807,
+      "functions": 67,
+      "try_blocks": 3,
+      "frozen_dataclasses": 10,
+      "parameter_defaults": 0,
+      "module_constants": 26,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_UNREADABLE_INPUT = 2  # shockharness: ignore[MAGIC001] reason=\"SPEC.md: exit 2 when the input cannot be read\""
+      ],
+      "catch_fallback": [
+        "except InputError as exc:",
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except csv.Error as exc:"
+      ],
+      "empty_string_miss": [
+        "return \"\""
+      ]
+    },
+    "hook_blocks": 5,
+    "hook_log": {
+      "runs": 18,
+      "feedback": 5
+    }
+  },
+  "03-contactclean-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "BATCH001": 1,
+        "CPLX001": 1,
+        "CPLX002": 3,
+        "DEF001": 14,
+        "DEF002": 2,
+        "DEF003": 2,
+        "DEF005": 1,
+        "EXC001": 8,
+        "EXC002": 2,
+        "MAGIC001": 41
+      },
+      "outside_tests": {
+        "BATCH001": 1,
+        "CPLX001": 1,
+        "CPLX002": 3,
+        "DEF001": 13,
+        "DEF002": 2,
+        "DEF003": 2,
+        "DEF005": 1,
+        "EXC001": 8,
+        "EXC002": 2,
+        "MAGIC001": 18
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...........................\n----------------------------------------------------------------------\nRan 27 tests in 0.038s\n\nOK\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 704,
+      "functions": 53,
+      "try_blocks": 8,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 4,
+      "module_constants": 14,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "value = raw.get(key)",
+        "plan = _COUNTRIES.get(country)"
+      ],
+      "truthiness_fallback": [
+        "normalized = [(f or \"\").strip().lower() for f in fieldnames]",
+        "if local.startswith(\".\") or local.endswith(\".\") or \"..\" in local:",
+        "return False  # NANP exchange code cannot start with 0 or 1"
+      ],
+      "catch_fallback": [
+        "except (OSError, UnicodeDecodeError, InputError) as exc:",
+        "except csv.Error as exc:",
+        "except csv.Error as exc:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:",
+        "except InvalidValue as exc:",
+        "except ValueError:",
+        "except ValueError:"
+      ],
+      "sentinel_default": [
+        "def main(argv: list[str] | None = None) -> int:",
+        "def clean(stream: TextIO, today: date | None = None) -> CleanResult:",
+        "def normalize_birthday(value: str, today: date | None = None) -> str:"
+      ],
+      "empty_string_miss": [
+        "return \"\"",
+        "return \"\""
+      ]
+    }
+  },
+  "04-jobqueue-r1-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "MAGIC001": 43,
+        "SLEEP001": 1
+      },
+      "outside_tests": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...............\n----------------------------------------------------------------------\nRan 15 tests in 0.224s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 555,
+      "functions": 41,
+      "try_blocks": 1,
+      "frozen_dataclasses": 4,
+      "parameter_defaults": 5,
+      "module_constants": 3,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[object]], *args: object) -> int:"
+      ]
+    },
+    "hook_blocks": 0,
+    "hook_log": {
+      "runs": 9,
+      "feedback": 0
+    }
+  },
+  "04-jobqueue-r1-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "CPLX002": 1,
+        "DEF001": 18,
+        "EXC001": 7,
+        "MAGIC001": 90,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 6
+      },
+      "outside_tests": {
+        "ASYNC003": 1,
+        "CPLX002": 1,
+        "DEF001": 17,
+        "EXC001": 6,
+        "MAGIC001": 5,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 6
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "...............................\n----------------------------------------------------------------------\nRan 31 tests in 1.084s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 758,
+      "functions": 67,
+      "try_blocks": 4,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 10,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "raise ValueError(\"timeout must be positive or None\")",
+        "raise ValueError(\"max_delay must be non-negative or None\")"
+      ],
+      "catch_fallback": [
+        "except asyncio.CancelledError:",
+        "except Exception as exc:",
+        "except RetryableError as exc:",
+        "except TimeoutError as exc:",
+        "except asyncio.CancelledError as exc:",
+        "except Exception as exc:",
+        "except asyncio.CancelledError:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: Summary | None = None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  },
+  "04-jobqueue-r2-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "MAGIC001": 53,
+        "SLEEP001": 1
+      },
+      "outside_tests": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "................\n----------------------------------------------------------------------\nRan 16 tests in 0.422s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 603,
+      "functions": 48,
+      "try_blocks": 1,
+      "frozen_dataclasses": 3,
+      "parameter_defaults": 5,
+      "module_constants": 3,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[object]], *args: object) -> int:"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 11,
+      "feedback": 1
+    }
+  },
+  "04-jobqueue-r2-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "CPLX002": 2,
+        "DEF001": 16,
+        "EXC001": 7,
+        "MAGIC001": 77,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 5
+      },
+      "outside_tests": {
+        "ASYNC003": 1,
+        "CPLX002": 2,
+        "DEF001": 16,
+        "EXC001": 6,
+        "MAGIC001": 5,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 5
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".....................\n----------------------------------------------------------------------\nRan 21 tests in 0.530s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 641,
+      "functions": 50,
+      "try_blocks": 3,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 7,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "raise ValueError(\"timeout must be positive or None\")",
+        "raise ValueError(\"max_delay must be >= 0 or None\")"
+      ],
+      "catch_fallback": [
+        "except asyncio.CancelledError:",
+        "except Exception as exc:",
+        "except TimeoutError as exc:",
+        "except RetryableError as exc:",
+        "except asyncio.CancelledError:",
+        "except Exception as exc:",
+        "except asyncio.CancelledError:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: Summary | None = None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  },
+  "04-jobqueue-r3-gated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "MAGIC001": 43,
+        "SLEEP001": 1
+      },
+      "outside_tests": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..............\n----------------------------------------------------------------------\nRan 14 tests in 0.479s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 544,
+      "functions": 45,
+      "try_blocks": 1,
+      "frozen_dataclasses": 2,
+      "parameter_defaults": 5,
+      "module_constants": 3,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[object]], *args: object) -> int:"
+      ]
+    },
+    "hook_blocks": 1,
+    "hook_log": {
+      "runs": 5,
+      "feedback": 1
+    }
+  },
+  "04-jobqueue-r3-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "DEF001": 18,
+        "DEF004": 1,
+        "EXC001": 8,
+        "EXC002": 1,
+        "MAGIC001": 79,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 6
+      },
+      "outside_tests": {
+        "ASYNC003": 1,
+        "DEF001": 16,
+        "DEF004": 1,
+        "EXC001": 7,
+        "EXC002": 1,
+        "MAGIC001": 5,
+        "RETRY001": 1,
+        "SLEEP001": 1,
+        "TYPE001": 6
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "..........................\n----------------------------------------------------------------------\nRan 26 tests in 1.141s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 726,
+      "functions": 62,
+      "try_blocks": 6,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 10,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "truthiness_fallback": [
+        "raise ValueError(\"timeout must be > 0 or None\")"
+      ],
+      "catch_fallback": [
+        "except KeyError:",
+        "except asyncio.QueueEmpty:",
+        "except asyncio.CancelledError:",
+        "except Exception as exc:  # a bug in the queue itself, not in the job",
+        "except TimeoutError as exc:",
+        "except asyncio.CancelledError:",
+        "except Exception as exc:",
+        "except asyncio.CancelledError:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors: list[BaseException], summary: Summary | None = None):",
+        "def _raise_if_errors(self, summary: Summary | None = None) -> None:"
+      ],
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn: Callable[..., Awaitable[Any]], *args: Any) -> int:"
+      ]
+    }
+  }
+}

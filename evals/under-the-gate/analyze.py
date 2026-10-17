@@ -71,7 +71,18 @@ def check(tree: Path, shockharness: str) -> dict:
         if finding["suppression"] is None:
             by_rule[finding["rule_id"]] = by_rule.get(finding["rule_id"], 0) + 1
     suppressed = len([f for f in report["findings"] if f["suppression"] is not None])
-    return {"by_rule": dict(sorted(by_rule.items())), "suppressed": suppressed}
+    # Round 3 exempts tests from MAGIC001 and DEF001 (spec 21.1 decision 35), so the
+    # findings outside test files are counted too.
+    roles = {f["path"]: f["role"] for f in report["files"]}
+    outside: dict[str, int] = {}
+    for finding in report["findings"]:
+        if finding["suppression"] is None and roles.get(finding["path"]) != "test":
+            outside[finding["rule_id"]] = outside.get(finding["rule_id"], 0) + 1
+    return {
+        "by_rule": dict(sorted(by_rule.items())),
+        "outside_tests": dict(sorted(outside.items())),
+        "suppressed": suppressed,
+    }
 
 
 def tests(tree: Path) -> dict:

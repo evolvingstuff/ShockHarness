@@ -4241,3 +4241,31 @@ Evidence: tests/unit/test_defaults.py (statement forms, both orders, the
 environment case, a branch that raises; helpers in all five shapes, positional
 and keyword defaults, a method not followed, a fixed-default helper, modes
 forbid / review / allow and the deviation); 1201 tests pass.
+
+## Under-the-gate experiment, round 3 — DONE (2026-10-17)
+
+On Tom's go-ahead: decision 35's setup.
+* `build.sh` writes `init`'s configuration (tests exempt) and commits each build's setup
+  before the builder starts.
+* `review.sh` gives reviewers the setup configuration.
+* `analyze.py` also counts findings outside tests.
+
+The run was 24 builds on Opus 5.5 (about $19.50 notional, Tom's subscription) and 12
+reviews. The write-up is in `evals/under-the-gate/RESULTS-round3.md`, the evidence in
+`round3/`, and every quoted evasion was checked in the code.
+
+* **Test disguises:** gone. No test values in data files, no `Number("3000")`; tests
+  state values plainly.
+* **Production code:** no worse. Findings outside tests are 1-10 per build, the same as
+  round 2 recomputed.
+* **Configuration:** no builder switched a rule off. All 23 config edits are one-file
+  boundaries, so the hook never fed back a VERIFY003.
+* **Spec values:** contactclean now suppresses exit 2 honestly instead of
+  `EXIT_REPORTED + 1`.
+* **What remains:** production disguises, mostly because strict MAGIC001 refuses named
+  constants (`"  "` indent ×5, `REPORT_INDENT = True`, `len(calendar.month_name)` ×3,
+  `HEADER_ROW + 1` ×2). Two rules pushed legitimate code into longhand: DEF002 on
+  grouping `setdefault`, DEF005 on `except ValueError: return None`. Also pre-emptive
+  boundaries, `SystemExit` subclasses and ritual `python -O` guards.
+* **Recommendations:** six new rows in `docs/ideas.md`. The biggest, allowing named
+  constants in strict MAGIC001, is Tom's decision.

@@ -1,0 +1,16 @@
+{"time": "2026-10-17T18:57:14+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:17+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:22+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:25+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:00+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:18+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:25+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:54+00:00", "tool": "Bash", "files": ["feedcheck/__init__.py", "feedcheck/__main__.py", "feedcheck/config.py", "feedcheck/fetch.py"], "findings": 7, "details": ["EXC001 feedcheck/config.py:40", "EXC001 feedcheck/config.py:42", "EXC001 feedcheck/config.py:47", "EXC001 feedcheck/fetch.py:42", "EXC001 feedcheck/fetch.py:44", "EXC001 feedcheck/fetch.py:50", "EXC001 feedcheck/fetch.py:52"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:05+00:00", "tool": "Bash", "files": [".shockharness.toml", "feedcheck/fetch.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:41+00:00", "tool": "Bash", "files": ["feedcheck/check.py", "feedcheck/cli.py", "feedcheck/health.py"], "findings": 1, "details": ["CPLX004 feedcheck/health.py:33"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:50+00:00", "tool": "Bash", "files": ["feedcheck/cli.py", "feedcheck/health.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:00:53+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_feedcheck.py"], "findings": 2, "details": ["DEF002 tests/test_feedcheck.py:47", "DEF002 tests/test_feedcheck.py:48"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:01:08+00:00", "tool": "Bash", "files": ["tests/test_feedcheck.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:01:18+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:01:32+00:00", "tool": "Bash", "files": ["tests/test_feedcheck.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:01:45+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

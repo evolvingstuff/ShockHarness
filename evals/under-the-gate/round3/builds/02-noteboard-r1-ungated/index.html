@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>noteboard</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #1d1d1f; background: #f4f4f6; }
+    body { margin: 0; padding: 2rem 1rem 6rem; }
+    main { max-width: 40rem; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 1.4rem; }
+    button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid #c8c8cc; background: #fff; padding: .35rem .8rem; }
+    button.danger { background: #c62828; border-color: #c62828; color: #fff; }
+    #notes { list-style: none; padding: 0; display: grid; gap: .6rem; }
+    .note { display: flex; gap: .5rem; align-items: flex-start; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: .7rem; }
+    .note.pinned { border-color: #e0a800; background: #fffbea; }
+    .note.editing { outline: 2px solid #3366cc; }
+    .note-text { flex: 1; white-space: pre-wrap; min-height: 1.4em; cursor: text; }
+    .note-text.placeholder { color: #999; font-style: italic; }
+    .note-editor { flex: 1; min-height: 5rem; font: inherit; resize: vertical; }
+    .note-toolbar { display: flex; gap: .25rem; }
+    .icon-btn { display: inline-flex; padding: .3rem; border: none; background: transparent; color: #555; }
+    .icon-btn:hover { background: #eee; }
+    .icon-btn[aria-pressed="true"] { color: #b07d00; }
+    .empty { color: #888; text-align: center; padding: 2rem; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / .35); display: grid; place-items: center; z-index: 10; }
+    .modal { background: #fff; border-radius: 10px; padding: 1.2rem 1.4rem; max-width: 22rem; box-shadow: 0 10px 30px rgb(0 0 0 / .2); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    .toasts { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); display: grid; gap: .4rem; z-index: 20; }
+    .toast { display: flex; align-items: center; gap: .6rem; background: #222; color: #fff; padding: .5rem .5rem .5rem 1rem; border-radius: 8px; }
+    .toast-error { background: #a52020; }
+    .toast .icon-btn { color: #fff; }
+    .toast .icon-btn:hover { background: rgb(255 255 255 / .15); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>noteboard</h1>
+      <button type="button" id="add-note">New note</button>
+    </header>
+    <ul id="notes" aria-label="Notes"></ul>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

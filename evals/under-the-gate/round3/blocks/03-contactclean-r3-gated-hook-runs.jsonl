@@ -1,0 +1,18 @@
+{"time": "2026-10-17T19:07:01+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:08+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:01+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:06+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:26+00:00", "tool": "Bash", "files": ["contactclean/__init__.py", "contactclean/__main__.py", "contactclean/birthday.py", "contactclean/emails.py", "contactclean/fields.py", "contactclean/results.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:44+00:00", "tool": "Bash", "files": ["contactclean/phone.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:56+00:00", "tool": "Bash", "files": ["contactclean/phone.py", "contactclean/reader.py"], "findings": 1, "details": ["EXC003 contactclean/reader.py:23"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:09:02+00:00", "tool": "Bash", "files": ["contactclean/reader.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:09:26+00:00", "tool": "Write", "files": ["contactclean/clean.py"], "findings": 2, "details": ["MAGIC001 contactclean/clean.py:14", "DEF002 contactclean/clean.py:179"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:09:44+00:00", "tool": "Bash", "files": ["contactclean/clean.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:09:54+00:00", "tool": "Bash", "files": ["contactclean/cli.py"], "findings": 1, "details": ["MAGIC001 contactclean/cli.py:17"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:10:08+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:10:27+00:00", "tool": "Bash", "files": [".shockharness.toml", "contactclean/__main__.py", "contactclean/cli.py"], "findings": 1, "details": ["DEF005 contactclean/cli.py:49"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:10:35+00:00", "tool": "Bash", "files": ["contactclean/cli.py", "contactclean/phone.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:11:13+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_cli.py", "tests/test_fields.py"], "findings": 1, "details": ["EXC001 tests/test_cli.py:32"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:11:23+00:00", "tool": "Bash", "files": ["tests/test_cli.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:11:29+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:11:33+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

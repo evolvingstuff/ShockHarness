@@ -1,0 +1,12 @@
+{"time": "2026-10-17T18:54:29+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:54:32+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:54:38+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:55:32+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:56:46+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:41+00:00", "tool": "Bash", "files": ["feedcheck/__init__.py", "feedcheck/__main__.py", "feedcheck/check.py", "feedcheck/cli.py", "feedcheck/config.py", "feedcheck/fetch.py", "feedcheck/health.py", "feedcheck/report.py"], "findings": 10, "details": ["EXC001 feedcheck/check.py:72", "EXC001 feedcheck/cli.py:28", "EXC001 feedcheck/config.py:44", "EXC001 feedcheck/config.py:53", "EXC001 feedcheck/fetch.py:49", "EXC001 feedcheck/fetch.py:61", "EXC001 feedcheck/health.py:38", "EXC001 feedcheck/health.py:42", "EXC001 feedcheck/health.py:76", "EXC001 feedcheck/health.py:97"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:52+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:58+00:00", "tool": "Bash", "files": ["feedcheck/cli.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:01+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_feedcheck.py"], "findings": 2, "details": ["CPLX001 tests/test_feedcheck.py:61", "CPLX002 tests/test_feedcheck.py:61"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:15+00:00", "tool": "Bash", "files": ["tests/test_feedcheck.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:59:40+00:00", "tool": "Bash", "files": ["feedcheck/__main__.py", "feedcheck/cli.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:00:02+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

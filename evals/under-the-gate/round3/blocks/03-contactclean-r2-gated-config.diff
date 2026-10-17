@@ -1,0 +1,16 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..56fcd74 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,10 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "contactclean/csvio.py", language = "python", exceptions = ["OSError", "UnicodeDecodeError", "csv.Error"], reason = "File and CSV I/O on the user's input; each failure becomes UnreadableInputError (exit 2 per SPEC.md)" },
++  { path = "contactclean/cli.py", language = "python", exceptions = ["contactclean.csvio.UnreadableInputError", "contactclean.clean.InputFormatError"], reason = "Command-line entry point: an input that cannot be read is reported on stderr with exit 2 per SPEC.md" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true

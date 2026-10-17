@@ -1,0 +1,16 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..d972afa 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,10 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "src/storage.js", language = "javascript", exception = "SyntaxError", reason = "Decoding text read from localStorage, which the program does not control; a parse failure becomes a typed UnreadableNotesError carrying the raw text" },
++  { path = "src/load.js", language = "javascript", exception = "UnreadableNotesError", reason = "Startup boundary: unreadable stored notes are quarantined under another key and reported to the user once, as SPEC.md requires, instead of crashing the page" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true

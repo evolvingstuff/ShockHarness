@@ -1,0 +1,19 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..e593110 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,13 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "feedcheck/config.py", language = "python", exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"], reason = "Reading and parsing the user's config file; a failure becomes a typed ConfigError" },
++  { path = "feedcheck/cli.py", language = "python", exception = "feedcheck.config.ConfigError", reason = "A bad config stops the tool with a clear message and exit status 2 before any feed is fetched" },
++  { path = "feedcheck/fetch.py", language = "python", exceptions = ["OSError", "http.client.HTTPException"], reason = "Network I/O to a feed server; a failure becomes a typed FeedUnreachable" },
++  { path = "feedcheck/check.py", language = "python", exception = "feedcheck.fetch.FeedUnreachable", reason = "A feed server that does not answer is retried, then reported as unreachable" },
++  { path = "feedcheck/health.py", language = "python", exceptions = ["json.JSONDecodeError", "UnicodeDecodeError", "ValueError", "feedcheck.health.InvalidFeed"], reason = "Decoding an external feed body and its timestamps; an invalid feed is reported as unhealthy with its reason" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true

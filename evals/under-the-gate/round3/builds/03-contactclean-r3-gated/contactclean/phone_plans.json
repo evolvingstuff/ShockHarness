@@ -1,0 +1,10 @@
+{
+  "source": "ITU-T E.164 (at most 15 digits) and the national numbering plans of each country",
+  "unverified_pattern": "\\+?\\d{1,15}",
+  "countries": {
+    "US": {"calling_code": "1", "trunk_prefix": "1", "national_pattern": "[2-9]\\d{2}[2-9]\\d{6}"},
+    "GB": {"calling_code": "44", "trunk_prefix": "0", "national_pattern": "[1-9]\\d{8,9}"},
+    "DE": {"calling_code": "49", "trunk_prefix": "0", "national_pattern": "[1-9]\\d{5,12}"},
+    "FR": {"calling_code": "33", "trunk_prefix": "0", "national_pattern": "[1-9]\\d{8}"}
+  }
+}

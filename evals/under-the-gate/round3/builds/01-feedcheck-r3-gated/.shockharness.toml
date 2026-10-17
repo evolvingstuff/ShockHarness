@@ -1,0 +1,707 @@
+# Bundled defaults: the "strict" profile. Loaded from the package, lowest
+# precedence tier. User configuration is validated against the same schema and
+# merged over these values; lists replace, tables merge key by key.
+
+[tool.shockharness]
+profile = "strict"
+# TypeScript (.ts, .tsx, .mts, .cts) since H-TS; declaration files (.d.ts) hold types only
+# and are excluded.
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+parse_errors = "fail"
+# A file that `include` matches but no adapter can parse (.pyx, .vue):
+# "fail" -> analysis failure, exit 3, like an unparseable file; "warn" -> listed under
+# coverage.unsupported_sources with a warning line; "ignore" -> only counted. Files that
+# `include` does not match or `exclude` drops are never affected.
+unsupported_sources = "warn"
+follow_symlinks = false
+# Each entry disables rules either for path globs (`paths = [...]`) or for file roles
+# (`roles = ["test"]`): exactly one of the two, a non-empty `disable` list and a `reason`.
+# Every entry is reported as a policy deviation.
+overrides = [
+  { roles = ["test"], disable = ["MAGIC001", "DEF001"], reason = "Test code states literal expected values, and test helpers and fixtures take keyword defaults (written by shockharness init; remove it to hold tests to every rule)" },
+]
+
+# File roles (H1). Every analyzed file gets exactly one role: the first of generated,
+# vendor, config, test, docs whose globs match its path (same glob rules as include),
+# else production. Roles never change which files are discovered or analyzed; they label
+# files in the report (files[].role, coverage.roles, summary.by_role) and scope
+# [[overrides]] (`roles = [...]`) and the MAGIC001 configuration-file exemption. A list
+# set here replaces the default list for that role.
+[tool.shockharness.file_roles]
+generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
+vendor = ["**/vendor/**", "**/third_party/**"]
+# Tooling configuration rather than application source. The default is the list that
+# rules.magic_numbers.configuration_files had in 0.3.0; that key is the legacy spelling
+# and, when a configuration sets it, its globs are merged into this role.
+config = [
+  "conftest.py",
+  "setup.py",
+  "*.config.js",
+  "*.config.mjs",
+  "*.config.cjs",
+  "*.conf.js",
+  "*.conf.cjs",
+  "*.config.ts",
+  "*.config.mts",
+  "*.config.cts",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  "gulpfile.js",
+  "Gruntfile.js",
+]
+# conftest.py is config by default (config precedes test); **/conftest.py below applies
+# when the config list leaves it out.
+test = [
+  "tests/**",
+  "test/**",
+  "**/__tests__/**",
+  "**/test_*.py",
+  "**/*_test.py",
+  "**/*.test.js",
+  "**/*.spec.js",
+  "**/*.test.mjs",
+  "**/*.spec.mjs",
+  "**/*.test.ts",
+  "**/*.spec.ts",
+  "**/*.test.tsx",
+  "**/*.spec.tsx",
+  "**/*.test.mts",
+  "**/*.spec.mts",
+  "**/conftest.py",
+]
+docs = ["docs/**"]
+
+[tool.shockharness.rules.magic_numbers]
+enabled = true
+# "error": MAGIC001 findings fail the gate. "review": reported, never gating (a deviation).
+severity = "error"
+allowed_values = [0, 1]
+# -1 (a unary minus over 1) is allowed: Python's last-item and all-but-last idioms
+# (items[-1], text[:-1]) and JavaScript's indexOf / findIndex "not found" (H6 feedback
+# from MetaList: 262 findings, none a hidden meaning). false reports it like any other
+# literal. A -1 that stands for a project's own meaning is MAGIC003's (rules.sentinels).
+allow_unary_negative_one = true
+# A numeric literal that is the whole value of a module-level constant definition
+# (MAX_PAGES = 8, _WAIT: Final = 10.0, const SETTLE_MS = 400, export const N = 3):
+# "report" (strict: a named constant is not automatically justified) or "allow" (the
+# name is the remedy MAGIC001 asks for; the recommended and minimal profiles). Literals
+# inside containers, expressions, functions and class bodies are reported either way.
+named_constant_definitions = "report"
+# A finding with status "unknown" is one where the rule could not establish the property
+# (an unresolved identity, an unproven receiver type). false: unknown findings are
+# reported and counted (gate.unknown) but never fail the gate; true: they gate by their
+# severity like any other finding. Setting a family below its profile's value is a policy
+# deviation. MAGIC001 never produces unknown findings today.
+fail_on_unknown = false
+# true: files that the config role's globs match are exempt from MAGIC001 and the
+# exemption is listed in the report (files[].rules_disabled).
+exclude_configuration_files = true
+# Legacy spelling of file_roles.config (kept through 0.x). Its default equals the default
+# config role; a configuration that sets it replaces this list as in 0.3.0 and its globs
+# join the config role (merged with file_roles.config when that is set too).
+configuration_files = [
+  "conftest.py",
+  "setup.py",
+  "*.config.js",
+  "*.config.mjs",
+  "*.config.cjs",
+  "*.conf.js",
+  "*.conf.cjs",
+  "*.config.ts",
+  "*.config.mts",
+  "*.config.cts",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".prettierrc.js",
+  ".prettierrc.cjs",
+  "gulpfile.js",
+  "Gruntfile.js",
+]
+
+[tool.shockharness.rules.sentinels]        # MAGIC003 (decision 30)
+enabled = true
+severity = "review"                        # the meaning cannot be known
+roles = ["production"]
+# The values reported where they stand for a value; only values MAGIC001 permits are
+# checked. Adding 0 or 1 is possible, and noisy (counters and flags start there).
+values = [-1]
+# Callees whose arguments are indexes or counts, where -1 is not a sentinel ("name" is a
+# qualified callee, ".name" a method on any receiver). Adding one is a deviation.
+python_index_callees = [
+  "range", "slice", "itertools.islice", ".pop", ".insert", ".split", ".rsplit",
+  ".replace", ".reshape", ".view", ".unsqueeze", ".squeeze",
+]
+javascript_index_callees = [
+  ".slice", ".at", ".splice", ".substr", ".substring", ".charAt", ".charCodeAt",
+  ".codePointAt", ".indexOf", ".lastIndexOf", ".includes", ".subarray",
+]
+# Names (the last part of an assigned name, or an entry's key) whose -1 a platform
+# standard defines: HTML's tabIndex = -1 is "focusable, not in the Tab order". Adding one
+# is a deviation. A -1 passed to a callee that the same file also passes 1 (move(-1),
+# move(1)) is a direction and is not reported either.
+standard_targets = ["tabIndex"]
+
+[tool.shockharness.rules.magic_strings]    # MAGIC002 (decision 31)
+enabled = true
+# "review" (the default) or "fail" (MAGIC002 findings are errors).
+mode = "review"
+roles = ["production"]
+# A value is reported when it is at least min_length characters long (whitespace aside),
+# appears at least min_occurrences times in at least min_files files...
+min_length = 4
+min_occurrences = 3
+min_files = 2
+# ...and is compared (==, in, case) in at least this many files: a decision string, not a
+# word that happens to repeat. 0 reports every repeated value (noisy).
+min_compared_files = 2
+# The positions counted: "argument", "subscript", "compare", "value"; "key" (dict and
+# object keys) and "jsx" (JSX attribute values) are opt-in.
+kinds = ["argument", "subscript", "compare", "value"]
+# Calls whose string arguments are messages, not constants (the last name of the callee);
+# a callee ending in Error, Exception or Warning is one too.
+message_callees = [
+  "debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log",
+  "print", "trace", "fail", "skip", "xfail",
+]
+# Values never reported. Adding one is a deviation.
+allowed = ["utf-8", "utf8", "__main__", "strict", "replace", "ignore", "ascii"]
+
+[tool.shockharness.rules.exceptions]
+enabled = true
+# "error": EXC001-EXC003 findings fail the gate. "review": reported, never gating.
+severity = "error"
+mode = "boundary_whitelist"
+# EXC001 has always failed closed: an exception type, handler or manager binding that
+# cannot be resolved is reported as an error that fails the gate. Unknown findings keep
+# doing so unless this is set to false (a policy deviation).
+fail_on_unknown = true
+# When true, a handler that only re-raises the caught exception (bare `raise`,
+# `raise err`, `throw err`) passes EXC001 outside any boundary. Off in strict:
+# wrapping and re-raising is not the same as no catch.
+transparent_rethrow = false
+# Guard functions (callee as written: "rethrowUnexpectedError", "errors.rethrow_unexpected")
+# that re-raise anything unexpected and return for expected failures. A handler whose
+# first statement calls a listed guard with the caught exception as its only argument is
+# treated as narrowed by it: EXC001 does not report the catch, and EXC002 classifies the
+# statements after the guard. Every entry is reported as a policy deviation.
+transparent_guards = []
+# A project's own exception-capturing context managers, by qualified name
+# ("app.errors.CapturedExceptionContext"). `with Manager(T1, T2, ...):` is then a catch of
+# T1 and T2 (its positional arguments that name exception types), approved by boundaries
+# like an except handler. `contextlib.suppress(...)` is always such a catch, and one whose
+# handler swallows. Every entry is reported as a policy deviation.
+capture_managers = []
+# Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+# several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+# match `path` for one language. Every entry is reported as a policy deviation.
+boundaries = [
+  { path = "feedcheck/config.py", language = "python", exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"], reason = "Reading and parsing the user's config file; each failure becomes a ConfigError carrying its cause" },
+  { path = "feedcheck/fetch.py", language = "python", exceptions = ["OSError", "http.client.HTTPException"], reason = "Network I/O to a feed; a failure to get an answer becomes a typed NoAnswer outcome reported as unreachable" },
+  { path = "feedcheck/health.py", language = "python", exception = "ValueError", reason = "Decoding external feed data (JSON body, ISO 8601 timestamps); a failure becomes a typed unhealthy verdict" },
+  { path = "feedcheck/cli.py", language = "python", exception = "feedcheck.config.ConfigError", reason = "Entry point: an invalid config stops the tool with a clear message and exit status 1" },
+]
+
+[tool.shockharness.rules.defaults]
+enabled = true
+# "error": each mode below decides the severity. "review": every DEF finding, DEF005
+# included, is capped at review (reported, never gating).
+severity = "error"
+# Each mode: "forbid" -> error (fails the gate), "review" -> reported, never fails,
+# "allow" -> no finding. Anything looser than the strict value below is reported
+# as a policy deviation.
+function_parameters = "forbid"      # DEF001: def f(x=v), function f(x = v), destructured parameter defaults
+dataclass_fields = "forbid"         # DEF001: x: int = v, field(default=...), field(default_factory=...) in a @dataclass
+missing_value_fallbacks = "forbid"  # DEF002: m.get(k, v), getattr(o, a, v), const {x = v} = o, o?.x ?? v
+truthiness_fallbacks = "review"     # DEF003: x or v, x || v (also replace legitimate falsy values)
+nullish_fallbacks = "forbid"        # DEF004: x ?? v, x if x is not None else v
+configuration_fallbacks = "forbid"  # DEF006: os.getenv("X", v), process.env.X || v
+# DEF005 (a handler that returns a default) has no mode: it is always an error.
+# DEF002 on m.get(k, v), m.setdefault(k, v), m.pop(k, v) whose receiver is not proven a
+# mapping is an unknown finding (the verdict depends on the receiver's type); it has
+# always failed the gate, and keeps doing so unless this is false (a policy deviation).
+fail_on_unknown = true
+
+# Verification integrity (VERIFY001, VERIFY002, VERIFY004; H2): compares a head revision
+# with a base revision, so it runs only under `diff` / `gate --base --head`; a plain
+# `check` reports it as not applicable. Findings are policy_integrity and cannot be
+# suppressed inline.
+[tool.shockharness.rules.verification]
+enabled = true
+# Severity of every VERIFY finding: "warning" (default: reported, never gating, per
+# spec 21.1 decision 9), "error" (gates like any hard violation), "review" (a
+# policy deviation).
+severity = "warning"
+# A finding whose base revision could not be analyzed, or whose file's rename could
+# not be determined, is unknown; with this false it is reported and never gates.
+fail_on_unknown = false
+# Reasons (exact strings of a skip marker's reason argument) that make an added skip
+# acceptable; each listed reason is a policy deviation. Python markers only:
+# JavaScript skips carry no reason.
+allowed_skip_reasons = []
+# VERIFY002 reports blanket suppressions always; narrow ones (naming rule codes) only
+# when this is true.
+report_narrow_suppressions = false
+# VERIFY003 findings for a configuration change that switches a rule off (spec 21.1
+# decision 35): every loosening except a catch boundary naming one file. `check` and the
+# edit hook report them against the last accepted configuration, `diff` and `gate
+# --base` against the base revision. "error" (default) fails the gate until a person
+# accepts the change; lower values are a policy deviation.
+rule_switching_severity = "error"
+
+# H3 guardrails (STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001; EXC004 lives in
+# rules.exceptions). Each table's `severity` is the severity of every finding of its rules:
+# "warning" (BOOL001: "review") until the rule's precision is measured (spec 21.1 decision
+# 9), "error" to gate on it, "review" to lower it (a policy deviation). `roles` lists the
+# file roles the rules apply to; removing a role is a policy deviation.
+[tool.shockharness.rules.stubs]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# STUB001 also reports a comment containing one of these markers (e.g. ["TODO", "FIXME"]).
+markers = []
+# STUB002: an import whose module path has one of these segments is test code.
+test_path_segments = ["tests", "test", "__tests__", "fixtures", "mocks", "__mocks__", "conftest"]
+# STUB003 (a check that always answers yes) has its own severity: "review" by default,
+# because a flag that is deliberately always on looks the same.
+stub003_severity = "review"
+# STUB002: mocking and fake-data libraries (an import of one, or below one, is test code).
+mock_modules = [
+  "unittest.mock",
+  "mock",
+  "pytest",
+  "pytest_mock",
+  "faker",
+  "freezegun",
+  "responses",
+  "sinon",
+  "jest",
+  "@jest/globals",
+  "jest-mock",
+  "vitest",
+  "@faker-js/faker",
+  "msw",
+  "nock",
+]
+
+[tool.shockharness.rules.assertions]       # ASSERT001, ASSERT002 (decision 28)
+enabled = true
+severity = "warning"                       # ASSERT001: an assert on external input
+assert002_severity = "review"              # ASSERT002: asserts relied on, -O not refused
+roles = ["production"]
+# An assert that only narrows types (x is not None, isinstance(x, T)) is never reported,
+# even on external input; false reports it like any other assert.
+allow_type_narrowing = true
+# External input for ASSERT001, beyond rules.input's sources and configuration reads:
+# command-line arguments, stdin, files and network reads (".name" is a method on any
+# receiver; "x.*" something below x, not x itself: a variable of os.environ, not the
+# environment handed to a subprocess). An assert on anything else is an internal
+# invariant and is not reported.
+external_reads = [
+  "sys.argv", "sys.stdin", "input", "os.environ.*", "open", ".read_text", ".read_bytes",
+  "json.load", "tomllib.load", "requests.get", "requests.post", "urllib.request.urlopen",
+  ".recv",
+]
+
+[tool.shockharness.rules.dom]               # DOM001 (decision 27), JavaScript and TypeScript
+enabled = true
+severity = "warning"
+roles = ["production"]
+# Classes whose instanceof test on an event target, before .closest(...), drops other
+# elements (SVG icons). A narrower class (HTMLButtonElement) is a deliberate filter.
+classes = ["HTMLElement"]
+# DOM002 (decision 32): the functions holding the skip lists of page-level press handlers
+# that act on presses outside (leave a mode, swallow the next click), as "path:function".
+# Every pressable element attached to document.body must match one selector of each list.
+# Empty: DOM002 reports nothing (most handlers only close their own widget).
+press_exclusions = []
+dom002_severity = "review"
+
+[tool.shockharness.rules.boolean_arguments]
+enabled = true
+severity = "review"
+roles = ["production"]
+# Calls whose last callee segment is listed here are not reported (each addition is a
+# policy deviation); the defaults are the lookups DEF002 already judges.
+allowed_callees = ["get", "getattr", "setattr", "setdefault", "pop", "next"]
+
+[tool.shockharness.rules.module_state]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# [[tool.shockharness.rules.module_state.allowed]] entries (path glob, name, reason)
+# declare a deliberate process-wide binding; each is a policy deviation.
+allowed = []
+
+[tool.shockharness.rules.import_effects]
+enabled = true
+severity = "warning"
+roles = ["production"]
+# Scripts do their work at the top level: IMPORT001 does not apply to a file whose first
+# line is a shebang (#!), nor to a file these globs match that no analyzed file imports.
+# Adding a glob is a policy deviation.
+script_files = ["scripts/**", "bin/**"]
+# Qualified callees that must not run at import time; removing one is a policy deviation.
+python_operations = [
+  "subprocess.run",
+  "subprocess.call",
+  "subprocess.check_call",
+  "subprocess.check_output",
+  "subprocess.Popen",
+  "os.system",
+  "os.popen",
+  "os.remove",
+  "os.unlink",
+  "os.rmdir",
+  "os.removedirs",
+  "shutil.rmtree",
+  "socket.socket",
+  "socket.create_connection",
+  "threading.Thread",
+  "multiprocessing.Process",
+  "urllib.request.urlopen",
+  "requests.get",
+  "requests.post",
+  "requests.put",
+  "requests.patch",
+  "requests.delete",
+  "requests.head",
+  "requests.request",
+  "httpx.get",
+  "httpx.post",
+  "httpx.put",
+  "httpx.patch",
+  "httpx.delete",
+  "httpx.request",
+  "asyncio.run",
+]
+javascript_operations = [
+  "child_process.exec",
+  "child_process.execSync",
+  "child_process.execFile",
+  "child_process.execFileSync",
+  "child_process.spawn",
+  "child_process.spawnSync",
+  "child_process.fork",
+  "fs.rmSync",
+  "fs.rm",
+  "fs.unlinkSync",
+  "fs.unlink",
+  "fs.rmdirSync",
+  "fs.writeFileSync",
+  "fs.writeFile",
+  "net.connect",
+  "net.createConnection",
+  "fetch",
+  "setInterval",
+]
+
+# H4 async lifecycle (ASYNC001-ASYNC003): discarded coroutines and Promises, tasks started
+# without an owner, settled batches whose failures nobody checks. `severity` and `roles`
+# work as in the H3 tables; tests are included because an unawaited coroutine makes a test
+# pass without running its check.
+[tool.shockharness.rules.async_lifecycle]
+enabled = true
+severity = "warning"
+roles = ["production", "test"]
+# A probable call-graph edge (matched by name only) makes an ASYNC001 finding unknown.
+fail_on_unknown = false
+# ASYNC001: coroutine / Promise APIs whose result must not be thrown away (removing one is a
+# policy deviation). Project functions declared async are found through the call graph.
+python_coroutine_apis = [
+  "asyncio.sleep",
+  "asyncio.wait_for",
+  "asyncio.wait",
+  "asyncio.gather",
+  "asyncio.shield",
+  "asyncio.to_thread",
+  "asyncio.open_connection",
+  "asyncio.create_subprocess_exec",
+  "asyncio.create_subprocess_shell",
+]
+javascript_promise_apis = [
+  "fetch",
+  "fs/promises.readFile",
+  "fs/promises.writeFile",
+  "fs/promises.appendFile",
+  "fs/promises.rm",
+  "fs/promises.unlink",
+  "fs/promises.mkdir",
+  "fs/promises.rename",
+  "fs/promises.copyFile",
+  "timers/promises.setTimeout",
+]
+# ASYNC002: context managers whose bound name owns the tasks it creates (`async with
+# asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
+supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
+
+# H5 API-catalog rules. `severity` and `roles` work as in the H3 tables; catalogs list
+# qualified callees resolved through each file's imports (removing one is a deviation).
+[tool.shockharness.rules.processes]        # PROCESS001
+enabled = true
+severity = "warning"
+roles = ["production"]
+python_process_apis = [
+  "subprocess.run",
+  "subprocess.call",
+  "subprocess.check_call",
+  "subprocess.check_output",
+  "subprocess.Popen",
+  "subprocess.getoutput",
+  "subprocess.getstatusoutput",
+  "os.system",
+  "os.popen",
+]
+javascript_process_apis = [
+  "child_process.exec",
+  "child_process.execSync",
+  "child_process.execFile",
+  "child_process.execFileSync",
+  "child_process.spawn",
+  "child_process.spawnSync",
+]
+
+[tool.shockharness.rules.results]          # RESULT001
+enabled = true
+severity = "warning"
+roles = ["production", "test"]
+# A qualified function, or ".name" for a method on any receiver (approximate). "/N" or
+# "/N-M" is the number of positional arguments the pure callee takes: a call with another
+# count is a different method of that name (Thread.join(timeout=1), location.replace(url),
+# Path.replace(p)).
+# A call in a try block with a handler is not reported: it may run for what it raises.
+# A method of a string literal is the str method ("str.join" matches ", ".join(parts));
+# ".join" on a name is not listed: it was Thread.join in every case measured (pytest,
+# pip, hypothesis, MetaList).
+python_must_use = [
+  "sorted",
+  "reversed",
+  "copy.copy",
+  "copy.deepcopy",
+  "dataclasses.replace",
+  "str.join/1",
+  ".strip/0-1",
+  ".lstrip/0-1",
+  ".rstrip/0-1",
+  ".lower/0",
+  ".upper/0",
+  ".casefold/0",
+  ".title/0",
+  ".replace/2-3",
+  ".removeprefix/1",
+  ".removesuffix/1",
+  ".split/0-2",
+  ".format",
+  ".encode/0-2",
+  ".decode/0-2",
+]
+javascript_must_use = [
+  "structuredClone",
+  ".map/1-2",
+  ".filter/1-2",
+  ".concat",
+  ".slice/0-2",
+  ".flat/0-1",
+  ".flatMap/1-2",
+  ".trim/0",
+  ".trimStart/0",
+  ".trimEnd/0",
+  ".toUpperCase/0",
+  ".toLowerCase/0",
+  ".replace/2",
+  ".replaceAll/2",
+  ".padStart/1-2",
+  ".padEnd/1-2",
+  ".repeat/1",
+  ".split/0-2",
+  ".toSorted/0-1",
+  ".toReversed/0",
+  ".toSpliced",
+  ".with/2",
+]
+
+[tool.shockharness.rules.types]            # TYPE001 (Python and TypeScript)
+enabled = true
+severity = "review"
+roles = ["production"]
+# Any / any in an annotation.
+report_any = true
+# cast(...) (Python); x as T and <T>x, except `as const` (TypeScript).
+report_cast = true
+# x! (TypeScript): asserts a value is not null or undefined.
+report_non_null = true
+# # type: ignore (Python); @ts-ignore, @ts-expect-error, @ts-nocheck (TypeScript).
+report_type_ignore = true
+
+[tool.shockharness.rules.sleep]            # SLEEP001
+enabled = true
+severity = "review"
+roles = ["production"]
+python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
+
+[tool.shockharness.rules.retry]            # RETRY001
+enabled = true
+severity = "warning"
+roles = ["production"]
+retry_decorators = [
+  "tenacity.retry",
+  "retrying.retry",
+  "backoff.on_exception",
+  "backoff.on_predicate",
+]
+
+[tool.shockharness.rules.batches]          # BATCH001
+enabled = true
+severity = "warning"
+roles = ["production"]
+
+# ROLE001: is code classified as a test really a test? A production file importing a
+# test-role file is a finding (severity); a test-role file with no test cases is one at
+# empty_test_severity, unless it matches support_files (adding a glob is a deviation).
+[tool.shockharness.rules.role_integrity]
+enabled = true
+severity = "warning"
+empty_test_severity = "review"
+support_files = [
+  "**/conftest.py",
+  "**/__init__.py",
+  "**/fixtures/**",
+  "**/__fixtures__/**",
+  "**/helpers/**",
+  "**/mocks/**",
+  "**/__mocks__/**",
+  "**/factories/**",
+  "**/testing/**",
+  "**/support/**",
+  "**/*fixture*",
+  "**/*helper*",
+  "**/*_support.*",
+  "**/*_utils.*",
+  "**/*.setup.*",
+  "**/setup*.*",
+]
+
+[tool.shockharness.rules.input]            # INPUT001, INPUT002 (H6)
+enabled = true
+severity = "warning"                       # INPUT001
+input002_severity = "review"               # INPUT002: an unset variable may be intended
+roles = ["production"]
+# INPUT001 follows a value across at most this many function boundaries (an argument into
+# a parameter, or a return value back). Lowering it is a deviation.
+max_depth = 3
+# Sources: a qualified read or call ("flask.request.args" matches request.args.get(...)
+# after `from flask import request`); a dotted entry also matches a read rooted at a
+# parameter of that name (a Django view's request.GET, an Express handler's req.body).
+# Remote input only by default: command-line arguments and stdin come from whoever runs
+# the program, who controls it already ("sys.argv", "input", "process.argv" to add them).
+python_sources = [
+  "flask.request.args", "flask.request.form", "flask.request.values", "flask.request.json",
+  "flask.request.get_json", "flask.request.data", "flask.request.get_data",
+  "flask.request.files", "flask.request.cookies", "flask.request.headers",
+  "request.GET", "request.POST", "request.body", "request.query_params",
+]
+javascript_sources = [
+  "req.body", "req.query", "req.params", "req.headers", "req.cookies",
+  "request.body", "request.query", "request.params",
+  "ctx.request.body", "ctx.query", "ctx.params",
+  "event.body", "event.queryStringParameters", "event.pathParameters",
+]
+# Sinks: "callee:N" is the callee's argument N (counted from 0); ".name:N" is a method of
+# that name on any receiver (approximate).
+python_sinks = [
+  "os.system:0", "os.popen:0", "subprocess.run:0", "subprocess.call:0",
+  "subprocess.check_call:0", "subprocess.check_output:0", "subprocess.Popen:0",
+  "eval:0", "exec:0", "pickle.loads:0", "marshal.loads:0", "yaml.load:0",
+  "open:0", "os.remove:0", "os.unlink:0", "shutil.rmtree:0",
+  ".execute:0", ".executemany:0", "flask.redirect:0",
+  "requests.get:0", "requests.post:0", "urllib.request.urlopen:0",
+]
+javascript_sinks = [
+  "child_process.exec:0", "child_process.execSync:0", "child_process.spawn:0",
+  "child_process.spawnSync:0", "child_process.execFile:0", "child_process.execFileSync:0",
+  "eval:0", "Function:0", "vm.runInNewContext:0", "vm.runInThisContext:0",
+  "fs.readFile:0", "fs.readFileSync:0", "fs.writeFile:0", "fs.writeFileSync:0",
+  "fs.unlink:0", "fs.unlinkSync:0", "fs.rm:0", "fs.rmSync:0", "fs.createReadStream:0",
+  "fs/promises.readFile:0", "fs/promises.writeFile:0", "fs/promises.rm:0",
+  ".query:0", ".redirect:0", "fetch:0",
+]
+# Validators: a value passed through one is clean for every sink ("name" is a qualified
+# callee, ".name" a method on any receiver). Adding one is a deviation.
+python_validators = [
+  "int", "float", "bool", "len", "uuid.UUID", "ipaddress.ip_address", "shlex.quote",
+  ".model_validate", ".model_validate_json", ".parse_obj",
+]
+javascript_validators = [
+  "Number", "parseInt", "parseFloat", "Boolean", ".safeParse", ".parse",
+]
+# INPUT002: reads that yield None / undefined when the variable is unset.
+python_config_reads = ["os.getenv", "os.environ.get"]
+javascript_config_reads = ["process.env"]
+
+[tool.shockharness.rules.consistency]      # PROV001, GUARD001 (H6 part two)
+enabled = true
+severity = "review"                        # intent cannot be known
+roles = ["production"]
+# PROV001: a value from one of these is a made-up identifier; one from a call whose name
+# opens with an issuer word is an identifier the program issued.
+python_fabricators = ["uuid.uuid4", "uuid.uuid1", "secrets.token_hex", "secrets.token_urlsafe"]
+javascript_fabricators = ["crypto.randomUUID", "uuid.v4", "uuid.v1", "nanoid.nanoid"]
+issuer_prefixes = ["start", "create", "new", "register", "open", "begin", "issue", "allocate", "insert"]
+# GUARD001: report the unguarded sites when at least guard_min_sites call sites exist and
+# at least guard_min_percent of them share one guard. Raising either is a deviation.
+guard_min_sites = 3
+guard_min_percent = 75
+
+# Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
+# under metrics.complexity and metrics.graph, never failing a plain `check`. Each
+# threshold is compared per unit (function, method, lambda, class body, module body).
+[tool.shockharness.complexity]
+enabled = true
+cognitive_warn = 15        # CPLX002: cognitive/1 above this value
+cyclomatic_warn = 15       # CPLX001: cyclomatic/1 above this value
+max_nesting_warn = 4       # CPLX003: nesting/1 above this value
+cyclomatic_counts_boolean_operators = true   # cyclomatic/1 counts and/or, &&/||/??, ||= etc.
+npath_cap = 10000          # npath/1 saturates here; a saturated value is reported as ">= cap"
+npath_warn = 200           # CPLX004: npath/1 at or above this value, or saturated
+fan_out_warn = 20          # CPLX005: distinct call targets of one unit above this value
+fan_out_severity = "warning"   # CPLX005 fan-out findings: "warning" or "review" (both advisory)
+max_lines_warn = 50        # CPLX006: size/1 logical lines of one unit above this value (module bodies exempt)
+# NPath is the coarsest of the four unit measures and explodes on long runs of independent
+# ifs. When a unit is above both cognitive_warn and npath_warn, true reports it once, as
+# CPLX002, with the NPath number in the same message; false reports CPLX002 and CPLX004.
+npath_only_without_cognitive = true
+# Experimental, diff mode only: flag units whose own cognitive score fell while the
+# decision burden reachable through resolved calls grew. Every result is marked
+# approximate and experimental; there is no rule ID for it.
+abstraction_displacement = false
+# CPLX001-CPLX006 never produce unknown findings today, and are advisory either way.
+fail_on_unknown = false
+
+# Local git history (file-level granularity, never gating). Read with `git log` on the
+# analyzed root; no remote is contacted. When git is missing or the root is not inside a
+# repository the report says `metrics.history.status = "unavailable"` with the reason.
+[tool.shockharness.history]
+enabled = true
+horizon_days = 90     # commits newer than (head commit date - horizon_days) are counted
+min_support = 3       # co-change pairs need at least this many shared commits to be reported
+
+[tool.shockharness.gates]
+new_hard_violations = "fail"
+legacy = "baseline"
+# What a per-unit complexity regression against the base revision means in `diff` and
+# `gate --base/--head`: "warn" lists it in the gate reasons, "fail" fails the gate,
+# "ignore" says nothing. A plain `check` never fails on complexity.
+complexity_regressions = "warn"
+
+# The content-hash cache of per-file results (0.3.0). A file whose bytes, language,
+# effective configuration (digest), tool version and host interpreter are unchanged is
+# not re-parsed or re-checked; everything cross-file (call graph, cycles, diff, baseline
+# matching, history) is recomputed every run. The directory belongs in .gitignore; a
+# relative path resolves against the analysis root. `--no-cache` bypasses it for one run,
+# `baseline create` and revision diffs never read it. The `cache` table is not part of
+# the configuration digest, because it cannot change a result.
+[tool.shockharness.cache]
+enabled = true
+directory = ".shockharness-cache"

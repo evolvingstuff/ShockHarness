@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noteboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; background: #f6f6f4; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    #notes { list-style: none; padding: 0; display: grid; gap: .75rem; }
+    .note { position: relative; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: .75rem 4.5rem .75rem .75rem; cursor: text; min-height: 2.5rem; }
+    .note.pinned { border-color: #c9a227; background: #fffbea; }
+    .note.editing { outline: 2px solid #3a6ff7; }
+    .note-text { margin: 0; white-space: pre-wrap; }
+    .note-text:empty::before { content: "Empty note"; color: #999; }
+    .note-editor { width: 100%; min-height: 5rem; box-sizing: border-box; font: inherit; }
+    .toolbar { position: absolute; top: .5rem; right: .5rem; display: flex; gap: .25rem; }
+    .tool { border: 0; background: transparent; padding: .25rem; border-radius: 4px; cursor: pointer; line-height: 0; }
+    .tool:hover { background: #eee; }
+    .tool[aria-pressed="true"] { color: #c9a227; }
+    .icon { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .modal { border: 0; border-radius: 8px; padding: 1.25rem; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+    .modal-buttons { display: flex; justify-content: flex-end; gap: .5rem; }
+    .danger { background: #c62828; color: #fff; border: 0; border-radius: 4px; padding: .35rem .8rem; }
+    .toast-area { position: fixed; left: 0; right: 0; bottom: 1rem; display: flex; flex-direction: column; align-items: center; gap: .5rem; pointer-events: none; }
+    .toast { pointer-events: auto; display: flex; gap: .75rem; align-items: center; background: #222; color: #fff; padding: .6rem .9rem; border-radius: 6px; max-width: 36rem; }
+    .toast-close { background: transparent; color: inherit; border: 0; font-size: 1.1rem; cursor: pointer; }
+  </style>
+  <script type="module" src="app.js"></script>
+</head>
+<body data-toast-duration-ms="3000">
+  <header>
+    <h1>Noteboard</h1>
+    <button type="button" id="add-note">Add note</button>
+  </header>
+  <ul id="notes"></ul>
+  <div id="toasts" class="toast-area" aria-live="polite"></div>
+</body>
+</html>

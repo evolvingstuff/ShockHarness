@@ -1,0 +1,17 @@
+{"time": "2026-10-17T19:04:05+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:10+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:43+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:50+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:04:57+00:00", "tool": "Bash", "files": ["contactclean/__init__.py", "contactclean/__main__.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:17+00:00", "tool": "Bash", "files": ["contactclean/normalize.py"], "findings": 1, "details": ["DEF005 contactclean/normalize.py:149"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:26+00:00", "tool": "Bash", "files": [".shockharness.toml", "contactclean/normalize.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:49+00:00", "tool": "Bash", "files": ["contactclean/cleaning.py"], "findings": 1, "details": ["MAGIC001 contactclean/cleaning.py:20"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:58+00:00", "tool": "Bash", "files": ["contactclean/normalize.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:06:15+00:00", "tool": "Bash", "files": ["contactclean/cleaning.py"], "findings": 2, "details": ["DEF002 contactclean/cleaning.py:189", "DEF002 contactclean/cleaning.py:191"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:06:24+00:00", "tool": "Bash", "files": ["contactclean/cleaning.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:06:38+00:00", "tool": "Bash", "files": ["contactclean/cli.py"], "findings": 4, "details": ["MAGIC001 contactclean/cli.py:17", "EXC003 contactclean/cli.py:48", "DEF005 contactclean/cli.py:88", "EXC001 contactclean/cli.py:88"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:12+00:00", "tool": "Bash", "files": ["contactclean/cleaning.py", "contactclean/cli.py"], "findings": 2, "details": ["ASSERT001 contactclean/cleaning.py:94", "ASSERT001 contactclean/cleaning.py:96"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:20+00:00", "tool": "Bash", "files": ["contactclean/cleaning.py", "contactclean/cli.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:56+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_cli.py", "tests/test_normalize.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:01+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:04+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

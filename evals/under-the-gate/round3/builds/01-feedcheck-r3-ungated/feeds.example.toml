@@ -1,0 +1,15 @@
+# Seconds to wait for a single attempt before giving up on it.
+timeout_seconds = 10
+# Total attempts for a feed whose server answers 5xx or does not answer at all.
+attempts = 3
+# Delay before the first retry; each later retry waits twice as long.
+backoff_seconds = 1.0
+
+[[feeds]]
+name = "news"
+url = "https://example.com/news.json"
+max_age_hours = 24
+
+[[feeds]]
+name = "archive"
+url = "https://example.com/archive.json"

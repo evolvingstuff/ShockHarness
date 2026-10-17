@@ -11,6 +11,11 @@
 #
 # OUT_DIR/<spec>-r<k>-<variant>/ is the build; OUT_DIR/logs/<same>.jsonl is the
 # builder's tool-call stream (stream-json), from which hook blocks are extracted.
+#
+# Since round 3 (spec 21.1 decision 35) the gated configuration is what `shockharness
+# init` writes (strict, tests exempt from MAGIC001 and DEF001) with the include and
+# exclude below, and each build's setup is committed before the builder starts, so the
+# setup is the accepted configuration and `git status` shows only the builder's work.
 set -euo pipefail
 
 out="$1"
@@ -32,15 +37,17 @@ prepare() {
   mkdir -p "$dir"
   cp "$spec" "$dir/SPEC.md"
   if [ "$variant" = gated ]; then
-    cat > "$dir/.shockharness.toml" <<'TOML'
-[tool.shockharness]
-profile = "strict"
-include = ["**/*.py", "**/*.js", "**/*.mjs"]
-exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
-TOML
+    (cd "$dir" && PATH="$shockharness_bin:$PATH" shockharness init > /dev/null)
+    sed -i '' \
+      -e 's|^include = \[.*|include = ["**/*.py", "**/*.js", "**/*.mjs"]|' \
+      -e 's|^exclude = \[.*|exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]|' \
+      "$dir/.shockharness.toml"
     PATH="$shockharness_bin:$PATH" shockharness skills install --agent claude --project "$dir" --hook > /dev/null
   fi
   git -C "$dir" init -q
+  git -C "$dir" add -A
+  git -C "$dir" -c user.name="under-the-gate setup" -c user.email=setup@example.invalid \
+    commit -q -m "setup"
   echo "$dir"
 }
 

@@ -1,0 +1,25 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..ee5f4c4 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,10 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "src/storage.js", language = "javascript", exception = "SyntaxError", reason = "Stored notes in localStorage are external text; malformed JSON becomes a typed StoredNotesError" },
++  { path = "src/storage.js", language = "javascript", exception = "StoredNotesError", reason = "Unreadable stored notes are set aside under a backup key and reported to the user instead of loaded (SPEC: never silently discarded)" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true
+@@ -311,7 +314,7 @@ classes = ["HTMLElement"]
+ # that act on presses outside (leave a mode, swallow the next click), as "path:function".
+ # Every pressable element attached to document.body must match one selector of each list.
+ # Empty: DOM002 reports nothing (most handlers only close their own widget).
+-press_exclusions = []
++press_exclusions = ["src/floating.js:isFloatingControl"]
+ dom002_severity = "review"
+ 
+ [tool.shockharness.rules.boolean_arguments]

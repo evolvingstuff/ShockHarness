@@ -1,0 +1,13 @@
+{"time": "2026-10-17T19:05:51+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:54+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:05:56+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:06:50+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:06:55+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:13+00:00", "tool": "Write", "files": ["contactclean/normalize.py"], "findings": 4, "details": ["MAGIC001 contactclean/normalize.py:124", "MAGIC001 contactclean/normalize.py:124", "MAGIC001 contactclean/normalize.py:128", "MAGIC001 contactclean/normalize.py:128"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:19+00:00", "tool": "Bash", "files": ["contactclean/normalize.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:41+00:00", "tool": "Write", "files": ["contactclean/clean.py"], "findings": 2, "details": ["CPLX002 contactclean/clean.py:171", "DEF002 contactclean/clean.py:189"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:07:50+00:00", "tool": "Bash", "files": ["contactclean/clean.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:15+00:00", "tool": "Bash", "files": [".shockharness.toml", "contactclean/__init__.py", "contactclean/__main__.py", "contactclean/cli.py", "contactclean/csvio.py"], "findings": 3, "details": ["DEF005 contactclean/cli.py:31", "DEF005 contactclean/cli.py:37", "EXC003 contactclean/csvio.py:27"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:26+00:00", "tool": "Bash", "files": ["contactclean/cli.py", "contactclean/csvio.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:08:59+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_cli.py", "tests/test_normalize.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T19:09:04+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

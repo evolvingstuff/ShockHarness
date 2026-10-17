@@ -1,0 +1,11 @@
+{"time": "2026-10-17T18:54:29+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:54:33+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:54:38+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:54:41+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:55:55+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:56:22+00:00", "tool": "Bash", "files": ["feedcheck/__init__.py", "feedcheck/config.py", "feedcheck/errors.py", "feedcheck/fetch.py"], "findings": 4, "details": ["EXC001 feedcheck/config.py:39", "EXC001 feedcheck/config.py:44", "EXC001 feedcheck/config.py:49", "EXC001 feedcheck/fetch.py:56"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:56:30+00:00", "tool": "Bash", "files": [".shockharness.toml"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:56:58+00:00", "tool": "Bash", "files": ["feedcheck/__main__.py", "feedcheck/check.py", "feedcheck/cli.py", "feedcheck/report.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:57:51+00:00", "tool": "Bash", "files": ["tests/__init__.py", "tests/test_feedcheck.py"], "findings": 1, "details": ["DEF002 tests/test_feedcheck.py:39"], "exit": 2, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:05+00:00", "tool": "Bash", "files": ["tests/test_feedcheck.py"], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}
+{"time": "2026-10-17T18:58:12+00:00", "tool": "Bash", "files": [], "findings": 0, "details": [], "exit": 0, "note": "", "problems": []}

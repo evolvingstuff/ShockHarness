@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noteboard</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #222; background: #f4f4f1; }
+    body { margin: 0; padding: 2rem 1rem 6rem; }
+    main { max-width: 40rem; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+    button { font: inherit; cursor: pointer; border: 1px solid #bbb; background: #fff; border-radius: 6px; padding: .35rem .8rem; }
+    button.danger { background: #c62828; border-color: #c62828; color: #fff; }
+    #notes { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+    #notes[data-empty="true"]::before { content: "No notes yet."; color: #777; }
+    .note { display: flex; gap: .5rem; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: .6rem .7rem; }
+    .note.pinned { border-color: #e0a800; background: #fffbea; }
+    .note.editing { outline: 2px solid #3367d6; }
+    .note-body { flex: 1; min-width: 0; }
+    .note-text { margin: 0; white-space: pre-wrap; word-break: break-word; cursor: text; min-height: 1.4em; }
+    .note-text[data-placeholder]::before { content: attr(data-placeholder); color: #999; }
+    .note-editor { width: 100%; box-sizing: border-box; min-height: 5em; font: inherit; resize: vertical; }
+    .note-toolbar { display: flex; gap: .25rem; align-items: flex-start; }
+    .icon-button { padding: .25rem; line-height: 0; color: #555; }
+    .icon-button.pin[aria-pressed="true"] { color: #e0a800; }
+    .icon-button.delete:hover { color: #c62828; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 20; }
+    .modal { background: #fff; border-radius: 10px; padding: 1.2rem; max-width: 22rem; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .modal p { margin: 0 0 1rem; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    .toasts { position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); display: grid; gap: .5rem; z-index: 30; }
+    .toast { display: flex; align-items: center; gap: .75rem; background: #333; color: #fff; padding: .5rem .5rem .5rem 1rem; border-radius: 6px; }
+    .toast-error { background: #a32020; }
+    .toast-close { background: transparent; color: inherit; border: 0; padding: 0 .4rem; font-size: 1.2rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Noteboard</h1>
+      <button type="button" id="add-note">Add note</button>
+    </header>
+    <ul id="notes" aria-label="Notes"></ul>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

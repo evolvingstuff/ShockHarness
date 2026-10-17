@@ -1,0 +1,18 @@
+diff --git a/.shockharness.toml b/.shockharness.toml
+index 714b928..e6e6863 100644
+--- a/.shockharness.toml
++++ b/.shockharness.toml
+@@ -197,7 +197,12 @@ capture_managers = []
+ # Each boundary approves catching one qualified exception (`exception = "OSError"`) or
+ # several (`exceptions = ["OSError", "ProcessLookupError"]`, one reason) in files that
+ # match `path` for one language. Every entry is reported as a policy deviation.
+-boundaries = []
++boundaries = [
++  { path = "feedcheck/config.py", language = "python", exceptions = ["OSError", "UnicodeDecodeError", "tomllib.TOMLDecodeError"], reason = "Reading, decoding and parsing the user's config file; each failure becomes a ConfigError carrying its cause, so the tool stops with a clear message before any fetch" },
++  { path = "feedcheck/fetch.py", language = "python", exceptions = ["OSError", "http.client.HTTPException"], reason = "Network I/O for one feed request; a refused, timed-out or broken connection becomes a typed NoAnswer outcome that the checker retries and reports as unreachable" },
++  { path = "feedcheck/check.py", language = "python", exception = "ValueError", reason = "Decoding a feed body as JSON and parsing its ISO 8601 published dates; invalid external data becomes an unhealthy result naming the reason" },
++  { path = "feedcheck/cli.py", language = "python", exceptions = ["feedcheck.errors.FeedcheckError", "OSError"], reason = "Command-line entry point: a config or report-write failure stops the tool with a clear message (SystemExit carrying the cause) instead of a traceback" },
++]
+ 
+ [tool.shockharness.rules.defaults]
+ enabled = true

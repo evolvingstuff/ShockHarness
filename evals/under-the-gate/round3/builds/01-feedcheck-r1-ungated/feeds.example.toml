@@ -1,0 +1,15 @@
+# How long to wait for a feed to answer, in seconds.
+timeout_seconds = 10
+# Attempts per feed when the server answers 5xx or does not answer at all.
+attempts = 3
+# Delay before the second attempt; doubles for each attempt after that.
+backoff_seconds = 1
+
+[[feeds]]
+name = "news"
+url = "https://example.com/news.json"
+max_age_hours = 24
+
+[[feeds]]
+name = "status"
+url = "https://example.com/status.json"
