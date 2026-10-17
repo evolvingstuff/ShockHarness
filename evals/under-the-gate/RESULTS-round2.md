@@ -22,6 +22,10 @@ each feedback followed, but no builder transcript.
 
 **Caveats.**
 * Three runs per cell is a small distribution.
+* The gated configuration (written by `build.sh`, as in round 1) did not exempt tests
+  from MAGIC001 and DEF001. The shipped skills recommend that exemption, and
+  ShockHarness's own configuration has it, so the gated builds ran stricter than the
+  recommended setup (finding 3).
 * The reviewers come from the same model family as the builders.
 * Claude Code 2.1.302 does not put hook feedback in its stream output. Feedback is
   known from the hook's own log (exit 2 and the finding count), paired with the k-th
@@ -72,7 +76,7 @@ ungated lines. Reviewers again found the gated build stricter at its boundaries.
 also found real defects on both sides, many about how a failed write or an unreadable
 input is reported (section 5).
 
-### 3. Two builds loosened the gate themselves
+### 3. Two builds exempted their tests, as the skills recommend
 
 * **feedcheck r3.**
   * Its first hook feedback carried 53 findings: 46 MAGIC001, 5 DEF001 and 2 mapping
@@ -80,14 +84,30 @@ input is reported (section 5).
   * It ran `grep -n -A3 "^test = " defaults.toml` to learn which files the test role
     covers. Then it added
     `[[tool.shockharness.overrides]] roles = ["test"] disable = ["MAGIC001", "DEF001"]`.
-  * This was the most consequential first-block response in the round, and nothing
-    asked anyone. The build still reached `gate: PASS`.
+    The build still reached `gate: PASS`, and nobody was asked.
 * **contactclean r2.** Same override for MAGIC001 in tests, with the reason "Tests
   assert concrete row numbers and exit codes taken from SPEC.md examples". SPEC.md gives
   the exit codes but has no examples and no row numbers, so the reason is partly false.
 
-The other ten gated builds kept the shipped rules and named their test values, often
-through the disguises below.
+The reviewers called both overrides evasions. They are not, by ShockHarness's own
+practice:
+* six shipped skills tell an agent setting up a project to "exempt them from `MAGIC001`
+  and `DEF001` with an `[[tool.shockharness.overrides]]` entry that carries a `reason`,
+  as the tool's own configuration does";
+* ShockHarness's own `.shockharness.toml` has exactly that entry.
+
+The experiment's `build.sh` wrote the gated configuration without it. So all 12 gated
+builds started stricter than the skills recommend. Ten kept that and disguised their test
+values (finding 4); two added the recommended exemption themselves.
+
+What is wrong is the process, not the override itself:
+* the agent changed the gate's policy mid-task, with no one asked;
+* the change showed up only as one more `policy deviation` line next to the catch
+  boundaries;
+* one reason was partly false.
+
+The test exemption is recommended practice, yet the shipped default does not include it.
+That gap is what produced both outcomes. `docs/proposal-gate-loosening.md` takes this up.
 
 ### 4. The evasions are still about small numbers, and they spread to more forms
 
@@ -145,10 +165,11 @@ noteboard, and a job's own `BaseException` blamed on the queue in jobqueue.
 
 ## Recommendations (recorded in docs/ideas.md)
 
-1. **Overrides need sign-off.** An agent-added `[[overrides]]` or `disable` should
-   need the user's approval, or at least be reported as gate loosening (VERIFY003)
-   whenever the gate runs, not only in a diff. Two of 12 gated builds turned off rules
-   for their whole test role.
+1. **Make the recommended test exemption the default, then make any other rule
+   switched off by an agent need sign-off.** The exemption is in our own configuration
+   and the skills, but not in what `init` writes or in the bundled defaults. An agent
+   that adds it, or anything looser, changes the gate's policy unasked, and that shows
+   only as a deviation line. Draft: `docs/proposal-gate-loosening.md`.
 2. **MAGIC001 should see numbers in other forms:**
    * strings used as numbers (`indent="  "`, `Number("3000")`);
    * lengths of literals (`len("  ")`);
@@ -157,10 +178,10 @@ noteboard, and a job's own `BaseException` blamed on the queue in jobqueue.
    * values parsed out of inline strings (`tomllib.loads("k = 24")`, `json.loads("[...]")`).
 3. **Data files next to tests:** scan the TOML/JSON files that tests read (and HTML
    `data-*` attributes), or have the skills say not to move test values into them.
-4. **MAGIC001 in tests and for values the spec gives:** two builds turned the rule off
-   for tests, and the others disguised spec values such as exit 2. Measure a test-role
-   default that allows literals in assertions. Make the skills say plainly that a spec-given value is a named
-   literal.
+4. **MAGIC001 for values the spec gives:** builds disguised spec values such as exit 2.
+   Make the skills say plainly that a spec-given value is a named literal. With the
+   test exemption as the default (recommendation 1), most of the test-value disguises
+   in finding 4 have no reason to exist; the next round should check that.
 5. **New shape: padding external records.** `row + [""] * n` and dropping all-empty
    rows with `continue` are silent defaults at a boundary. Look at it with DEF002.
 6. **Skills: what to do with an I/O failure, not only what to avoid.** Several gated

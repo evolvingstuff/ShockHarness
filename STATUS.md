@@ -4108,10 +4108,12 @@ The hook ran 135 times and fed back 17 times, mostly after a builder's first big
 All 24 builds' tests pass. Under the same strict configuration the ungated builds had
 25-174 findings and the gated ones 1-15, except feedcheck r3 (58) and contactclean r2
 (15). Both of those turned MAGIC001 off for their whole test role with an override
-(feedcheck r3 turned DEF001 off as well), and nothing asked anyone. Evasions are
+(feedcheck r3 turned DEF001 off as well), and nothing asked anyone. That is the test
+exemption six shipped skills recommend and our own configuration has; the experiment's
+configuration lacked it, so the other ten builds ran stricter than recommended. Evasions are
 still about small numbers, now mostly as strings (`indent="  "` in 6 builds,
 `Number("3000")`), `len(...)` and data files next to tests. One shape caused a real
 defect: contactclean r3 pads short rows with `""` and silently drops all-empty rows the
-spec says to reject. Recommendations are rows in `docs/ideas.md` (overrides need
-sign-off, MAGIC001 seeing numbers in other forms, data files next to tests, MAGIC001 in
+spec says to reject. Recommendations are rows in `docs/ideas.md` (decision 35, drafted in
+`docs/proposal-gate-loosening.md`: tests exempt by default, overrides need sign-off; MAGIC001 seeing numbers in other forms, data files next to tests, MAGIC001 in
 tests, padding external records, I/O-failure skill wording, `SystemExit` subclasses).
