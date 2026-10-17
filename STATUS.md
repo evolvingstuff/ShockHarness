@@ -4354,3 +4354,27 @@ On Tom's go-ahead (items 1-3 of the proposed 0.9.0 work).
 
 Tests: `test_exc005.py` (3), a DEF002 assigned-grouping test, a BOOL001 assertion test,
 updated rule lists. 1209 tests pass; the self-gate passes.
+
+## MetaList's "error wiped by a reload" rule — MEASURED, not built (2026-10-17)
+
+The prototype detector (in scratch, tree-sitter, not in the package) checks one function.
+Reported, when no flag assigned in the error's branch is tested on the way to the reload:
+* a catch branch marks an object failed (`x.status = 'error'`, `x.error = ...`, an error
+  entry pushed);
+* the object belongs to a `this.<prop>` collection (pushed into it, or read back from it);
+* a later statement or the `finally` reassigns `this.<prop>`, directly or through a
+  same-file method.
+
+The branch matters: MetaList's buggy reload was already guarded by `!wasCancelled`,
+which the cancel branch sets.
+
+Results:
+* **Positive control:** `_submitMessage` before the fix (MetaList ac98c983^): the error
+  branch is reported against `_loadSession`, the cancel branch is not; after the fix,
+  nothing.
+* **MetaList now:** 234 app and 44 script JS files, no other candidate.
+* **The experiment's builds:** 174 JS files, no candidate.
+
+The shape is precise, but rare: the only instance found is the bug itself. The choice is
+Tom's: build it at review as a guard (about half a session), or measure on third-party
+front ends first (the old clones are gone, and recloning is a download).
