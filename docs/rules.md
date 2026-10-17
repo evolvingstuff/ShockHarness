@@ -46,7 +46,7 @@ What is unknown today (the inventory, kept as a test in
 | EXC001 | bare `except:`, untyped JavaScript `catch (e)`, inline untyped rejection handler: each provably binds every exception | `violation` |
 | DEF002 | `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)`, `m.get(k)` on a receiver not proven a mapping (`approximate` confidence): whether it is a fallback depends on the receiver's type | `unknown` |
 | ASYNC001 | a dropped call whose async callee the call graph matched by name only (a `probable` edge) | `unknown` |
-| every other finding | MAGIC001, EXC002, EXC003, EXC004, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002, STUB001, STUB002, ASSERT001, BOOL001, STATE001 (its `approximate` confidence is about aliasing, not about whether the binding is written), IMPORT001 | `violation` |
+| every other finding | MAGIC001, EXC002, EXC003, EXC004, the other DEF findings (an `approximate` one there is about intent, not about whether the shape is present), CPLX001-CPLX006, SUPP001, SUPP002, STUB001, STUB002, ASSERT001, ASSERT002, BOOL001, STATE001 (its `approximate` confidence is about aliasing, not about whether the binding is written), IMPORT001 | `violation` |
 
 Unresolved call-graph edges never become findings: CPLX005 counts resolved
 targets only and names the unresolved count in its message.
@@ -76,7 +76,7 @@ weakened" without a separate exit code: a gating finding of any category exits
 | Category | Families | Meaning |
 |---|---|---|
 | `policy_integrity` | `VERIFY*`, `ROLE001` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
-| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001`, `ASYNC*`, `PROCESS001`, `RESULT001`, `TYPE001`, `SLEEP001`, `RETRY001`, `BATCH001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
+| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT*`, `IMPORT001`, `ASYNC*`, `PROCESS001`, `RESULT001`, `TYPE001`, `SLEEP001`, `RETRY001`, `BATCH001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
 | `structural` | `CPLX*`, `BOOL001`, `STATE001` | complexity, coupling, unreadable call sites and shared state (advisory) |
 
 The JSON report counts findings per category in `summary.by_category`; SARIF
@@ -749,7 +749,8 @@ deviation. Every finding is a `violation` (the facts are exact syntax).
 | `EXC004` | `return`, `break` or `continue` that leaves a `finally` block, discarding the exception in flight | Python, JavaScript | every role (section `rules.exceptions`) |
 | `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body (`pass`/`...`/docstring), `throw new XError("not implemented")`; comments with a configured marker | Python, JavaScript | `rules.stubs.roles` (production) |
 | `STUB002` | an import of a mocking or fake-data library, or of a module under a test path segment | Python, JavaScript | `rules.stubs.roles` (production) |
-| `ASSERT001` | an `assert` (removed under `python -O`); type-narrowing asserts allowed by default | Python | `rules.assertions.roles` (production) |
+| `ASSERT001` | an `assert` whose test depends on external input (decision 28); internal invariants are never reported | Python | `rules.assertions.roles` (production) |
+| `ASSERT002` | asserts relied on in production while no code reads `sys.flags.optimize` (one finding per run, review) | Python | `rules.assertions.roles` (production) |
 | `BOOL001` | a `True`/`False` literal passed positionally to a call with several arguments | Python, JavaScript | `rules.boolean_arguments.roles` (production) |
 | `STATE001` | a module-level mutable binding that a function assigns or mutates | Python, JavaScript | `rules.module_state.roles` (production) |
 | `IMPORT001` | a configured side-effecting call (processes, network, sockets, threads, deletion) executed at import time | Python, JavaScript | `rules.import_effects.roles` (production) |
@@ -791,11 +792,23 @@ segments of a relative or absolute specifier (`./__mocks__/api.js`) with
 `test_path_segments`; a bare package name is never a path. Matching is by name,
 not by resolving files.
 
-**ASSERT001.** Every `assert` outside `if TYPE_CHECKING:`. With
-`rules.assertions.allow_type_narrowing = true` (the default) an assert whose
-test only narrows types (`x is not None`, `isinstance(x, T)`, or an `and` of
-those) is not reported: it records an invariant for the type checker. `false`
-reports those too.
+**ASSERT001, ASSERT002 (version 2, decision 28).** Asserts are encouraged: an
+assert states an internal invariant, and one that fires is a bug found at its
+source. ASSERT001 reports the misuse only: an `assert` whose test depends on
+external input, followed as INPUT001 follows values (through assignments,
+string building, calls and project functions, up to `rules.input.max_depth`
+crossings). External input is a `rules.input` source, a configuration read
+(`os.getenv`, `os.environ`) or a `rules.assertions.external_reads` entry
+(`sys.argv`, `input`, `sys.stdin`, `open`, `.read_text`, `json.load`,
+`requests.get`, ...). No validator cleans a value here: `assert int(x) > 0` still
+checks input, which deserves a typed error. With `allow_type_narrowing = true`
+(the default) an assert that only narrows types (`x is not None`,
+`isinstance(x, T)`, or an `and` of those) is never reported. Version 1 reported
+every production assert, which pushed agents to delete invariants. ASSERT002
+(review) is one finding per run, at the first production assert that is not
+pure type narrowing, when no analyzed Python file reads `sys.flags.optimize`:
+one startup check (`if sys.flags.optimize: raise SystemExit(...)`) makes every
+assert safe to rely on. ShockHarness's own CLI refuses to run under `-O`.
 
 **BOOL001.** A call with more than one positional argument (and no `*args` or
 spread) where one of them is a Boolean literal: one finding per literal, at

@@ -528,6 +528,7 @@ GUARDRAIL_CATALOGS = (
     ("stubs", "test_path_segments"),
     ("stubs", "mock_modules"),
     ("assertions", "roles"),
+    ("assertions", "external_reads"),
     ("boolean_arguments", "roles"),
     ("module_state", "roles"),
     ("import_effects", "roles"),

@@ -84,7 +84,8 @@ Implemented rules:
 | `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
 | `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body, `throw new Error("not implemented")` in production code (abstract API exempt) | warning |
 | `STUB002` | production code importing a mocking or fake-data library or a module under `tests/`, `fixtures/`, `mocks/` | warning |
-| `ASSERT001` | a Python `assert` in production code (removed under `python -O`); type-narrowing asserts allowed | warning |
+| `ASSERT001` | a Python `assert` that checks external input (a request field, a file, an environment variable); internal invariants are encouraged | warning |
+| `ASSERT002` | asserts relied on in production while nothing refuses `python -O` | review |
 | `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
 | `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
 | `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |

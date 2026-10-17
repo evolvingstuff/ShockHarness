@@ -11,7 +11,7 @@ from shockharness.config import EffectiveConfig
 from shockharness.errors import ConfigError
 
 OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED)
-H3 = ("EXC004", "STUB001", "STUB002", "ASSERT001", "BOOL001", "STATE001", "IMPORT001")
+H3 = ("EXC004", "STUB001", "STUB002", "ASSERT001", "ASSERT002", "BOOL001", "STATE001", "IMPORT001")
 
 
 def run(config: EffectiveConfig, path: str, text: str) -> FileResult:
@@ -201,27 +201,57 @@ def test_stub_rules_follow_roles(make_config: Callable[[str], EffectiveConfig]) 
 # -- ASSERT001 ---------------------------------------------------------------------------
 
 
-def test_assert001_reports_checks_and_allows_type_narrowing(
+def test_assert001_reports_asserts_on_external_input_only(
     make_config: Callable[[str], EffectiveConfig],
 ) -> None:
+    """Decision 28: an internal invariant is never reported; an assert on input is."""
     text = (
-        "from typing import TYPE_CHECKING\n\n\n"
+        "import os\nimport sys\nfrom typing import TYPE_CHECKING\n\n"
+        "from flask import request\n\n\n"
         "def f(x, y):\n"
-        "    assert x is not None\n"
-        "    assert isinstance(x, int) and y is not None\n"
-        "    assert x > 0, 'positive'\n"  # 7
-        "    assert x\n"  # 8
-        "    return x\n\n\n"
+        "    assert x is not None\n"  # 9: an invariant
+        "    assert x > 0 and y, 'positive'\n"  # 10: an invariant on parameters
+        "    amount = int(request.form['amount'])\n"
+        "    assert amount > 0\n"  # 12: input, even after int()
+        "    assert os.environ['MODE'] in ('a', 'b')\n"  # 13: configuration
+        "    assert isinstance(request.json, dict)\n"  # 14: narrowing, allowed by default
+        "    assert len(sys.argv) > 1\n"  # 15: command-line arguments
+        "    return check(amount)\n\n\n"
+        "def check(value):\n"
+        "    assert value < LIMIT\n"  # 20: input from f, across a call
+        "    return value\n\n\n"
         "if TYPE_CHECKING:\n    assert False\n"
     )
+    guarded = text + "\n\nif sys.flags.optimize:\n    raise SystemExit('no -O')\n"
     default = make_config("")
-    assert rows(run(default, "src/a.py", text)) == [
-        ("ASSERT001", 7, "warning"),
-        ("ASSERT001", 8, "warning"),
+    found = [
+        (f.span.line, f.message)
+        for f in run(default, "src/a.py", guarded).findings
+        if f.rule_id == "ASSERT001"
     ]
+    assert [line for line, _ in found] == [12, 13, 15, 20]
+    assert found[0][1].startswith("assert amount > 0 checks external input, flask.request.form")
+    assert "(through check)" in found[3][1]
     strict = make_config("[tool.shockharness.rules.assertions]\nallow_type_narrowing = false\n")
-    assert [r[1] for r in rows(run(strict, "src/a.py", text))] == [5, 6, 7, 8]
-    assert rows(run(default, "tests/test_a.py", text)) == []
+    lines = [
+        f.span.line for f in run(strict, "src/a.py", guarded).findings if f.rule_id == "ASSERT001"
+    ]
+    assert lines == [12, 13, 14, 15, 20]
+    assert rows(run(default, "tests/test_a.py", guarded)) == []
+
+
+def test_assert002_asks_for_a_startup_guard(make_config: Callable[[str], EffectiveConfig]) -> None:
+    text = (
+        "def head(items):\n    assert items, 'the ordering has a head here'\n    return items[0]\n"
+    )
+    result = run(make_config(""), "src/a.py", text)
+    assert rows(result) == [("ASSERT002", 2, "review")]
+    message = next(f.message for f in result.findings if f.rule_id == "ASSERT002")
+    assert message.startswith("production code relies on 1 assert(s) in 1 file(s)")
+    guard = "import sys\n\nif sys.flags.optimize:\n    raise SystemExit('do not run with -O')\n"
+    assert rows(run(make_config(""), "src/a.py", guard + text)) == []
+    narrowing = "def f(x):\n    assert x is not None\n    return x\n"
+    assert rows(run(make_config(""), "src/a.py", narrowing)) == []
 
 
 # -- BOOL001 -----------------------------------------------------------------------------

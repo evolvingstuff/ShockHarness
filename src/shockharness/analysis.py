@@ -43,7 +43,14 @@ from shockharness.rules import registry
 from shockharness.rules.api_catalog import CATALOG_RULES, run_catalog_rules
 from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
-from shockharness.rules.dataflow import INPUT_RULES, FlowFile, run_input001, run_input002
+from shockharness.rules.dataflow import (
+    INPUT_RULES,
+    FlowFile,
+    run_assert001,
+    run_assert002,
+    run_input001,
+    run_input002,
+)
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
@@ -324,7 +331,11 @@ def _units(
 ) -> tuple[UnitMetrics, ...]:
     """ASYNC001 resolves callees through the call graph, which is built from the units, so
     they are measured for it even when complexity is disabled (and then not reported)."""
-    graph_rules = (registry.ASYNC001.rule_id, registry.INPUT001.rule_id)
+    graph_rules = (
+        registry.ASYNC001.rule_id,
+        registry.INPUT001.rule_id,
+        registry.ASSERT001.rule_id,
+    )
     if complexity["enabled"] is True or any(rule in applied for rule in graph_rules):
         return measure_units(relative_path, facts.functions, complexity)
     return ()
@@ -747,18 +758,44 @@ def input_findings(
     through the call graph."""
     if graph is None:
         return {}
-    files = [
+    files = _flow_files(pendings, registry.INPUT001)
+    return run_input001(files, graph, config.section(registry.INPUT_SECTION))
+
+
+def _flow_files(pendings: Sequence[PendingFile], rule: registry.RuleSpec) -> list[FlowFile]:
+    return [
         FlowFile(
             path=p.path,
             language=p.language,
             facts=p.facts,
             source=p.source,
-            applies=registry.INPUT001.rule_id in p.rules_applied,
+            applies=rule.rule_id in p.rules_applied,
         )
         for p in pendings
         if not p.failed and p.facts is not None and p.source is not None
     ]
-    return run_input001(files, graph, config.section(registry.INPUT_SECTION))
+
+
+def assert_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """ASSERT001 (an assert on external input, traced across files) and ASSERT002 (asserts
+    relied on, optimized runs not refused): decision 28."""
+    assertions = config.section(registry.ASSERTIONS_SECTION)
+    found: dict[str, list[Finding]] = {}
+    if graph is not None:
+        inputs = config.section(registry.INPUT_SECTION)
+        files = _flow_files(pendings, registry.ASSERT001)
+        for path, findings in run_assert001(files, graph, inputs, assertions).items():
+            found[path] = list(findings)
+    severity = str(assertions["assert002_severity"])
+    for path, findings in run_assert002(
+        _flow_files(pendings, registry.ASSERT002), severity
+    ).items():
+        if path not in found:
+            found[path] = []
+        found[path].extend(findings)
+    return found
 
 
 def complete(
@@ -766,7 +803,13 @@ def complete(
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
-    graph_rules = (*ASYNC_RULES, registry.ROLE001, registry.INPUT001, registry.IMPORT001)
+    graph_rules = (
+        *ASYNC_RULES,
+        registry.ROLE001,
+        registry.INPUT001,
+        registry.IMPORT001,
+        registry.ASSERT001,
+    )
     if graph is None and any(
         rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
     ):
@@ -776,10 +819,11 @@ def complete(
     asynchrony = async_findings(pendings, config, graph)
     roles = role_findings(pendings, config, graph)
     inputs = input_findings(pendings, config, graph)
+    asserts = assert_findings(pendings, config, graph)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        for found in (outcome.graph_findings, asynchrony, roles, inputs):
+        for found in (outcome.graph_findings, asynchrony, roles, inputs, asserts):
             if pending.path in found:
                 extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))

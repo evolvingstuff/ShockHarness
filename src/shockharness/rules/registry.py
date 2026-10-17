@@ -1325,41 +1325,91 @@ STUB002 = RuleSpec(
 
 ASSERT001 = RuleSpec(
     rule_id="ASSERT001",
-    version="1",
-    name="runtime check that python -O removes",
+    version="2",
+    name="assert used to check external input",
     family="assertions",
     config_section=ASSERTIONS_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
     languages=(PYTHON,),
     summary=(
-        "An assert statement in production code is removed under python -O: a check the "
-        "program depends on disappears in optimized deployments."
+        "An assert whose test depends on external input (a request field, an environment "
+        "variable, a command-line argument, a file's or a response's contents): an expected "
+        "failure is an error to raise, and python -O removes the assert."
     ),
     rationale=(
-        "assert reads like validation, so it gets used as validation: of input, of "
-        "permissions, of state. Run with -O or PYTHONOPTIMIZE and every one of those checks "
-        "is gone, silently."
+        "An assert states an internal invariant: if it fails, the program has a bug, and "
+        "stopping loudly at that point is right; asserts are encouraged for that. Input from "
+        "outside fails for reasons that are not bugs and deserves a typed error that "
+        "survives every build. Version 1 reported every production assert, which pushed "
+        "agents to delete invariants; version 2 (decision 28) reports only the misuse."
     ),
     guarantees=(
-        "Every assert in a Python file whose role is in rules.assertions.roles (production by "
-        "default), outside if TYPE_CHECKING. With rules.assertions.allow_type_narrowing = true "
-        "(the default), an assert whose test only narrows types (x is not None, isinstance(x, "
-        "T), or an and of those) is not reported: it documents an invariant for the type "
-        "checker. Exact."
+        "A Python assert in a file whose role is in rules.assertions.roles (production by "
+        "default) whose test depends, as INPUT001 follows values (assignments, string "
+        "building, calls, and project functions through the call graph up to "
+        "rules.input.max_depth crossings), on a rules.input source, a configuration read "
+        "(rules.input.python_config_reads, os.environ) or one of "
+        "rules.assertions.external_reads (sys.argv, input, open, json.load, requests ...). "
+        "No validator cleans a value: assert int(x) > 0 still checks input. With "
+        "allow_type_narrowing (the default) an assert that only narrows types is never "
+        "reported. An assert on anything else is an internal invariant and is not reported."
     ),
     limitations=(
-        "Intent is not inferred: an internal invariant written as assert len(x) == n is "
-        "reported like input validation. JavaScript has no removable assert statement."
+        "The limitations of INPUT001's value following apply (no attributes, closures or "
+        "callbacks). Data from the project's own storage is not external unless a read of it "
+        "is listed. JavaScript has no removable assert statement."
     ),
     remediation=(
-        "Validate with an explicit check that raises a typed error (if not ok: raise "
-        "ValueError(...)). For an internal invariant that must hold in every build, raise "
-        "explicitly as well; an assert is for checks you are content to lose."
+        "Check the input explicitly where it enters and raise a typed error that names the "
+        "problem (if amount <= 0: raise ValueError(...)). Keep asserts for internal "
+        "invariants; never delete an assert to satisfy a finding."
     ),
-    noncompliant_example='assert amount > 0, "amount must be positive"',
+    noncompliant_example='amount = int(request.form["amount"])\nassert amount > 0, "positive"',
     compliant_example=(
+        'amount = int(request.form["amount"])\n'
         'if amount <= 0:\n    raise ValueError(f"amount must be positive, got {amount}")'
+    ),
+)
+
+ASSERT002 = RuleSpec(
+    rule_id="ASSERT002",
+    version="1",
+    name="asserts relied on, optimized runs not refused",
+    family="assertions",
+    config_section=ASSERTIONS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "Production code checks invariants with assert, and no analyzed code reads "
+        "sys.flags.optimize: under python -O or PYTHONOPTIMIZE every one of those checks "
+        "disappears."
+    ),
+    rationale=(
+        "Whether asserts run is a property of how the program is started, so it is checked "
+        "once, at startup, not at every assert. A project that refuses to run optimized can "
+        "rely on its asserts everywhere."
+    ),
+    guarantees=(
+        "One finding per run, at the first assert (by path and line) that is not pure type "
+        "narrowing in a file whose role is in rules.assertions.roles, when no analyzed Python "
+        "file reads sys.flags.optimize (through import sys or from sys import flags). "
+        "Severity rules.assertions.assert002_severity (review by default)."
+    ),
+    limitations=(
+        "Any read of sys.flags.optimize counts as the guard; what the code does with it is "
+        "not checked. A run that analyzes only part of the project may not see the guard."
+    ),
+    remediation=(
+        "At the program's entry point, refuse to run optimized: if sys.flags.optimize: "
+        "raise SystemExit('this program checks its invariants with assert; do not run it "
+        "with python -O'). Do not replace the asserts."
+    ),
+    noncompliant_example="def head(items):\n    assert items, 'the ordering has a head here'",
+    compliant_example=(
+        "def main():\n    if sys.flags.optimize:\n"
+        "        raise SystemExit('do not run with python -O')"
     ),
 )
 
@@ -2118,6 +2168,7 @@ RULES: tuple[RuleSpec, ...] = (
     STUB001,
     STUB002,
     ASSERT001,
+    ASSERT002,
     BOOL001,
     STATE001,
     IMPORT001,

@@ -46,12 +46,15 @@ from shockharness.ir.model import (
     origin_parts,
 )
 from shockharness.rules.guardrails import import_aliases, qualified_callee
-from shockharness.rules.registry import INPUT001, INPUT002, PYTHON, RuleSpec
+from shockharness.rules.registry import ASSERT001, ASSERT002, INPUT001, INPUT002, PYTHON, RuleSpec
 from shockharness.source import SourceText
 
 METHOD_PREFIX = "."
 SINK_SEPARATOR = ":"
 CROSSING = " -> "
+ASSERT_TARGET = "assert"
+BELOW = ".*"
+OPTIMIZE_FLAG = "sys.flags.optimize"
 # Decoders that a ".parse" validator entry must not match: they parse, they do not check.
 DECODERS = frozenset({"JSON.parse"})
 ABSENT = {PYTHON: "None"}
@@ -104,9 +107,14 @@ def catalog_for(settings: Mapping[str, Any], language: str) -> Catalog:
 
 
 def _matches(text: str, entries: frozenset[str]) -> str | None:
-    """The entry ``text`` reads (the entry itself or something below it), if any."""
+    """The entry ``text`` reads (the entry itself or something below it), if any. An
+    entry ending in ``.*`` matches only something below it (``os.environ.*`` is a
+    variable, not the whole environment handed on)."""
     for entry in sorted(entries):
-        if text == entry or text.startswith(entry + METHOD_PREFIX):
+        if entry.endswith(BELOW):
+            if text.startswith(entry[: len(entry) - len(BELOW)] + METHOD_PREFIX):
+                return entry
+        elif text == entry or text.startswith(entry + METHOD_PREFIX):
             return entry
     return None
 
@@ -187,13 +195,29 @@ class Located:
 
 @dataclass(frozen=True)
 class SinkHit:
-    """A sink argument, reached from a parameter possibly through further project calls."""
+    """A sink (a call argument, or an assert's test), reached from a parameter possibly
+    through further project calls. ``target`` is the callee, or "assert"."""
 
     file: FlowFile
-    call: FlowCall
+    span: Span
+    text: str
+    target: str
     argument: int
     exact: bool
     via: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Mode:
+    """What one run of the engine looks for: INPUT001 (call-argument sinks) or ASSERT001
+    (asserts as sinks, no validators)."""
+
+    rule: RuleSpec
+    severity: str
+    max_depth: int
+    catalogs: Mapping[str, Catalog]
+    assert_sinks: bool
+    skipped_asserts: Mapping[str, frozenset[Span]]
 
 
 @dataclass(frozen=True)
@@ -259,6 +283,9 @@ class _Evaluation:
         qualified = qualified_callee(call.callee, self.aliases)
         if qualified in self.catalog.sources:
             return frozenset({Taint(qualified, self.path, call.span, exact=True, via=())})
+        method = _method(call.callee, self.aliases)
+        if method is not None and method in self.catalog.sources:
+            return frozenset({Taint(method, self.path, call.span, exact=False, via=())})
         if is_validator(call.callee, self.aliases, self.catalog):
             return EMPTY
         resolved = self.analysis.target(self.located, call)
@@ -300,12 +327,24 @@ class _Evaluation:
         return frozenset(found)
 
     def sink_hits(self) -> Iterator[tuple[Value, SinkHit]]:
+        file = self.located.file
+        if self.analysis.mode.assert_sinks:
+            skipped = self.analysis.mode.skipped_asserts[self.path]
+            for checked in self.unit.asserts:
+                if checked.span not in skipped:
+                    text = file.source.excerpt(checked.span.line)
+                    hit = SinkHit(file, checked.span, text, ASSERT_TARGET, 0, exact=True, via=())
+                    yield self.value(checked.origins), hit
+            return
         for call in self.unit.calls:
             positions, exact = sink_arguments(call.callee, self.aliases, self.catalog)
             for position in sorted(positions):
                 if position < len(call.arguments):
                     value = self.value(call.arguments[position])
-                    yield value, SinkHit(self.located.file, call, position, exact, ())
+                    hit = SinkHit(
+                        file, call.span, call.text, call.callee, position, exact=exact, via=()
+                    )
+                    yield value, hit
 
     def passed(self) -> Iterator[Passed]:
         for call in self.unit.calls:
@@ -326,14 +365,12 @@ Edges = dict[tuple[str, int], list[tuple[Located, int, bool]]]
 class _Analysis:
     """INPUT001 over every file: return summaries to a fixed point, then sinks."""
 
-    def __init__(
-        self, files: Sequence[FlowFile], graph: CallGraph, settings: Mapping[str, Any]
-    ) -> None:
+    def __init__(self, files: Sequence[FlowFile], graph: CallGraph, mode: Mode) -> None:
         self.sites = graph.sites
-        self.max_depth = int(settings["max_depth"])
-        self.severity = str(settings["severity"])
+        self.mode = mode
+        self.max_depth = mode.max_depth
         self.units = _index(files)
-        self.catalogs = {f.path: catalog_for(settings, f.language) for f in files}
+        self.catalogs = mode.catalogs
         self.aliases = {f.path: import_aliases(f.facts.imports, f.language) for f in files}
         self.returns: dict[str, Value] = {key: EMPTY for key in self.units}
         self.found: dict[tuple[str, Span, int, str, str, Span], tuple[Taint, SinkHit]] = {}
@@ -379,7 +416,7 @@ class _Analysis:
     def report(self, taint: Taint, hit: SinkHit) -> None:
         if not hit.file.applies:
             return
-        key = (hit.file.path, hit.call.span, hit.argument, taint.label, taint.path, taint.span)
+        key = (hit.file.path, hit.span, hit.argument, taint.label, taint.path, taint.span)
         if key in self.found and len(self.found[key][0].via) <= len(taint.via):
             return
         self.found[key] = (taint, hit)
@@ -423,16 +460,22 @@ class _Analysis:
         confidence = CONFIDENCE_APPROXIMATE
         if taint.exact and hit.exact:
             confidence = CONFIDENCE_EXACT
-        message = (
-            f"{taint.label} ({taint.path}:{taint.span.line}) reaches argument "
-            f"{hit.argument + 1} of {hit.call.callee}(...) without passing a validator"
-            f"{through}: {hit.call.text}"
-        )
+        origin = f"{taint.label} ({taint.path}:{taint.span.line})"
+        if self.mode.assert_sinks:
+            message = (
+                f"{hit.text} checks external input, {origin}{through}: an expected failure "
+                "is an error to raise, and python -O removes the assert"
+            )
+        else:
+            message = (
+                f"{origin} reaches argument {hit.argument + 1} of {hit.target}(...) without "
+                f"passing a validator{through}: {hit.text}"
+            )
         return _finding(
-            INPUT001,
-            self.severity,
+            self.mode.rule,
+            self.mode.severity,
             hit.file.path,
-            hit.call.span,
+            hit.span,
             message,
             hit.file.source,
             confidence,
@@ -482,8 +525,8 @@ def _extend(
         extended = replace(hit, exact=hit.exact and exact, via=(target.unit.name, *hit.via))
         if start not in reach:
             reach[start] = []
-        known = {(h.call.span, h.file.path, h.argument, h.via) for h in reach[start]}
-        if (extended.call.span, extended.file.path, extended.argument, extended.via) not in known:
+        known = {(h.span, h.file.path, h.argument, h.via) for h in reach[start]}
+        if (extended.span, extended.file.path, extended.argument, extended.via) not in known:
             reach[start].append(extended)
             changed = True
     return changed
@@ -523,7 +566,92 @@ def run_input001(
     """INPUT001 findings per path, for the files where the rule applies."""
     if not any(file.applies for file in files):
         return {}
-    return _Analysis(files, graph, settings).run()
+    mode = Mode(
+        rule=INPUT001,
+        severity=str(settings["severity"]),
+        max_depth=int(settings["max_depth"]),
+        catalogs={f.path: catalog_for(settings, f.language) for f in files},
+        assert_sinks=False,
+        skipped_asserts={},
+    )
+    return _Analysis(files, graph, mode).run()
+
+
+def _assert_catalog(
+    inputs: Mapping[str, Any], assertions: Mapping[str, Any], language: str
+) -> Catalog:
+    """External input for ASSERT001: request data, configuration reads and the listed
+    file, network and command-line reads; nothing validates (an assert on int(x) still
+    checks input), and the asserts themselves are the sinks."""
+    prefix = _prefix(language)
+    sources = {str(s) for s in inputs[f"{prefix}_sources"]}
+    sources.update(str(r) for r in inputs[f"{prefix}_config_reads"])
+    if language == PYTHON:
+        sources.update(str(r) for r in assertions["external_reads"])
+    return Catalog(sources=frozenset(sources), sinks={}, validators=frozenset())
+
+
+def run_assert001(
+    files: Sequence[FlowFile],
+    graph: CallGraph,
+    inputs: Mapping[str, Any],
+    assertions: Mapping[str, Any],
+) -> dict[str, list[Finding]]:
+    """ASSERT001 (decision 28): an assert whose test depends on external input, traced
+    like INPUT001 with the asserts as sinks. Internal invariants are never reported."""
+    if not any(file.applies for file in files):
+        return {}
+    narrowing_allowed = assertions["allow_type_narrowing"] is True
+    mode = Mode(
+        rule=ASSERT001,
+        severity=str(assertions["severity"]),
+        max_depth=int(inputs["max_depth"]),
+        catalogs={f.path: _assert_catalog(inputs, assertions, f.language) for f in files},
+        assert_sinks=True,
+        skipped_asserts={
+            f.path: frozenset(
+                a.span for a in f.facts.guardrails.asserts if narrowing_allowed and a.narrowing
+            )
+            for f in files
+        },
+    )
+    return _Analysis(files, graph, mode).run()
+
+
+def _reads_optimize_flag(file: FlowFile) -> bool:
+    aliases = import_aliases(file.facts.imports, file.language)
+    for unit in file.facts.dataflow.units:
+        for read in unit.reads:
+            if not read.on_parameter and _matches(
+                qualified_callee(read.text, aliases), frozenset({OPTIMIZE_FLAG})
+            ):
+                return True
+    return False
+
+
+def run_assert002(files: Sequence[FlowFile], severity: str) -> dict[str, list[Finding]]:
+    """ASSERT002 (decision 28): production code relies on asserts (other than pure type
+    narrowing) and no analyzed file reads sys.flags.optimize. One finding per run."""
+    relying = sorted(
+        (file.path, fact.span, file)
+        for file in files
+        if file.applies
+        for fact in file.facts.guardrails.asserts
+        if not fact.narrowing
+    )
+    if len(relying) == 0:
+        return {}
+    if any(f.language == PYTHON and _reads_optimize_flag(f) for f in files):
+        return {}
+    path, span, file = relying[0]
+    count = len({path for path, _span, _file in relying})
+    message = (
+        f"production code relies on {len(relying)} assert(s) in {count} file(s), and no "
+        f"analyzed code reads {OPTIMIZE_FLAG}: under python -O or PYTHONOPTIMIZE every one is "
+        "removed; one startup check that refuses to run optimized makes them safe to rely on"
+    )
+    finding = _finding(ASSERT002, severity, path, span, message, file.source, CONFIDENCE_EXACT)
+    return {path: [finding]}
 
 
 # -- INPUT002 -----------------------------------------------------------------------------

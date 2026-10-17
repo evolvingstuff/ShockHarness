@@ -225,13 +225,24 @@ mock_modules = [
   "nock",
 ]
 
-[tool.shockharness.rules.assertions]
+[tool.shockharness.rules.assertions]       # ASSERT001, ASSERT002 (decision 28)
 enabled = true
-severity = "warning"
+severity = "warning"                       # ASSERT001: an assert on external input
+assert002_severity = "review"              # ASSERT002: asserts relied on, -O not refused
 roles = ["production"]
-# An assert that only narrows types (x is not None, isinstance(x, T)) documents an
-# invariant for the type checker; false reports it too.
+# An assert that only narrows types (x is not None, isinstance(x, T)) is never reported,
+# even on external input; false reports it like any other assert.
 allow_type_narrowing = true
+# External input for ASSERT001, beyond rules.input's sources and configuration reads:
+# command-line arguments, stdin, files and network reads (".name" is a method on any
+# receiver; "x.*" something below x, not x itself: a variable of os.environ, not the
+# environment handed to a subprocess). An assert on anything else is an internal
+# invariant and is not reported.
+external_reads = [
+  "sys.argv", "sys.stdin", "input", "os.environ.*", "open", ".read_text", ".read_bytes",
+  "json.load", "tomllib.load", "requests.get", "requests.post", "urllib.request.urlopen",
+  ".recv",
+]
 
 [tool.shockharness.rules.boolean_arguments]
 enabled = true

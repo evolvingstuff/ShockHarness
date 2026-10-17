@@ -317,7 +317,9 @@ Stated so that a clean report is never read as more than it is.
 * Syntax, not intent. `STUB001` does not recognize an abstract API written
   without `ABC`, `Protocol` or `@abstractmethod`, and cannot tell a plausible
   fake (`return True`) from an implementation (that is the planned `STUB003`).
-  `ASSERT001` cannot tell an internal invariant from input validation.
+  `ASSERT001` knows external input only through its catalogs (data read from the
+  project's own storage is an invariant to it); `ASSERT002` accepts any read of
+  `sys.flags.optimize` as the guard and may not see one outside a partial run.
   `BOOL001` does not resolve the callee, so a flag whose meaning is obvious from
   the function name is reported too.
 * `STUB002` matches import names, not files: a production package named

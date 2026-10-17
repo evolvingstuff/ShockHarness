@@ -865,6 +865,14 @@ class FlowReturn:
 
 
 @dataclass(frozen=True)
+class FlowAssert:
+    """A Python ``assert`` and every origin its test looks at (ASSERT001)."""
+
+    span: Span
+    origins: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FlowUnit:
     """One unit's value dependencies; ``name`` is its FunctionFact name. ``tested`` holds
     every origin a condition of the unit looks at (if, while, assert, ternary and
@@ -880,6 +888,7 @@ class FlowUnit:
     stores: tuple[FlowStore, ...]
     returns: tuple[FlowReturn, ...]
     tested: tuple[str, ...]
+    asserts: tuple[FlowAssert, ...]
     truncated: bool
 
 

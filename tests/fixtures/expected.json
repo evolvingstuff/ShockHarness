@@ -2099,10 +2099,10 @@
         false
       ],
       [
-        "ASSERT001",
+        "ASSERT002",
         26,
         5,
-        "assert a or b, 'one is needed' is remove",
+        "production code relies on 1 assert(s)",
         false
       ],
       [

@@ -111,7 +111,8 @@ def _field_names(node: Node, field: str) -> list[str]:
 
 
 def _declared(node: Node) -> list[str]:
-    """Names one node of the unit declares."""
+    """Names one node of the unit declares. Imports are not among them: an imported name
+    is read through the file's import aliases."""
     if node.type in DECLARED_FIELDS:
         return _field_names(node, DECLARED_FIELDS[node.type])
     if node.type in NESTED_DECLARATIONS:
@@ -119,9 +120,6 @@ def _declared(node: Node) -> list[str]:
         if name is None:
             return []
         return [node_text(name)]
-    if node.type in ("import_specifier", "namespace_import", "import_clause"):
-        names = [node_text(c) for c in node.named_children if c.type == IDENTIFIER]
-        return names[len(names) - 1 :]
     return []
 
 
@@ -223,6 +221,7 @@ class _Unit:
             stores=tuple(self.stores),
             returns=tuple(self.returns),
             tested=tuple(sorted(self.tested)),
+            asserts=(),
             truncated=self.truncated,
         )
 

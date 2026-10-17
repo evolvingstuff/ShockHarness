@@ -292,7 +292,12 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "assertions": TableField(
-                    fields={**GUARDRAIL_COMMON, "allow_type_narrowing": BoolField()},
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "assert002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "allow_type_narrowing": BoolField(),
+                        "external_reads": ListField(StrField(allow_empty=False)),
+                    },
                     required=(),
                 ),
                 "boolean_arguments": TableField(

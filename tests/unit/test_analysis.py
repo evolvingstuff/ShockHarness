@@ -133,6 +133,7 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     assert data["finding_count"] == 1
     assert data["rules_applied"] == [
         "ASSERT001",
+        "ASSERT002",
         "ASYNC001",
         "ASYNC002",
         "ASYNC003",

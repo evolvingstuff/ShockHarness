@@ -33,7 +33,7 @@ the full detection guarantees.
 | `SUPP001` / `SUPP002` | a malformed suppression comment / one that silences nothing | error / warning |
 | `EXC004` | `return`, `break` or `continue` that leaves a `finally` block | warning |
 | `STUB001` / `STUB002` | a stub (`raise NotImplementedError`, an empty body, `throw new Error("not implemented")`) / an import of a mock or test module in production code | warning |
-| `ASSERT001` | a Python `assert` used as a runtime check (removed under `-O`) | warning |
+| `ASSERT001` / `ASSERT002` | a Python `assert` that checks external input (raise a typed error instead) / asserts relied on while nothing refuses `python -O` | warning / review |
 | `BOOL001` | `f(x, True, False)`: pass flags by keyword or an options object | review |
 | `STATE001` / `IMPORT001` | module state written from functions / a side effect at import time | warning |
 | `ASYNC001`-`ASYNC003` | a coroutine or Promise dropped, a task started without an owner, a settled batch never checked for failures (see `async-lifecycle`) | warning |
@@ -154,6 +154,24 @@ a plain `check`; see the `refactor-complexity` skill.
    add_item(order, item): order.items.append(item)`, which changes every holder
    of `order`, and `function markPaid(order) { order.paid = true; }`, which a
    caller cannot see coming from the call site.
+9. **Assert internal invariants; raise for expected failures.** Where the code
+   relies on something being true (the ordering has a head here, a started run
+   is in the history), assert it where it must hold: an assert that fires is a
+   bug found at its source. Input from outside (a request field, a file, an
+   environment variable, an argument) fails for reasons that are not bugs:
+   check it where it enters and raise a typed error (`ASSERT001` reports an
+   assert on input). Python drops asserts under `-O`, so the entry point refuses
+   to run optimized (`ASSERT002`). JavaScript's `console.assert` only logs.
+
+   ```python
+   def main() -> int:
+       if sys.flags.optimize:
+           raise SystemExit("do not run with python -O: invariants are asserts")
+
+   def next_step(plan: Plan) -> Step:
+       assert plan.steps, "a scheduled plan always has a step"
+       return plan.steps[0]
+   ```
 
 ## Examples
 
@@ -326,6 +344,7 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] Any suppression has an exact rule ID and a reason that cites a source.
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
+- [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses to run under `python -O`.
 
 ## Adopting ShockHarness
 

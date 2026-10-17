@@ -64,6 +64,7 @@ def test_implemented_rules_are_exactly_the_h6_set() -> None:
         "STUB001",
         "STUB002",
         "ASSERT001",
+        "ASSERT002",
         "BOOL001",
         "STATE001",
         "IMPORT001",

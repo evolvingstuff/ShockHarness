@@ -638,11 +638,13 @@ mock_modules = ["unittest.mock", "mock", "pytest", "pytest_mock", "faker", "free
                 "responses", "sinon", "jest", "@jest/globals", "jest-mock", "vitest",
                 "@faker-js/faker", "msw", "nock"]
 
-[tool.shockharness.rules.assertions]       # ASSERT001
+[tool.shockharness.rules.assertions]       # ASSERT001, ASSERT002
 enabled = true
-severity = "warning"
+severity = "warning"                       # ASSERT001: an assert on external input
+assert002_severity = "review"              # ASSERT002: asserts relied on, -O not refused
 roles = ["production"]
 allow_type_narrowing = true
+external_reads = ["sys.argv", "sys.stdin", "input", "os.environ.*", "open", ".read_text", ...]   # "x.*": below x only
 
 [tool.shockharness.rules.boolean_arguments]  # BOOL001
 enabled = true
@@ -675,7 +677,8 @@ switch and `severity` cap) and applies to every role.
 | `roles` | the file roles the rules apply to; a rule is not applied to (and not listed in `rules_applied` of) a file of another role | a default role is removed |
 | `markers` | STUB001 also reports comment lines that open with one of these words | never (adding tightens) |
 | `test_path_segments`, `mock_modules` | what STUB002 treats as test code | an entry is removed |
-| `allow_type_narrowing` | ASSERT001 skips asserts that only narrow types | never (`false` tightens) |
+| `allow_type_narrowing` | ASSERT001 never reports an assert that only narrows types | never (`false` tightens) |
+| `external_reads` | what ASSERT001 treats as external input, beyond `rules.input`'s sources and configuration reads | an entry is removed |
 | `allowed_callees` | BOOL001 skips calls whose last callee segment is listed | an entry is added |
 | `allowed` | STATE001 skips `name` in files matching `path` | always, one line per entry, with its `reason` |
 | `python_operations`, `javascript_operations` | the qualified callees IMPORT001 reports at import time | an entry is removed |

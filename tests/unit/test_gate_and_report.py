@@ -140,6 +140,7 @@ def test_report_lists_implemented_rules_in_registry_order(
         "STUB001",
         "STUB002",
         "ASSERT001",
+        "ASSERT002",
         "BOOL001",
         "STATE001",
         "IMPORT001",

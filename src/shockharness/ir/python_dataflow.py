@@ -17,6 +17,7 @@ from shockharness.ir.model import (
     ORIGIN_READ,
     UNIT_METHOD,
     DataflowFacts,
+    FlowAssert,
     FlowCall,
     FlowRead,
     FlowReturn,
@@ -56,8 +57,6 @@ BINDING_NODES = frozenset(
         ast.AsyncFunctionDef,
         ast.ClassDef,
         ast.ExceptHandler,
-        ast.Import,
-        ast.ImportFrom,
         ast.Global,
         ast.Nonlocal,
     }
@@ -108,7 +107,8 @@ def _binding_targets(node: ast.AST) -> list[ast.AST]:
 
 
 def _local_names(unit: ast.AST) -> set[str]:
-    """The names the unit binds (Python scoping: assigned anywhere in it)."""
+    """The names the unit binds (Python scoping: assigned anywhere in it). Imports are
+    not among them: an imported name is read through the file's import aliases."""
     names: set[str] = set()
     declared: set[str] = set()
     for node in _own_nodes(unit):
@@ -119,8 +119,6 @@ def _local_names(unit: ast.AST) -> set[str]:
         if isinstance(node, (*FUNCTION_NODES, ast.ClassDef, ast.ExceptHandler)):
             if node.name is not None:
                 names.add(node.name)
-        elif isinstance(node, ast.Import | ast.ImportFrom):
-            names.update(_import_names(node))
         elif isinstance(node, ast.Global | ast.Nonlocal):
             declared.update(node.names)
     return names - declared
@@ -225,6 +223,7 @@ class _Unit:
         self.stores: list[FlowStore] = []
         self.returns: list[FlowReturn] = []
         self.tested: set[str] = set()
+        self.asserts: list[FlowAssert] = []
         self.mentions: list[set[str]] = []
         self.depth = 0
         self.truncated = False
@@ -247,6 +246,7 @@ class _Unit:
             stores=tuple(self.stores),
             returns=tuple(self.returns),
             tested=tuple(sorted(self.tested)),
+            asserts=tuple(self.asserts),
             truncated=self.truncated,
         )
 
@@ -265,13 +265,17 @@ class _Unit:
         self.weak -= 1
 
     def test(self, node: ast.expr) -> Origins:
+        return self.tests(node)[0]
+
+    def tests(self, node: ast.expr) -> tuple[Origins, Origins]:
+        """(the test's value, every origin the test looks at)."""
         self.mentions.append(set())
         value = self.expr(node)
         mentioned = self.mentions.pop()
         self.tested.update(mentioned)
         if len(self.mentions) > 0:
             self.mentions[len(self.mentions) - 1].update(mentioned)
-        return value
+        return value, frozenset(mentioned)
 
     def enter(self) -> bool:
         """One level deeper; False (and the unit truncated) past DATAFLOW_MAX_DEPTH."""
@@ -497,7 +501,8 @@ def _raise(unit: _Unit, node: ast.stmt) -> None:
 
 def _assert(unit: _Unit, node: ast.stmt) -> None:
     assert isinstance(node, ast.Assert)
-    unit.test(node.test)
+    _value, mentioned = unit.tests(node.test)
+    unit.asserts.append(FlowAssert(node_span(unit.source, node), _sorted(mentioned)))
     unit.expr(node.msg)
 
 
@@ -516,9 +521,12 @@ def _definition(unit: _Unit, node: ast.stmt) -> None:
 
 
 def _import(unit: _Unit, node: ast.stmt) -> None:
+    """An imported name stays free: a chain on it is a read, qualified through the file's
+    imports (``sys.flags.optimize``, ``request.args``), wherever the import is."""
     assert isinstance(node, ast.Import | ast.ImportFrom)
     for name in _import_names(node):
-        unit.bind(name, EMPTY)
+        if name in unit.env:
+            del unit.env[name]
 
 
 StatementHandler = Callable[[_Unit, ast.stmt], None]

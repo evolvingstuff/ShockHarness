@@ -3622,3 +3622,60 @@ unimported and an imported `scripts/` file. 1133 tests pass on CPython 3.14 and
 self-scan, the golden fixtures and both examples, in all three profiles (none of
 them has a TODO-shaped message or a script); self-diff against ed8881b: no new
 findings, no complexity regressions (after splitting the script filter).
+
+## Asserts: ASSERT001 version 2 and ASSERT002 — DONE (2026-10-16)
+
+From the maintainer and an agent on MetaList (spec 21.1 decision 28, approved):
+asserts are encouraged; the rule targets their misuse.
+
+### What was built
+
+* **Facts**: `FlowAssert` (span and every origin the test looks at) in each
+  Python unit's dataflow facts.
+* **ASSERT001 v2** (`rules/dataflow.run_assert001`): the INPUT001 engine,
+  generalized with a `Mode`, with asserts as sinks, no validators, and as
+  sources the `rules.input` sources, the configuration reads and the new
+  `rules.assertions.external_reads`. It runs in the cross-file phase, so input
+  passed into a function that asserts on it is found too.
+* **ASSERT002** (`run_assert002`, review): one finding per run when production
+  code has asserts other than pure type narrowing and no analyzed file reads
+  `sys.flags.optimize`.
+* **The CLI refuses `python -O`** (exit 2), which also satisfies ASSERT002 for
+  this repository.
+* **Skills**: write-compliant-code principle 9 (assert internal invariants,
+  raise for expected failures, refuse `-O` at the entry point, `console.assert`
+  only logs) and a checklist line; fix-violations rows for both rules ("never
+  delete an assert to satisfy a finding").
+* **Dataflow fix**: imported names are reads wherever the import is (they were
+  locals, which hid `sys.flags.optimize` and a function-level `from flask import
+  request`).
+
+### Decisions (mine; review these)
+
+1. **`allow_type_narrowing` keeps its meaning** (default true: a narrowing assert
+   is never reported, even on input), so existing configurations are unchanged.
+2. **Validators do not clean a value for ASSERT001**: `assert int(x) > 0` checks
+   input as much as `assert x`.
+3. **`os.environ.*`, not `os.environ`**: a variable read from the environment is
+   external input; the environment object handed to a subprocess is not (the
+   corpus showed `assert proc.stdout` reported through `env=os.environ.copy()`).
+   A catalog entry ending in `.*` matches only below it.
+4. **`console.assert`** is a note in the skill, not a rule (decision 28 named it
+   a candidate).
+
+### Evidence (2026-10-16, macOS)
+
+On the 790-file corpus (pip, pytest, hypothesis, build, hatchling, npm):
+ASSERT001 goes from 581 findings (0.6.0) to 7, each an assert on data read from
+a file or the environment (hypothesis's charmap cache and bundled TLD list, pip's
+netrc credentials and an uninstall record); ASSERT002 gives one finding
+("581 assert(s) in 158 file(s)"). This repository has neither: its asserts are
+internal, and the CLI reads `sys.flags.optimize`.
+
+1135 tests pass on CPython 3.14 and 3.11.11; ruff clean; the self-gate passes.
+The golden fixture `python/def_truthiness.py`'s `assert a or b` (an invariant on
+parameters) is now an ASSERT002 finding instead of ASSERT001. Verdicts against
+0.6.0 (ASSERT and H4-H6 rule IDs excluded) are identical on all twelve runs.
+Self-diff against 6c820ca: no new findings, no complexity regressions. The
+TSX parity rerun shows no differences (its own dataclass comparison recurses on
+the new deep-source fixtures, a limit of the scratch plugin, not of the tool).

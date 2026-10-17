@@ -30,6 +30,7 @@ from shockharness.ir.model import (
 )
 from shockharness.rules.registry import (
     ASSERT001,
+    ASSERT002,
     BOOL001,
     EXC004,
     IMPORT001,
@@ -43,7 +44,8 @@ from shockharness.rules.registry import (
 from shockharness.rules.severity import section_severity
 from shockharness.source import SourceText
 
-GUARDRAIL_RULES = (EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001)
+# ASSERT001 and ASSERT002 are applied here and run in the cross-file phase (rules/dataflow.py).
+GUARDRAIL_RULES = (EXC004, STUB001, STUB002, ASSERT001, ASSERT002, BOOL001, STATE001, IMPORT001)
 NODE_PREFIX = "node:"
 DEFAULT_EXPORT = "default"
 PLACEHOLDER_MESSAGES = {
@@ -224,28 +226,7 @@ def _stub002(
     return found
 
 
-# -- ASSERT001 / BOOL001 -----------------------------------------------------------------
-
-
-def _assert001(
-    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
-) -> list[Finding]:
-    allow_narrowing = settings["allow_type_narrowing"] is True
-    return [
-        _finding(
-            ASSERT001,
-            str(settings["severity"]),
-            path,
-            fact.span,
-            f"{fact.text} is removed under python -O; the check it makes disappears in an "
-            "optimized run",
-            source,
-            None,
-            CONFIDENCE_EXACT,
-        )
-        for fact in facts.guardrails.asserts
-        if not (allow_narrowing and fact.narrowing)
-    ]
+# -- BOOL001 -----------------------------------------------------------------
 
 
 def _bool001(
@@ -417,8 +398,6 @@ def run_guardrail_rules(
         found.extend(_stub001(facts, source, path, rules["stubs"]))
     if STUB002.rule_id in active:
         found.extend(_stub002(facts, source, path, language, rules["stubs"]))
-    if ASSERT001.rule_id in active:
-        found.extend(_assert001(facts, source, path, rules["assertions"]))
     if BOOL001.rule_id in active:
         found.extend(_bool001(facts, source, path, rules["boolean_arguments"]))
     if STATE001.rule_id in active:

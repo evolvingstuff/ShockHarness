@@ -1128,3 +1128,19 @@ def test_unsupported_sources_default_and_config_effective(
     write(empty_root, ".shockharness.toml", '[tool.shockharness]\nunsupported_sources = "fail"\n')
     code, out, _ = run(["config", "validate", "--root", str(empty_root)], capsys)
     assert code == 0 and "policy deviation" not in out
+
+
+def test_refuses_to_run_optimized(empty_root: Path) -> None:
+    """Decision 28: ShockHarness checks its own invariants with assert, so python -O (or
+    PYTHONOPTIMIZE) would remove them; the CLI refuses to start (exit 2)."""
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-O", "-m", "shockharness", "check", str(empty_root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 2
+    assert "does not run under python -O or PYTHONOPTIMIZE" in completed.stderr

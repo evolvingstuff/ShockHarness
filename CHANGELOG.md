@@ -5,6 +5,24 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (asserts, decision 28)
+- **ASSERT001 version 2 reports only an assert that checks external input**: one
+  whose test depends, followed like INPUT001 (across functions too), on request
+  data, a configuration read, or `rules.assertions.external_reads` (`sys.argv`,
+  `input`, `open`, `json.load`, `requests.get`, ...). Internal invariants are
+  never reported; version 1 reported every production assert, which pushed
+  agents to delete them. Fewer findings than 0.6.0 wherever asserts state
+  invariants.
+- New `ASSERT002` (review): production code relies on asserts and no analyzed
+  code reads `sys.flags.optimize`; one finding per run asking for a startup
+  check. New keys `rules.assertions.assert002_severity` and `external_reads`.
+- The CLI refuses to run under `python -O` / `PYTHONOPTIMIZE` (exit 2):
+  ShockHarness checks its own invariants with assert.
+- The skills encourage asserting internal invariants (write-compliant-code
+  principle 9) and say never to delete an assert to satisfy a finding.
+- Dataflow: an imported name is now a read wherever the import is (a
+  function-level `from flask import request` was a local).
+
 ### Changed (feedback)
 - STUB001: a JavaScript error message is a TODO placeholder only when it opens
   with `TODO` in capitals or `todo` followed by `:` or `(`; `"Todo toggle

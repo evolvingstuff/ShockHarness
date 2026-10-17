@@ -670,6 +670,14 @@ def main(argv: Sequence[str]) -> int:
     """Run the CLI with ``argv`` (without the program name) and return the exit code."""
     parser = build_parser()
     args = parser.parse_args(list(argv))
+    if sys.flags.optimize:
+        # ShockHarness checks its own invariants with assert (decision 28): an optimized
+        # run would remove them, so it refuses to start.
+        sys.stderr.write(
+            f"{PROGRAM}: error: ShockHarness checks its invariants with assert and does not "
+            "run under python -O or PYTHONOPTIMIZE\n"
+        )
+        return EXIT_INVALID_CONFIG
     # Boundary (declared in .shockharness.toml): the process edge. Typed errors map to
     # exit 2; anything unexpected prints its full traceback and exits 3. Nothing is hidden.
     try:
