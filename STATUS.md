@@ -4277,5 +4277,11 @@ from 0.7.0: README, docs, examples, the six skills' adoption section, and the te
 check the pins. The changelog `[0.8.0]` section leads with the two verdict-moving
 changes (decision 35's rule-switching errors, decision 34's DEF002 statement forms) and
 init's test exemption. Local release checks: ruff, 1201 tests, the self-gate, `python -m
-build` and the consumer upgrade check (2 examples, 14 steps, 0 failed). Tag `v0.8.0`;
-published by `publish.yml`.
+build` and the consumer upgrade check (2 examples, 14 steps, 0 failed). Tag `v0.8.0` at 1f06164.
+Published by `publish.yml` (run 39065322851): the full matrix on the tagged commit,
+the self-gate against the accepted policy, the version check, then trusted publishing.
+
+Verified after publication: PyPI lists `0.8.0` as the latest release, with a wheel and
+an sdist. `pip install shockharness==0.8.0` into a fresh environment works, and
+`shockharness version` prints `shockharness 0.8.0`. uv's cached index did not see the
+release yet; pip installed it.
