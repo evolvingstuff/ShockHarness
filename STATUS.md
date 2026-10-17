@@ -4265,7 +4265,7 @@ reviews. The write-up is in `evals/under-the-gate/RESULTS-round3.md`, the eviden
 * **What remains:** production disguises, mostly because strict MAGIC001 refuses named
   constants (`"  "` indent ×5, `REPORT_INDENT = True`, `len(calendar.month_name)` ×3,
   `HEADER_ROW + 1` ×2). Two rules pushed legitimate code into longhand: DEF002 on
-  grouping `setdefault`, DEF005 on `except ValueError: return None`. Also pre-emptive
+  an assigned grouping `setdefault`, DEF005 on `except ValueError: return None`. Also pre-emptive
   boundaries, `SystemExit` subclasses and ritual `python -O` guards.
 * **Recommendations:** six new rows in `docs/ideas.md`. The biggest, allowing named
   constants in strict MAGIC001, is Tom's decision.

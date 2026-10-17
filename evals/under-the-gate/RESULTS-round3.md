@@ -125,13 +125,18 @@ into `phone_plans.json` / `phone_rules.json` (×3). These are sourced reference 
 The reviews found two rules that blocked legitimate code; the agents complied by writing
 the same thing out longhand.
 
-* **DEF002 on grouping.** contactclean r1's `groups.setdefault(root(contact.row),
-  []).append(contact)` was blocked. It became
-  `if group_root not in groups: groups[group_root] = []`, then `.append`.
-  * Grouping with `setdefault` is not a fallback, and nothing was hidden.
-  * Decision 34, which makes DEF002 recognize the statement forms, would flag the longhand
-    too, so DEF002 needs an exemption for an empty-container `setdefault` that is mutated
-    at once.
+* **DEF002 on grouping.** In contactclean r1 the hook reported DEF002 at
+  `cleaning.py:189` and `:191`. The reviewer attributed it to
+  `groups.setdefault(root(contact.row), []).append(contact)`, but the orchestrator checked:
+  DEF002 already exempts that chained form. The two lines it flagged were
+  `reasons = shared.setdefault(kept_root, set())`, then `reasons.add(key)` (the same
+  grouping idiom with the result assigned first), and `shared.pop(absorbed, set())`.
+  * The agent rewrote all three as membership checks, `groups` included. Nothing was
+    hidden by any of them.
+  * After decision 34 (ef679a4), DEF002 still does not flag the longhand
+    `if k not in groups: groups[k] = []`. Checked.
+  * So the gap is narrow: `x = m.setdefault(k, <empty container>)` followed by mutating
+    `x` should be exempt like the chained form.
 * **DEF005 on `try: datetime.date(...) except ValueError: return None`.**
   * contactclean r1 replaced it with `_date_or_none`, which re-implements `datetime.date`'s
     validation (MINYEAR, the month range, `calendar.monthrange`) so it can return the same
@@ -177,8 +182,8 @@ timeout=30.0`) and silent failures.
    would also make the `2` question mostly moot outside expressions.
 3. **MAGIC001 disguise detection**, still open from round 2: strings and bools passed as
    numeric arguments (`indent="  "`, `indent=True`), and `len(<stdlib table>) ± n`.
-4. **DEF002: exempt an empty-container `setdefault` used for grouping**, and build it into
-   decision 34 so the longhand is not flagged either.
+4. **DEF002: exempt `x = m.setdefault(k, <empty container>)` followed by mutating `x`**, as
+   the chained form already is. Decision 34 already leaves the longhand alone.
 5. **DEF005 inside a declared boundary:** a handler that returns an exit status or a
    reported `None` there is the boundary doing its job. Consider narrowing.
 6. **Boundaries:** a boundary for a file that does not exist yet, or one added before the
