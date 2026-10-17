@@ -58,7 +58,7 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "a rejection handler reference this module does not define is opaque; EXC001 unknown",
     ),
     # EXC001: where the status is decided.
-    ("rules/exceptions.py", "_name_matches"): (
+    ("rules/exceptions.py", "name_matches"): (
         frozenset({"CONFIDENCE_UNRESOLVED"}),
         "an unresolved identity never matches a boundary (fails closed)",
     ),
@@ -105,6 +105,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     ("rules/magic_numbers.py", "run_magic001"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "MAGIC001 is exact: violation",
+    ),
+    ("rules/boundary_usage.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "EXC005 is exact once every covered file was analyzed: violation; a boundary whose "
+        "files were not all analyzed is not judged at all",
     ),
     ("rules/magic_numbers.py", "_magic004_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),

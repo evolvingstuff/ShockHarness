@@ -20,8 +20,9 @@ Recognized shapes:
   whose fallback is ``None`` assigned to a name and checked by the very next
   statement, an ``if`` that only raises (``x = m.get(k)`` then ``if x is None:
   raise ...``); and ``m.setdefault(k, <empty container>)`` whose result is
-  immediately mutated (the grouping idiom). ``m.pop(k, None)`` whose result is
-  discarded is its own kind, ``discarded_removal``;
+  immediately mutated (the grouping idiom), chained or assigned to a name that the
+  very next statement mutates (``x = m.setdefault(k, set())`` then ``x.add(v)``).
+  ``m.pop(k, None)`` whose result is discarded is its own kind, ``discarded_removal``;
 * pydantic model fields (``class M(BaseModel)`` with ``BaseModel`` resolved through
   the imports): ``x: int = 1``, ``Field(default=...)``, ``Field(1)``,
   ``Field(default_factory=...)``, reported with the dataclass kinds;
@@ -521,6 +522,37 @@ def _mutated_accumulator(node: ast.AST) -> ast.Call | None:
     return None
 
 
+def _mutated_name(statement: ast.stmt) -> str | None:
+    """The name a statement mutates in place (``x.add(v)``, ``x[k] = v``), else None."""
+    if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
+        func = statement.value.func
+        if isinstance(func, ast.Attribute) and func.attr in ACCUMULATOR_MUTATORS:
+            if isinstance(func.value, ast.Name):
+                return func.value.id
+    if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+        target = statement.targets[0]
+        if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+            return target.value.id
+    return None
+
+
+def _assigned_accumulators(node: ast.AST) -> list[ast.Call]:
+    """``x = m.setdefault(k, <empty>)`` whose very next statement mutates ``x``: the
+    grouping idiom with the container named first (under-the-gate round 3)."""
+    found: list[ast.Call] = []
+    for statements in _statement_lists(node):
+        for statement, following in itertools.pairwise(statements):
+            if not isinstance(statement, ast.Assign) or len(statement.targets) != 1:
+                continue
+            target = statement.targets[0]
+            call = _accumulator_setdefault(statement.value)
+            if call is None or not isinstance(target, ast.Name):
+                continue
+            if _mutated_name(following) == target.id:
+                found.append(call)
+    return found
+
+
 def _discarded_pop(node: ast.AST) -> ast.Call | None:
     """``m.pop(k, None)`` as an expression statement."""
     if not isinstance(node, ast.Expr):
@@ -540,6 +572,7 @@ def _exemptions(module: ast.Module) -> _Exemptions:
         accumulator = _mutated_accumulator(node)
         if accumulator is not None:
             claimed.add(id(accumulator))
+        claimed.update(id(call) for call in _assigned_accumulators(node))
         pop = _discarded_pop(node)
         if pop is not None:
             discarded.add(id(pop))

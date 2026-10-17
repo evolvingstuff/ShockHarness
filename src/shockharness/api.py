@@ -47,6 +47,7 @@ from shockharness.report import (
 from shockharness.roles import FILE_ROLES_KEY, role_classifier
 from shockharness.rules import registry
 from shockharness.rules.accepted_policy import accepted_policy
+from shockharness.rules.boundary_usage import unused_boundary_findings
 from shockharness.rules.policy_integrity import fingerprinted, policy_attempt_findings
 from shockharness.rules.registry import VERIFICATION_SECTION
 
@@ -91,8 +92,10 @@ def analyze_paths(
     files = with_unsupported_sources(outcome.files, discovery, config)
     # VERIFY003 for repository keys that tried to loosen the --policy file (H2 part 2):
     # the only verification finding a run without a base revision can produce.
-    attempts = fingerprinted(
-        policy_attempt_findings(config, root, config.section(VERIFICATION_SECTION))
+    attempts = (
+        *fingerprinted(policy_attempt_findings(config, root, config.section(VERIFICATION_SECTION))),
+        # EXC005: a declared boundary that no catch in its files uses.
+        *unused_boundary_findings(outcome.catches, root, config),
     )
     classifier = role_classifier(config.values[FILE_ROLES_KEY])
     attempt_roles = {f.path: classifier.classify(f.path).role for f in attempts}

@@ -73,6 +73,7 @@ Implemented rules:
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |
 | `EXC004` | `return`, `break` or `continue` that leaves a `finally` block, discarding the exception in flight | warning |
+| `EXC005` | a declared catch boundary that no catch in its files uses | warning |
 | `DEF001` | parameter default, dataclass field default / `default_factory` | error |
 | `DEF002` | `m.get(k, v)`, `getattr(o, a, v)`, `o?.x ?? v`, `const {x = v} = o`; `.get(k)` implicit `None` as review | error |
 | `DEF003` | `x or v`, `x || v` outside Boolean logic | review |

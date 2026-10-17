@@ -36,7 +36,7 @@ from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
-from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
+from shockharness.ir.model import NO_VERIFICATION, CatchFact, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
@@ -58,7 +58,7 @@ from shockharness.rules.dataflow import (
     run_input002,
 )
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
-from shockharness.rules.exceptions import run_exception_rules
+from shockharness.rules.exceptions import manager_catches, run_exception_rules
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001, run_magic004
@@ -206,6 +206,9 @@ class AnalysisOutcome:
     # Per-file verification facts (H2), for a revision diff to compare; a plain check
     # does not use them.
     verification: Mapping[str, FileVerification]
+    # Every catch of each parsed file (clauses and capture managers, as EXC001 sees
+    # them), for EXC005's question whether a declared boundary is used.
+    catches: Mapping[str, tuple[CatchFact, ...]]
 
 
 def file_role(relative_path: str, config: EffectiveConfig) -> FileRole:
@@ -986,7 +989,24 @@ def complete(
         files=tuple(results),
         metrics={"complexity": outcome.complexity, "graph": outcome.graph},
         verification={pending.path: verification_input(pending) for pending in pendings},
+        catches=_catches(pendings, config),
     )
+
+
+EXCEPTIONS_SECTION = "rules.exceptions"
+
+
+def _catches(
+    pendings: Sequence[PendingFile], config: EffectiveConfig
+) -> dict[str, tuple[CatchFact, ...]]:
+    capture = frozenset(
+        str(name) for name in config.section(EXCEPTIONS_SECTION)["capture_managers"]
+    )
+    return {
+        pending.path: (*pending.facts.catches, *manager_catches(pending.facts.managers, capture))
+        for pending in pendings
+        if pending.facts is not None
+    }
 
 
 def unsupported_source_result(relative: str, reason: str, config: EffectiveConfig) -> FileResult:

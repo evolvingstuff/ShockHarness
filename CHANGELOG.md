@@ -13,6 +13,11 @@ existing `# shockharness: ignore[MAGIC001]` on such a line now matches nothing a
 SUPP002 warning: delete the comment and keep the citation as a plain comment.
 
 ### Added
+- `EXC005` (`rules.exceptions`, warning): a declared catch boundary naming an
+  exception that no catch in the files it covers catches, reported at the
+  boundary's line in the configuration file. Judged only when every covered file
+  was analyzed in the run. From the under-the-gate experiment, where agents
+  declared boundaries ahead of the code.
 - `MAGIC004` (`rules.magic_numbers`, review, Python, JavaScript and TypeScript): a
   named constant whose name only spells a number (`TWO = 2`, `ONE_HUNDRED = 100`,
   `VALUE_100 = 100`). Severity `rules.magic_numbers.magic004_severity`.
@@ -24,7 +29,17 @@ SUPP002 warning: delete the comment and keep the citation as a plain comment.
   ShockHarness's own `src`, and 58 in the under-the-gate experiment's agent-written
   builds go away, and no constant name among them only spells a number.
 - The skills say a fixed value is a module-level named constant that cites its
-  source, with no suppression, never named after its value or disguised.
+  source, with no suppression, never named after its value or disguised. They also
+  say:
+  * a failed read or write is reported, never dropped;
+  * a boundary is declared for the catch being written;
+  * a project error never derives from `SystemExit`;
+  * test values stay in the test;
+  * the `python -O` refusal is only for code that asserts.
+- `DEF002`: `x = m.setdefault(k, <empty container>)` whose next statement mutates `x`
+  is the grouping idiom, like the chained form, and is not reported.
+- `BOOL001`: the expected value of an assertion (`assertEqual(x, True)`,
+  `assert.equal(v, true)`) is not reported. MetaList had 159 of its 353 findings there.
 - ShockHarness's own configuration drops its `constants.py` MAGIC001 override.
 - The consumer upgrade check injects a literal in an expression, and the examples
   keep their RFC citations as plain comments.

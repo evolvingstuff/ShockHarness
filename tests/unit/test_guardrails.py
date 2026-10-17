@@ -283,6 +283,27 @@ def test_bool001_positional_booleans(make_config: Callable[[str], EffectiveConfi
     assert rows(run(default, "src/a.js", js)) == [("BOOL001", 1, "review")]
 
 
+def test_bool001_skips_the_expected_value_of_an_assertion(
+    make_config: Callable[[str], EffectiveConfig],
+) -> None:
+    # MetaList: 159 of its 353 BOOL001 findings were assertion arguments in browser test
+    # scripts outside the test role; the assertion says what the Boolean means.
+    default = make_config("")
+    text = (
+        "self.assertEqual(result, True)\n"
+        "assertIs(flag, False)\n"
+        "mock.assert_called_with(path, True)\n"
+        "render(page, True)\n"  # 4: still reported
+    )
+    assert rows(run(default, "src/a.py", text)) == [("BOOL001", 4, "review")]
+    js = (
+        "assert.equal(visible, true);\n"
+        "assert.strictEqual(state.open, false, 'closed after Escape');\n"
+        "connect(host, true);\n"  # 3: still reported
+    )
+    assert rows(run(default, "src/a.js", js)) == [("BOOL001", 3, "review")]
+
+
 # -- STATE001 ----------------------------------------------------------------------------
 
 

@@ -28,6 +28,9 @@ preventive one and `pre-commit-review` is the final check.
   error; one that silences nothing is a `SUPP002` warning.
 - **Never widen a boundary, loosen a profile or lower a severity to get green.**
   Those are policy changes; propose them with a recorded rationale.
+- **Never trade a forbidden catch for a quieter failure**: a check that returns
+  the same fallback, a `raise SystemExit` deep in the code, or a project error
+  derived from `SystemExit`. A failed read or write is reported, never dropped.
 - **Never move a number into an unexplained constant** (`THIRTY = 30`, which
   MAGIC004 reports). The name must say what the value means and where it comes
   from; a module-level named constant then needs no suppression.

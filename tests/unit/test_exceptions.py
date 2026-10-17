@@ -427,7 +427,13 @@ def test_exception_rules_share_one_enabled_switch(
     config = make_config("[tool.shockharness.rules.exceptions]\nenabled = false\n")
     result = _run(config, "a.py", "python", "try:\n    f()\nexcept:\n    pass\n")
     assert result.findings == ()
-    assert [d.rule_id for d in result.rules_disabled] == ["EXC001", "EXC002", "EXC003", "EXC004"]
+    assert [d.rule_id for d in result.rules_disabled] == [
+        "EXC001",
+        "EXC002",
+        "EXC003",
+        "EXC004",
+        "EXC005",
+    ]
     assert "rules.exceptions is disabled" in config.deviations
 
 

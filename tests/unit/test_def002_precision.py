@@ -135,6 +135,29 @@ def test_the_grouping_idiom_is_not_a_fallback(strict_config: EffectiveConfig) ->
     assert def002(run(strict_config, text)) == [(5, "error"), (6, "error"), (7, "error")]
 
 
+def test_the_grouping_idiom_with_the_container_named_first(
+    strict_config: EffectiveConfig,
+) -> None:
+    # Under-the-gate round 3: `reasons = shared.setdefault(k, set())` then
+    # `reasons.add(key)` is the same idiom; it was flagged and rewritten as a
+    # membership check.
+    text = (
+        "def merge(shared: dict, keys: list, kept: int) -> None:\n"
+        "    for key in keys:\n"
+        "        reasons = shared.setdefault(kept, set())\n"  # 3: mutated next: exempt
+        "        reasons.add(key)\n"
+        "        rows = shared.setdefault(key, [])\n"  # 5: mutated next by subscript
+        "        rows[0] = key\n"
+        "        seen = shared.setdefault(key, set())\n"  # 7: not mutated next: reported
+        "        print(seen)\n"
+        "        other = shared.setdefault(key, set())\n"  # 9: another name mutated
+        "        reasons.add(other)\n"
+        "        size = shared.setdefault(key, 0)\n"  # 11: not an empty container
+        "        size.bit_length()\n"
+    )
+    assert def002(run(strict_config, text)) == [(7, "error"), (9, "error"), (11, "error")]
+
+
 def test_remediation_names_the_three_cases() -> None:
     remediation = registry.DEF002.remediation
     assert "(1) The key must exist" in remediation

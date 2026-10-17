@@ -2361,6 +2361,56 @@ MAGIC004 = RuleSpec(
 )
 
 
+# --- EXC005 (0.9.0, under-the-gate round 3) ---------------------------------------------
+
+EXC005 = RuleSpec(
+    rule_id="EXC005",
+    version="1",
+    name="catch boundary that no catch uses",
+    family="exceptions",
+    config_section="rules.exceptions",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A declared boundary (rules.exceptions.boundaries) names an exception that no catch "
+        "in the files it covers catches: it approves a catch nobody has written, or no longer "
+        "writes."
+    ),
+    rationale=(
+        "A boundary is a reviewed decision that one file may catch one kind of external "
+        "failure. Declared ahead of the code, or left behind after the catch is gone, it "
+        "pre-approves the next catch there without review. In the under-the-gate "
+        "experiment agents declared boundaries for files they had not written yet."
+    ),
+    guarantees=(
+        "For each exception a boundary names: reported at the boundary's path line in the "
+        "configuration file when no except/catch clause or capture manager in the files the "
+        "boundary covers (its glob, its language; a JavaScript boundary also covers "
+        "TypeScript) catches that exception, matched as EXC001 matches. Judged only when the "
+        "boundary covers at least one file of the tree and every covered file was analyzed "
+        "in this run. Severity warning; rules.exceptions.enabled = false turns it off."
+    ),
+    limitations=(
+        "A boundary for a file that does not exist yet is not judged, and neither is one "
+        "whose files were not all analyzed (the edit hook, check on a subdirectory). A catch "
+        "whose type cannot be resolved does not count as a use."
+    ),
+    remediation=(
+        "Remove the exception from the boundary, or the boundary itself; declare a boundary "
+        "when you write the catch it approves, for the exceptions that catch handles."
+    ),
+    noncompliant_example=(
+        '{ path = "app/cli.py", language = "python", exception = "OSError", '
+        'reason = "..." }  # cli.py catches nothing'
+    ),
+    compliant_example=(
+        '{ path = "app/io.py", language = "python", exception = "OSError", '
+        'reason = "reading the input file" }  # io.py: except OSError as exc: raise ...'
+    ),
+)
+
+
 # --- DOM001 (decision 27) ---------------------------------------------------------------
 
 DOM001 = RuleSpec(
@@ -2574,6 +2624,7 @@ RULES: tuple[RuleSpec, ...] = (
     GUARD001,
     MAGIC003,
     MAGIC004,
+    EXC005,
     DOM001,
     DOM002,
 )

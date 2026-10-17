@@ -62,7 +62,10 @@ a plain `check`; see the `refactor-complexity` skill.
    a file, decoding external input, a network call, a subprocess. Inside the
    boundary the `try` wraps exactly one operation and the handler converts the
    failure into a typed error the caller must handle; it never returns a
-   success-shaped value.
+   success-shaped value, and a failed read or write reaches the caller or the
+   user, never nothing. Declare a boundary for a catch you are writing, in that
+   file (an unused one is `EXC005`). A project's own error derives from
+   `Exception`, never `SystemExit`: only the entry point turns it into an exit.
 3. **No defaults, no fallbacks.** Do not write `b=1`, `.get(k, v)`, `x or v`,
    `x ?? v`, `os.getenv("X", "3")`, `process.env.PORT || 3000`. Read required
    data with indexing (`raw["PORT"]`, `env.PORT` followed by validation) so a
@@ -83,7 +86,8 @@ a plain `check`; see the `refactor-complexity` skill.
    belong in `.toml`, `.json`, `.env.example`, a schema, or named constants.
    Build-tool configuration files (`conftest.py`, `*.config.js`, `.eslintrc.js`,
    listed under `rules.magic_numbers.configuration_files`) are exempt from
-   `MAGIC001` and the report says so per file.
+   `MAGIC001` and the report says so per file. Test values stay in the test,
+   which is exempt from `MAGIC001`; never move them into a data file.
 7. **Validate what you return, not only what you receive.** When a function's
    contract promises something about its result (non-empty, sorted, within a
    range, exactly the expected keys), check it before returning and raise on
@@ -158,14 +162,11 @@ a plain `check`; see the `refactor-complexity` skill.
    bug found at its source. Input from outside (a request field, a file, an
    environment variable, an argument) fails for reasons that are not bugs:
    check it where it enters and raise a typed error (`ASSERT001` reports an
-   assert on input). Python drops asserts under `-O`, so the entry point refuses
-   to run optimized (`ASSERT002`). JavaScript's `console.assert` only logs.
+   assert on input). Python drops asserts under `-O`, so an entry point whose
+   code asserts refuses to run optimized (`ASSERT002`); code with no asserts
+   needs no such guard. JavaScript's `console.assert` only logs.
 
    ```python
-   def main() -> int:
-       if sys.flags.optimize:
-           raise SystemExit("do not run with python -O: invariants are asserts")
-
    def next_step(plan: Plan) -> Step:
        assert plan.steps, "a scheduled plan always has a step"
        return plan.steps[0]
@@ -337,12 +338,12 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] No `try`/`catch` outside a boundary declared in `.shockharness.toml`; each approved `try` wraps one operation and re-raises a typed error with its cause.
 - [ ] No numeric literal other than `0` or `1`; each number lives in configuration or a cited, named constant.
 - [ ] Each `0` or `1` that means something (exit code, sentinel, flag) has a name.
-- [ ] Data, configuration and specification live in data files or a declared constants module, not in executable source.
+- [ ] Data, configuration and specification live in data files or named constants, not in executable source; test values stay in the tests.
 - [ ] `shockharness check .` ends in `gate: PASS (exit 0)` and the tests pass.
 - [ ] Any suppression has an exact rule ID and a reason that cites a source.
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
-- [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses to run under `python -O`.
+- [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses `python -O` only when the code asserts.
 
 ## Adopting ShockHarness
 

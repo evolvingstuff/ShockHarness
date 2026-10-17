@@ -145,10 +145,10 @@ def _dotted_tail(qualified: str) -> str:
 
 
 def identity_matches(identity: ExceptionIdentity, boundary: Boundary) -> bool:
-    return any(_name_matches(identity, name) for name in boundary.exceptions)
+    return any(name_matches(identity, name) for name in boundary.exceptions)
 
 
-def _name_matches(identity: ExceptionIdentity, exception: str) -> bool:
+def name_matches(identity: ExceptionIdentity, exception: str) -> bool:
     if identity.qualified is None or identity.confidence == CONFIDENCE_UNRESOLVED:
         return False
     if identity.confidence == CONFIDENCE_EXACT:

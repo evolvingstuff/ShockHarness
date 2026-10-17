@@ -450,8 +450,10 @@ pydantic and NamedTuple defaults are not recognized.
 - `m.setdefault(k, <empty container>)` (`[]`, `{}`, `()`, `set()`, `list()`,
   `dict()`, `tuple()`, `frozenset()`) whose result is immediately mutated by
   `.append`, `.add`, `.extend`, `.update`, `.insert`, `.setdefault` or a
-  subscript assignment: the grouping idiom. A non-empty fallback, or a result
-  that is read, is reported.
+  subscript assignment: the grouping idiom. Since 0.9.0 the same holds when the
+  result is assigned to a name that the very next statement mutates
+  (`reasons = shared.setdefault(k, set())` then `reasons.add(key)`). A non-empty
+  fallback, or a result that is read, is reported.
 
 **Discarded removal.** `m.pop(k, None)` as an expression statement removes the
 key if it is there. It is a `review` finding of kind `discarded_removal` in
@@ -782,6 +784,17 @@ A rule whose section does not list a file's role is not applied to that file
 (it is absent from `rules_applied`, as the VERIFY role scopes are), so a test
 file may use `mock` and `assert` freely.
 
+**EXC005 (0.9.0).** A declared boundary names an exception that no catch in the
+files it covers catches (`except`/`catch` clauses and capture managers, matched as
+EXC001 matches; a JavaScript boundary also covers TypeScript). One warning per
+exception, at the boundary's `path` line in the configuration file. It approves a
+catch nobody has written, or no longer writes: in the under-the-gate experiment,
+agents declared boundaries for files before writing them. A boundary is judged only
+when it covers at least one file of the tree and every covered file was analyzed in
+this run, so the edit hook, `check` on a subdirectory, and a boundary for a file that
+does not exist yet produce nothing. On ShockHarness's own 37 boundaries and the
+experiment's 53 it found none unused.
+
 **EXC004.** Python: `return` anywhere in a `finally` block, and `break`/`continue`
 not inside a loop of their own within the block (a `break` in the `else` of such
 a loop leaves the block). JavaScript: `return` in a `finally` clause; an
@@ -839,7 +852,11 @@ spread) where one of them is a Boolean literal: one finding per literal, at
 `rules.boolean_arguments.allowed_callees` are skipped (default: `get`,
 `getattr`, `setattr`, `setdefault`, `pop`, `next`, which DEF002 already judges);
 each addition is a policy deviation. A single-argument call (`toggle(True)`) is
-not reported.
+not reported, and neither is an assertion (since 0.9.0): a callee whose last segment
+starts with `assert` (`assertEqual`, `self.assertIs`, `mock.assert_called_with`) or
+whose receiver is `assert` (`assert.equal`, `assert.strictEqual`). There the Boolean
+is the expected value, and the assertion says what it means. MetaList measured 159 of
+its 353 BOOL001 findings in browser test scripts outside the test role.
 
 **STATE001.** The module-level variables the analyzer marks mutable (bound to a
 list/dict/set display or a mutable constructor, a JavaScript `let`/`var` or a

@@ -4324,3 +4324,33 @@ download.
 leaves MAGIC004 out, like the other new rules. Goldens lose four constant-definition
 findings. The consumer check injects a literal in an expression, and the
 examples' and eval references' unneeded suppressions became plain comments.
+
+## 0.9.0 batch: skill wording, DEF002 and BOOL001 fixes, EXC005 — DONE (2026-10-17)
+
+On Tom's go-ahead (items 1-3 of the proposed 0.9.0 work).
+* **Skills.**
+  * write-compliant-code principle 2: a failed read or write reaches the caller or the
+    user; declare a boundary for the catch being written (EXC005); project errors derive
+    from `Exception`, never `SystemExit`.
+  * Principle 6: test values stay in the test. Principle 9: the `-O` refusal only for
+    code that asserts; the example that taught the ritual guard is gone.
+  * fix-violations: never trade a forbidden catch for a quieter failure.
+* **DEF002.** `x = m.setdefault(k, <empty>)` whose next statement mutates `x` is the
+  grouping idiom (`_assigned_accumulators` in `ir/python_defaults.py`); `m.pop(k,
+  set())` is still a finding.
+* **BOOL001.** Assertion callees are skipped (`rules/guardrails.py::_is_assertion`).
+* **EXC005** (`rules/boundary_usage.py`, warning). `analyze_paths` gets every parsed
+  file's catches from the cross-file phase (`AnalysisOutcome.catches`). Each exception
+  a boundary names, that no covered catch catches, is reported at the boundary's `path`
+  line. A boundary is judged only when it covers at least one file and every covered
+  file was analyzed. Inventory sites: `boundary_usage._finding` (exact, violation) and
+  `exceptions.name_matches` (renamed from `_name_matches`).
+  * Measured: none of ShockHarness's 37 boundaries and none of the experiment's 53 is
+    unused (the pre-emptive ones had catches by the end).
+  * A sample with an unused exception, a catch-less file and a not-yet-existing file
+    reports the first two and skips the third.
+* **DEF005 inside a boundary:** not changed. Decision 37 is drafted in
+  `docs/proposal-def005-boundaries.md`, waiting on Tom.
+
+Tests: `test_exc005.py` (3), a DEF002 assigned-grouping test, a BOOL001 assertion test,
+updated rule lists. 1209 tests pass; the self-gate passes.
