@@ -523,6 +523,7 @@ GUARDRAIL_RULES = {
     "role_integrity": "ROLE001",
     "input": "INPUT001",
     "consistency": "PROV001, GUARD001",
+    "sentinels": "MAGIC003",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -561,6 +562,8 @@ GUARDRAIL_CATALOGS = (
     ("consistency", "python_fabricators"),
     ("consistency", "javascript_fabricators"),
     ("consistency", "issuer_prefixes"),
+    ("sentinels", "roles"),
+    ("sentinels", "values"),
 )
 TYPE_SWITCHES = ("report_any", "report_cast", "report_non_null", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
@@ -570,6 +573,8 @@ GUARDRAIL_PERMISSIONS = (
     ("import_effects", "script_files"),
     ("input", "python_validators"),
     ("input", "javascript_validators"),
+    ("sentinels", "python_index_callees"),
+    ("sentinels", "javascript_index_callees"),
 )
 REVIEW = "review"
 

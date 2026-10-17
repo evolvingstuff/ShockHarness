@@ -43,10 +43,11 @@ def test_negative_one_is_allowed_by_default_negative_zero_is_not(
     analyze: Callable[[str, str], FileResult], make_config: Callable[[str], EffectiveConfig]
 ) -> None:
     text = "a = -1\nb = -0\nc = -0.0\nd = -1.0\nlast = items[-1]\n"
-    assert [f.span.line for f in analyze(text, "python").findings] == [2, 3]
+    lines = [f.span.line for f in analyze(text, "python").findings if f.rule_id == "MAGIC001"]
+    assert lines == [2, 3]
     off = make_config("[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n")
     result = analyze_text("t.py", "python", text, off, AnalysisOptions(True, CACHE_CONFIGURED))
-    assert [f.span.line for f in result.findings] == [1, 2, 3, 4, 5]
+    assert [f.span.line for f in result.findings if f.rule_id == "MAGIC001"] == [1, 2, 3, 4, 5]
     assert not any("allow_unary_negative_one" in d for d in off.deviations)  # stricter
 
 
@@ -61,7 +62,7 @@ def test_allow_unary_negative_one(make_config: Callable[[str], EffectiveConfig])
         config,
         AnalysisOptions(True, CACHE_CONFIGURED),
     )
-    assert [f.span.line for f in result.findings] == [3, 4]
+    assert [f.span.line for f in result.findings if f.rule_id == "MAGIC001"] == [3, 4]
     js = analyze_text(
         "t.js",
         "javascript",
@@ -69,7 +70,7 @@ def test_allow_unary_negative_one(make_config: Callable[[str], EffectiveConfig])
         config,
         AnalysisOptions(True, CACHE_CONFIGURED),
     )
-    assert [f.message.split(" ")[2] for f in js.findings] == ["-0"]
+    assert [f.message.split(" ")[2] for f in js.findings if f.rule_id == "MAGIC001"] == ["-0"]
 
 
 def test_extra_allowed_values_are_honoured_and_reported(

@@ -97,11 +97,11 @@ def test_any_other_integer_is_flagged_in_both_languages(value: int, name: str) -
 @given(value=st.sampled_from([-1, 0, 1]), name=identifiers)
 @settings(max_examples=50, deadline=None)
 def test_zero_and_one_never_flagged(value: int, name: str) -> None:
-    assert analyze_text("p.py", "python", f"{name} = {value}\n", CONFIG, OPTIONS).findings == ()
-    assert (
-        analyze_text("j.js", "javascript", f"let {name} = {value};\n", CONFIG, OPTIONS).findings
-        == ()
-    )
+    """MAGIC001 permits -1, 0 and 1 (a -1 standing for a value is MAGIC003's, review)."""
+    python = analyze_text("p.py", "python", f"{name} = {value}\n", CONFIG, OPTIONS)
+    assert [f for f in python.findings if f.rule_id == "MAGIC001"] == []
+    javascript = analyze_text("j.js", "javascript", f"let {name} = {value};\n", CONFIG, OPTIONS)
+    assert [f for f in javascript.findings if f.rule_id == "MAGIC001"] == []
 
 
 @given(n=st.integers(min_value=0, max_value=2**70))

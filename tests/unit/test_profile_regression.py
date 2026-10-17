@@ -107,6 +107,8 @@ H3_OFF = (
             "retry",
             "batches",
             "input",
+            "consistency",
+            "sentinels",
         )
     )
     + '[[tool.shockharness.overrides]]\npaths = ["**"]\ndisable = ["EXC004"]\nreason = "0.3.0"\n'

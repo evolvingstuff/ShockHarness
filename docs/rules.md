@@ -1029,6 +1029,24 @@ and 29).
   (75) of them are guarded, and some are not; the message names the most common
   guard.
 
+### MAGIC003: a small number standing in for a meaning (review)
+
+MAGIC001 permits `-1`, `0` and `1` because they are how code counts and indexes.
+Used as a value they can also encode a meaning of the program's own: "nothing
+selected", "never ran", "no limit". MAGIC003 reports the values in
+`rules.sentinels.values` (`-1` by default; only values MAGIC001 permits are
+checked, so nothing is reported twice) where they stand for a value: the whole
+value of an assignment (a variable, attribute, subscript or class field), a
+return (an arrow body too), an argument or keyword argument, or a dict / object
+entry. Not reported: subscripts, slices, arithmetic, comparisons
+(`indexOf(x) === -1`), an UPPER_SNAKE_CASE target (`NO_SELECTION = -1` is the
+remedy), and arguments of the `python_index_callees` / `javascript_index_callees`
+catalogs (`range`, `slice`, `.pop`, `.split`, `.reshape`; `.slice`, `.at`,
+`.splice`, `.substr` ...), where `-1` is an index or a count. On pip, pytest,
+hypothesis, build, hatchling and npm it gives 42 findings where 0.6.0 reported
+543 for `-1` (`sys.exit(-1)`, `return -1` for "not found", `lineno = -1`,
+`max(..., default=-1)`, click's `nargs=-1`).
+
 ## Registered, not implemented
 
 These IDs are reserved and configurable now; they produce no findings and are

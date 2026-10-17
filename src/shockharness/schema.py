@@ -371,6 +371,15 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "batches": TableField(fields=dict(GUARDRAIL_COMMON), required=()),
+                "sentinels": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "values": ListField(NumberField()),
+                        "python_index_callees": ListField(StrField(allow_empty=False)),
+                        "javascript_index_callees": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
                 "consistency": TableField(
                     fields={
                         **GUARDRAIL_COMMON,

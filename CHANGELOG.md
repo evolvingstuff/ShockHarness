@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added (MAGIC003, decision 30)
+- `MAGIC003` (`rules.sentinels`, review): a `-1` standing for a value (assigned,
+  returned, passed, a dict / object entry), where it often encodes a meaning of
+  the program's own (`selected_index = -1`, `sys.exit(-1)`). Subscripts, slices,
+  arithmetic, comparisons, UPPER_SNAKE targets and arguments of index callees
+  (`range`, `.split`, `.slice`, `.at` ...) are never reported. `values` can add
+  `0` or `1`.
+
 ### Changed (MAGIC001, feedback from MetaList)
 - **`-1` is allowed by default** (`rules.magic_numbers.allow_unary_negative_one =
   true` in every profile; it was true only in `recommended`): Python's last-item

@@ -3758,3 +3758,48 @@ differ by exactly those six findings, everything else identical; the 0.3.0
 verdict regression pins `false` for strict and minimal and passes unchanged.
 1139 tests pass on CPython 3.14 and 3.11.11; self-diff against 0b3a36c: no new
 findings, no complexity regressions.
+
+## MAGIC003: a small number standing in for a meaning — DONE (2026-10-17)
+
+Point 2 of the MetaList MAGIC001 feedback, its own change after `-1` became
+allowed by default (spec 21.1 decision 30).
+
+### What was built
+
+* **Facts** (`SentinelUse`, `ModuleFacts.sentinels`) from
+  `ir/python_sentinels.py` and `ir/javascript_sentinels.py`: a numeric literal,
+  unary signs and TypeScript wrappers folded in, that is the whole value of an
+  assignment (variable, attribute, subscript, class field), a return (an arrow
+  body too), an argument or keyword argument, or a dict / object entry; an
+  UPPER_SNAKE_CASE target is skipped. `parse_js_number` moved to
+  `ir/javascript_numbers.py` (still exported by `ir.javascript`). Cache schema
+  "10".
+* **Rule** (`rules/sentinels.py`, per file): the values of
+  `rules.sentinels.values` that MAGIC001 permits, except arguments of the
+  index-callee catalogs.
+* **Config**: `rules.sentinels` (review, production, `values = [-1]`, index
+  callees per language); deviations for a removed value or role and an added
+  index callee.
+
+### Decisions (mine; review these)
+
+1. **`-1` only by default.** `0` and `1` in value positions are mostly counters
+   and flags; `values` can add them.
+2. **Comparisons are never reported**: `x == -1` is where a sentinel is used,
+   and the definition is what needs the name.
+3. **Index callees are a catalog**, so `range(n - 1, -1, -1)`, `.split(",", -1)`
+   and `.at(-1)` stay quiet, and a project adds its own.
+
+### Evidence (2026-10-17, macOS)
+
+On the 790-file corpus: 42 MAGIC003 findings, against 543 MAGIC001 findings on
+`-1` in 0.6.0. Nearly all are meanings that deserve a name: `sys.exit(-1)`,
+`return -1` for "not found" or "unknown width", `lineno = -1`, `size = -1`,
+`max(..., default=-1)`, `next(it, -1)`, click's `nargs=-1`, the stdlib's
+`buffering=-1`; two are arithmetic or an index passed to a project method.
+The golden fixtures gain six reviewed MAGIC003 findings, exactly where MAGIC001
+used to report `-1`. 1142 tests pass on CPython 3.14 and 3.11.11; the self-gate
+passes; against 0.6.0 only the six `-1` MAGIC001 findings of point 1 differ;
+self-diff against a82b45c: no new findings, no complexity regressions, after
+splitting the JavaScript literal folding and visitor and moving a long expected
+rule list in a test to a module constant.

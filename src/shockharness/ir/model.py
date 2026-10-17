@@ -921,6 +921,28 @@ def origin_parts(value: str) -> tuple[str, int]:
     return kind, int(index)
 
 
+# --- Sentinel facts (MAGIC003) -----------------------------------------------------------
+# A small numeric literal (a unary sign folded in) in a position where it stands for a
+# value: assigned, returned, passed, or the value of a dict / object entry. Which values
+# count and which callees take an index is the rule's catalog (rules.sentinels).
+SENTINEL_ASSIGN = "assign"  # x = -1, self.selected = -1, let i = -1, a class field
+SENTINEL_RETURN = "return"  # return -1, () => -1
+SENTINEL_ARGUMENT = "argument"  # f(x, -1), f(timeout=-1)
+SENTINEL_ENTRY = "entry"  # {"selected": -1}, { selected: -1 }
+
+
+@dataclass(frozen=True)
+class SentinelUse:
+    """``target`` is the assigned name, the callee (with ``=name`` for a keyword), the
+    entry's key, or empty for a return."""
+
+    span: Span
+    value: float
+    raw: str
+    kind: str
+    target: str
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -938,6 +960,7 @@ class ModuleFacts:
     asynchrony: AsyncFacts
     catalog: CatalogFacts
     dataflow: DataflowFacts
+    sentinels: tuple[SentinelUse, ...]
     parse_failure: ParseFailure | None
 
 
@@ -959,5 +982,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         asynchrony=NO_ASYNC,
         catalog=NO_CATALOG,
         dataflow=NO_DATAFLOW,
+        sentinels=(),
         parse_failure=failure,
     )

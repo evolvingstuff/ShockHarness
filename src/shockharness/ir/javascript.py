@@ -14,10 +14,6 @@ from tree_sitter import Language, Node, Parser
 
 from shockharness.constants import (
     EVIDENCE_MAX_CHARS,
-    RADIX_BINARY,
-    RADIX_DECIMAL,
-    RADIX_HEX,
-    RADIX_OCTAL,
 )
 from shockharness.ir.javascript_async import collect_javascript_async
 from shockharness.ir.javascript_catalog import collect_javascript_catalog
@@ -35,6 +31,8 @@ from shockharness.ir.javascript_functions import (
     collect_javascript_imports,
 )
 from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
+from shockharness.ir.javascript_numbers import parse_js_number
+from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -84,8 +82,6 @@ TYPE_CONTEXTS = frozenset(
 )
 SIGN_OPERATORS = frozenset({"-", "+"})
 
-LEGACY_OCTAL = re.compile(r"0[0-7]+")
-DECIMAL_INTEGER = re.compile(r"[0-9]+")
 # A named constant for rules.magic_numbers.named_constant_definitions: UPPER_SNAKE_CASE with
 # leading underscores allowed; only `const` (and `export const`) at module scope qualifies.
 CONSTANT_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
@@ -93,29 +89,6 @@ LEXICAL_DECLARATION = "lexical_declaration"
 EXPORT_STATEMENT = "export_statement"
 VARIABLE_DECLARATOR = "variable_declarator"
 CONST_KIND = "const"
-
-
-def parse_js_number(raw: str) -> int | float:
-    """Decode a JavaScript numeric literal the grammar has already accepted.
-
-    Handles ``_`` separators, ``0x``/``0o``/``0b`` prefixes, legacy octal
-    (``017``), BigInt ``n`` suffix, and decimal/exponent floats. Because the
-    token is grammar-validated, no branch here can fail.
-    """
-    text = raw.replace("_", "").lower()
-    if text.endswith("n"):
-        text = text[: len(text) - len("n")]
-    if text.startswith("0x"):
-        return int(text[len("0x") :], RADIX_HEX)
-    if text.startswith("0o"):
-        return int(text[len("0o") :], RADIX_OCTAL)
-    if text.startswith("0b"):
-        return int(text[len("0b") :], RADIX_BINARY)
-    if LEGACY_OCTAL.fullmatch(text) is not None:
-        return int(text, RADIX_OCTAL)
-    if DECIMAL_INTEGER.fullmatch(text) is not None:
-        return int(text, RADIX_DECIMAL)
-    return float(text)
 
 
 def _fold_unary(node: Node) -> tuple[Node, bool] | None:
@@ -290,6 +263,7 @@ def _extract_facts(
         asynchrony=asynchrony,
         catalog=catalog,
         dataflow=collect_javascript_dataflow(source, root),
+        sentinels=collect_javascript_sentinels(source, root),
         parse_failure=None,
     )
 

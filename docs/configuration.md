@@ -823,6 +823,20 @@ Removing a fabricator or an issuer word, and raising either GUARD001 threshold,
 are policy deviations. Values are followed across at most
 `rules.input.max_depth` function boundaries, as for INPUT001.
 
+## Sentinels (MAGIC003)
+
+```toml
+[tool.shockharness.rules.sentinels]
+enabled = true
+severity = "review"
+roles = ["production"]
+values = [-1]                     # adding 0 or 1 is possible, and noisy
+python_index_callees = ["range", "slice", "itertools.islice", ".pop", ".insert", ".split", ...]
+javascript_index_callees = [".slice", ".at", ".splice", ".substr", ".indexOf", ...]
+```
+
+Removing a value or a role and adding an index callee are policy deviations.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

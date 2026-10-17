@@ -80,7 +80,7 @@ allowed_values = [0, 1]
 # -1 (a unary minus over 1) is allowed: Python's last-item and all-but-last idioms
 # (items[-1], text[:-1]) and JavaScript's indexOf / findIndex "not found" (H6 feedback
 # from MetaList: 262 findings, none a hidden meaning). false reports it like any other
-# literal. A -1 that stands for a project's own meaning is MAGIC003's (planned).
+# literal. A -1 that stands for a project's own meaning is MAGIC003's (rules.sentinels).
 allow_unary_negative_one = true
 # A numeric literal that is the whole value of a module-level constant definition
 # (MAX_PAGES = 8, _WAIT: Final = 10.0, const SETTLE_MS = 400, export const N = 3):
@@ -117,6 +117,24 @@ configuration_files = [
   ".prettierrc.cjs",
   "gulpfile.js",
   "Gruntfile.js",
+]
+
+[tool.shockharness.rules.sentinels]        # MAGIC003 (decision 30)
+enabled = true
+severity = "review"                        # the meaning cannot be known
+roles = ["production"]
+# The values reported where they stand for a value; only values MAGIC001 permits are
+# checked. Adding 0 or 1 is possible, and noisy (counters and flags start there).
+values = [-1]
+# Callees whose arguments are indexes or counts, where -1 is not a sentinel ("name" is a
+# qualified callee, ".name" a method on any receiver). Adding one is a deviation.
+python_index_callees = [
+  "range", "slice", "itertools.islice", ".pop", ".insert", ".split", ".rsplit",
+  ".replace", ".reshape", ".view", ".unsqueeze", ".squeeze",
+]
+javascript_index_callees = [
+  ".slice", ".at", ".splice", ".substr", ".substring", ".charAt", ".charCodeAt",
+  ".codePointAt", ".indexOf", ".lastIndexOf", ".includes", ".subarray",
 ]
 
 [tool.shockharness.rules.magic_strings]

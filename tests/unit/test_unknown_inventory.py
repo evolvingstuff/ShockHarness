@@ -124,6 +124,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "ROLE001: violation (imports through resolved module edges only)",
     ),
+    # MAGIC003: a small literal standing for a value: a violation, approximate.
+    ("rules/sentinels.py", "run_magic003"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "MAGIC003: violation (approximate; review)",
+    ),
     # H6 part two: call sites of one function that disagree with the others: always a
     # violation, approximate (intent is not known).
     ("rules/consistency.py", "_finding"): (

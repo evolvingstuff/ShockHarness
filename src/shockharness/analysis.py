@@ -56,8 +56,14 @@ from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
-from shockharness.rules.registry import CATALOG_SECTIONS, DATAFLOW_SECTIONS, GUARDRAIL_SECTIONS
+from shockharness.rules.registry import (
+    CATALOG_SECTIONS,
+    DATAFLOW_SECTIONS,
+    GUARDRAIL_SECTIONS,
+    SENTINEL_SECTIONS,
+)
 from shockharness.rules.role_integrity import RoleFile, run_role_integrity
+from shockharness.rules.sentinels import run_magic003
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -310,6 +316,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         *GUARDRAIL_SECTIONS,
         *CATALOG_SECTIONS,
         *DATAFLOW_SECTIONS,
+        *SENTINEL_SECTIONS,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -360,7 +367,13 @@ def _policy_rules(
     guardrails = _active_guardrails(language, role, config, disabled_ids)
     catalog = frozenset(
         rule.rule_id
-        for rule in (*CATALOG_RULES, *INPUT_RULES, registry.PROV001, registry.GUARD001)
+        for rule in (
+            *CATALOG_RULES,
+            *INPUT_RULES,
+            registry.PROV001,
+            registry.GUARD001,
+            registry.MAGIC003,
+        )
         if rule.rule_id not in disabled_ids
         and language in rule.languages
         and _in_scope(rule, role, config)
@@ -378,6 +391,11 @@ def _policy_rules(
     ]
     if registry.INPUT002.rule_id in catalog:
         findings.extend(run_input002(facts, source, relative_path, language, rules["input"]))
+    if registry.MAGIC003.rule_id in catalog:
+        magic = rules["magic_numbers"]
+        findings.extend(
+            run_magic003(facts, source, relative_path, language, rules["sentinels"], magic)
+        )
     return applied, findings
 
 

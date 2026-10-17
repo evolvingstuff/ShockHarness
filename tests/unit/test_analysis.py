@@ -124,6 +124,53 @@ def test_line_count_is_recorded(strict_config: EffectiveConfig) -> None:
     assert result.line_count == 2
 
 
+# The rules applied to a Python file under the strict profile (grows with every rule).
+APPLIED_TO_PYTHON = (
+    "ASSERT001",
+    "ASSERT002",
+    "ASYNC001",
+    "ASYNC002",
+    "ASYNC003",
+    "BATCH001",
+    "BOOL001",
+    "CPLX001",
+    "CPLX002",
+    "CPLX003",
+    "CPLX004",
+    "CPLX005",
+    "CPLX006",
+    "DEF001",
+    "DEF002",
+    "DEF003",
+    "DEF004",
+    "DEF005",
+    "DEF006",
+    "EXC001",
+    "EXC002",
+    "EXC003",
+    "EXC004",
+    "GUARD001",
+    "IMPORT001",
+    "INPUT001",
+    "INPUT002",
+    "MAGIC001",
+    "MAGIC003",
+    "PROCESS001",
+    "PROV001",
+    "RESULT001",
+    "RETRY001",
+    "ROLE001",
+    "SLEEP001",
+    "STATE001",
+    "STUB001",
+    "STUB002",
+    "STUB003",
+    "SUPP001",
+    "SUPP002",
+    "TYPE001",
+)
+
+
 def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     data = analyze_text(
         "t.py", "python", "x = 2\n", strict_config, AnalysisOptions(True, CACHE_CONFIGURED)
@@ -131,49 +178,7 @@ def test_file_result_json_shape(strict_config: EffectiveConfig) -> None:
     assert data["path"] == "t.py"
     assert data["status"] == "analyzed"
     assert data["finding_count"] == 1
-    assert data["rules_applied"] == [
-        "ASSERT001",
-        "ASSERT002",
-        "ASYNC001",
-        "ASYNC002",
-        "ASYNC003",
-        "BATCH001",
-        "BOOL001",
-        "CPLX001",
-        "CPLX002",
-        "CPLX003",
-        "CPLX004",
-        "CPLX005",
-        "CPLX006",
-        "DEF001",
-        "DEF002",
-        "DEF003",
-        "DEF004",
-        "DEF005",
-        "DEF006",
-        "EXC001",
-        "EXC002",
-        "EXC003",
-        "EXC004",
-        "GUARD001",
-        "IMPORT001",
-        "INPUT001",
-        "INPUT002",
-        "MAGIC001",
-        "PROCESS001",
-        "PROV001",
-        "RESULT001",
-        "RETRY001",
-        "ROLE001",
-        "SLEEP001",
-        "STATE001",
-        "STUB001",
-        "STUB002",
-        "STUB003",
-        "SUPP001",
-        "SUPP002",
-        "TYPE001",
-    ]
+    assert data["rules_applied"] == list(APPLIED_TO_PYTHON)
 
 
 def test_override_and_configuration_file_patterns_honour_the_root_anchor(

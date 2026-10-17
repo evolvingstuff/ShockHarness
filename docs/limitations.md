@@ -447,6 +447,15 @@ Stated so that a clean report is never read as more than it is.
 * Only call sites the call graph resolves to one project function are compared;
   method calls on objects the graph cannot type are not.
 
+## MAGIC003
+
+* Whether a number means something is not known: plain arithmetic written as a
+  value (`step = -1`, a direction passed to a project function, an index passed
+  to a project method) is reported too, and a sentinel built at run time
+  (`-len(x)`) is not seen.
+* Index callees are matched by name (`.pop` on any receiver); a project method
+  that takes an index needs adding to the catalog.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits

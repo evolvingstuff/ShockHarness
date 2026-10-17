@@ -20,7 +20,7 @@ the full detection guarantees.
 
 | Rule | What fails | Default |
 |---|---|---|
-| `MAGIC001` | a numeric literal other than exactly `0` or `1` in executable code (`2`, `-1`, `1.5`, `0x10`, `10n`, a literal inside a Python type annotation) | error |
+| `MAGIC001` / `MAGIC003` | a numeric literal other than `0`, `1` or `-1` in executable code (`2`, `1.5`, `0x10`, `10n`, a literal in a Python type annotation) / a `-1` standing for a value (`selected = -1`, `return -1`): name what it means | error / review |
 | `EXC001` | a catch outside an approved boundary: bare `except:`, `except Exception`, an untyped JavaScript `catch (e)`, or any catch in a file no boundary covers | error |
 | `EXC002` | a handler that swallows the exception, only logs it, or replaces it without its cause | error |
 | `EXC003` | an approved `try` whose body does more than the one operation the boundary sanctions | error |

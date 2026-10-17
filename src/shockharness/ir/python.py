@@ -37,6 +37,7 @@ from shockharness.ir.python_functions import (
     collect_python_imports,
 )
 from shockharness.ir.python_guardrails import collect_python_guardrails
+from shockharness.ir.python_sentinels import collect_python_sentinels
 from shockharness.ir.python_verification import collect_python_verification
 from shockharness.source import SourceText
 
@@ -291,5 +292,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         asynchrony=collect_python_async(source, parsed),
         catalog=collect_python_catalog(source, parsed),
         dataflow=collect_python_dataflow(source, parsed),
+        sentinels=collect_python_sentinels(source, parsed),
         parse_failure=None,
     )

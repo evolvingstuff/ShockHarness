@@ -64,6 +64,7 @@ Implemented rules:
 | ID | What it reports | Default |
 |---|---|---|
 | `MAGIC001` | numeric literal other than `0`, `1` or `-1` in executable code | error |
+| `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |

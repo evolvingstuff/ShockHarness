@@ -2230,6 +2230,61 @@ GUARD001 = RuleSpec(
     compliant_example="if store.has_hash(note.id):\n    store.remove_hash(note.id)",
 )
 
+# --- MAGIC003: sentinels (decision 30) -----------------------------------------------------
+
+SENTINELS_SECTION = "rules.sentinels"
+SENTINELS_FAMILY = "sentinels"
+SENTINEL_SECTIONS = (SENTINELS_SECTION,)
+
+MAGIC003 = RuleSpec(
+    rule_id="MAGIC003",
+    version="1",
+    name="small number standing in for a meaning",
+    family=SENTINELS_FAMILY,
+    config_section=SENTINELS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A -1 (by default) that stands for a value: assigned, returned, passed, or a dict / "
+        "object entry (selected_index = -1, exitCode: -1), where it often encodes a meaning of "
+        "the program's own that deserves a name."
+    ),
+    rationale=(
+        "MAGIC001 allows -1, 0 and 1 because they are how code counts and indexes. Used as a "
+        "value they can also mean 'nothing selected', 'never ran' or 'no limit', a contract "
+        "every reader and every comparison has to know. A name (NO_SELECTION = -1) states it "
+        "once."
+    ),
+    guarantees=(
+        "A literal whose value is in rules.sentinels.values (-1 by default; only values "
+        "MAGIC001 permits are checked, so nothing is reported twice) that is the whole value "
+        "of an assignment (a variable, an attribute, a subscript, a class field), a return "
+        "(an arrow body too), an argument or keyword argument, or a dict / object entry. Not "
+        "reported: subscripts, slices, arithmetic, comparisons (indexOf(x) === -1), an "
+        "UPPER_SNAKE_CASE target (the remedy), and arguments of "
+        "rules.sentinels.python_index_callees / javascript_index_callees (range, slice, "
+        ".pop, .split, .reshape; .slice, .at, .splice, .substr ...), where -1 is an index or "
+        "a count. Approximate: the meaning is not known."
+    ),
+    limitations=(
+        "Whether the value means something is not known; a -1 that is plain arithmetic "
+        "written as a value (step = -1) is reported too. A sentinel built at run time "
+        "(-len(x)) is not seen."
+    ),
+    remediation=(
+        "If the number stands for something, name it where the meaning is defined "
+        "(NO_SELECTION = -1, NEVER_RAN = -1) and use the name in every assignment and "
+        "comparison; better still, use a value that cannot be confused with a real one "
+        "(None, an enum member). If it is plain arithmetic, write it as such."
+    ),
+    noncompliant_example="state = {'selected_index': -1}\nif state['selected_index'] == -1: ...",
+    compliant_example=(
+        "NO_SELECTION = -1  # an index that selects nothing\n"
+        "state = {'selected_index': NO_SELECTION}"
+    ),
+)
+
 
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
@@ -2285,6 +2340,7 @@ RULES: tuple[RuleSpec, ...] = (
     INPUT002,
     PROV001,
     GUARD001,
+    MAGIC003,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -2340,6 +2396,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     ROLE_INTEGRITY_FAMILY: CATEGORY_POLICY,
     INPUT_FAMILY: CATEGORY_CONTRACT,
     CONSISTENCY_FAMILY: CATEGORY_CONTRACT,
+    SENTINELS_FAMILY: CATEGORY_CONTRACT,
 }
 
 
