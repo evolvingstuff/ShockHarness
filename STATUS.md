@@ -3954,3 +3954,37 @@ Decision (mine): rule versions are not bumped, as in the first feedback round.
 Evidence: tests for each fix in test_api_catalog, test_async_lifecycle,
 test_consistency and cli/test_role_integrity; corpus findings otherwise
 identical (only the 20 RESULT001 removed).
+
+## DOM002: floating controls a press handler treats as outside — DONE (2026-10-17)
+
+Spec 21.1 decision 32, from MetaList's backup-reminder bug and Tom's go-ahead to
+build it opt-in and test it on downloaded front ends. Facts
+(`ir/javascript_floating.py`, `ModuleFacts.dom`): body-attached elements with the
+selectors their building function gives them, whether it makes something
+pressable, whether the element is a helper (removed, clicked or submitted by the
+code, a file or hidden input) or a returned container; container fills; per
+function the `closest`/`matches` selectors, constants and plain helper calls;
+module string constants. The rule (`rules/floating.py`, cross-file) resolves
+constants and helpers through `rules/imports.py` (shared with STUB003).
+
+Corpus: ten front ends cloned shallow into the scratch folder, read only (Trilium,
+Etherpad, TiddlyWiki5, CodiMD, flatpickr, select2, Choices, Tom Select, Quill,
+summernote; about 6,700 JS/TS files). Their page-level press handlers close their
+own widget (Trilium's context menu with `host.contains`, its tooltips with
+`closest(".note-tooltip")`, select2 with `closest(".select2")`), which is why the
+rule is opt-in. They attach one pressable element to the body in vanilla DOM
+between them (Trilium's standalone error overlay); the first collector also
+counted a hidden logout form and a file input, now excluded as helpers. Hiding
+(`hidden`, `display: none`) was tried as a helper sign and dropped: menus and
+modals are built hidden and shown later.
+
+MetaList (read only, `app/static/js` at 96f38d87~1 and HEAD, both press handlers
+named): before the fix 5 findings: the update and backup notices in the notice
+stack (the bug, fixed in 96f38d87), the reminder surface (fixed later), the error
+banner (likely; relayed to MetaList) and the bulk-proposal dialog (a modal,
+probably opened only outside edit mode). Two context-menu false alarms of the
+first version came from a helper (`isContextMenuInteractionTarget`) and are gone
+since helpers are followed. At HEAD: the banner and the dialog. Not seen: the
+image-zoom overlay, attached through `moduleState.activeZoomOverlay`.
+
+Evidence: `tests/unit/test_floating.py` (5).

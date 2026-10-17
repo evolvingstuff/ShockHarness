@@ -62,6 +62,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.consistency.severity": ("error", "warning", "review"),
     "rules.sentinels.severity": ("error", "warning", "review"),
     "rules.dom.severity": ("error", "warning", "review"),
+    "rules.dom.dom002_severity": ("error", "warning", "review"),
     "rules.magic_strings.mode": ("fail", "review"),
 }
 # A higher value reports less.

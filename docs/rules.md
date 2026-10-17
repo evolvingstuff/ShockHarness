@@ -1056,6 +1056,43 @@ and 29).
   has(x)`, `if (!isNote(n)) throw ...`): a call without the check fails loudly
   there.
 
+### DOM002: a floating control a press handler treats as outside (review, opt-in)
+
+A page-level press handler that acts on presses outside (leaving edit mode,
+swallowing the next click) skips the elements that handle their own presses
+through `target.closest(<selectors>)`. A control attached to `document.body`
+later (a notice, a banner, an overlay) sits outside everything that list was
+written for, and its first press silently does the wrong thing (spec 21.1
+decision 32; MetaList's backup reminder button did nothing while a note was
+being edited). The project names the functions holding those skip lists in
+`rules.dom.press_exclusions` (`"path:function"`); nothing is reported while the
+list is empty, because most press handlers only close their own widget and for
+them every other element is meant to be outside.
+
+A skip list is the `closest(...)` / `matches(...)` arguments of the named
+function: strings, `[...].join(",")`, constants defined in the file or imported
+from an analyzed one, and the lists of the plain helper functions it calls
+(followed through imports). A control is an element passed to
+`document.body.append` / `appendChild` / `prepend` / `insertBefore` /
+`insertAdjacentElement`, or appended into what a function that attaches and
+returns an element gives back (`appNoticeStack().append(card)`), when the
+building function makes something pressable (a `<button>`, `role="button"`, a
+click or pointer listener) and the element is not a helper (removed again,
+clicked or submitted by the code itself, a file or hidden input). It is reported
+where it is attached when its id, classes and tag (or its container's) match the
+last compound of no selector of a list (`.modal .close` is matched on `.close`;
+attribute and pseudo parts are not evaluated). An entry whose file was analyzed
+but holds no such function is reported as `unknown`. Approximate; `review`
+(`rules.dom.dom002_severity`); JavaScript and TypeScript, vanilla DOM only.
+
+Measured: on MetaList before its fix, with its two press handlers named, 5
+findings: the two notice-stack buttons (the bug), the reminder surface (fixed
+later), the error banner (likely) and a modal opened only outside edit mode
+(probably not). Ten widely used front ends (Trilium, Etherpad, TiddlyWiki,
+CodiMD, flatpickr, select2, Choices, Tom Select, Quill, summernote) attach one
+pressable element to the body in vanilla DOM between them; they build floating
+UI with jQuery or a framework, which DOM002 does not read.
+
 ### MAGIC002: one string repeated across files (review)
 
 A status (`"pending"`), an error code (`"ERESOLVE"`), a platform or a mode

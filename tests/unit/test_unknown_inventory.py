@@ -124,6 +124,16 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "ROLE001: violation (imports through resolved module edges only)",
     ),
+    # DOM002: a floating control a named skip list misses (approximate), or a named
+    # skip list that is not there (unknown: nothing was checked against it).
+    ("rules/floating.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "DOM002: violation (approximate; review) or unknown for an unresolved entry",
+    ),
+    ("rules/floating.py", "_unresolved"): (
+        frozenset({"CONFIDENCE_UNRESOLVED", "STATUS_UNKNOWN"}),
+        "DOM002: an entry of rules.dom.press_exclusions whose function is not found",
+    ),
     # MAGIC002: a string repeated and compared across files: a violation, approximate.
     ("rules/strings.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),

@@ -13,6 +13,7 @@ import tokenize
 from shockharness.constants import FIRST_COLUMN
 from shockharness.ir.model import (
     MODULE_SCOPE,
+    NO_DOM,
     Comment,
     ModuleFacts,
     NumericLiteral,
@@ -295,5 +296,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         dataflow=collect_python_dataflow(source, parsed),
         sentinels=collect_python_sentinels(source, parsed),
         strings=collect_python_strings(source, parsed),
+        dom=NO_DOM,  # the DOM is JavaScript's
         parse_failure=None,
     )

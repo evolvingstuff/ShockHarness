@@ -21,6 +21,9 @@ MUST_USE_ENTRY = re.compile(
     r"(?P<name>\.?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)(?:/(?P<low>\d+)(?:-(?P<high>\d+))?)?"
 )
 MUST_USE = "a callee or .method, optionally /N or /N-M arguments (.replace/2-3)"
+# A DOM002 skip list: the file that holds it and the function, "path:function".
+PRESS_EXCLUSION = re.compile(r"[^:]+:[A-Za-z_$][\w$]*")
+EXCLUSION = "path:function (app/events.js:isExcluded)"
 
 
 @dataclass(frozen=True)
@@ -339,7 +342,12 @@ CONFIG_SCHEMA = TableField(
                     required=(),
                 ),
                 "dom": TableField(
-                    fields={**GUARDRAIL_COMMON, "classes": ListField(StrField(allow_empty=False))},
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "classes": ListField(StrField(allow_empty=False)),
+                        "dom002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "press_exclusions": ListField(PatternField(PRESS_EXCLUSION, EXCLUSION)),
+                    },
                     required=(),
                 ),
                 "boolean_arguments": TableField(

@@ -66,6 +66,14 @@ def _directions(facts: ModuleFacts) -> frozenset[str]:
     )
 
 
+def _checked(settings: Mapping[str, Any], magic: Mapping[str, Any]) -> set[float]:
+    """The configured values MAGIC001 permits (the others MAGIC001 reports itself)."""
+    permitted = {float(v) for v in magic["allowed_values"]}
+    if magic["allow_unary_negative_one"] is True:
+        permitted.add(NEGATIVE_ONE)
+    return {float(v) for v in settings["values"]} & permitted
+
+
 def run_magic003(
     facts: ModuleFacts,
     source: SourceText,
@@ -76,10 +84,7 @@ def run_magic003(
 ) -> list[Finding]:
     """MAGIC003 for one file; ``magic`` is rules.magic_numbers (a value MAGIC001 already
     reports is not reported twice)."""
-    permitted = {float(v) for v in magic["allowed_values"]}
-    if magic["allow_unary_negative_one"] is True:
-        permitted.add(NEGATIVE_ONE)
-    checked = {float(v) for v in settings["values"]} & permitted
+    checked = _checked(settings, magic)
     prefix = "python" if language == PYTHON else "javascript"
     index_callees = frozenset(str(c) for c in settings[f"{prefix}_index_callees"])
     standard_targets = frozenset(str(t) for t in settings["standard_targets"])

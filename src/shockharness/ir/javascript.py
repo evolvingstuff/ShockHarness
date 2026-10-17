@@ -25,6 +25,7 @@ from shockharness.ir.javascript_catches import (
 )
 from shockharness.ir.javascript_dataflow import collect_javascript_dataflow
 from shockharness.ir.javascript_defaults import collect_javascript_defaults
+from shockharness.ir.javascript_floating import collect_javascript_floating
 from shockharness.ir.javascript_functions import (
     collect_javascript_bindings,
     collect_javascript_functions,
@@ -267,6 +268,7 @@ def _extract_facts(
         dataflow=collect_javascript_dataflow(source, root),
         sentinels=collect_javascript_sentinels(source, root),
         strings=collect_javascript_strings(source, root),
+        dom=collect_javascript_floating(source, root),
         parse_failure=None,
     )
 

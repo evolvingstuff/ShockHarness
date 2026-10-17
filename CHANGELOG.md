@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- `DOM002` (`rules.dom`, review, JavaScript and TypeScript, opt-in): a pressable
+  element attached to `document.body` (directly, or appended into a container a
+  function attaches and returns) that matches no selector of the skip lists named
+  in `press_exclusions` (`"path:function"`): its presses reach that handler as
+  presses outside (decision 32). Skip lists follow constants and helper calls
+  through imports. Nothing is reported while `press_exclusions` is empty. New
+  keys: `press_exclusions`, `dom002_severity`. The cache schema is "16".
+
 ### Changed (MetaList's rule ideas)
 - `MAGIC003`: not reported for a name in the new `standard_targets` (`tabIndex`,
   where HTML defines `-1`), nor for a `-1` passed to a callee the same file also

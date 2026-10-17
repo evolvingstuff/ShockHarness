@@ -854,15 +854,22 @@ Raising a threshold, removing a role or a kind, and adding a message callee or
 an allowed value are policy deviations; `mode = "fail"` back to `"review"` is a
 loosening `VERIFY003` reports in a diff.
 
-## Delegated handlers (DOM001)
+## Delegated handlers and floating controls (DOM001, DOM002)
 
 ```toml
 [tool.shockharness.rules.dom]
 enabled = true
-severity = "warning"
+severity = "warning"              # DOM001
 roles = ["production"]
 classes = ["HTMLElement"]
+# DOM002: the functions holding the skip lists of press handlers that act on presses
+# outside, as "path:function"; empty (the default) reports nothing.
+press_exclusions = ["app/static/js/events/mouse-events.js:isOutsideEditExclusion"]
+dom002_severity = "review"
 ```
+
+An entry that is not `path:function` is a configuration error; one whose
+function is not found in an analyzed file is an `unknown` DOM002 finding.
 
 Removing a class or a role is a policy deviation; adding a narrower class
 (`HTMLButtonElement`) reports those filters too.

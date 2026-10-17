@@ -70,6 +70,7 @@ Ask what the code promises when the value is absent or the operation fails.
 | `ASSERT002` | Can the program run under `python -O`? | Make the entry point refuse it once (`if sys.flags.optimize: raise SystemExit(...)`); keep the asserts. |
 | `BOOL001` | What does the flag switch? | Pass it by keyword (`escape=True`) or in an options object; a flag that selects behavior may be two functions. |
 | `STATE001` | Who owns this state? Does it need to change at all? | A fixed table becomes a `tuple`/`frozenset`/`Object.freeze`d value (`write-compliant-code`, principle 8). Otherwise an object the caller creates and passes in, or a new value returned. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
+| `DOM002` | Should a press on this control count as "outside"? | Usually no: add its selector to the skip list it misses and add a browser test that presses it in each mode. If yes, suppress with that reason. |
 | `DOM001` | Does the handler mean to ignore clicks on SVG icons? | No: test `instanceof Element` (where `closest` is defined), or call `closest` first and narrow its result. A deliberate filter names the narrower class (`HTMLButtonElement`). |
 | `IMPORT001` | Who asked for this effect? | Move it into a function the entry point calls (`main()`, a factory, `start()`). |
 | `PROCESS001` | Can the data contain shell syntax? Who checks the exit status? | An argument list without a shell; `check=True`, or read the status and raise a typed error. |

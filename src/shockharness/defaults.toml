@@ -299,6 +299,12 @@ roles = ["production"]
 # Classes whose instanceof test on an event target, before .closest(...), drops other
 # elements (SVG icons). A narrower class (HTMLButtonElement) is a deliberate filter.
 classes = ["HTMLElement"]
+# DOM002 (decision 32): the functions holding the skip lists of page-level press handlers
+# that act on presses outside (leave a mode, swallow the next click), as "path:function".
+# Every pressable element attached to document.body must match one selector of each list.
+# Empty: DOM002 reports nothing (most handlers only close their own widget).
+press_exclusions = []
+dom002_severity = "review"
 
 [tool.shockharness.rules.boolean_arguments]
 enabled = true

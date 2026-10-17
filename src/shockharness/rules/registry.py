@@ -2344,6 +2344,59 @@ DOM001 = RuleSpec(
         "});"
     ),
 )
+DOM002 = RuleSpec(
+    rule_id="DOM002",
+    version="1",
+    name="floating control a press handler treats as outside",
+    family="dom",
+    config_section=DOM_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(JAVASCRIPT, TYPESCRIPT),
+    summary=(
+        "A pressable element attached to document.body (a notice, a banner, an overlay) "
+        "matches none of the selectors a page-level press handler skips: its presses reach "
+        "that handler as presses outside, which can leave the current mode or swallow the "
+        "click before the element's own action runs."
+    ),
+    rationale=(
+        "A handler that acts on presses outside (leave edit mode, consume the next click) "
+        "lists the elements that handle their own presses. Floating UI attached to the body "
+        "afterwards sits outside everything that list was written for, so its first press "
+        "silently does the wrong thing."
+    ),
+    guarantees=(
+        "Opt-in: rules.dom.press_exclusions names the functions holding the skip lists "
+        "(path:function); nothing is reported while it is empty. A skip list is the "
+        "closest(...) / matches(...) arguments of that function: strings, [...].join(','), "
+        "and constants resolved in the file and through its imports. A control is an element "
+        "passed to document.body.append / appendChild / prepend / insertBefore / "
+        "insertAdjacentElement, or appended into what a function that attaches and returns "
+        "such an element gives back, when the building function makes something pressable "
+        "(a button, role=button, a click or pointer listener) and does not remove it again. "
+        "Reported when its id, classes and tag (or its container's) match the last compound "
+        "of no selector of a list. An entry whose file holds no such function is reported "
+        "as unknown."
+    ),
+    limitations=(
+        "Vanilla DOM only: jQuery, portals and framework rendering are not seen. Attribute "
+        "and pseudo selectors are not evaluated, names set elsewhere than the building "
+        "function are not seen, and whether the handler really acts on such presses is the "
+        "project's statement in press_exclusions."
+    ),
+    remediation=(
+        "Add the control's selector to the skip list (or give it a class the list skips), "
+        "and add a browser test that presses it in each mode; if a press on it is meant to "
+        "count as outside, suppress the finding with that reason."
+    ),
+    noncompliant_example=(
+        "// mouse-events.js\nfunction isExcluded(t) { return t.closest('.modal, #menu'); }\n"
+        "// notice.js\nconst card = document.createElement('aside');\n"
+        "card.className = 'notice';\ncard.append(button);\ndocument.body.append(card);"
+    ),
+    compliant_example=("function isExcluded(t) { return t.closest('.modal, #menu, .notice'); }"),
+)
+
 
 # --- MAGIC002 (decision 31) ---------------------------------------------------------------
 
@@ -2452,6 +2505,7 @@ RULES: tuple[RuleSpec, ...] = (
     GUARD001,
     MAGIC003,
     DOM001,
+    DOM002,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}

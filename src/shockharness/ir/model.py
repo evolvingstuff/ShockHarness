@@ -1001,6 +1001,70 @@ class SentinelUse:
     target: str
 
 
+# --- Floating elements (DOM002) ----------------------------------------------------------
+# Elements attached to document.body, and the selector lists press handlers skip
+# (ir/javascript_floating.py; Python has none).
+
+
+@dataclass(frozen=True)
+class FloatingElement:
+    """``document.body.append(x)``: ``names`` are the selectors the building function
+    gives ``x`` (``.class``, ``#id``, the created tag); ``interactive``: that function
+    makes something pressable; ``transient``: ``x`` is a helper, not a control (removed
+    again, clicked or submitted by the code, hidden); ``returned``: the function returns
+    ``x`` (a container other modules fill)."""
+
+    span: Span
+    function: str
+    names: tuple[str, ...]
+    interactive: bool
+    transient: bool
+    returned: bool
+
+
+@dataclass(frozen=True)
+class ContainerFill:
+    """``callee().append(card)`` (or through a local assigned from the call) with a
+    pressable ``card``; ``names`` are the card's selectors."""
+
+    span: Span
+    callee: str
+    names: tuple[str, ...]
+    interactive: bool
+
+
+@dataclass(frozen=True)
+class SelectorList:
+    """The ``closest`` / ``matches`` arguments of one function: selector strings, the
+    names of the constants it uses for them, and the plain functions it calls (helpers
+    that test more selectors: ``isContextMenuTarget(target)``)."""
+
+    function: str
+    span: Span
+    selectors: tuple[str, ...]
+    constants: tuple[str, ...]
+    calls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StringConstant:
+    """A module-level ``const NAME = "..."``, or an array of strings."""
+
+    name: str
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DomFacts:
+    floating: tuple[FloatingElement, ...]
+    fills: tuple[ContainerFill, ...]
+    selector_lists: tuple[SelectorList, ...]
+    constants: tuple[StringConstant, ...]
+
+
+NO_DOM = DomFacts(floating=(), fills=(), selector_lists=(), constants=())
+
+
 # --- String facts (MAGIC002) -------------------------------------------------------------
 # Every string literal that could be a repeated constant, with its position. Docstrings,
 # the literal parts of f-strings and templates, type annotations, import specifiers and
@@ -1040,6 +1104,7 @@ class ModuleFacts:
     dataflow: DataflowFacts
     sentinels: tuple[SentinelUse, ...]
     strings: tuple[StringUse, ...]
+    dom: DomFacts
     parse_failure: ParseFailure | None
 
 
@@ -1063,5 +1128,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         dataflow=NO_DATAFLOW,
         sentinels=(),
         strings=(),
+        dom=NO_DOM,
         parse_failure=failure,
     )

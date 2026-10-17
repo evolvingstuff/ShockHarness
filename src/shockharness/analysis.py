@@ -59,6 +59,7 @@ from shockharness.rules.dataflow import (
 )
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
+from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
 from shockharness.rules.registry import (
@@ -382,6 +383,7 @@ def _policy_rules(
             registry.GUARD001,
             registry.MAGIC003,
             registry.MAGIC002,
+            registry.DOM002,
         )
         if rule.rule_id not in disabled_ids
         and language in rule.languages
@@ -882,6 +884,28 @@ def stub_findings(
     return run_stub003(files, graph.module_edges, config.section(registry.STUBS_SECTION))
 
 
+def dom_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """DOM002: pressable elements on document.body that a named skip list misses."""
+    if graph is None:
+        return {}
+    files = [
+        FloatingFile(
+            path=p.path,
+            dom=p.facts.dom,
+            imports=p.facts.imports,
+            source=p.source,
+            applies=registry.DOM002.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    return run_dom002(files, graph.module_edges, config.section(registry.DOM_SECTION))
+
+
 def consistency_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -899,47 +923,50 @@ def consistency_findings(
     return found
 
 
+# The cross-file rules that need the call graph or the module graph (built here when
+# complexity did not build it), and the phases that compute them, in report order.
+GRAPH_RULES = (
+    *ASYNC_RULES,
+    registry.ROLE001,
+    registry.INPUT001,
+    registry.IMPORT001,
+    registry.ASSERT001,
+    registry.PROV001,
+    registry.GUARD001,
+    registry.STUB003,
+    registry.DOM002,
+)
+GRAPH_PHASES = (
+    async_findings,
+    role_findings,
+    input_findings,
+    assert_findings,
+    consistency_findings,
+    stub_findings,
+    dom_findings,
+)
+
+
 def complete(
     pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
-    graph_rules = (
-        *ASYNC_RULES,
-        registry.ROLE001,
-        registry.INPUT001,
-        registry.IMPORT001,
-        registry.ASSERT001,
-        registry.PROV001,
-        registry.GUARD001,
-        registry.STUB003,
-    )
     if graph is None and any(
-        rule.rule_id in p.rules_applied for p in pendings for rule in graph_rules
+        rule.rule_id in p.rules_applied for p in pendings for rule in GRAPH_RULES
     ):
         graph = build_call_graph(_module_inputs(pendings))
     if graph is not None:
         pendings = _unimported_scripts(pendings, config, graph)
-    asynchrony = async_findings(pendings, config, graph)
-    roles = role_findings(pendings, config, graph)
-    inputs = input_findings(pendings, config, graph)
-    asserts = assert_findings(pendings, config, graph)
-    consistency = consistency_findings(pendings, config, graph)
-    strings = string_findings(pendings, config)
-    stubs = stub_findings(pendings, config, graph)
+    phases = (
+        outcome.graph_findings,
+        *(phase(pendings, config, graph) for phase in GRAPH_PHASES),
+        string_findings(pendings, config),
+    )
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
-        for found in (
-            outcome.graph_findings,
-            asynchrony,
-            roles,
-            inputs,
-            asserts,
-            consistency,
-            strings,
-            stubs,
-        ):
+        for found in phases:
             if pending.path in found:
                 extra.extend(found[pending.path])
         results.append(finish(pending, extra, options))

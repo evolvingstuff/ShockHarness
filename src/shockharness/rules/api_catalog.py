@@ -34,6 +34,7 @@ from shockharness.ir.suppression_directives import (
     TOOL_TYPE_IGNORE,
 )
 from shockharness.rules.guardrails import import_aliases, qualified_callee
+from shockharness.rules.imports import ClassKey, imported_names
 from shockharness.rules.registry import (
     BATCH001,
     PROCESS001,
@@ -370,30 +371,6 @@ class PredicateFile:
     applies: bool
 
 
-# A class: (the path that defines it, its name).
-ClassKey = tuple[str, str]
-
-
-def _import_targets(
-    files: Sequence[PredicateFile], module_edges: Sequence[ModuleEdge]
-) -> dict[tuple[str, str], ClassKey]:
-    """(path, local name) -> (the file it comes from, the name there), for every name a
-    file imports from an analyzed file; a whole-module import maps to (file, "")."""
-    targets = {
-        (edge.source, edge.span): edge.target for edge in module_edges if edge.target is not None
-    }
-    found: dict[tuple[str, str], ClassKey] = {}
-    for file in files:
-        for fact in file.imports:
-            if (file.path, fact.span) not in targets:
-                continue
-            target = targets[(file.path, fact.span)]
-            for imported, local in fact.names:
-                if imported != "*":
-                    found[(file.path, local)] = (target, imported)
-    return found
-
-
 def _resolve_base(
     path: str, base: str, defined: set[ClassKey], imported: Mapping[tuple[str, str], ClassKey]
 ) -> ClassKey | None:
@@ -417,7 +394,7 @@ def _class_bases(
 ) -> dict[ClassKey, list[ClassKey]]:
     """Every class and the project classes its bases resolve to."""
     defined = {(file.path, c.name) for file in files for c in file.catalog.classes}
-    imported = _import_targets(files, module_edges)
+    imported = imported_names([(f.path, f.imports) for f in files], module_edges)
     bases: dict[ClassKey, list[ClassKey]] = {}
     for file in files:
         for declared in file.catalog.classes:

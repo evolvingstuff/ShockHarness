@@ -466,6 +466,17 @@ Stated so that a clean report is never read as more than it is.
 * Index callees are matched by name (`.pop` on any receiver); a project method
   that takes an index needs adding to the catalog.
 
+## DOM002
+
+* Opt-in: whether a handler really acts on presses outside is the project's
+  statement in `press_exclusions`; nothing is guessed.
+* Vanilla DOM only: jQuery (`$("body").append`), portals and framework rendering
+  are not read, and an element reached through an object property
+  (`document.body.append(state.overlay)`) is not followed.
+* Names given to an element outside the function that builds it, attribute and
+  pseudo selectors, and helpers reached through anything but a plain call are not
+  seen; whether a modal can open while the handler's mode is active is not known.
+
 ## MAGIC002
 
 * Equal strings are grouped by value only: two copies that mean different
