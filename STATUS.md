@@ -1219,7 +1219,8 @@ In order:
    EXC004 (`return`/`break`/`continue` in `finally`). Done 2026-10-16 (see its
    entry below); released as 0.6.0.
 3. **H4** (async lifecycle, including uninspected `gather(return_exceptions=True)`
-   and `Promise.allSettled` results; done 2026-10-16, not released), **H5** (API catalog, PROCESS001 naming
+   and `Promise.allSettled` results; done 2026-10-16, not released), **H5** (done
+   2026-10-16, not released) (API catalog, PROCESS001 naming
    `check=False`), **H-TS** (TypeScript; `tree-sitter-typescript` approved),
    then H6 and H7.
 - Declined: Python 3.10 support (decision 17). Recorded, not scheduled: a rule
@@ -3177,4 +3178,107 @@ the updated rule lists, skill list, inventory and regression.
 * A `len((ISINSTANCE, GATHER))` trick to avoid a literal was replaced by the
   named constant `ISINSTANCE_ARGUMENTS`; the self-gate also caught a `[2]` index
   and a conditional fallback in the new extractors.
+
+## Milestone H5: API-catalog rules — DONE (2026-10-16)
+
+PROCESS001, RESULT001, TYPE001 (Python half), SLEEP001, RETRY001, BATCH001 and
+STUB003, as recorded in spec 21.2 (H5 row) and decisions 15 and 23. Implemented
+in the lead session; not released.
+
+### What was built
+
+* **Facts** (`ir/model.py`: `ProcessCall`, `SleepCall`, `RetryFact`,
+  `BatchLoop`, `TypeEscape`, `ConstantPredicate`, `CatalogFacts`;
+  `ModuleFacts.catalog`) from `ir/python_catalog.py` and
+  `ir/javascript_catalog.py`, cached (cache schema "6"). RESULT001 reuses H4's
+  discarded-call facts; TYPE001's `type: ignore` comes from the H2 directive
+  facts.
+* **Rules** (`rules/api_catalog.py`), run in the per-file phase next to the H3
+  rules (`analysis._policy_rules`), with callees resolved through each file's
+  imports (`import_aliases` / `qualified_callee`, shared with IMPORT001 and
+  ASYNC001).
+* **Config**: six sections plus `rules.stubs.stub003_severity`; deviations,
+  the loosening order and `--policy` protection through the H3 machinery, and
+  a deviation for each TYPE001 kind switched off.
+
+### Decisions (mine; review these)
+
+1. **Severities**: warning for PROCESS001, RESULT001, RETRY001, BATCH001;
+   review for TYPE001, SLEEP001 and STUB003, whose patterns are often
+   deliberate (a validated boundary, rate limiting, a flag that is always on).
+2. **PROCESS001 has two findings**: injection (a shell plus a non-literal
+   command) and an ignored exit status (returned, then dropped or never read).
+   JavaScript `exec` reports failure through its callback and `execSync`
+   throws, so only `spawnSync` is judged for its status. Whether the data can
+   contain shell syntax is H6's question.
+3. **RESULT001 method entries match by name** and are approximate; a function
+   of an imported module never matches one (`os.replace` is not `.replace`).
+   Roles default to production and test: `name.strip()` as a statement is a no-op
+   in a test too.
+4. **RETRY001 counts a handler that can raise, return or break as bounded**, so
+   `if attempts > LIMIT: raise` passes without modeling counters.
+5. **STUB003 lives in `rules.stubs` with its own severity key**, since its
+   default (review) differs from STUB001/002's (warning).
+6. **This repository sets `rules.types.report_any = false`**: its configuration,
+   report and cache values are dynamic TOML/JSON data typed `Mapping[str, Any]`
+   by design (validated by `schema.py`); 304 review findings would bury the
+   casts and `type: ignore` comments, which stay reported (there are none). The
+   setting is a reported deviation, and the self-diff reports it as VERIFY003,
+   as intended.
+7. **ROLE001** (decision 24) follows as its own change.
+
+### Regression against 0.6.0
+
+`shockharness==0.6.0` against this tree (its configuration without the new
+`rules.types` key, which 0.6.0 does not know), same inputs, all three profiles:
+the self-scan (190), the golden fixtures (exits 3/3/1) and both examples are
+identical, and no target has an H4 or H5 finding. The 0.3.0 regression runs
+with the H5 sections off.
+
+### Evidence (2026-10-16, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts
+All checks passed!
+134 files already formatted
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  190 findings  (cache hits 0 / misses 137, then 137 / 0)
+$ shockharness check src tests scripts --no-cache
+gate: PASS (exit 0)
+
+$ pytest -q        # CPython 3.14.7
+1075 passed
+$ pytest -q        # CPython 3.11.11 / 3.12.8 / 3.13.1
+1074 passed, 1 skipped   (on each; the skip is the wheel test, `build` not installed there)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests --format json --no-cache` runs are
+byte-identical with `coverage.cache` removed.
+
+Self-diff in a scratch clone against 6980823 (H4): 138 files compared (4 new),
+`gate: PASS (exit 0)`; the one new finding is VERIFY003 on this repository's
+own `rules.types.report_any = false` (decision 6). The first self-diff also
+flagged complexity in `prepare_text`, `extract_javascript_facts` (fan-out),
+`javascript_catalog._shell`, `collect_javascript_catalog`, `_type_escapes` and
+one test; each was split.
+
+New tests: `tests/unit/test_api_catalog.py` (9: each rule in both languages
+where it applies, TYPE001 switches, STUB003's severity, role scoping), plus the
+updated rule lists, inventory, regression and the split report test.
+
+### Failures observed during development (and what was done)
+
+* A first end-to-end probe reported no H5 findings: the cache from an earlier
+  run had the same key (tool version 0.6.0, cache schema "6") although the code
+  had changed. Only a development tree hits this; a release bumps the version.
+* RESULT001 first matched `os.replace(...)` against `.replace`; method entries
+  now skip receivers that are imported modules.
+* `isinstance(node, SCOPES | LOOPS)` with tuples raised a `TypeError` (the
+  third time this mistake was made: noted for next time).
+* A scripted rewrite of an expected rule list found the wrong closing bracket
+  and mangled a test; the file was restored and patched by hand.
 

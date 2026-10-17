@@ -70,6 +70,13 @@ Ask what the code promises when the value is absent or the operation fails.
 | `BOOL001` | What does the flag switch? | Pass it by keyword (`escape=True`) or in an options object; a flag that selects behavior may be two functions. |
 | `STATE001` | Who owns this state? Does it need to change at all? | A fixed table becomes a `tuple`/`frozenset`/`Object.freeze`d value (`write-compliant-code`, principle 8). Otherwise an object the caller creates and passes in, or a new value returned. A deliberate cache goes in `[[rules.module_state.allowed]]` with its reason. |
 | `IMPORT001` | Who asked for this effect? | Move it into a function the entry point calls (`main()`, a factory, `start()`). |
+| `PROCESS001` | Can the data contain shell syntax? Who checks the exit status? | An argument list without a shell; `check=True`, or read the status and raise a typed error. |
+| `RESULT001` | Was the value supposed to change? | Use the result (`name = name.strip()`), call the mutating form (`sort`, `forEach`), or delete the line. |
+| `TYPE001` | What is the real type? | Name it, validate at the boundary, or narrow with `isinstance`; keep an escape only where a runtime check backs it. |
+| `SLEEP001` | What condition is the sleep waiting for? | Wait on it (an event, a future, a readiness check with a deadline); a pacing interval comes from configuration. |
+| `RETRY001` | When does it give up? | Bound the attempts, retry only transient failures, re-raise the last error. |
+| `BATCH001` | Who learns which items failed? | Collect the failures and return them, or raise after the loop. |
+| `STUB003` | What should the check decide? | Implement it; a deliberate constant becomes a named setting. |
 | `ASYNC001`-`ASYNC003` | Who waits for this work and sees it fail? | `await` or return it; start tasks in a `TaskGroup`; check every settled result for failure. See the `async-lifecycle` skill. |
 
 An **unknown** finding means the rule could not establish the property, not

@@ -35,13 +35,14 @@ from shockharness.ir.model import NO_VERIFICATION, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
 from shockharness.rules import registry
+from shockharness.rules.api_catalog import CATALOG_RULES, run_catalog_rules
 from shockharness.rules.async_lifecycle import ASYNC_RULES, run_async_rules
 from shockharness.rules.complexity import run_unit_rules
 from shockharness.rules.defaults import DEFAULT_RULES, run_default_rules
 from shockharness.rules.exceptions import run_exception_rules
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001
-from shockharness.rules.registry import GUARDRAIL_SECTIONS
+from shockharness.rules.registry import CATALOG_SECTIONS, GUARDRAIL_SECTIONS
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -239,7 +240,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
     """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
     scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
     section = rule.config_section
-    if section is None or section not in GUARDRAIL_SECTIONS:
+    if section is None or section not in (*GUARDRAIL_SECTIONS, *CATALOG_SECTIONS):
         return True
     return role.role in config.section(section)["roles"]
 
@@ -264,6 +265,39 @@ def _units(
     if complexity["enabled"] is True or registry.ASYNC001.rule_id in applied:
         return measure_units(relative_path, facts.functions, complexity)
     return ()
+
+
+def _policy_rules(
+    facts: ModuleFacts,
+    source: SourceText,
+    config: EffectiveConfig,
+    relative_path: str,
+    language: str,
+    role: FileRole,
+    disabled_ids: set[str],
+) -> tuple[list[str], list[Finding]]:
+    """The H3-H5 rules for one file: (rule IDs applied, findings). ASYNC001-ASYNC003 run
+    in the cross-file phase (ASYNC001 needs the call graph); here they are only recorded
+    as applied when they apply to the file."""
+    rules = config.values["rules"]
+    guardrails = _active_guardrails(language, role, config, disabled_ids)
+    catalog = frozenset(
+        rule.rule_id
+        for rule in CATALOG_RULES
+        if rule.rule_id not in disabled_ids
+        and language in rule.languages
+        and _in_scope(rule, role, config)
+    )
+    applied = [
+        *sorted(guardrails),
+        *sorted(catalog),
+        *sorted(_active_async(language, role, config, disabled_ids)),
+    ]
+    findings = [
+        *run_guardrail_rules(facts, source, rules, relative_path, language, guardrails),
+        *run_catalog_rules(facts, source, rules, relative_path, language, catalog),
+    ]
+    return applied, findings
 
 
 def _active_async(
@@ -382,16 +416,11 @@ def prepare_text(
             )
         )
 
-    active_guardrails = _active_guardrails(language, role, config, disabled_ids)
-    applied.extend(sorted(active_guardrails))
-    # ASYNC001-ASYNC003 run in the cross-file phase (ASYNC001 needs the call graph); the
-    # per-file phase only decides whether they apply to this file.
-    applied.extend(sorted(_active_async(language, role, config, disabled_ids)))
-    findings.extend(
-        run_guardrail_rules(
-            facts, source, config.values["rules"], relative_path, language, active_guardrails
-        )
+    policy_applied, policy_findings = _policy_rules(
+        facts, source, config, relative_path, language, role, disabled_ids
     )
+    applied.extend(policy_applied)
+    findings.extend(policy_findings)
 
     complexity = config.section(COMPLEXITY_SECTION)
     units = _units(relative_path, facts, complexity, applied)

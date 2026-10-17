@@ -287,6 +287,7 @@ CONFIG_SCHEMA = TableField(
                         "markers": ListField(StrField(allow_empty=False)),
                         "test_path_segments": ListField(StrField(allow_empty=False)),
                         "mock_modules": ListField(StrField(allow_empty=False)),
+                        "stub003_severity": EnumField(VERIFICATION_SEVERITIES),
                     },
                     required=(),
                 ),
@@ -323,6 +324,46 @@ CONFIG_SCHEMA = TableField(
                     },
                     required=(),
                 ),
+                "processes": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "python_process_apis": ListField(StrField(allow_empty=False)),
+                        "javascript_process_apis": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "results": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "python_must_use": ListField(StrField(allow_empty=False)),
+                        "javascript_must_use": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "types": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "report_any": BoolField(),
+                        "report_cast": BoolField(),
+                        "report_type_ignore": BoolField(),
+                    },
+                    required=(),
+                ),
+                "sleep": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "python_sleep_apis": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "retry": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "retry_decorators": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "batches": TableField(fields=dict(GUARDRAIL_COMMON), required=()),
                 "verification": TableField(
                     fields={
                         "enabled": BoolField(),

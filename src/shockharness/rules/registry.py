@@ -1616,6 +1616,298 @@ ASYNC003 = RuleSpec(
 )
 
 
+# --- H5: API-catalog rules (spec 21.2) ------------------------------------------------------
+# Advisory until measured (decision 9): warning, or review where the pattern is often
+# deliberate (TYPE001, SLEEP001, STUB003). Each section's `roles` scopes its rules.
+
+PROCESSES_SECTION = "rules.processes"
+RESULTS_SECTION = "rules.results"
+TYPES_SECTION = "rules.types"
+SLEEP_SECTION = "rules.sleep"
+RETRY_SECTION = "rules.retry"
+BATCHES_SECTION = "rules.batches"
+CATALOG_SECTIONS = (
+    PROCESSES_SECTION,
+    RESULTS_SECTION,
+    TYPES_SECTION,
+    SLEEP_SECTION,
+    RETRY_SECTION,
+    BATCHES_SECTION,
+)
+
+PROCESS001 = RuleSpec(
+    rule_id="PROCESS001",
+    version="1",
+    name="shell command from data, or exit status ignored",
+    family="processes",
+    config_section=PROCESSES_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A shell command built from data (an injection waiting for the right value), or a "
+        "process API that returns its exit status with nothing checking it (a failed "
+        "command reads as success)."
+    ),
+    rationale=(
+        "subprocess.run(cmd) without check=True and os.system(...) return a status code; "
+        "dropped, the program continues after the command failed. A command string built "
+        "from a variable and run through a shell executes whatever shell syntax the value "
+        "contains."
+    ),
+    guarantees=(
+        "Calls whose callee, resolved through the file's imports, is in "
+        "rules.processes.python_process_apis / javascript_process_apis. Reported: a command "
+        "built from non-literal parts (an f-string or template with substitutions, + or % "
+        "with a non-literal, .format) run through a shell (shell=True, {shell: true}, "
+        "os.system, os.popen, subprocess.getoutput, child_process.exec / execSync); and "
+        "subprocess.run without check=True, subprocess.call or child_process.spawnSync whose "
+        "result is thrown away or whose function never reads .returncode / .status, and "
+        "os.system whose result is thrown away. Exact."
+    ),
+    limitations=(
+        "Whether a non-literal value can contain shell syntax is not traced (that is H6's "
+        "taint analysis); a status read anywhere in the function counts as checking it. "
+        "Popen and child_process.spawn (event-based) are not judged for their exit status."
+    ),
+    remediation=(
+        "Pass an argument list without a shell (subprocess.run([...], check=True); "
+        "execFile / spawnSync with an array). Use check=True, or read the status and raise "
+        "a typed error on failure."
+    ),
+    noncompliant_example='subprocess.run(f"rm -rf {path}", shell=True)',
+    compliant_example='subprocess.run(["rm", "-rf", "--", path], check=True)',
+)
+
+RESULT001 = RuleSpec(
+    rule_id="RESULT001",
+    version="1",
+    name="must-use result thrown away",
+    family="results",
+    config_section=RESULTS_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A call that returns a new value and changes nothing is used as a statement: "
+        "name.strip(), sorted(items), items.map(f). The line has no effect."
+    ),
+    rationale=(
+        "The author meant to change the value and the code does not. Tests that check the "
+        "unchanged value pass by accident or never notice."
+    ),
+    guarantees=(
+        "A call that is a whole statement whose callee is listed in "
+        "rules.results.python_must_use / javascript_must_use: a qualified function "
+        "(sorted, copy.deepcopy, dataclasses.replace; structuredClone) is exact; an entry "
+        "starting with '.' names a method on any receiver (.strip, .replace, .lower; .map, "
+        ".filter, .concat, .slice, .trim, .toSorted) and is approximate, because the "
+        "receiver's type is not known."
+    ),
+    limitations=(
+        "A method matched by name on a receiver of another type (a custom .replace that "
+        "mutates) is reported. Values stored and never read are not tracked."
+    ),
+    remediation=(
+        "Use the result (name = name.strip()), call the mutating form (items.sort(), "
+        "forEach), or delete the line if the call was not needed."
+    ),
+    noncompliant_example="name.strip()\nitems.map((item) => item.id);",
+    compliant_example="name = name.strip()\nconst ids = items.map((item) => item.id);",
+)
+
+TYPE001 = RuleSpec(
+    rule_id="TYPE001",
+    version="1",
+    name="type escape hatch",
+    family="types",
+    config_section=TYPES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "Any, typing.cast and # type: ignore switch the type checker off for a value or a "
+        "line; each is a claim nobody checks."
+    ),
+    rationale=(
+        "An agent that cannot satisfy the type checker can make it stop looking. Each escape "
+        "hatch is sometimes right (a boundary with runtime validation), and always worth a "
+        "reviewer's glance."
+    ),
+    guarantees=(
+        "Python: Any (bare or typing.Any) in a parameter, return or annotated-assignment "
+        "annotation; cast(...) and typing.cast(...); every # type: ignore comment. Each "
+        "kind can be switched off (report_any, report_cast, report_type_ignore). Exact. The "
+        "TypeScript half (any, as any, @ts-ignore) comes with the TypeScript adapter."
+    ),
+    limitations=(
+        "Type checking itself stays with mypy or pyright; ShockHarness only lists the "
+        "escapes. A deliberate boundary is excluded with an [[overrides]] entry."
+    ),
+    remediation=(
+        "Name the real type, validate at the boundary and return a typed value, or narrow "
+        "with isinstance; keep the escape only where a runtime check backs it, and say so."
+    ),
+    noncompliant_example="def load(raw: Any) -> Any:\n    return cast(Config, raw)",
+    compliant_example="def load(raw: object) -> Config:\n    return Config.parse(raw)",
+)
+
+SLEEP001 = RuleSpec(
+    rule_id="SLEEP001",
+    version="1",
+    name="fixed sleep instead of a condition",
+    family="sleep",
+    config_section=SLEEP_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "time.sleep / asyncio.sleep / an awaited setTimeout waits a fixed time where the "
+        "code needs a condition: too short and it races, too long and it is slow."
+    ),
+    rationale=(
+        "Sleeping is how flaky synchronization gets fixed until it breaks again. A sleep in a "
+        "loop is polling; a single sleep is usually waiting for something that has a signal."
+    ),
+    guarantees=(
+        "Python: calls resolved to rules.sleep.python_sleep_apis (time.sleep, asyncio.sleep, "
+        "trio.sleep, anyio.sleep); JavaScript: new Promise((r) => setTimeout(r, ...)) and an "
+        "awaited timers/promises setTimeout. The message says whether it is in a loop. "
+        "Approximate: a sleep may be legitimate pacing or rate limiting, hence review."
+    ),
+    limitations=(
+        "Intent is not inferred. Rate limiting and backoff written as a sleep are reported "
+        "like synchronization."
+    ),
+    remediation=(
+        "Wait on the condition (an event, a future, a readiness probe with a deadline), or "
+        "name the pacing policy and take its interval from configuration."
+    ),
+    noncompliant_example="start_server()\ntime.sleep(PAUSE)  # hope it is up",
+    compliant_example=(
+        "start_server()\nwait_until_ready(server, deadline=settings.startup_deadline)"
+    ),
+)
+
+RETRY001 = RuleSpec(
+    rule_id="RETRY001",
+    version="1",
+    name="retry without a limit",
+    family="retry",
+    config_section=RETRY_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A retry with no stop condition: a permanent failure retries forever and the "
+        "caller never hears about it."
+    ),
+    rationale=(
+        "Retrying is how transient failures are hidden; without a limit it hides permanent "
+        "ones too, and the process spins instead of failing."
+    ),
+    guarantees=(
+        "while True / while (true) / for (;;) whose body catches an exception in a handler "
+        "that never raises, returns or breaks; decorators resolved to "
+        "rules.retry.retry_decorators (tenacity.retry, retrying.retry, backoff.on_exception, "
+        "backoff.on_predicate) used without stop / stop_max_attempt_number / tries / "
+        "attempts / max_attempts (tenacity, retrying) or max_tries / max_time (backoff). "
+        "Exact."
+    ),
+    limitations=(
+        "A limit enforced elsewhere (a timeout around the loop, a counter checked outside the "
+        "handler) is not seen; a handler that raises on any path counts as bounded."
+    ),
+    remediation=(
+        "Bound the retries (stop_after_attempt, max_tries, a counter that raises), retry only "
+        "the failures that can be transient, and re-raise the last error when giving up."
+    ),
+    noncompliant_example="@tenacity.retry\ndef fetch(url): ...",
+    compliant_example=(
+        "@tenacity.retry(stop=tenacity.stop_after_attempt(settings.attempts))\ndef fetch(url): ..."
+    ),
+)
+
+BATCH001 = RuleSpec(
+    rule_id="BATCH001",
+    version="1",
+    name="batch drops per-item failures",
+    family="batches",
+    config_section=BATCHES_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A loop catches each item's failure and only passes, continues or logs: the batch "
+        "finishes 'successfully' with items silently missing."
+    ),
+    rationale=(
+        "Per-item error handling is how one bad record stops failing a whole import. Done "
+        "without recording the failures, it is how a whole import fails without anyone "
+        "knowing."
+    ),
+    guarantees=(
+        "A for / for...of / for...in loop whose body (outside nested functions and loops) "
+        "has a try whose handler contains only pass, continue, logging calls "
+        "(logger.*, logging.*, print; console.*), or nothing. Approximate: whether the "
+        "caller learns of the failures elsewhere is not traced."
+    ),
+    limitations=(
+        "A handler that records the failure in a list, or re-raises after the loop, is not "
+        "reported; whether that record is ever reported is not checked. The catch itself is "
+        "also judged by EXC001/EXC002."
+    ),
+    remediation=(
+        "Collect the failures and return them with the results (a partial-success result), "
+        "or raise after the loop when any item failed."
+    ),
+    noncompliant_example=(
+        "for row in rows:\n    try:\n        save(row)\n    except ValueError:\n"
+        "        log.warning('skip')"
+    ),
+    compliant_example=(
+        "failures = []\nfor row in rows:\n    try:\n        save(row)\n"
+        "    except ValueError as error:\n        failures.append((row, error))\n"
+        "return ImportResult(saved, failures)"
+    ),
+)
+
+STUB003 = RuleSpec(
+    rule_id="STUB003",
+    version="1",
+    name="check that always answers yes",
+    family="stubs",
+    config_section="rules.stubs",
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A function named as a check (is_admin, can_edit, validate_token) whose whole body "
+        "returns True: a success-shaped placeholder."
+    ),
+    rationale=(
+        "The most dangerous stub compiles, passes every test that expects access, and grants "
+        "everything. A real check rarely has no inputs that matter."
+    ),
+    guarantees=(
+        "Python and JavaScript functions, methods and arrows named is_/has_/can_/should_ "
+        "(isX/hasX/... in JavaScript) or starting with check, validate, verify, authorize, "
+        "authenticate or allow, whose body (docstring aside) is only return True / return "
+        "true / => true. Severity rules.stubs.stub003_severity (review by default). "
+        "Approximate: a feature flag that is deliberately always on looks the same."
+    ),
+    limitations="Other success-shaped constants (return {} from a fetch) are not judged.",
+    remediation=(
+        "Implement the check, or delete it and make callers decide; a deliberate constant "
+        "(a flag that is always on) becomes a named setting."
+    ),
+    noncompliant_example="def can_refund(user, order):\n    return True",
+    compliant_example=(
+        "def can_refund(user, order):\n    return user.id == order.owner_id and order.refundable"
+    ),
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     _planned(
@@ -1657,6 +1949,13 @@ RULES: tuple[RuleSpec, ...] = (
     ASYNC001,
     ASYNC002,
     ASYNC003,
+    PROCESS001,
+    RESULT001,
+    TYPE001,
+    SLEEP001,
+    RETRY001,
+    BATCH001,
+    STUB003,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -1703,6 +2002,12 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "boolean_arguments": CATEGORY_STRUCTURAL,
     "module_state": CATEGORY_STRUCTURAL,
     "async_lifecycle": CATEGORY_CONTRACT,
+    "processes": CATEGORY_CONTRACT,
+    "results": CATEGORY_CONTRACT,
+    "types": CATEGORY_CONTRACT,
+    "sleep": CATEGORY_CONTRACT,
+    "retry": CATEGORY_CONTRACT,
+    "batches": CATEGORY_CONTRACT,
 }
 
 

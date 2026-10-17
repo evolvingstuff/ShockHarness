@@ -38,7 +38,7 @@ def _excerpt(node: ast.AST) -> str:
     return text
 
 
-def _scope_nodes(scope: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
+def scope_nodes(scope: ast.AST) -> list[tuple[ast.AST, ast.AST]]:
     """(node, parent) for every node in ``scope``, not descending into nested scopes."""
     found: list[tuple[ast.AST, ast.AST]] = []
     stack: list[tuple[ast.AST, ast.AST]] = [(child, scope) for child in ast.iter_child_nodes(scope)]
@@ -91,7 +91,7 @@ def _returns_exceptions(call: ast.Call) -> bool:
 class _Scope:
     def __init__(self, source: SourceText, scope: ast.AST) -> None:
         self.source = source
-        self.nodes = _scope_nodes(scope)
+        self.nodes = scope_nodes(scope)
         self.parents = {id(node): parent for node, parent in self.nodes}
         self.in_async = isinstance(scope, ast.AsyncFunctionDef)
         self.bound = _with_bindings(self.nodes)

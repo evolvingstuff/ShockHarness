@@ -37,6 +37,8 @@ the full detection guarantees.
 | `BOOL001` | `f(x, True, False)`: pass flags by keyword or an options object | review |
 | `STATE001` / `IMPORT001` | module state written from functions / a side effect at import time | warning |
 | `ASYNC001`-`ASYNC003` | a coroutine or Promise dropped, a task started without an owner, a settled batch never checked for failures (see `async-lifecycle`) | warning |
+| `PROCESS001` / `RESULT001` / `RETRY001` / `BATCH001` | a shell command built from data or an unchecked exit status / a must-use result thrown away / a retry with no limit / a loop that drops per-item failures | warning |
+| `TYPE001` / `SLEEP001` / `STUB003` | `Any`, `cast`, `# type: ignore` / a fixed sleep instead of a condition / a check that always returns `True` | review |
 
 A clean report says `gate: PASS (exit 0)`. Exit `1` is a policy violation, `2`
 an invalid configuration or invocation, `3` a tool failure or, under

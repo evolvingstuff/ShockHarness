@@ -19,6 +19,7 @@ from shockharness.constants import (
     RADIX_OCTAL,
 )
 from shockharness.ir.javascript_async import collect_javascript_async
+from shockharness.ir.javascript_catalog import collect_javascript_catalog
 from shockharness.ir.javascript_catches import (
     collect_javascript_catches,
     node_span,
@@ -35,7 +36,10 @@ from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
+    AsyncFacts,
+    CatalogFacts,
     Comment,
+    GuardrailFacts,
     ModuleFacts,
     NumericLiteral,
     ParseFailure,
@@ -288,6 +292,7 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
 
     literals.sort(key=lambda lit: lit.span)
     comments.sort(key=lambda comment: comment.span)
+    guardrails, asynchrony, catalog = _policy_facts(source, root)
     return ModuleFacts(
         language="javascript",
         parser=PARSER_NAME,
@@ -300,7 +305,19 @@ def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
         imports=collect_javascript_imports(source, root),
         bindings=collect_javascript_bindings(source, root),
         verification=collect_javascript_verification(source, root, tuple(comments)),
-        guardrails=collect_javascript_guardrails(source, root),
-        asynchrony=collect_javascript_async(source, root),
+        guardrails=guardrails,
+        asynchrony=asynchrony,
+        catalog=catalog,
         parse_failure=None,
+    )
+
+
+def _policy_facts(
+    source: SourceText, root: Node
+) -> tuple[GuardrailFacts, AsyncFacts, CatalogFacts]:
+    """The H3-H5 facts: guardrails, async lifecycle, API catalog."""
+    return (
+        collect_javascript_guardrails(source, root),
+        collect_javascript_async(source, root),
+        collect_javascript_catalog(source, root),
     )

@@ -712,6 +712,46 @@ their failures) is declared in `supervisors`:
 supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery", "app.jobs.Supervisor"]
 ```
 
+## API-catalog rules (H5)
+
+```toml
+[tool.shockharness.rules.processes]   # PROCESS001
+enabled = true
+severity = "warning"
+roles = ["production"]
+python_process_apis = ["subprocess.run", "subprocess.call", "os.system", ...]
+javascript_process_apis = ["child_process.exec", "child_process.spawnSync", ...]
+
+[tool.shockharness.rules.results]     # RESULT001
+roles = ["production", "test"]
+python_must_use = ["sorted", "copy.deepcopy", ".strip", ".replace", ...]
+javascript_must_use = ["structuredClone", ".map", ".filter", ".trim", ...]
+
+[tool.shockharness.rules.types]       # TYPE001, review
+report_any = true
+report_cast = true
+report_type_ignore = true
+
+[tool.shockharness.rules.sleep]       # SLEEP001, review
+python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
+
+[tool.shockharness.rules.retry]       # RETRY001
+retry_decorators = ["tenacity.retry", "retrying.retry", "backoff.on_exception", "backoff.on_predicate"]
+
+[tool.shockharness.rules.batches]     # BATCH001
+
+[tool.shockharness.rules.stubs]
+stub003_severity = "review"           # STUB003
+```
+
+Every section has `enabled`, `severity` and `roles` as in the H3 tables (the
+defaults: `warning`, or `review` for `types` and `sleep`; production only, or
+production and test for `results`). Removing a role or a catalog entry,
+switching a TYPE001 kind off, or lowering a severity to `review` is a policy
+deviation, reported by VERIFY003 and protected by `--policy`. Adding entries
+tightens: a project lists its own wrappers (`app.shell.run`, `app.retry`) so the
+rules see them. The full default lists are in `defaults.toml`.
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

@@ -25,6 +25,12 @@ mode = "boundary_whitelist"
 
 # Declared boundaries where the tool meets the outside world. Each converts the
 # named failure into a typed analyzer diagnostic; none may swallow it.
+# TYPE001: configuration, report and cache values are dynamic TOML/JSON data, typed
+# Mapping[str, Any] by design (validated by schema.py, not by the type checker); listing
+# every Any would bury the casts and type: ignore comments, which stay reported.
+[tool.shockharness.rules.types]
+report_any = false
+
 [[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/config.py"
 language = "python"

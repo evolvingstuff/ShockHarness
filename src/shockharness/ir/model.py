@@ -702,6 +702,112 @@ class AsyncFacts:
 NO_ASYNC = AsyncFacts(discarded_calls=(), settled_batches=())
 
 
+# --- API-catalog facts (H5) -------------------------------------------------------------
+# What PROCESS001, SLEEP001, RETRY001, BATCH001, TYPE001 and STUB003 need
+# (rules/api_catalog.py). RESULT001 reads the H4 discarded calls.
+
+CHECK_TRUE = "true"
+CHECK_FALSE = "false"
+CHECK_ABSENT = "absent"
+RETRY_LOOP = "loop"
+RETRY_DECORATOR = "decorator"
+TYPE_ESCAPE_ANY = "any"
+TYPE_ESCAPE_CAST = "cast"
+
+
+@dataclass(frozen=True)
+class ProcessCall:
+    """A call whose last callee segment names a process API (``run``, ``call``,
+    ``system``, ``exec``, ``spawnSync``, ...). ``shell`` is true for ``shell=True`` /
+    ``{shell: true}``; ``interpolated`` when the command is built from non-literal parts
+    (an f-string or template with substitutions, ``+``, ``%``, ``.format``); ``check`` is
+    ``true``/``false``/``absent`` (Python ``check=``); ``discarded`` when the result is
+    thrown away; ``status_read`` when the enclosing function reads ``.returncode`` /
+    ``.status``."""
+
+    callee: str
+    text: str
+    shell: bool
+    interpolated: bool
+    check: str
+    discarded: bool
+    status_read: bool
+    span: Span
+
+
+@dataclass(frozen=True)
+class SleepCall:
+    """``time.sleep`` / ``asyncio.sleep`` (any callee whose last segment is ``sleep``), or
+    a JavaScript ``new Promise((r) => setTimeout(r, ...))``. ``in_loop`` when inside a
+    loop of the same function (polling)."""
+
+    callee: str
+    text: str
+    in_loop: bool
+    span: Span
+
+
+@dataclass(frozen=True)
+class RetryFact:
+    """A retry without a visible limit. ``loop``: ``while True`` (``while (true)``) whose
+    body catches an exception and neither raises, returns nor breaks in the handler.
+    ``decorator``: ``@retry`` / ``@backoff.on_exception`` with none of the stop
+    arguments. ``callee`` names the decorator for that kind."""
+
+    kind: str
+    callee: str
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class BatchLoop:
+    """A loop whose body catches per-item failures and drops them: the handler only
+    passes, continues or logs (no raise, no return, nothing recorded)."""
+
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class TypeEscape:
+    """``Any`` in an annotation or a ``cast(...)`` call (Python)."""
+
+    kind: str
+    text: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class ConstantPredicate:
+    """A function named as a check (``is_*``, ``has_*``, ``can_*``, ``check*``,
+    ``validate*``, ``verify*``, ``authorize*``, ``authenticate*``, ``allow*``) whose whole
+    body returns the literal ``True`` / ``true``."""
+
+    name: str
+    span: Span
+
+
+@dataclass(frozen=True)
+class CatalogFacts:
+    process_calls: tuple[ProcessCall, ...]
+    sleeps: tuple[SleepCall, ...]
+    retries: tuple[RetryFact, ...]
+    batch_loops: tuple[BatchLoop, ...]
+    type_escapes: tuple[TypeEscape, ...]
+    constant_predicates: tuple[ConstantPredicate, ...]
+
+
+NO_CATALOG = CatalogFacts(
+    process_calls=(),
+    sleeps=(),
+    retries=(),
+    batch_loops=(),
+    type_escapes=(),
+    constant_predicates=(),
+)
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -717,6 +823,7 @@ class ModuleFacts:
     verification: VerificationFacts
     guardrails: GuardrailFacts
     asynchrony: AsyncFacts
+    catalog: CatalogFacts
     parse_failure: ParseFailure | None
 
 
@@ -736,5 +843,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         verification=NO_VERIFICATION,
         guardrails=NO_GUARDRAILS,
         asynchrony=NO_ASYNC,
+        catalog=NO_CATALOG,
         parse_failure=failure,
     )

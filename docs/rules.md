@@ -69,7 +69,7 @@ weakened" without a separate exit code: a gating finding of any category exits
 | Category | Families | Meaning |
 |---|---|---|
 | `policy_integrity` | `VERIFY*` | the change weakened its own verification: skipped tests, blanket suppressions, assertions that cannot fail |
-| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001`, `ASYNC*` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
+| `contract_integrity` | `MAGIC*`, `EXC*`, `DEF*`, `SUPP*`, `STUB*`, `ASSERT001`, `IMPORT001`, `ASYNC*`, `PROCESS001`, `RESULT001`, `TYPE001`, `SLEEP001`, `RETRY001`, `BATCH001` | the code hides a failure, a missing value, an unexplained number, a missing implementation, a check that can vanish, or an effect at import |
 | `structural` | `CPLX*`, `BOOL001`, `STATE001` | complexity, coupling, unreadable call sites and shared state (advisory) |
 
 The JSON report counts findings per category in `summary.by_category`; SARIF
@@ -850,6 +850,58 @@ name contains `Exception` or `Error`; JavaScript inspection is a `.status` or
 `.reason` access or a `"rejected"` string, anywhere in the enclosing function.
 Returning the batch (or a concise arrow that evaluates to it) hands the check to
 the caller.
+
+### PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003: API catalog (H5; warning or review)
+
+Milestone H5 of specification section 21. Each rule resolves callees through
+the file's own imports against a catalog in its section, so a project can add
+its own wrappers. Advisory until measured (decision 9): `warning`, or `review`
+where the pattern is often deliberate.
+
+| Rule | Reports | Default | Languages | Section (roles) |
+|---|---|---|---|---|
+| `PROCESS001` | a shell command built from data; a process API whose exit status is returned and never checked | warning | Python, JavaScript | `rules.processes` (production) |
+| `RESULT001` | a must-use call used as a statement: `name.strip()`, `sorted(items)`, `items.map(f)` | warning | Python, JavaScript | `rules.results` (production, test) |
+| `TYPE001` | `Any` in annotations, `cast(...)`, `# type: ignore` | review | Python | `rules.types` (production) |
+| `SLEEP001` | a fixed sleep (`time.sleep`, `asyncio.sleep`, `new Promise((r) => setTimeout(r, ...))`), said to be polling inside a loop | review | Python, JavaScript | `rules.sleep` (production) |
+| `RETRY001` | an endless retry loop whose handler never gives up; `@tenacity.retry` / `@backoff.on_exception` without a stop | warning | Python, JavaScript (loops) | `rules.retry` (production) |
+| `BATCH001` | a loop whose per-item handler only passes, continues or logs | warning | Python, JavaScript | `rules.batches` (production) |
+| `STUB003` | a function named as a check whose body only returns `True` | review | Python, JavaScript | `rules.stubs` (`stub003_severity`) |
+
+**PROCESS001.** Two findings. (1) The command is built from non-literal parts
+(an f-string or template with substitutions, `+` or `%` with a non-literal,
+`.format`) and runs through a shell: `shell=True`, `{shell: true}`, or an API
+that always uses one (`os.system`, `os.popen`, `subprocess.getoutput`,
+`child_process.exec` / `execSync`). (2) `subprocess.run` without `check=True`,
+`subprocess.call` and `child_process.spawnSync` whose result is thrown away or
+whose function never reads `.returncode` / `.status`, and `os.system` whose
+result is thrown away. Whether the data can contain shell syntax is not traced
+(that is H6).
+
+**RESULT001.** Uses H4's discarded-call facts. An entry in
+`python_must_use` / `javascript_must_use` is a qualified function (`sorted`,
+`copy.deepcopy`, `structuredClone`; exact) or `.name` for a method on any
+receiver (`.strip`, `.map`; approximate). A function of an imported module
+(`os.replace`) never matches a method entry.
+
+**TYPE001.** `report_any`, `report_cast` and `report_type_ignore` switch each
+kind off (a deviation). Type checking stays with mypy or pyright; the
+TypeScript half arrives with H-TS.
+
+**RETRY001.** A loop is bounded when its handler raises, returns or breaks on
+some path (a counter that raises counts). Decorators are matched through
+`retry_decorators` and need one of `stop`, `stop_max_attempt_number`, `tries`,
+`attempts`, `max_attempts` (tenacity, retrying) or `max_tries`, `max_time`
+(backoff).
+
+**BATCH001.** The handler body is only `pass`, `continue`, logging calls or
+nothing. A handler that records the failure (appends it, re-raises later) is
+not reported. The catch itself is also judged by EXC001/EXC002.
+
+**STUB003.** `is_`/`has_`/`can_`/`should_` (JavaScript `isX`, `hasX`, ...) or a
+name starting with `check`, `validate`, `verify`, `authorize`, `authenticate`,
+`allow`, whose body (docstring aside) only returns `True` / `true`. Severity
+`rules.stubs.stub003_severity` (`review` by default).
 
 ## Registered, not implemented
 

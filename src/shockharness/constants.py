@@ -88,7 +88,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # The content-hash cache (0.3.0): the shape version of index.json and of each entry.
 # Bumped on an incompatible change; a cache written by another version is invalidated.
 # "2": finding status and file role (H1); "3": verification facts (H2).
-CACHE_SCHEMA_VERSION: Final[str] = "5"
+CACHE_SCHEMA_VERSION: Final[str] = "6"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

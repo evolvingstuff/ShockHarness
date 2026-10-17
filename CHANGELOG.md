@@ -5,6 +5,34 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+Milestone H5 of specification section 21: API-catalog rules. Seven new rules
+ship at `warning` or `review` (decision 9), so no gate verdict changes; the
+golden corpus has no H5 findings, and the 0.3.0 regression runs with them off.
+
+### Added (H5)
+- `PROCESS001` (`rules.processes`): a shell command built from data (f-string,
+  template, `+`, `%`, `.format`) run through a shell; `subprocess.run` without
+  `check=True`, `subprocess.call`, `os.system`, `child_process.spawnSync` whose
+  exit status is thrown away or never read.
+- `RESULT001` (`rules.results`, production and test): a must-use call used as a
+  statement (`sorted(xs)`, `name.strip()`, `items.map(f)`); method entries are
+  approximate.
+- `TYPE001` (`rules.types`, review, Python): `Any` in annotations, `cast(...)`,
+  `# type: ignore`, each switchable.
+- `SLEEP001` (`rules.sleep`, review): fixed sleeps, marked as polling in loops.
+- `RETRY001` (`rules.retry`): endless retry loops whose handler never gives up;
+  unbounded `tenacity` / `retrying` / `backoff` decorators.
+- `BATCH001` (`rules.batches`): loops whose per-item handler only passes,
+  continues or logs.
+- `STUB003` (`rules.stubs.stub003_severity`, review): a check named
+  `is_*`/`can_*`/`validate*`/... that always returns `True`.
+
+### Changed (H5)
+- The cache schema is "6".
+- This repository's own configuration sets `rules.types.report_any = false`
+  (its configuration and report values are dynamic TOML/JSON data); casts and
+  `type: ignore` stay reported.
+
 Milestone H4 of specification section 21: async lifecycle. Three new rules ship
 at `warning` (decision 9), so no gate verdict changes; the golden corpus has no
 async findings, and the 0.3.0 regression runs with them off.

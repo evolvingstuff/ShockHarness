@@ -118,6 +118,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "unresolved) when the base version could not be analyzed, or when rename detection "
         "failed and the file has no base version under its own path",
     ),
+    # H5: every API-catalog finding is a violation (method-name matches are approximate).
+    ("rules/api_catalog.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003: violation",
+    ),
     # H4: ASYNC001 through a probable call-graph edge (the callee matched by name only)
     # is unknown; every other ASYNC finding is a violation.
     ("rules/async_lifecycle.py", "_async_callee"): (

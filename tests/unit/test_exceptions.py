@@ -445,6 +445,7 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "ASYNC001",
         "ASYNC002",
         "ASYNC003",
+        "BATCH001",
         "BOOL001",
         "CPLX001",
         "CPLX002",
@@ -463,11 +464,17 @@ def test_single_exception_rule_can_be_disabled_by_override(
         "EXC004",
         "IMPORT001",
         "MAGIC001",
+        "PROCESS001",
+        "RESULT001",
+        "RETRY001",
+        "SLEEP001",
         "STATE001",
         "STUB001",
         "STUB002",
+        "STUB003",
         "SUPP001",
         "SUPP002",
+        "TYPE001",
     )
 
 

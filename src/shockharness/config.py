@@ -509,6 +509,12 @@ GUARDRAIL_RULES = {
     "module_state": "STATE001",
     "import_effects": "IMPORT001",
     "async_lifecycle": "ASYNC001-ASYNC003",
+    "processes": "PROCESS001",
+    "results": "RESULT001",
+    "types": "TYPE001",
+    "sleep": "SLEEP001",
+    "retry": "RETRY001",
+    "batches": "BATCH001",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -523,7 +529,20 @@ GUARDRAIL_CATALOGS = (
     ("async_lifecycle", "roles"),
     ("async_lifecycle", "python_coroutine_apis"),
     ("async_lifecycle", "javascript_promise_apis"),
+    ("processes", "roles"),
+    ("processes", "python_process_apis"),
+    ("processes", "javascript_process_apis"),
+    ("results", "roles"),
+    ("results", "python_must_use"),
+    ("results", "javascript_must_use"),
+    ("types", "roles"),
+    ("sleep", "roles"),
+    ("sleep", "python_sleep_apis"),
+    ("retry", "roles"),
+    ("retry", "retry_decorators"),
+    ("batches", "roles"),
 )
+TYPE_SWITCHES = ("report_any", "report_cast", "report_type_ignore")
 GUARDRAIL_PERMISSIONS = (
     ("boolean_arguments", "allowed_callees"),
     ("async_lifecycle", "supervisors"),
@@ -541,6 +560,9 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
                 f"rules.{section}.severity is 'review'; {rule_ids} findings are reported as review"
             )
     found.extend(_guardrail_list_deviations(rules, strict))
+    for key in TYPE_SWITCHES:
+        if rules["types"][key] is False and strict["types"][key] is True:
+            found.append(f"rules.types.{key} is false; TYPE001 does not report that escape hatch")
     for index, allowed in enumerate(rules["module_state"]["allowed"]):
         found.append(
             f"rules.module_state.allowed[{index}] permits module state {allowed['name']!r} in "

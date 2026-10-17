@@ -15,8 +15,9 @@ item 2 removes the checked-then-raised ``table.get("raw")`` finding in every pro
 item 6 (``recommended`` sets ``rules.defaults.fail_on_unknown = false``) moves two unknown
 DEF002 findings out of the gate's hard and review counts under ``recommended``.
 
-The H3 and H4 rules (EXC004, STUB*, ASSERT001, BOOL001, STATE001, IMPORT001, ASYNC*)
-did not exist in 0.3.0: the snapshot comparison runs with them switched off, and
+The H3-H5 rules (EXC004, STUB*, ASSERT001, BOOL001, STATE001, IMPORT001, ASYNC*,
+PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001) did not exist in 0.3.0:
+the snapshot comparison runs with them switched off, and
 ``test_h3_rules_never_change_a_gate_verdict`` checks that switching them on changes no
 gate status, exit code or hard-violation count (they ship at warning and review).
 """
@@ -99,6 +100,12 @@ H3_OFF = (
             "module_state",
             "import_effects",
             "async_lifecycle",
+            "processes",
+            "results",
+            "types",
+            "sleep",
+            "retry",
+            "batches",
         )
     )
     + '[[tool.shockharness.overrides]]\npaths = ["**"]\ndisable = ["EXC004"]\nreason = "0.3.0"\n'

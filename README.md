@@ -39,7 +39,7 @@ two consumer examples) and G (bundled agent skills, `skills install` /
 (per-unit complexity metrics with versioned conventions, a call graph whose
 edges are `resolved`, `probable` or `unresolved`, module cycles, fan-in/out,
 shared-mutable-state notes, hotspots from churn and cognitive complexity, and
-per-unit regressions in revision diffs) are implemented, as are the first four
+per-unit regressions in revision diffs) are implemented, as are the first five
 milestones of the advanced guardrails: H1 (an explicit `unknown` finding status
 and file roles), H2 (verification integrity: in a revision diff, report test
 skips and focus markers, blanket suppressions, neutralized assertions and
@@ -50,7 +50,10 @@ skill, `verification-integrity`), H3 (syntax-level guardrails: `return` in
 positional Boolean flags, module state written from functions, side effects at
 import time; advisory until their precision is measured) and H4 (async lifecycle:
 coroutines and Promises created and dropped, tasks started without an owner,
-settled batches whose failures nobody checks; a sixth skill, `async-lifecycle`).
+settled batches whose failures nobody checks; a sixth skill, `async-lifecycle`)
+and H5 (API-catalog rules: shell commands from data and ignored exit statuses,
+must-use results, type escape hatches, fixed sleeps, unbounded retries, batches
+that drop failures, checks that always say yes).
 `MAGIC002` is **not yet implemented**; every report lists unimplemented rules under
 `rules_not_implemented` so a clean run never implies coverage the tool does
 not have. See `STATUS.md` for exact evidence.
@@ -87,6 +90,13 @@ Implemented rules:
 | `ASYNC001` | a coroutine or Promise created and dropped (an async call as a statement, `void`), across files | warning |
 | `ASYNC002` | `asyncio.create_task(...)` with its handle dropped, outside a `TaskGroup` | warning |
 | `ASYNC003` | `gather(return_exceptions=True)` / `Promise.allSettled` whose results are not checked for failure | warning |
+| `PROCESS001` | a shell command built from data; a subprocess whose exit status nothing checks | warning |
+| `RESULT001` | a must-use call used as a statement (`name.strip()`, `sorted(xs)`, `items.map(f)`) | warning |
+| `TYPE001` | `Any`, `cast(...)`, `# type: ignore` (Python) | review |
+| `SLEEP001` | a fixed sleep where a condition is needed (polling in a loop) | review |
+| `RETRY001` | a retry with no limit (endless loop, unbounded `@retry`) | warning |
+| `BATCH001` | a loop that drops per-item failures | warning |
+| `STUB003` | a check (`is_admin`, `canEdit`) that always returns `True` | review |
 
 ## Install
 

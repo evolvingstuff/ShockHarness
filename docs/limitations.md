@@ -348,6 +348,21 @@ Stated so that a clean report is never read as more than it is.
 * Framework background-job queues, event emitters and callback APIs are not
   modeled.
 
+## PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003 (H5)
+
+* Advisory until measured (decision 9); `TYPE001`, `SLEEP001` and `STUB003` ship
+  at `review` because the pattern is often deliberate.
+* Catalogs, not types: a callee counts only when it resolves through the file's
+  imports to a listed name; a wrapper the project wrote is invisible until it is
+  listed. `RESULT001`'s method entries match any receiver by name.
+* `PROCESS001` does not trace whether interpolated data can contain shell syntax
+  (H6), counts a status read anywhere in the function as checking it, and does
+  not judge `Popen` / `spawn` exit handling.
+* `RETRY001` sees bounds only in the handler or the decorator; a timeout around
+  the loop is not seen. `BATCH001` does not check whether recorded failures are
+  ever reported. `SLEEP001` cannot tell pacing from synchronization.
+* `TYPE001`'s TypeScript half (`any`, `as any`, `@ts-ignore`) arrives with H-TS.
+
 ## Empty trees, and checks a layered checker may still need
 
 * A tree with no analyzable files passes: `check` reports `0 file(s)` and exits
@@ -361,8 +376,9 @@ Stated so that a clean report is never read as more than it is.
   until measured), and since H4 `asyncio.gather(..., return_exceptions=True)`
   and `Promise.allSettled` whose results are never inspected (`ASYNC003`),
   dropped coroutines and Promises (`ASYNC001`) and tasks started without an
-  owner (`ASYNC002`). Planned and not yet reported: `subprocess` calls with
-  `check=False` or without `check=True` (`PROCESS001`, H5); TypeScript (H-TS).
+  owner (`ASYNC002`), and since H5 `subprocess` calls whose exit status is
+  ignored and shell commands built from data (`PROCESS001`). Planned and not
+  yet reported: TypeScript (H-TS).
   Keep those in the layered checker until the milestone lands.
 
 ## Not yet built (see the specification)

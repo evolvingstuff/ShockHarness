@@ -189,6 +189,9 @@ roles = ["production"]
 markers = []
 # STUB002: an import whose module path has one of these segments is test code.
 test_path_segments = ["tests", "test", "__tests__", "fixtures", "mocks", "__mocks__", "conftest"]
+# STUB003 (a check that always answers yes) has its own severity: "review" by default,
+# because a flag that is deliberately always on looks the same.
+stub003_severity = "review"
 # STUB002: mocking and fake-data libraries (an import of one, or below one, is test code).
 mock_modules = [
   "unittest.mock",
@@ -329,6 +332,114 @@ javascript_promise_apis = [
 # ASYNC002: context managers whose bound name owns the tasks it creates (`async with
 # asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
 supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
+
+# H5 API-catalog rules. `severity` and `roles` work as in the H3 tables; catalogs list
+# qualified callees resolved through each file's imports (removing one is a deviation).
+[tool.shockharness.rules.processes]        # PROCESS001
+enabled = true
+severity = "warning"
+roles = ["production"]
+python_process_apis = [
+  "subprocess.run",
+  "subprocess.call",
+  "subprocess.check_call",
+  "subprocess.check_output",
+  "subprocess.Popen",
+  "subprocess.getoutput",
+  "subprocess.getstatusoutput",
+  "os.system",
+  "os.popen",
+]
+javascript_process_apis = [
+  "child_process.exec",
+  "child_process.execSync",
+  "child_process.execFile",
+  "child_process.execFileSync",
+  "child_process.spawn",
+  "child_process.spawnSync",
+]
+
+[tool.shockharness.rules.results]          # RESULT001
+enabled = true
+severity = "warning"
+roles = ["production", "test"]
+# A qualified function, or ".name" for a method on any receiver (approximate).
+python_must_use = [
+  "sorted",
+  "reversed",
+  "copy.copy",
+  "copy.deepcopy",
+  "dataclasses.replace",
+  ".strip",
+  ".lstrip",
+  ".rstrip",
+  ".lower",
+  ".upper",
+  ".casefold",
+  ".title",
+  ".replace",
+  ".removeprefix",
+  ".removesuffix",
+  ".split",
+  ".join",
+  ".format",
+  ".encode",
+  ".decode",
+]
+javascript_must_use = [
+  "structuredClone",
+  ".map",
+  ".filter",
+  ".concat",
+  ".slice",
+  ".flat",
+  ".flatMap",
+  ".trim",
+  ".trimStart",
+  ".trimEnd",
+  ".toUpperCase",
+  ".toLowerCase",
+  ".replace",
+  ".replaceAll",
+  ".padStart",
+  ".padEnd",
+  ".repeat",
+  ".split",
+  ".toSorted",
+  ".toReversed",
+  ".toSpliced",
+  ".with",
+]
+
+[tool.shockharness.rules.types]            # TYPE001 (Python; TypeScript with H-TS)
+enabled = true
+severity = "review"
+roles = ["production"]
+report_any = true
+report_cast = true
+report_type_ignore = true
+
+[tool.shockharness.rules.sleep]            # SLEEP001
+enabled = true
+severity = "review"
+roles = ["production"]
+python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
+
+[tool.shockharness.rules.retry]            # RETRY001
+enabled = true
+severity = "warning"
+roles = ["production"]
+retry_decorators = [
+  "tenacity.retry",
+  "retrying.retry",
+  "backoff.on_exception",
+  "backoff.on_predicate",
+]
+
+[tool.shockharness.rules.batches]          # BATCH001
+enabled = true
+severity = "warning"
+roles = ["production"]
 
 # Complexity metrics and the call graph (CPLX001-CPLX006): advisory warnings, reported
 # under metrics.complexity and metrics.graph, never failing a plain `check`. Each

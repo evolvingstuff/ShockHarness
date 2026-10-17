@@ -105,6 +105,14 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
     assert report.coverage["verification"]["status"] == "not_applicable"
     assert "DEF001" not in report.coverage["rules_not_implemented"]
     assert "EXC001" not in report.coverage["rules_not_implemented"]
+    assert report.coverage["languages"]["python"]["parser"] == "python-ast"
+
+
+def test_report_lists_implemented_rules_in_registry_order(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    write(empty_root, "src/a.py", "x = 1\n")
+    report = analyze_paths([empty_root / "src"], empty_root, strict_config, OPTIONS)
     assert report.coverage["rules_implemented"] == [
         "MAGIC001",
         "EXC001",
@@ -138,8 +146,14 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "ASYNC001",
         "ASYNC002",
         "ASYNC003",
+        "PROCESS001",
+        "RESULT001",
+        "TYPE001",
+        "SLEEP001",
+        "RETRY001",
+        "BATCH001",
+        "STUB003",
     ]
-    assert report.coverage["languages"]["python"]["parser"] == "python-ast"
 
 
 def test_json_output_is_byte_identical_across_runs_and_target_order(

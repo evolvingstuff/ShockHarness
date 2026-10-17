@@ -21,6 +21,7 @@ from shockharness.ir.model import (
     failed_facts,
 )
 from shockharness.ir.python_async import collect_python_async
+from shockharness.ir.python_catalog import collect_python_catalog
 from shockharness.ir.python_catches import (
     SCOPE_NODES,
     collect_python_catches,
@@ -280,5 +281,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         verification=collect_python_verification(source, parsed, comments),
         guardrails=collect_python_guardrails(source, parsed),
         asynchrony=collect_python_async(source, parsed),
+        catalog=collect_python_catalog(source, parsed),
         parse_failure=None,
     )
