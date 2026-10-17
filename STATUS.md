@@ -3988,3 +3988,28 @@ since helpers are followed. At HEAD: the banner and the dialog. Not seen: the
 image-zoom overlay, attached through `moduleState.activeZoomOverlay`.
 
 Evidence: `tests/unit/test_floating.py` (5).
+
+## Edit-time feedback: a Claude Code hook — DONE (2026-10-17)
+
+Tom's direction (from Fable's review): feedback while the edit is in the agent's
+context is the main product surface on greenfield work, and `skills install`
+should offer the hook. `shockharness hook claude-code post-edit` (`hook.py`)
+reads the `PostToolUse` call on stdin (`tool_input.file_path`), analyzes that one
+file under the project's configuration with the cache, and writes the findings
+at `--fail-on` (`warning` by default) or worse to stderr with exit 2, which
+Claude Code shows to the agent; exit 1 is a notice for malformed input, exit 0
+is clean or out of scope. `skills install --agent claude --hook` appends a
+`PostToolUse` group (`Edit|Write|MultiEdit`, timeout 60 s) to the project's
+`.claude/settings.json`, once, never replacing existing hooks; without `--hook`
+it prints the offer. The hook format was checked against Claude Code's hook
+documentation (exit 2 shows stderr to the agent; PostToolUse cannot undo the
+edit) and against slopwatch and dunnit, which use the same exit-2 protocol
+(slopwatch on PostToolUse, dunnit on Stop).
+
+Decisions (mine): exit 2 with stderr rather than JSON `additionalContext`
+(documented, and the same protocol as slopwatch); a Stop hook that blocks the
+agent from finishing is not shipped yet, because it would also block on findings
+in code the agent did not touch (it needs the diff against a base). Measured: 0.4
+to 0.5 s per hook run on a file of this repository.
+
+Evidence: `tests/unit/test_hook.py` (8). 1173 tests pass; the self-gate passes.

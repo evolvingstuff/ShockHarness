@@ -10,7 +10,7 @@ import argparse
 import json
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 
@@ -36,6 +36,14 @@ from shockharness.gate import GATE_ERROR, as_advisory, process_exit_code
 from shockharness.gating.baseline import Baseline, build_baseline, load_baseline, render_baseline
 from shockharness.gating.diff import DiffReport, diff_revisions, head_paths, with_metrics
 from shockharness.history.hotspots import collect_history
+from shockharness.hook import (
+    HOOK_AGENTS,
+    HOOK_EVENTS,
+    SEVERITY_ORDER,
+    read_stdin,
+    run_post_edit,
+    write_result,
+)
 from shockharness.inventory import build_inventory
 from shockharness.inventory import render_text as render_inventory
 from shockharness.output import json as json_output
@@ -47,6 +55,7 @@ from shockharness.rules.policy_integrity import read_text
 from shockharness.schema import PROFILE_STRICT, PROFILES
 from shockharness.skills import SKILL_NAMES, shipped_frontmatter, skill_text
 from shockharness.skills.adapters import (
+    AGENT_CLAUDE,
     AGENT_GENERIC,
     AGENTS,
     get_adapter,
@@ -55,10 +64,12 @@ from shockharness.skills.adapters import (
 )
 from shockharness.skills.install import (
     ACTION_NONE,
+    HOOK_COMMAND,
     MANIFEST_FILENAME,
     STATUS_EDITED,
     STATUS_UP_TO_DATE,
     SkillsResult,
+    install_claude_hook,
     install_skills,
     update_skills,
 )
@@ -74,6 +85,8 @@ COMMAND_CHECK = "check"
 COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
 COMMAND_VERSION = "version"
 COMMAND_SKILLS = "skills"
+COMMAND_HOOK = "hook"
+HOOK_DEFAULT_FAIL_ON = "warning"
 COMMAND_EXCEPTIONS = "exceptions"
 INVENTORY_FORMATS = (FORMAT_TEXT, FORMAT_JSON)
 
@@ -115,6 +128,8 @@ def build_parser() -> argparse.ArgumentParser:
     exceptions.add_argument(
         "--output", type=Path, default=None, help="write the list here instead of stdout"
     )
+
+    _add_hook_parser(commands)
 
     baseline = commands.add_parser("baseline", help="create a reviewed baseline of findings")
     baseline_commands = baseline.add_subparsers(
@@ -195,14 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     skills_commands.add_parser("list", help="list the shipped skills with their descriptions")
     show = skills_commands.add_parser("show", help="print one shipped SKILL.md")
     show.add_argument("name", choices=SKILL_NAMES)
-    skills_install = skills_commands.add_parser(
-        "install",
-        help=f"write every skill and a {MANIFEST_FILENAME} manifest into the agent's directory",
-    )
-    _add_skills_destination_arguments(skills_install)
-    skills_install.add_argument(
-        "--force", action="store_true", help="replace skill files that already exist"
-    )
+    _add_skills_install_parser(skills_commands)
     skills_update = skills_commands.add_parser(
         "update",
         help="rewrite unedited skill files from the installed package, keep edited ones",
@@ -215,6 +223,46 @@ def build_parser() -> argparse.ArgumentParser:
         "or removed relative to the installed package",
     )
     return parser
+
+
+def _add_skills_install_parser(
+    skills_commands: "argparse._SubParsersAction[argparse.ArgumentParser]",
+) -> None:
+    skills_install = skills_commands.add_parser(
+        "install",
+        help=f"write every skill and a {MANIFEST_FILENAME} manifest into the agent's directory",
+    )
+    _add_skills_destination_arguments(skills_install)
+    skills_install.add_argument(
+        "--force", action="store_true", help="replace skill files that already exist"
+    )
+    skills_install.add_argument(
+        "--hook",
+        action="store_true",
+        help="--agent claude: also add an edit-time hook to the project's .claude/settings.json "
+        "(PostToolUse on Edit/Write/MultiEdit runs `shockharness hook claude-code post-edit`, "
+        "so the agent hears findings right after each edit); appended, never replacing hooks",
+    )
+
+
+def _add_hook_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    hook = commands.add_parser(
+        COMMAND_HOOK,
+        help="edit-time feedback for a coding agent: analyze the file the agent just edited "
+        "(the agent's hook JSON on stdin); exit 2 with the findings on stderr, else exit 0",
+    )
+    hook.add_argument("agent", choices=HOOK_AGENTS, help="the agent whose hook calls this")
+    hook.add_argument("event", choices=HOOK_EVENTS, help="post-edit: after Edit/Write/MultiEdit")
+    _add_config_arguments(hook)
+    _add_analysis_arguments(hook)
+    _add_cache_argument(hook)
+    hook.add_argument(
+        "--fail-on",
+        choices=SEVERITY_ORDER,
+        default=HOOK_DEFAULT_FAIL_ON,
+        help="feed back findings of this severity or worse (default: warning, so the agent "
+        "hears warnings while the code is in its context)",
+    )
 
 
 def version_string() -> str:
@@ -586,6 +634,54 @@ def _print_skill_files(result: SkillsResult) -> None:
         sys.stdout.write(line + "\n")
 
 
+def _check_hook_arguments(args: argparse.Namespace, agent: str) -> None:
+    if not args.hook:
+        return
+    if agent != AGENT_CLAUDE:
+        raise UsageError(f"--hook is for --agent {AGENT_CLAUDE} (Claude Code hooks)", None)
+    if args.user:
+        raise UsageError(
+            "--hook writes the project's .claude/settings.json; it needs a project, not --user",
+            None,
+        )
+
+
+def _report_hook(args: argparse.Namespace, agent: str, project_root: Path) -> None:
+    """Install the edit-time hook when asked; offer it to a Claude Code project otherwise."""
+    if args.hook:
+        settings, status = install_claude_hook(project_root)
+        sys.stdout.write(
+            f"  hook       {settings} ({status}): {HOOK_COMMAND}\n"
+            "Edit-time feedback needs `shockharness` on the PATH the agent's hooks run with; "
+            "if it lives in a virtual environment, put that path in the command.\n"
+        )
+    elif agent == AGENT_CLAUDE and not args.user:
+        sys.stdout.write(
+            "Edit-time feedback: rerun with --hook to add a PostToolUse hook to "
+            ".claude/settings.json, so the agent hears findings right after each edit "
+            "instead of at commit or in CI.\n"
+        )
+
+
+def _install_skills(args: argparse.Namespace, destination: Path, project_root: Path) -> int:
+    adapter = get_adapter(args.agent)
+    _check_hook_arguments(args, adapter.agent)
+    result = install_skills(destination, args.agent, args.force)
+    sys.stdout.write(
+        f"{PROGRAM}: installed {len(result.files)} skill(s) for {args.agent} into {destination}\n"
+    )
+    _print_skill_files(result)
+    sys.stdout.write(f"  manifest   {MANIFEST_FILENAME} ({version_string()})\n")
+    sys.stdout.write(f"{adapter.discovery}\n")
+    if adapter.agent == AGENT_GENERIC:
+        sys.stdout.write(
+            "Add this line to the agent's instruction file (for example AGENTS.md):\n"
+            f"  {pointer_line(project_root)}\n"
+        )
+    _report_hook(args, adapter.agent, project_root)
+    return result.exit_code
+
+
 def _run_skills(args: argparse.Namespace) -> int:
     if args.skills_command == "list":
         for name in SKILL_NAMES:
@@ -595,22 +691,8 @@ def _run_skills(args: argparse.Namespace) -> int:
         sys.stdout.write(skill_text(args.name))
         return EXIT_OK
     destination, project_root = _skills_destination(args)
-    adapter = get_adapter(args.agent)
     if args.skills_command == "install":
-        result = install_skills(destination, args.agent, args.force)
-        sys.stdout.write(
-            f"{PROGRAM}: installed {len(result.files)} skill(s) for {args.agent} into "
-            f"{destination}\n"
-        )
-        _print_skill_files(result)
-        sys.stdout.write(f"  manifest   {MANIFEST_FILENAME} ({version_string()})\n")
-        sys.stdout.write(f"{adapter.discovery}\n")
-        if adapter.agent == AGENT_GENERIC:
-            sys.stdout.write(
-                "Add this line to the agent's instruction file (for example AGENTS.md):\n"
-                f"  {pointer_line(project_root)}\n"
-            )
-        return result.exit_code
+        return _install_skills(args, destination, project_root)
     result = update_skills(destination, args.agent, args.check)
     mode = "checked" if args.check else "updated"
     sys.stdout.write(
@@ -637,33 +719,38 @@ def _run_skills(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def _run_hook(args: argparse.Namespace) -> int:
+    """The agent's hook protocol (Claude Code): 2 feeds stderr back to the agent, 1 is a
+    notice to the user, 0 is clean. A configuration error is the usual exit 2: the agent
+    sees it, which is right when its edit broke the configuration."""
+    config = _load_config(args)
+    result = run_post_edit(read_stdin(), args.root, config, _options(args), args.fail_on)
+    return write_result(result, sys.stderr)
+
+
 def _run_version() -> int:
     sys.stdout.write(version_string() + "\n")
     return EXIT_OK
 
 
 def _dispatch(args: argparse.Namespace) -> int:
-    if args.command == COMMAND_CHECK or args.command == COMMAND_SCAN:
-        return _run_scan(args)
-    if args.command == COMMAND_VERSION:
-        return _run_version()
-    if args.command == COMMAND_EXCEPTIONS:
-        return _run_exceptions(args)
-    if args.command == "baseline":
-        return _run_baseline(args)
-    if args.command == "diff":
-        return _run_diff(args)
-    if args.command == "gate":
-        return _run_gate(args)
-    if args.command == "config":
-        return _run_config(args)
-    if args.command == "rules":
-        return _run_rules(args)
-    if args.command == "init":
-        return _run_init(args)
-    if args.command == COMMAND_SKILLS:
-        return _run_skills(args)
-    raise UsageError(f"unknown command {args.command!r}", None)
+    runners: dict[str, Callable[[argparse.Namespace], int]] = {
+        COMMAND_CHECK: _run_scan,
+        COMMAND_SCAN: _run_scan,
+        COMMAND_VERSION: lambda _args: _run_version(),
+        COMMAND_EXCEPTIONS: _run_exceptions,
+        "baseline": _run_baseline,
+        "diff": _run_diff,
+        "gate": _run_gate,
+        "config": _run_config,
+        "rules": _run_rules,
+        "init": _run_init,
+        COMMAND_SKILLS: _run_skills,
+        COMMAND_HOOK: _run_hook,
+    }
+    if args.command not in runners:
+        raise UsageError(f"unknown command {args.command!r}", None)
+    return runners[args.command](args)
 
 
 def main(argv: Sequence[str]) -> int:

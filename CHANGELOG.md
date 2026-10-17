@@ -6,6 +6,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Edit-time feedback for Claude Code: `shockharness hook claude-code post-edit`
+  reads a `PostToolUse` tool call on stdin, analyzes the edited file and feeds
+  its findings (`--fail-on`, `warning` by default) back to the agent with exit 2.
+  `skills install --agent claude --hook` appends the hook to the project's
+  `.claude/settings.json` (once, never replacing existing hooks); without
+  `--hook`, it offers it.
 - `DOM002` (`rules.dom`, review, JavaScript and TypeScript, opt-in): a pressable
   element attached to `document.body` (directly, or appended into a container a
   function attaches and returns) that matches no selector of the skip lists named

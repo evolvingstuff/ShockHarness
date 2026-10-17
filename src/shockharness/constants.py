@@ -35,6 +35,12 @@ EVIDENCE_MAX_CHARS: Final[int] = 120
 DATAFLOW_MAX_DEPTH: Final[int] = 100
 # GUARD001's rules.consistency.guard_min_percent is a percentage of call sites.
 PERCENT: Final[int] = 100
+# Claude Code's hook protocol: exit 2 shows the hook's stderr to the agent (an edit hook
+# feeds findings back while the edit is still in the agent's context).
+HOOK_FEEDBACK: Final[int] = 2
+# Seconds Claude Code waits for the edit hook (a run analyzes one file, with the cache;
+# measured at about half a second on this repository).
+HOOK_TIMEOUT_SECONDS: Final[int] = 60
 # A listener registration's arguments before its options: the event name and the handler
 # (addEventListener("unhandledrejection", h), process.on("unhandledRejection", h)).
 LISTENER_ARGUMENTS: Final[int] = 2

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from shockharness.constants import (
+    HOOK_TIMEOUT_SECONDS,
     EXIT_OK,
     EXIT_VIOLATIONS,
     JSON_INDENT,
@@ -334,3 +335,81 @@ def update_skills(destination: Path, agent: str, check: bool) -> SkillsResult:
     conflicts = sum(1 for file in files if file.status == STATUS_EDITED)
     exit_code = EXIT_OK if conflicts == 0 else EXIT_VIOLATIONS
     return SkillsResult(destination, manifest_path, tuple(files), exit_code)
+
+
+# --- The edit-time hook (Claude Code) ------------------------------------------------------
+
+CLAUDE_SETTINGS = Path(".claude") / "settings.json"
+HOOKS_KEY = "hooks"
+POST_TOOL_USE = "PostToolUse"
+EDIT_TOOLS = "Edit|Write|MultiEdit"
+HOOK_COMMAND = 'shockharness hook claude-code post-edit --root "$CLAUDE_PROJECT_DIR"'
+COMMAND_KEY = "command"
+JSON_KINDS = {dict: "object", list: "array"}
+HOOK_ADDED = "added"
+HOOK_PRESENT = "already present"
+
+
+def _settings_document(path: Path) -> dict[str, Any]:
+    """The project's Claude Code settings, or an empty object when there are none."""
+    if not path.exists():
+        return {}
+    data = _read_bytes(path)
+    # Boundary (declared in .shockharness.toml): the settings file is external input.
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise UsageError(f"Claude Code settings are not UTF-8: {exc}", str(path)) from exc
+    # Boundary (declared in .shockharness.toml): the settings file is external input.
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise UsageError(f"Claude Code settings are not valid JSON: {exc}", str(path)) from exc
+    if not isinstance(document, dict):
+        raise UsageError("Claude Code settings must be a JSON object", str(path))
+    return document
+
+
+def _runs_shockharness(handler: Any) -> bool:
+    return isinstance(handler, dict) and COMMAND_KEY in handler and (
+        handler[COMMAND_KEY] == HOOK_COMMAND
+    )
+
+
+def _has_hook(groups: list[Any]) -> bool:
+    return any(
+        isinstance(group, dict)
+        and HOOKS_KEY in group
+        and isinstance(group[HOOKS_KEY], list)
+        and any(_runs_shockharness(handler) for handler in group[HOOKS_KEY])
+        for group in groups
+    )
+
+
+def _member(document: dict[str, Any], key: str, empty: Any, path: Path) -> Any:
+    """``document[key]``, created empty when the settings have none yet: a project
+    without hooks is a valid state, and the hook is added to it."""
+    if key not in document:
+        document[key] = empty
+    value = document[key]
+    if not isinstance(value, type(empty)):
+        raise UsageError(
+            f"Claude Code settings: {key!r} must be a JSON {JSON_KINDS[type(empty)]}", str(path)
+        )
+    return value
+
+
+def install_claude_hook(project_root: Path) -> tuple[Path, str]:
+    """Add the post-edit hook to ``.claude/settings.json``: appended to any PostToolUse
+    hooks already configured, never replacing them, and only once."""
+    path = project_root / CLAUDE_SETTINGS
+    document = _settings_document(path)
+    hooks = _member(document, HOOKS_KEY, {}, path)
+    groups = _member(hooks, POST_TOOL_USE, [], path)
+    if _has_hook(groups):
+        return path, HOOK_PRESENT
+    handler = {"type": "command", COMMAND_KEY: HOOK_COMMAND, "timeout": HOOK_TIMEOUT_SECONDS}
+    groups.append({"matcher": EDIT_TOOLS, HOOKS_KEY: [handler]})
+    text = json.dumps(document, indent=JSON_INDENT) + "\n"
+    _write_bytes(path, text.encode("utf-8"))
+    return path, HOOK_ADDED

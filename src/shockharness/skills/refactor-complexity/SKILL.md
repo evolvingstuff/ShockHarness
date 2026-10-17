@@ -376,6 +376,7 @@ Four skills ship inside the package: `write-compliant-code`,
 
 ```bash
 shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
+shockharness skills install --agent claude --hook                       # also: findings after every edit (.claude/settings.json)
 shockharness skills install --agent codex                               # .agents/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent generic --project docs/agent-skills # any agent; prints the line to add to AGENTS.md
 shockharness skills update --agent claude --check                       # exit 1 when an installed skill is stale or edited

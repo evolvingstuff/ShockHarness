@@ -238,6 +238,38 @@ with the verified destination paths, and the manifest format are in
 short, self-contained form of this document, written for an agent reading it
 over HTTP; every skill carries the same section.
 
+### Edit-time feedback (Claude Code)
+
+Pre-commit and CI are late: by then the agent has moved on and the fix is a
+second task. With `--hook`, `skills install --agent claude` also adds a
+`PostToolUse` hook to the project's `.claude/settings.json`:
+
+```bash
+shockharness skills install --agent claude --hook
+```
+
+```json
+{"hooks": {"PostToolUse": [{"matcher": "Edit|Write|MultiEdit", "hooks": [
+  {"type": "command", "timeout": 60,
+   "command": "shockharness hook claude-code post-edit --root \"$CLAUDE_PROJECT_DIR\""}]}]}}
+```
+
+After every edit, `shockharness hook claude-code post-edit` reads the tool call
+on stdin, analyzes the edited file under the project's configuration (with the
+cache: about half a second on this repository) and, when the file has findings
+of `--fail-on` severity or worse (`warning` by default), writes them to stderr
+and exits 2, which Claude Code shows to the agent while the edit is still in
+its context. A clean file, a file outside the project or one the configuration
+does not include exits 0 silently; malformed input exits 1 (a notice to you,
+not to the agent). The hook is appended to any `PostToolUse` hooks already
+there, never replaces them, and is added once. It needs `shockharness` on the
+`PATH` hooks run with; for a virtual environment, edit the command to its
+path.
+
+Only the edited file is analyzed, so the cross-file rules see that file alone:
+`check` and `gate` in CI stay the authority. Edits made through a shell
+command are not seen by `PostToolUse`.
+
 ## 8. Acceptance checks this repository runs
 
 * The wheel builds, installs into a fresh venv, and exposes `shockharness` on `PATH` (`package` job).

@@ -8,9 +8,8 @@ description: Write new Python or JavaScript that passes the ShockHarness quality
 ShockHarness (`shockharness check`) is a deterministic static-analysis gate for
 Python and JavaScript. Its one idea: unexpected failures, missing information
 and unexplained decisions must not silently become apparently valid program
-behavior. This skill is for writing code that passes the gate the first time.
-Use `fix-violations` for existing findings and `pre-commit-review` before you
-commit.
+behavior. This skill is for writing code that passes the gate the first time;
+use `fix-violations` for existing findings, `pre-commit-review` before commit.
 
 ## The contract you are writing to
 
@@ -461,6 +460,7 @@ Four skills ship inside the package: `write-compliant-code`,
 
 ```bash
 shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
+shockharness skills install --agent claude --hook                       # also: findings after every edit (.claude/settings.json)
 shockharness skills install --agent codex                               # .agents/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent generic --project docs/agent-skills # any agent; prints the line to add to AGENTS.md
 shockharness skills update --agent claude --check                       # exit 1 when an installed skill is stale or edited
