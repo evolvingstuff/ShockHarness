@@ -1,0 +1,58 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "tomllib.TOMLDecodeError"
+reason = "Decoding the external config file; becomes ConfigError"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "OSError"
+reason = "Filesystem and network I/O; becomes ConfigError or Unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Decoding the external config file; becomes ConfigError"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "urllib.error.HTTPError"
+reason = "Network call; a status answer becomes Unreachable (5xx) or Unhealthy"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "http.client.HTTPException"
+reason = "Malformed HTTP answer from an external server; becomes Unreachable"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "ValueError"
+reason = "Decoding external JSON or timestamps; becomes Unhealthy"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "feedcheck.Unreachable"
+reason = "Top-level boundary: an unreachable feed is recorded in the report, not fatal"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "feedcheck.Unhealthy"
+reason = "Top-level boundary: an unhealthy feed is recorded in the report, not fatal"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "feedcheck.py"
+language = "python"
+exception = "feedcheck.ConfigError"
+reason = "Entry point: a bad config is reported to the user and exits with EXIT_CONFIG"

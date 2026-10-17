@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Noteboard</title>
+<style>
+body{font-family:sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem}
+#notes{list-style:none;padding:0}
+.note{border:1px solid #ccc;border-radius:6px;padding:.5rem;margin:.5rem 0}
+.note.pinned{background:#fffbe0}
+.note-edit{width:100%;box-sizing:border-box;min-height:4rem}
+.toolbar button{border:0;background:none;cursor:pointer}
+.modal-overlay{position:fixed;inset:0;background:#0006;display:grid;place-items:center}
+.modal{background:#fff;padding:1rem;border-radius:6px}
+#toasts{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%)}
+.toast{background:#333;color:#fff;padding:.5rem 1rem;border-radius:6px;margin-top:.5rem}
+.toast-close{background:none;border:0;color:#fff;cursor:pointer;margin-left:.5rem}
+</style>
+</head>
+<body>
+<h1>Noteboard</h1>
+<button id="add" type="button">Add note</button>
+<ul id="notes"></ul>
+<script type="module" src="app.js"></script>
+</body>
+</html>

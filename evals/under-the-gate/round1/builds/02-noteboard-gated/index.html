@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Noteboard</title>
+  <style>
+    body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; }
+    ul { list-style: none; padding: 0; }
+    li { border: 1px solid #ccc; padding: .5rem; margin: .5rem 0; display: flex; gap: .5rem; justify-content: space-between; }
+    li.pinned { background: #fff8d6; }
+    li textarea { width: 100%; min-height: 4rem; }
+    .toolbar { display: flex; gap: .25rem; align-items: flex-start; }
+    button { cursor: pointer; }
+    .toolbar svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; }
+    [data-modal] { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+    [data-modal] .dialog { background: #fff; padding: 1rem; border-radius: .5rem; }
+    #toasts { position: fixed; bottom: 1rem; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+    [data-toast] { background: #222; color: #fff; padding: .5rem 1rem; border-radius: .25rem; display: flex; gap: .5rem; }
+  </style>
+</head>
+<body data-toast-ms="3000">
+  <h1>Noteboard</h1>
+  <button id="new-note" type="button">New note</button>
+  <ul id="notes"></ul>
+  <script type="module">
+    import { start } from "./app.js";
+    start(document, window.localStorage);
+  </script>
+</body>
+</html>

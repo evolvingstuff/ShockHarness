@@ -4053,3 +4053,27 @@ Not done: no real agent run, so there is no distribution yet. Runs use Tom's
 account (15 cases x 5 runs, plus the judge), so they wait for his go-ahead on the
 model, the run count and the budget. The GSO motivation figure is not cited: the
 named source could not be found.
+
+## Under-the-gate experiment, round 1 — DONE (2026-10-17)
+
+Fable's proposal, run on Tom's go-ahead: four specs (`evals/under-the-gate/specs/`), each
+built by the same agent with the gate (strict configuration, skills, edit-time hook) and
+without, then reviewed by a fresh context that saw only the trees, the mechanical results
+and the hook blocks. Results and evidence: `evals/under-the-gate/RESULTS.md`, `round1/`.
+
+Runs: Claude Code 2.0.55 headless, `--model claude-sonnet-5-5`, one run per spec and
+variant (the planned default model is retired in 1.0.65; Opus 5.5 needs Claude Code
+2.1.280+). A first attempt on 1.0.65 crashed in 3 of 4 gated builds: that CLI mishandles
+a PostToolUse exit-2 message during parallel tool calls (API 400, `tool_use` without
+`tool_result`). It also exposed a hook bug, fixed in 4da9566: an edit to `pyproject.toml`
+fed "unsupported file type" back as a finding.
+
+Results: every builder edited through Bash (heredocs, patch scripts), so the edit hook
+never fired; the gated builds were steered by the skills and their own `check` runs. The
+gated builds had 1-13 findings against 18-66 under the same strict configuration, no
+parameter defaults, and kept the failures the specs required visible where three ungated
+builds swallowed them. Every evasion found concerned small numbers and was pre-emptive:
+`EXIT_REPORTED + 1` for exit 2, `len(calendar.month_name)` for 12, `value + value`, test
+numbers moved into a JSON file, a toast duration moved into markup, and an `HTTPStatus`
+range that misses 512-599 (a real bug). No default, fallback or catch evasion was found.
+Recommendations are rows in `docs/ideas.md`.

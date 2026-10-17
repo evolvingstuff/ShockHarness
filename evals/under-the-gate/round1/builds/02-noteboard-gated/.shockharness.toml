@@ -1,0 +1,10 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/storage.js"
+language = "javascript"
+exception = "SyntaxError"
+reason = "Stored text is external input; unparseable JSON is reported to the user in a toast, never dropped silently"

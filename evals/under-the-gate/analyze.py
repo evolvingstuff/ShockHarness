@@ -34,7 +34,9 @@ SKIP_PARTS = {".git", ".claude", "node_modules", "__pycache__", ".venv"}
 
 
 def behavior_runner():
-    spec = importlib.util.spec_from_file_location("behavior_run", HERE.parent / "behavior" / "run.py")
+    spec = importlib.util.spec_from_file_location(
+        "behavior_run", HERE.parent / "behavior" / "run.py"
+    )
     module = importlib.util.module_from_spec(spec)
     sys.modules["behavior_run"] = module
     spec.loader.exec_module(module)
@@ -43,7 +45,8 @@ def behavior_runner():
 
 def sources(tree: Path) -> list[Path]:
     return sorted(
-        p for p in tree.rglob("*")
+        p
+        for p in tree.rglob("*")
         if p.suffix in SOURCE_SUFFIXES and p.is_file() and not SKIP_PARTS & set(p.parts)
     )
 
@@ -56,7 +59,10 @@ def check(tree: Path, shockharness: str) -> dict:
     (copy / ".shockharness.toml").write_text(STRICT, encoding="utf-8")
     result = subprocess.run(
         [shockharness, "check", ".", "--format", "json", "--no-cache", "--exit-zero"],
-        cwd=copy, capture_output=True, text=True, check=False,
+        cwd=copy,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     shutil.rmtree(copy)
     report = json.loads(result.stdout)
@@ -74,23 +80,40 @@ def tests(tree: Path) -> dict:
         if not (tree / "tests").is_dir():
             argv = [sys.executable, "-m", "unittest", "discover"]
         env_path = "src" if (tree / "src").is_dir() else "."
-        result = subprocess.run(argv, cwd=tree, capture_output=True, text=True, check=False,
-                                env={"PYTHONPATH": env_path, "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
-                                timeout=600)
+        result = subprocess.run(
+            argv,
+            cwd=tree,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PYTHONPATH": env_path, "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
+            timeout=600,
+        )
     else:
-        result = subprocess.run(["node", "--test"], cwd=tree, capture_output=True, text=True,
-                                check=False, timeout=600)
+        result = subprocess.run(
+            ["node", "--test"], cwd=tree, capture_output=True, text=True, check=False, timeout=600
+        )
     return {"exit_code": result.returncode, "tail": (result.stdout + result.stderr)[-600:]}
 
 
 def structure(tree: Path) -> dict:
-    counts = {"files": 0, "lines": 0, "functions": 0, "try_blocks": 0, "frozen_dataclasses": 0,
-              "parameter_defaults": 0, "module_constants": 0, "inline_suppressions": 0}
+    counts = {
+        "files": 0,
+        "lines": 0,
+        "functions": 0,
+        "try_blocks": 0,
+        "frozen_dataclasses": 0,
+        "parameter_defaults": 0,
+        "module_constants": 0,
+        "inline_suppressions": 0,
+    }
     for path in sources(tree):
         text = path.read_text(encoding="utf-8", errors="replace")
         counts["files"] += 1
         counts["lines"] += len(text.splitlines())
-        counts["inline_suppressions"] += len(re.findall(r"shockharness:\s*ignore\[|#\s*noqa|eslint-disable", text))
+        counts["inline_suppressions"] += len(
+            re.findall(r"shockharness:\s*ignore\[|#\s*noqa|eslint-disable", text)
+        )
         if path.suffix != ".py":
             counts["functions"] += len(re.findall(r"\bfunction\b|=>", text))
             counts["try_blocks"] += len(re.findall(r"\btry\s*\{", text))
@@ -100,19 +123,28 @@ def structure(tree: Path) -> dict:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 counts["functions"] += 1
                 counts["parameter_defaults"] += len(node.args.defaults) + len(
-                    [d for d in node.args.kw_defaults if d is not None])
+                    [d for d in node.args.kw_defaults if d is not None]
+                )
             elif isinstance(node, (ast.Try, ast.TryStar)):
                 counts["try_blocks"] += 1
             elif isinstance(node, ast.ClassDef):
                 for decorator in node.decorator_list:
                     if isinstance(decorator, ast.Call) and any(
                         k.arg == "frozen" and isinstance(k.value, ast.Constant) and k.value.value
-                        for k in decorator.keywords):
+                        for k in decorator.keywords
+                    ):
                         counts["frozen_dataclasses"] += 1
-        counts["module_constants"] += len([
-            s for s in module.body if isinstance(s, (ast.Assign, ast.AnnAssign))
-            and all(isinstance(t, ast.Name) and t.id.isupper() for t in
-                    (s.targets if isinstance(s, ast.Assign) else [s.target]))])
+        counts["module_constants"] += len(
+            [
+                s
+                for s in module.body
+                if isinstance(s, (ast.Assign, ast.AnnAssign))
+                and all(
+                    isinstance(t, ast.Name) and t.id.isupper()
+                    for t in (s.targets if isinstance(s, ast.Assign) else [s.target])
+                )
+            ]
+        )
     return counts
 
 
@@ -123,10 +155,18 @@ def evasions(tree: Path, run) -> dict:
         relative = path.relative_to(tree).as_posix()
         prefix = "tests/" if "test" in relative else "src/"
         lines.append(f"+++ b/{prefix}{relative}")
-        lines.extend("+" + line for line in path.read_text(encoding="utf-8", errors="replace").splitlines())
-    fired = run._pattern_hits([l[1:] for l in lines if l.startswith("+") and not l.startswith("+++")],
-                              run.ADDED_SOURCE_PATTERNS)
-    restating = [l[1:].strip() for l in lines if (m := run.CONSTANT_ASSIGNMENT.match(l[1:])) and run._restates(m[1], m[2])]
+        lines.extend(
+            "+" + line for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+        )
+    fired = run._pattern_hits(
+        [row[1:] for row in lines if row.startswith("+") and not row.startswith("+++")],
+        run.ADDED_SOURCE_PATTERNS,
+    )
+    restating = [
+        row[1:].strip()
+        for row in lines
+        if (m := run.CONSTANT_ASSIGNMENT.match(row[1:])) and run._restates(m[1], m[2])
+    ]
     if restating:
         fired["value_restating_constant"] = restating
     return {kind: hits[:8] for kind, hits in fired.items()}
@@ -159,9 +199,17 @@ def hook_blocks(log: Path) -> list[dict]:
         if HOOK_MARKER not in text:
             continue
         path = call.get("input", {}).get("file_path", "")
-        following = next((c for c in order[index + 1:] if c.get("input", {}).get("file_path") == path), None)
-        blocks.append({"file": path, "edit": call.get("input"), "feedback": text[:3000],
-                       "next_edit_of_that_file": following and following.get("input")})
+        following = next(
+            (c for c in order[index + 1 :] if c.get("input", {}).get("file_path") == path), None
+        )
+        blocks.append(
+            {
+                "file": path,
+                "edit": call.get("input"),
+                "feedback": text[:3000],
+                "next_edit_of_that_file": following and following.get("input"),
+            }
+        )
     return blocks
 
 
@@ -170,17 +218,31 @@ def main(builds: Path, out: Path, shockharness: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     results = {}
     for tree in sorted(p for p in builds.iterdir() if p.is_dir() and p.name != "logs"):
-        results[tree.name] = {"check": check(tree, shockharness), "tests": tests(tree),
-                              "structure": structure(tree), "evasion_detectors": evasions(tree, run)}
+        results[tree.name] = {
+            "check": check(tree, shockharness),
+            "tests": tests(tree),
+            "structure": structure(tree),
+            "evasion_detectors": evasions(tree, run),
+        }
         log = builds / "logs" / f"{tree.name}.jsonl"
         if tree.name.endswith("-gated") and log.exists():
             blocks = hook_blocks(log)
             results[tree.name]["hook_blocks"] = len(blocks)
-            (out / f"{tree.name}-blocks.json").write_text(json.dumps(blocks, indent=2), encoding="utf-8")
+            (out / f"{tree.name}-blocks.json").write_text(
+                json.dumps(blocks, indent=2), encoding="utf-8"
+            )
     (out / "mechanical.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     for name, r in results.items():
-        print(name, "tests", r["tests"]["exit_code"], "findings", sum(r["check"]["by_rule"].values()),
-              r["check"]["by_rule"], "blocks", r.get("hook_blocks", "-"))
+        print(
+            name,
+            "tests",
+            r["tests"]["exit_code"],
+            "findings",
+            sum(r["check"]["by_rule"].values()),
+            r["check"]["by_rule"],
+            "blocks",
+            r.get("hook_blocks", "-"),
+        )
 
 
 if __name__ == "__main__":

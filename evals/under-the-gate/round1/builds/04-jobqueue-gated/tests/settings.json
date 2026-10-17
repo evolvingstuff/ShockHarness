@@ -1,0 +1,12 @@
+{
+  "workers": 2,
+  "timeout": 0.2,
+  "attempts": 3,
+  "delay": 0.01,
+  "factor": 2.0,
+  "slow": 5.0,
+  "total_jobs": 4,
+  "operand": 21,
+  "doubled": 42,
+  "never_succeeds": 6
+}

@@ -1,0 +1,316 @@
+{
+  "01-feedcheck-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 12,
+        "SLEEP001": 1
+      },
+      "suppressed": 1
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": ".feedcheck: config is not valid TOML: Expected '=' after a key in a key/value pair (at line 1, column 6)\nfeedcheck: config: missing required key 'settings'\nfeedcheck: [settings]: 'attempts' must be at least 1\nfeedcheck: [[feeds]] entry 1: 'url' must be an http or https URL\nfeedcheck: [[feeds]] entry 1: missing required key 'url'\n...feedcheck: cannot read config /tmp/tmpt7t3m1_k/nope.toml: [Errno 2] No such file or directory: '/tmp/tmpt7t3m1_k/nope.toml'\n.....\n----------------------------------------------------------------------\nRan 9 tests in 4.567s\n\nOK\n"
+    },
+    "structure": {
+      "files": 2,
+      "lines": 474,
+      "functions": 44,
+      "try_blocks": 10,
+      "frozen_dataclasses": 4,
+      "parameter_defaults": 0,
+      "module_constants": 10,
+      "inline_suppressions": 1
+    },
+    "evasion_detectors": {
+      "new_suppression": [
+        "EXIT_CONFIG = 2  # shockharness: ignore[MAGIC001] reason=\"2 is the conventional usage/configuration error exit status (argparse, POSIX shells)\""
+      ],
+      "truthiness_fallback": [
+        "if not isinstance(item, dict) or \"published\" not in item:"
+      ],
+      "catch_fallback": [
+        "except tomllib.TOMLDecodeError as exc:",
+        "except (OSError, UnicodeDecodeError) as exc:",
+        "except urllib.error.HTTPError as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except (OSError, http.client.HTTPException) as exc:",
+        "except Unreachable as exc:",
+        "except ValueError as exc:",
+        "except ValueError as exc:"
+      ],
+      "variadic_signature": [
+        "def log_message(self, format: str, *args: object) -> None:"
+      ]
+    },
+    "hook_blocks": 0
+  },
+  "01-feedcheck-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX002": 2,
+        "DEF001": 7,
+        "DEF002": 6,
+        "DEF003": 1,
+        "DEF004": 1,
+        "DEF005": 3,
+        "EXC001": 10,
+        "EXC002": 3,
+        "MAGIC001": 32,
+        "ROLE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "le.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 503: 'Service Unavailable'>\n  _warnings.warn(self.warn_message, ResourceWarning)\n.....feedcheck: config file not found: /tmp/tmp8482q3fk/missing.toml\nfeedcheck: invalid config file /tmp/tmp8482q3fk/feeds1.toml: Expected '=' after a key in a key/value pair (at line 1, column 6)\nfeedcheck: config must define at least one [[feeds]] entry\nfeedcheck: 'attempts' must be a number >= 1, got 0\nfeedcheck: feed #1 needs a non-empty string 'url'\n.\n----------------------------------------------------------------------\nRan 10 tests in 1.031s\n\nOK\n"
+    },
+    "structure": {
+      "files": 2,
+      "lines": 345,
+      "functions": 29,
+      "try_blocks": 8,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 7,
+      "module_constants": 4,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_fallback": [
+        "value = table.get(key, default)",
+        "HITS[path] = HITS.get(path, 0) + 1"
+      ],
+      "mapping_get": [
+        "feeds = data.get(\"feeds\")",
+        "if not isinstance(feed.get(key), str) or not feed[key].strip():",
+        "items = doc.get(\"items\")",
+        "pub = item.get(\"published\") if isinstance(item, dict) else None"
+      ],
+      "catch_fallback": [
+        "except FileNotFoundError:",
+        "except OSError as e:",
+        "except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:",
+        "except urllib.error.HTTPError as e:",
+        "except OSError:",
+        "except (ValueError, UnicodeDecodeError):",
+        "except ValueError:",
+        "except (urllib.error.URLError, socket.timeout, TimeoutError, OSError,"
+      ],
+      "sentinel_default": [
+        "def check_feed(feed, cfg, sleep=time.sleep, now=None):",
+        "def main(argv=None):",
+        "def check(self, path, attempts=3, max_age=None, url=None):"
+      ]
+    }
+  },
+  "02-noteboard-gated": {
+    "check": {
+      "by_rule": {
+        "EXC001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "\u2714 notes operations are immutable and ordered (1.277208ms)\n\u2714 pressing outside the edited note saves it (0.104292ms)\n\u2714 switching notes saves the previous one; escape saves nothing (0.0835ms)\n\u2714 storage round trips (0.227292ms)\n\u2714 unreadable stored data is reported and kept, board starts empty (0.099833ms)\n\u2139 tests 5\n\u2139 suites 0\n\u2139 pass 5\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 41.339083\n"
+    },
+    "structure": {
+      "files": 9,
+      "lines": 399,
+      "functions": 69,
+      "try_blocks": 1,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "getItem: (key) => (data.has(key) ? data.get(key) : null),"
+      ]
+    },
+    "hook_blocks": 0
+  },
+  "02-noteboard-ungated": {
+    "check": {
+      "by_rule": {
+        "DEF001": 5,
+        "DEF002": 2,
+        "DEF003": 1,
+        "DEF005": 2,
+        "EXC001": 4,
+        "EXC002": 1,
+        "MAGIC001": 2,
+        "STATE001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "\u2714 storage round trip (1.030833ms)\n\u2714 missing data is not an error (0.057459ms)\n\u2714 corrupt data is reported and preserved (0.096583ms)\n\u2714 store operations (0.164792ms)\n\u2714 edit mode decisions (0.066334ms)\n\u2139 tests 5\n\u2139 suites 0\n\u2139 pass 5\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 39.697083\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 300,
+      "functions": 42,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 0,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {}
+  },
+  "03-contactclean-gated": {
+    "check": {
+      "by_rule": {
+        "CPLX004": 1,
+        "EXC001": 4
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "....contactclean: input has no 'name' column\n..contactclean: cannot read /tmp/tmp_wc4yqnj/missing.csv: [Errno 2] No such file or directory: '/tmp/tmp_wc4yqnj/missing.csv'\n.........\n----------------------------------------------------------------------\nRan 15 tests in 0.004s\n\nOK\n"
+    },
+    "structure": {
+      "files": 8,
+      "lines": 520,
+      "functions": 38,
+      "try_blocks": 3,
+      "frozen_dataclasses": 6,
+      "parameter_defaults": 0,
+      "module_constants": 23,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "catch_fallback": [
+        "except InputUnreadable as exc:",
+        "except OSError as exc:",
+        "except UnicodeDecodeError as exc:",
+        "except csv.Error as exc:"
+      ],
+      "empty_string_miss": [
+        "return \"\""
+      ]
+    },
+    "hook_blocks": 0
+  },
+  "03-contactclean-ungated": {
+    "check": {
+      "by_rule": {
+        "CPLX001": 1,
+        "CPLX002": 2,
+        "CPLX003": 1,
+        "DEF001": 1,
+        "DEF003": 1,
+        "DEF005": 1,
+        "EXC001": 4,
+        "EXC002": 1,
+        "MAGIC001": 24
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 1,
+      "tail": "/main.py\", line 149, in createTests\n    self.test = loader.discover(self.start, self.pattern, self.top)\n                ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/loader.py\", line 341, in discover\n    raise ImportError('Start directory is not importable: %r' % start_dir)\nImportError: Start directory is not importable: '/private/tmp/claude-501/-Users-thomaslahore-Desktop-ShockHarness/706bccae-1ae9-4595-8eeb-45abd594f5c1/scratchpad/utg-builds2/03-contactclean-ungated/tests'\n"
+    },
+    "structure": {
+      "files": 2,
+      "lines": 280,
+      "functions": 17,
+      "try_blocks": 4,
+      "frozen_dataclasses": 0,
+      "parameter_defaults": 1,
+      "module_constants": 5,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "mapping_get": [
+        "r = {f: (raw.get(f) or \"\").strip() for f in FIELDS}"
+      ],
+      "truthiness_fallback": [
+        "r = {f: (raw.get(f) or \"\").strip() for f in FIELDS}"
+      ],
+      "catch_fallback": [
+        "except ValueError:",
+        "except Invalid as e:",
+        "except Invalid as e:",
+        "except (OSError, UnicodeDecodeError, ValueError, csv.Error) as e:"
+      ],
+      "sentinel_default": [
+        "def main(argv=None):"
+      ]
+    }
+  },
+  "04-jobqueue-gated": {
+    "check": {
+      "by_rule": {
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.291s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 289,
+      "functions": 21,
+      "try_blocks": 0,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 0,
+      "module_constants": 5,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "variadic_signature": [
+        "def submit(self, name: str, coro_fn, *args) -> int:"
+      ]
+    },
+    "hook_blocks": 0
+  },
+  "04-jobqueue-ungated": {
+    "check": {
+      "by_rule": {
+        "ASYNC003": 1,
+        "DEF001": 15,
+        "EXC001": 6,
+        "MAGIC001": 32,
+        "RETRY001": 1,
+        "SLEEP001": 1
+      },
+      "suppressed": 0
+    },
+    "tests": {
+      "exit_code": 0,
+      "tail": "........\n----------------------------------------------------------------------\nRan 8 tests in 0.219s\n\nOK\n"
+    },
+    "structure": {
+      "files": 4,
+      "lines": 346,
+      "functions": 28,
+      "try_blocks": 3,
+      "frozen_dataclasses": 1,
+      "parameter_defaults": 7,
+      "module_constants": 0,
+      "inline_suppressions": 0
+    },
+    "evasion_detectors": {
+      "catch_fallback": [
+        "except asyncio.QueueEmpty:",
+        "except asyncio.CancelledError:",
+        "except Exception as exc:  # bug in the queue itself: record, keep going",
+        "except TimeoutError as exc:",
+        "except RetryableError as exc:",
+        "except Exception as exc:"
+      ],
+      "sentinel_default": [
+        "def __init__(self, errors, summary=None):"
+      ],
+      "variadic_signature": [
+        "def submit(self, name, coro_fn, *args):"
+      ]
+    }
+  }
+}

@@ -4,7 +4,7 @@
 [tool.shockharness]
 profile = "strict"
 include = ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py", "evals/*.py", "evals/behavior/*.py"]
-exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**", "evals/behavior/cases/**", "evals/behavior/review_queue/**"]
+exclude = ["**/.venv/**", "**/node_modules/**", "**/dist/**", "**/build/**", "tests/fixtures/**", "evals/tasks/**", "evals/behavior/cases/**", "evals/behavior/review_queue/**", "evals/under-the-gate/round*/**"]
 parse_errors = "fail"
 
 # File roles: the bundled defaults, except that this repository has no tooling

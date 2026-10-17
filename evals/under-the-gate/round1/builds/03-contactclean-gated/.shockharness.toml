@@ -1,0 +1,29 @@
+[tool.shockharness]
+profile = "strict"
+include = ["**/*.py", "**/*.js", "**/*.mjs"]
+exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
+
+# Input boundary: the only place contactclean meets the outside world is reading the CSV file.
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/reader.py"
+language = "python"
+exception = "OSError"
+reason = "File I/O; an unreadable input becomes a typed InputUnreadable error that main maps to exit 2"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/reader.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "Decoding external input; undecodable bytes become a typed InputUnreadable error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/reader.py"
+language = "python"
+exception = "csv.Error"
+reason = "Parsing external input; malformed CSV becomes a typed InputUnreadable error"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "contactclean/cli.py"
+language = "python"
+exception = "contactclean.reader.InputUnreadable"
+reason = "Process boundary; an unreadable input is reported on stderr and mapped to exit code 2"
