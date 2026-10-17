@@ -77,7 +77,11 @@ enabled = true
 # "error": MAGIC001 findings fail the gate. "review": reported, never gating (a deviation).
 severity = "error"
 allowed_values = [0, 1]
-allow_unary_negative_one = false
+# -1 (a unary minus over 1) is allowed: Python's last-item and all-but-last idioms
+# (items[-1], text[:-1]) and JavaScript's indexOf / findIndex "not found" (H6 feedback
+# from MetaList: 262 findings, none a hidden meaning). false reports it like any other
+# literal. A -1 that stands for a project's own meaning is MAGIC003's (planned).
+allow_unary_negative_one = true
 # A numeric literal that is the whole value of a module-level constant definition
 # (MAX_PAGES = 8, _WAIT: Final = 10.0, const SETTLE_MS = 400, export const N = 3):
 # "report" (strict: a named constant is not automatically justified) or "allow" (the

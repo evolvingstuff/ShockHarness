@@ -113,9 +113,19 @@ H3_OFF = (
 )
 
 
+# 0.3.0 reported -1 in the strict and minimal profiles; the default allows it since the
+# H6 feedback round (MetaList), so the comparison pins the 0.3.0 value there.
+NEGATIVE_ONE_AS_IN_0_3_0 = {
+    "strict": "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n",
+    "recommended": "",
+    "minimal": "[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n",
+}
+
+
 def _write_config(root: Path, profile: str, extra: str) -> None:
     cache = "[tool.shockharness.cache]\nenabled = false\n"
-    body = f'[tool.shockharness]\nprofile = "{profile}"\n{cache}{extra}'
+    pinned = NEGATIVE_ONE_AS_IN_0_3_0[profile]
+    body = f'[tool.shockharness]\nprofile = "{profile}"\n{cache}{pinned}{extra}'
     (root / ".shockharness.toml").write_text(body, encoding="utf-8")
 
 

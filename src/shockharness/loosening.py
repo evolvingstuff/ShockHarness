@@ -38,6 +38,8 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "unsupported_sources": ("fail", "warn", "ignore"),
     "parse_errors": ("fail", "warn"),
     "rules.verification.severity": ("error", "warning", "review"),
+    # Allowing -1 is the default; a project that had it off and turns it on loosens.
+    "rules.magic_numbers.allow_unary_negative_one": ("False", "True"),
     "complexity.fan_out_severity": ("warning", "review"),
     "rules.stubs.severity": ("error", "warning", "review"),
     "rules.assertions.severity": ("error", "warning", "review"),

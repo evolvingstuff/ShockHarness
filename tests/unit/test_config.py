@@ -171,7 +171,7 @@ def test_deviations_are_explicit(empty_root: Path) -> None:
     config = load_config(empty_root, None)
     joined = "\n".join(config.deviations)
     assert "allowed_values permits 10, 2" in joined
-    assert "allow_unary_negative_one is enabled" in joined
+    assert "allow_unary_negative_one" not in joined  # the default since the H6 feedback
     assert "rules.magic_strings is disabled" in joined
     assert "overrides[0] disables MAGIC001 for tests/**: fixtures" in joined
 

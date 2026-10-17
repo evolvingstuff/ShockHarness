@@ -77,8 +77,9 @@ identifiers = st.from_regex(r"\A[a-z_][a-z0-9_]{0,11}\Z").filter(
         and s not in {"print", "exec", "match", "case", "type"}
     )
 )
+# -1 is allowed by default (like 0 and 1), so the strategy leaves it out.
 not_zero_or_one = st.integers(min_value=2, max_value=10**15) | st.integers(
-    min_value=-(10**15), max_value=-1
+    min_value=-(10**15), max_value=-2
 )
 
 
@@ -93,7 +94,7 @@ def test_any_other_integer_is_flagged_in_both_languages(value: int, name: str) -
     assert str(value) in js.findings[0].message
 
 
-@given(value=st.sampled_from([0, 1]), name=identifiers)
+@given(value=st.sampled_from([-1, 0, 1]), name=identifiers)
 @settings(max_examples=50, deadline=None)
 def test_zero_and_one_never_flagged(value: int, name: str) -> None:
     assert analyze_text("p.py", "python", f"{name} = {value}\n", CONFIG, OPTIONS).findings == ()

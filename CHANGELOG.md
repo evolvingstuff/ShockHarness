@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed (MAGIC001, feedback from MetaList)
+- **`-1` is allowed by default** (`rules.magic_numbers.allow_unary_negative_one =
+  true` in every profile; it was true only in `recommended`): Python's last-item
+  and all-but-last idioms (`items[-1]`, `text[:-1]`) and JavaScript's
+  `indexOf(...) === -1`. On MetaList's code, all 262 findings for it were such
+  idioms. A strict project that reported `-1` gets fewer findings; `false` keeps
+  the old behavior and is no longer a deviation, while turning it on in a project
+  that had it off is a loosening `VERIFY003` reports.
+
 Milestone H6, part two (decision 29): cross-site consistency. Both rules are
 review findings (decision 9), so no gate verdict changes.
 

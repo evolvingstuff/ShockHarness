@@ -92,8 +92,10 @@ Every numeric literal in executable code must be exactly `0` or `1`.
 **Detection guarantees.** Exact on numeric AST nodes: Python `int`, `float`,
 `complex` constants; JavaScript `number` tokens including BigInt. Value-based:
 `0x1`, `1.0`, `1e0`, `0b0`, `1n`, `0j` pass. A chain of unary `+`/`-` over a
-literal is checked as one unit: `-1` fails unless `allow_unary_negative_one` is
-true; `-0` and `-0.0` always fail; `- -1` folds to `1` and passes. Python
+literal is checked as one unit: `-1` passes while `allow_unary_negative_one` is
+true, the default since the H6 feedback round (`items[-1]`, `text[:-1]`,
+`indexOf(...) === -1`; MetaList's 262 findings for it held no hidden meaning);
+`-0` and `-0.0` always fail; `- -1` folds to `1` and passes. Python
 booleans are never flagged. Literals in Python type annotations (`Literal[2]`)
 are flagged and labelled. `match`/`case` patterns, JSX attribute expressions,
 and template substitutions are executable code and are scanned.

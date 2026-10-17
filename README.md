@@ -63,7 +63,7 @@ Implemented rules:
 
 | ID | What it reports | Default |
 |---|---|---|
-| `MAGIC001` | numeric literal other than `0`/`1` in executable code | error |
+| `MAGIC001` | numeric literal other than `0`, `1` or `-1` in executable code | error |
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |
@@ -374,7 +374,7 @@ parse_errors = "fail"
 [tool.shockharness.rules.magic_numbers]
 enabled = true
 allowed_values = [0, 1]
-allow_unary_negative_one = false
+allow_unary_negative_one = true     # -1 for items[-1] and indexOf() === -1 (the default)
 
 [[tool.shockharness.overrides]]
 roles = ["test"]          # or paths = ["tests/**"]; exactly one of the two

@@ -1,6 +1,6 @@
 ---
 name: write-compliant-code
-description: Write new Python or JavaScript that passes the ShockHarness quality gate on the first run. Use when adding or changing executable code in a repository that runs shockharness. Covers clear contracts, no catch outside a declared boundary, no parameter defaults or fallback values, no numeric literal other than 0 or 1, named constants for meaningful 0/1 values, and keeping data, configuration and specification files separate from source.
+description: Write new Python or JavaScript that passes the ShockHarness quality gate on the first run. Use when adding or changing executable code in a repository that runs shockharness. Covers clear contracts, no catch outside a declared boundary, no parameter defaults or fallback values, no numeric literal other than 0, 1 or -1, named constants for meaningful 0/1/-1 values, and keeping data, configuration and specification files separate from source.
 ---
 
 # Write compliant code
@@ -68,17 +68,17 @@ a plain `check`; see the `refactor-complexity` skill.
    `x ?? v`, `os.getenv("X", "3")`, `process.env.PORT || 3000`. Read required
    data with indexing (`raw["PORT"]`, `env.PORT` followed by validation) so a
    missing value fails loudly, once, at load time.
-4. **No numeric literal other than 0 or 1.** A number in code needs a contract:
+4. **No numeric literal other than 0, 1 or -1.** A number in code needs a contract:
    variable policy (timeouts, limits, page sizes) becomes a required,
    validated configuration parameter; invariant mathematics or a published
    protocol value becomes a named constant that cites its source, kept in a
    designated constants module or suppressed inline with the citation as the
    reason. Never move a number into an unexplained constant.
-5. **Name a 0 or 1 that carries meaning.** The rule permits `0` and `1`, it does
-   not recommend them. An exit code, a sentinel, a flag, a first page, a
-   protocol value: give it a name (`EXIT_OK = 0`, `FIRST_PAGE = 1`). Plain
-   arithmetic identity stays literal: `i + 1`, `len(x) - 1`, `range(0, n)`,
-   `x ** 0`, `start = 0`.
+5. **Name a 0, 1 or -1 that carries meaning.** The rule permits them, it does
+   not recommend them. An exit code, a sentinel ("nothing selected"), a flag, a
+   first page, a protocol value: give it a name (`EXIT_OK = 0`, `NO_SELECTION =
+   -1`). Plain arithmetic and indexing stay literal: `i + 1`, `items[-1]`,
+   `text[:-1]`, `indexOf(x) === -1`, `range(0, n)`, `start = 0`.
 6. **Separate source from data, configuration and specification.** Numbers
    belong in `.toml`, `.json`, `.env.example`, a schema, or a constants module
    that is declared as such. In the tool's own repository the single

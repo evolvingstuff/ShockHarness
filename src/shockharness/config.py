@@ -729,8 +729,6 @@ def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> 
     extra = sorted({str(v) for v in allowed if v != 0 and v != 1})
     if len(extra) > 0:
         found.append("rules.magic_numbers.allowed_values permits " + ", ".join(extra))
-    if rules["magic_numbers"]["allow_unary_negative_one"] is True:
-        found.append("rules.magic_numbers.allow_unary_negative_one is enabled")
     if rules["magic_numbers"]["named_constant_definitions"] == NAMED_CONSTANT_ALLOW:
         found.append(
             f"rules.magic_numbers.named_constant_definitions is {NAMED_CONSTANT_ALLOW!r}; a "

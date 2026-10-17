@@ -13,7 +13,6 @@
 # defaults, and every line below is reported as a policy deviation.
 
 [tool.shockharness.rules.magic_numbers]
-allow_unary_negative_one = true
 named_constant_definitions = "allow"
 
 [tool.shockharness.rules.defaults]

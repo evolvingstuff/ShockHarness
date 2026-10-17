@@ -3729,3 +3729,32 @@ excluded) are identical on all twelve runs. On the 790-file corpus neither rule
 reports anything (after decision 1). Self-diff against 192145b: no new findings,
 no complexity regressions, after splitting `_sites` and `Evaluation.call` and
 moving two long expected rule lists in tests to module constants.
+
+## MAGIC001: -1 allowed by default — DONE (2026-10-16)
+
+From the MetaList session (ShockHarness 0.6.0, MAGIC001 at error, about 1,870
+findings): all 262 findings for `-1` were Python's last-item and all-but-last
+idioms (`items[-1]`, `text[:-1]`, `range(n - 1, -1, -1)`) and JavaScript's
+`indexOf`/`findIndex` "not found" checks.
+
+* `rules.magic_numbers.allow_unary_negative_one` is `true` in the bundled
+  defaults, so in every profile (it was `true` only in `recommended`, whose line
+  is gone). `false` is now stricter than the default and no deviation; turning
+  it on in a project that had it off is an ordered loosening `VERIFY003`
+  reports. This repository keeps `false`: its own code uses only 0 and 1.
+* The skill's principles 4 and 5 now say 0, 1 or -1, and name a `-1` that
+  carries meaning (`NO_SELECTION = -1`); the sentinel rule (point 2, its own
+  change) is what reports those.
+* Point 3 (accepting `16 * MIB` as a named definition) was implemented, then
+  withdrawn by the MetaList session before commit: naming the 16 surfaced a
+  duplicated limit, a byte unit labelling a character count, and undocumented
+  cache budgets. It is not in this change; the patch is kept aside pending the
+  maintainer's confirmation.
+
+Evidence: the golden fixtures lose exactly their six `-1` findings
+(`magic_negatives.py`/`.js`: `-1`, `-+1`, `-1n`; `exc_return_fallback.py:40`),
+with exits unchanged (3/3/1); against 0.6.0 the strict and minimal fixture runs
+differ by exactly those six findings, everything else identical; the 0.3.0
+verdict regression pins `false` for strict and minimal and passes unchanged.
+1139 tests pass on CPython 3.14 and 3.11.11; self-diff against 0b3a36c: no new
+findings, no complexity regressions.

@@ -75,7 +75,7 @@ MAGIC001 = RuleSpec(
     default_severity=SEVERITY_ERROR,
     implemented=True,
     languages=ALL_LANGUAGES,
-    summary="Every numeric literal in executable code must be exactly 0 or 1.",
+    summary="Every numeric literal in executable code must be exactly 0, 1 or -1.",
     rationale=(
         "A bare number carries no contract: nobody can tell whether 30 is a timeout, a "
         "retry budget, or a protocol code, or why it is 30. Naming it is not enough on its "
@@ -87,9 +87,9 @@ MAGIC001 = RuleSpec(
         "Exact on numeric AST nodes: int, float, complex (Python) and number/bigint "
         "(JavaScript) literals in any encoding (decimal, hex, octal, binary, exponent, "
         "separators). Value-based: 0x1, 1.0, 1e0, 0b0 and 1n pass as 0 or 1. Unary minus "
-        "over a literal is checked as one unit: -1 fails unless allow_unary_negative_one is "
-        "set; -0 and -0.0 always fail. Python booleans are never flagged. Numeric literals in "
-        "Python type annotations are flagged."
+        "over a literal is checked as one unit: -1 passes while allow_unary_negative_one is "
+        "true (the default: items[-1], indexOf(...) === -1); -0 and -0.0 always fail. Python "
+        "booleans are never flagged. Numeric literals in Python type annotations are flagged."
     ),
     limitations=(
         "Does not look inside strings or regular-expression literals; '30' and /\\d{3}/ are "
@@ -102,8 +102,8 @@ MAGIC001 = RuleSpec(
         "becomes a required, validated configuration parameter. Invariant mathematics or a "
         "published specification value becomes a named constant that cites its source. "
         "Never move the number into an unexplained constant and never add a fallback. A "
-        "0 or 1 that carries meaning (an exit code, a sentinel) deserves a name too, even "
-        "though the rule permits it."
+        "0, 1 or -1 that carries meaning (an exit code, a sentinel such as 'nothing "
+        "selected') deserves a name too, even though the rule permits it."
     ),
     noncompliant_example=(
         "timeout = 30\n"

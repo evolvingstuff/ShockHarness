@@ -39,11 +39,15 @@ def test_zero_and_one_in_any_encoding_pass(analyze: Callable[[str, str], FileRes
     )
 
 
-def test_negative_one_and_negative_zero_fail_by_default(
-    analyze: Callable[[str, str], FileResult],
+def test_negative_one_is_allowed_by_default_negative_zero_is_not(
+    analyze: Callable[[str, str], FileResult], make_config: Callable[[str], EffectiveConfig]
 ) -> None:
-    result = analyze("a = -1\nb = -0\nc = -0.0\nd = -1.0\n", "python")
-    assert [f.span.line for f in result.findings] == [1, 2, 3, 4]
+    text = "a = -1\nb = -0\nc = -0.0\nd = -1.0\nlast = items[-1]\n"
+    assert [f.span.line for f in analyze(text, "python").findings] == [2, 3]
+    off = make_config("[tool.shockharness.rules.magic_numbers]\nallow_unary_negative_one = false\n")
+    result = analyze_text("t.py", "python", text, off, AnalysisOptions(True, CACHE_CONFIGURED))
+    assert [f.span.line for f in result.findings] == [1, 2, 3, 4, 5]
+    assert not any("allow_unary_negative_one" in d for d in off.deviations)  # stricter
 
 
 def test_allow_unary_negative_one(make_config: Callable[[str], EffectiveConfig]) -> None:
