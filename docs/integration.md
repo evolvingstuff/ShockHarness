@@ -249,26 +249,38 @@ shockharness skills install --agent claude --hook
 ```
 
 ```json
-{"hooks": {"PostToolUse": [{"matcher": "Edit|Write|MultiEdit", "hooks": [
+{"hooks": {"PostToolUse": [{"matcher": "Edit|Write|MultiEdit|Bash", "hooks": [
   {"type": "command", "timeout": 60,
    "command": "shockharness hook claude-code post-edit --root \"$CLAUDE_PROJECT_DIR\""}]}]}}
 ```
 
 After every edit, `shockharness hook claude-code post-edit` reads the tool call
-on stdin, analyzes the edited file under the project's configuration (with the
-cache: about half a second on this repository) and, when the file has findings
-of `--fail-on` severity or worse (`warning` by default), writes them to stderr
-and exits 2, which Claude Code shows to the agent while the edit is still in
-its context. A clean file, a file outside the project or one the configuration
-does not include exits 0 silently; malformed input exits 1 (a notice to you,
-not to the agent). The hook is appended to any `PostToolUse` hooks already
+on stdin and analyzes what it changed under the project's configuration (with
+the cache: about half a second on this repository). For Edit, Write and
+MultiEdit that is the file the call names. For a shell command, which may change
+any file, it is the source files `git status` shows as modified, added or
+untracked whose content differs from what the hook last analyzed. Agents often
+write files through the shell (every builder in the under-the-gate experiment
+did), and a hook on Edit/Write alone never sees those. When the files have
+findings of `--fail-on` severity or worse (`warning` by default), the hook
+writes them to stderr and exits 2, which Claude Code shows to the agent while
+the edit is still in its context. A clean file, a file outside the project, a file that is not
+source or one the configuration does not include exits 0 silently; malformed
+input exits 1 (a notice to you, not to the agent). Outside a git repository,
+shell edits are not checked, and the run log says so.
+
+The hook keeps two files in the cache directory (`.shockharness-cache/hook/`):
+`state.json` (the content hash of each file it last analyzed, so a file is not
+reported twice for the same content) and `runs.jsonl` (one line per run: time,
+tool, files analyzed, findings, exit code, notes and I/O problems), so "clean"
+and "never ran" can be told apart. `skills install --hook` updates the matcher
+of a hook installed by an earlier version. The hook is appended to any `PostToolUse` hooks already
 there, never replaces them, and is added once. It needs `shockharness` on the
 `PATH` hooks run with; for a virtual environment, edit the command to its
 path.
 
 Only the edited file is analyzed, so the cross-file rules see that file alone:
-`check` and `gate` in CI stay the authority. Edits made through a shell
-command are not seen by `PostToolUse`.
+`check` and `gate` in CI stay the authority.
 
 ## 8. Acceptance checks this repository runs
 

@@ -200,6 +200,24 @@ exception = "json.JSONDecodeError"
 reason = "An agent hook's stdin is external input; malformed JSON becomes a notice to the user (exit 1), never feedback to the agent"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/hook_state.py"
+language = "python"
+exception = "OSError"
+reason = "The edit hook reads the files an agent changed and keeps its own state and run log in the cache directory; every failure is recorded and written to the run log (a file that cannot be read is not analyzed, a state that cannot be read is none)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/hook_state.py"
+language = "python"
+exception = "UnicodeDecodeError"
+reason = "The hook's state file is bytes on disk; undecodable state is recorded and ignored, so changed files are analyzed again"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/hook_state.py"
+language = "python"
+exception = "json.JSONDecodeError"
+reason = "The hook's state file may be corrupt; a corrupt state is recorded and ignored, so changed files are analyzed again"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/cache/store.py"
 language = "python"
 exception = "OSError"

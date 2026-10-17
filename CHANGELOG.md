@@ -13,6 +13,11 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   `.claude/settings.json` (once, never replacing existing hooks); without
   `--hook`, it offers it.
   The hook skips files that are not source (`pyproject.toml`, `README.md`).
+  It also runs after shell commands (matcher `Edit|Write|MultiEdit|Bash`) and
+  then checks the source files `git status` shows as changed since its last run:
+  agents often write files through the shell. Each run is logged in
+  `.shockharness-cache/hook/runs.jsonl`; `skills install --hook` updates an older
+  matcher.
 - `DOM002` (`rules.dom`, review, JavaScript and TypeScript, opt-in): a pressable
   element attached to `document.body` (directly, or appended into a container a
   function attaches and returns) that matches no selector of the skip lists named

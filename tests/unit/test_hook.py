@@ -1,6 +1,7 @@
 """Edit-time feedback: `shockharness hook claude-code post-edit` and `skills install --hook`."""
 
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -68,6 +69,7 @@ def test_fail_on_chooses_what_is_fed_back(
     edited.write_text("def f(items):\n    return items or []\n", encoding="utf-8")  # DEF003
     config = make_config("")
     assert run_post_edit(event(edited), empty_root, config, OPTIONS, "warning").exit_code == 0
+    edited.write_text("def f(items):\n    return items or ()\n", encoding="utf-8")
     review = run_post_edit(event(edited), empty_root, config, OPTIONS, "review")
     assert review.exit_code == 2
     assert "DEF003 review" in review.message
@@ -96,7 +98,7 @@ def test_install_appends_the_hook_once(empty_root: Path) -> None:
     document = json.loads(settings.read_text(encoding="utf-8"))
     assert document["model"] == "x"
     groups = document["hooks"]["PostToolUse"]
-    assert [g["matcher"] for g in groups] == ["Bash", "Edit|Write|MultiEdit"]
+    assert [g["matcher"] for g in groups] == ["Bash", "Edit|Write|MultiEdit|Bash"]
     assert groups[1]["hooks"] == [{"type": "command", "command": HOOK_COMMAND, "timeout": 60}]
 
 
@@ -123,3 +125,72 @@ def test_skills_install_offers_the_hook(
     assert "(added)" in capsys.readouterr().out
     assert main(["skills", "install", "--agent", "codex", "--hook"]) == 2
     assert "--hook is for --agent claude" in capsys.readouterr().err
+
+
+def bash_event() -> str:
+    return json.dumps({"tool_name": "Bash", "tool_input": {"command": "cat > a.py <<EOF"}})
+
+
+def git(root: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
+def runs(root: Path) -> list[dict]:
+    log = root / ".shockharness-cache" / "hook" / "runs.jsonl"
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
+def test_shell_edits_are_checked_through_git_status(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # Found by the under-the-gate experiment: every builder wrote files through Bash, so
+    # a hook on Edit / Write never ran.
+    git(empty_root, "init", "-q")
+    (empty_root / "clean.py").write_text("def g(x):\n    return x\n", encoding="utf-8")
+    (empty_root / "notes.md").write_text("x = 3\n", encoding="utf-8")  # not source
+    (empty_root / "a.py").write_text(SOURCE, encoding="utf-8")
+    result = run_post_edit(bash_event(), empty_root, strict_config, OPTIONS, "warning")
+    assert result.exit_code == 2
+    assert "finding(s) in a.py after this edit" in result.message
+    assert "clean.py" not in result.message
+    again = run_post_edit(bash_event(), empty_root, strict_config, OPTIONS, "warning")
+    assert (again.exit_code, again.message) == (0, "")  # unchanged since: not told twice
+    (empty_root / "a.py").write_text("def f(x=4):\n    return x\n", encoding="utf-8")
+    changed = run_post_edit(bash_event(), empty_root, strict_config, OPTIONS, "warning")
+    assert changed.exit_code == 2
+    logged = runs(empty_root)
+    assert [r["tool"] for r in logged] == ["Bash", "Bash", "Bash"]
+    assert [r["files"] for r in logged] == [["a.py", "clean.py"], [], ["a.py"]]
+    assert [r["exit"] for r in logged] == [2, 0, 2]
+
+
+def test_shell_edits_without_git_are_logged_not_checked(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    (empty_root / "a.py").write_text(SOURCE, encoding="utf-8")
+    result = run_post_edit(bash_event(), empty_root, strict_config, OPTIONS, "warning")
+    assert (result.exit_code, result.message) == (0, "")
+    assert runs(empty_root)[0]["note"].startswith("shell edits are not checked")
+
+
+def test_install_updates_an_older_matcher(empty_root: Path) -> None:
+    settings = empty_root / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    older = {"type": "command", "command": HOOK_COMMAND, "timeout": 60}
+    document = {"hooks": {"PostToolUse": [{"matcher": "Edit|Write|MultiEdit", "hooks": [older]}]}}
+    settings.write_text(json.dumps(document), encoding="utf-8")
+    assert install_claude_hook(empty_root) == (settings, "matcher updated")
+    groups = json.loads(settings.read_text(encoding="utf-8"))["hooks"]["PostToolUse"]
+    assert [g["matcher"] for g in groups] == ["Edit|Write|MultiEdit|Bash"]
+    assert install_claude_hook(empty_root) == (settings, "already present")
+
+
+def test_a_hook_that_cannot_keep_its_files_says_so(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    (empty_root / ".shockharness-cache").write_text("not a directory", encoding="utf-8")
+    edited = empty_root / "clean.py"
+    edited.write_text("def g(x):\n    return x\n", encoding="utf-8")
+    result = run_post_edit(event(edited), empty_root, strict_config, OPTIONS, "warning")
+    assert result.exit_code == 1  # a notice for the user; the agent did nothing wrong
+    assert "could not be written" in result.message

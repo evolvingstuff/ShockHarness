@@ -4077,3 +4077,22 @@ builds swallowed them. Every evasion found concerned small numbers and was pre-e
 numbers moved into a JSON file, a toast duration moved into markup, and an `HTTPStatus`
 range that misses 512-599 (a real bug). No default, fallback or catch evasion was found.
 Recommendations are rows in `docs/ideas.md`.
+
+## The edit hook covers shell edits — DONE (2026-10-17)
+
+From the under-the-gate experiment (every builder wrote files through Bash, so the hook
+never fired). The matcher is now `Edit|Write|MultiEdit|Bash`. For a shell command the
+hook checks the source files `git status --porcelain=v1 -z --no-renames
+--untracked-files=all` shows, keeping those whose SHA-256 differs from what it last
+analyzed (`hook_state.HookStore`, `.shockharness-cache/hook/state.json`), so a long
+session is not re-told the same findings. Every run appends a line to
+`.shockharness-cache/hook/runs.jsonl` (tool, files, findings, exit, note, I/O problems).
+Every I/O failure is recorded and logged, as the cache does; a hook that cannot keep its
+files exits 1 (a notice) when it has no feedback. `skills install --hook` updates an
+older matcher.
+
+Evidence: `tests/unit/test_hook.py` (12): shell edits through git status, no repeat for
+unchanged content, the run log, no git, the I/O notice, the matcher upgrade. Live: a
+headless Claude Code 2.0.55 (Sonnet 5.5) run told to write a file through a Bash heredoc
+received the hook's three findings word for word, and the run was logged. 1184 tests
+pass; the self-gate passes.

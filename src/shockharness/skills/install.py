@@ -342,7 +342,11 @@ def update_skills(destination: Path, agent: str, check: bool) -> SkillsResult:
 CLAUDE_SETTINGS = Path(".claude") / "settings.json"
 HOOKS_KEY = "hooks"
 POST_TOOL_USE = "PostToolUse"
-EDIT_TOOLS = "Edit|Write|MultiEdit"
+# Bash too: agents often write files through the shell, which no Edit/Write hook sees;
+# for those calls the hook checks the files git shows as changed.
+EDIT_TOOLS = "Edit|Write|MultiEdit|Bash"
+MATCHER_KEY = "matcher"
+HOOK_UPDATED = "matcher updated"
 HOOK_COMMAND = 'shockharness hook claude-code post-edit --root "$CLAUDE_PROJECT_DIR"'
 COMMAND_KEY = "command"
 JSON_KINDS = {dict: "object", list: "array"}
@@ -376,14 +380,16 @@ def _runs_shockharness(handler: Any) -> bool:
     )
 
 
-def _has_hook(groups: list[Any]) -> bool:
-    return any(
-        isinstance(group, dict)
-        and HOOKS_KEY in group
-        and isinstance(group[HOOKS_KEY], list)
-        and any(_runs_shockharness(handler) for handler in group[HOOKS_KEY])
-        for group in groups
-    )
+def _hook_group(groups: list[Any]) -> dict[str, Any] | None:
+    """The PostToolUse group that already runs the hook, if any."""
+    for group in groups:
+        if not isinstance(group, dict) or HOOKS_KEY not in group:
+            continue
+        if isinstance(group[HOOKS_KEY], list) and any(
+            _runs_shockharness(handler) for handler in group[HOOKS_KEY]
+        ):
+            return group
+    return None
 
 
 def _member(document: dict[str, Any], key: str, empty: Any, path: Path) -> Any:
@@ -401,15 +407,22 @@ def _member(document: dict[str, Any], key: str, empty: Any, path: Path) -> Any:
 
 def install_claude_hook(project_root: Path) -> tuple[Path, str]:
     """Add the post-edit hook to ``.claude/settings.json``: appended to any PostToolUse
-    hooks already configured, never replacing them, and only once."""
+    hooks already configured, never replacing them, and only once. A hook installed by an
+    earlier version gets the current matcher (Bash included)."""
     path = project_root / CLAUDE_SETTINGS
     document = _settings_document(path)
     hooks = _member(document, HOOKS_KEY, {}, path)
     groups = _member(hooks, POST_TOOL_USE, [], path)
-    if _has_hook(groups):
+    existing = _hook_group(groups)
+    if existing is not None and MATCHER_KEY in existing and existing[MATCHER_KEY] == EDIT_TOOLS:
         return path, HOOK_PRESENT
-    handler = {"type": "command", COMMAND_KEY: HOOK_COMMAND, "timeout": HOOK_TIMEOUT_SECONDS}
-    groups.append({"matcher": EDIT_TOOLS, HOOKS_KEY: [handler]})
+    status = HOOK_UPDATED
+    if existing is None:
+        handler = {"type": "command", COMMAND_KEY: HOOK_COMMAND, "timeout": HOOK_TIMEOUT_SECONDS}
+        groups.append({MATCHER_KEY: EDIT_TOOLS, HOOKS_KEY: [handler]})
+        status = HOOK_ADDED
+    else:
+        existing[MATCHER_KEY] = EDIT_TOOLS
     text = json.dumps(document, indent=JSON_INDENT) + "\n"
     _write_bytes(path, text.encode("utf-8"))
-    return path, HOOK_ADDED
+    return path, status
