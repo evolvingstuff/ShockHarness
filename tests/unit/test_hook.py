@@ -51,6 +51,11 @@ def test_post_edit_is_quiet_outside_the_project_and_loud_on_bad_input(
     assert (
         run_post_edit(event(outside), empty_root, strict_config, OPTIONS, "warning").exit_code == 0
     )
+    # Found by the under-the-gate experiment: editing pyproject.toml fed an
+    # "unsupported file type" error back to the agent as if it were a finding.
+    (empty_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    config_edit = event(empty_root / "pyproject.toml")
+    assert run_post_edit(config_edit, empty_root, strict_config, OPTIONS, "warning").exit_code == 0
     bad = run_post_edit("{", empty_root, strict_config, OPTIONS, "warning")
     assert bad.exit_code == 1  # a notice to the user: the agent did nothing wrong
     assert "not JSON" in bad.message

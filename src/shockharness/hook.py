@@ -5,7 +5,8 @@ as JSON on stdin; the edited file is ``tool_input.file_path``. The file is analy
 the project's configuration (with the cache, so a hook run costs one file), and its
 findings at or above ``--fail-on`` are written to stderr with exit 2, which Claude Code
 shows to the agent while the edit is still in its context. A clean file, a file outside
-the project or one the configuration does not include exits 0 and prints nothing.
+the project, a file that is not source (``pyproject.toml``, ``README.md``) or one the
+configuration does not include exits 0 and prints nothing.
 
 Only the edited file is analyzed: the cross-file rules see that file alone, so the gate
 (``check`` or ``gate`` in CI) stays the authority.
@@ -20,7 +21,7 @@ from typing import Any
 
 from shockharness.analysis import AnalysisOptions
 from shockharness.api import analyze_paths
-from shockharness.config import EffectiveConfig
+from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
 from shockharness.constants import HOOK_FEEDBACK
 from shockharness.findings import Finding
 from shockharness.output.text import finding_lines
@@ -113,8 +114,8 @@ def run_post_edit(
     if path is None:
         return HookResult(HOOK_CLEAN, "")
     relative = _within(Path(path), root)
-    if relative is None:
-        return HookResult(HOOK_CLEAN, "")
+    if relative is None or relative.suffix not in SUPPORTED_EXTENSIONS:
+        return HookResult(HOOK_CLEAN, "")  # outside the project, or not a source file
     report = analyze_paths([root / relative], root, config, options)
     own = [f for f in report.findings if f.path == relative.as_posix()]
     shown = _fed_back(own, fail_on)

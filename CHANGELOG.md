@@ -12,6 +12,7 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   `skills install --agent claude --hook` appends the hook to the project's
   `.claude/settings.json` (once, never replacing existing hooks); without
   `--hook`, it offers it.
+  The hook skips files that are not source (`pyproject.toml`, `README.md`).
 - `DOM002` (`rules.dom`, review, JavaScript and TypeScript, opt-in): a pressable
   element attached to `document.body` (directly, or appended into a container a
   function attaches and returns) that matches no selector of the skip lists named

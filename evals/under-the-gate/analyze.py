@@ -27,7 +27,7 @@ profile = "strict"
 include = ["**/*.py", "**/*.js", "**/*.mjs"]
 exclude = ["**/node_modules/**", ".claude/**", "**/.venv/**"]
 """
-HOOK_MARKER = "shockharness: "
+HOOK_MARKER = "after this edit; fix them now"
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit"}
 SOURCE_SUFFIXES = {".py", ".js", ".mjs"}
 SKIP_PARTS = {".git", ".claude", "node_modules", "__pycache__", ".venv"}
@@ -156,7 +156,7 @@ def hook_blocks(log: Path) -> list[dict]:
     blocks = []
     for index, call in enumerate(order):
         text = call.get("result", "") + call.get("system", "")
-        if HOOK_MARKER not in text or "finding(s)" not in text:
+        if HOOK_MARKER not in text:
             continue
         path = call.get("input", {}).get("file_path", "")
         following = next((c for c in order[index + 1:] if c.get("input", {}).get("file_path") == path), None)
