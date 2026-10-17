@@ -3803,3 +3803,22 @@ passes; against 0.6.0 only the six `-1` MAGIC001 findings of point 1 differ;
 self-diff against a82b45c: no new findings, no complexity regressions, after
 splitting the JavaScript literal folding and visitor and moving a long expected
 rule list in a test to a module constant.
+
+## Release 0.7.0 (2026-10-17)
+
+Tag `v0.7.0` at 256a7de. Published by `publish.yml` through trusted publishing
+(run https://github.com/evolvingstuff/ShockHarness/actions/runs/39033581139)
+after the maintainer's approval; the release commit's CI run
+(https://github.com/evolvingstuff/ShockHarness/actions/runs/39033214412) was
+green before the tag. Contents: Milestone H4 (6980823), H5 (9768a19), ROLE001
+(1785ca7), H-TS (ec8e1b1), H6 part one (ed16372), the RecursionError fix
+(ed8881b), the STUB001/IMPORT001 feedback fixes (6c820ca), the assert rework
+(192145b), H6 part two (0b3a36c), `-1` allowed by default (a82b45c), MAGIC003
+(ee36a7f) and the release commit 256a7de.
+
+Verified after publication: `uv pip install shockharness==0.7.0` into a fresh
+environment from PyPI; `shockharness version` prints `shockharness 0.7.0`; a
+TypeScript file is analyzed (TYPE001 reports `any` and an `as` assertion) with
+all 42 implemented rules applied; runtime dependencies are `tree-sitter`
+0.25.2, `tree-sitter-javascript` 0.25.0 and `tree-sitter-typescript` 0.23.2.
+PyPI lists `0.7.0` as the latest release, with a wheel and an sdist.
