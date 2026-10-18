@@ -19,6 +19,8 @@ import ast
 from collections import Counter
 from collections.abc import Iterator, Sequence
 
+from shockharness.ir.model import ReceiverClass, ReceiverFacts
+
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
@@ -184,3 +186,39 @@ def receiver_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str 
     if _binding_counts(function.body)[name] > 0:
         return None
     return name
+
+
+def _receiver_class(node: ast.ClassDef) -> ReceiverClass:
+    bases = tuple(ast.unparse(base) if is_dotted(base) else "" for base in node.bases)
+    methods = tuple(
+        sorted(name for name, f in class_methods(node).items() if method_kind(f) is not None)
+    )
+    return ReceiverClass(node.name, bases, methods)
+
+
+def _function_units(
+    tree: ast.Module,
+) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """Module-level functions and the methods of module-level classes, by unit name."""
+    for node in tree.body:
+        if isinstance(node, FUNCTIONS):
+            yield node.name, node
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, FUNCTIONS):
+                    yield f"{node.name}.{item.name}", item
+
+
+def collect_python_receivers(tree: ast.Module) -> ReceiverFacts:
+    singletons = tuple(
+        sorted((name, ast.unparse(callee)) for name, callee in singleton_constructors(tree).items())
+    )
+    constructed = tuple(
+        sorted(
+            (unit, name, ast.unparse(callee))
+            for unit, function in _function_units(tree)
+            for name, callee in constructed_locals(function).items()
+        )
+    )
+    classes = tuple(_receiver_class(n) for n in tree.body if isinstance(n, ast.ClassDef))
+    return ReceiverFacts(singletons, constructed, classes)

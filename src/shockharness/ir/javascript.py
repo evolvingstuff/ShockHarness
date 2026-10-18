@@ -39,6 +39,7 @@ from shockharness.ir.javascript_strings import collect_javascript_strings
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
+    NO_RECEIVER_FACTS,
     AsyncFacts,
     CatalogFacts,
     Comment,
@@ -305,6 +306,7 @@ def _extract_facts(
         sentinels=collect_javascript_sentinels(source, root),
         strings=collect_javascript_strings(source, root),
         dom=collect_javascript_floating(source, root),
+        receivers=NO_RECEIVER_FACTS,  # JavaScript receivers are R2
         parse_failure=None,
     )
 

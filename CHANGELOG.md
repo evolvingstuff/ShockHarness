@@ -19,6 +19,23 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   a method. Calls that were `unknown` can become passes or PROP001 violations. The family
   is opt-in, so no gate that has it off changes.
 
+### Changed
+- **The call graph resolves Python methods through exact receivers**
+  (`docs/proposal-receivers.md`, R1; cache schema "21").
+  - `self.m()` / `cls.m()` that the class or a project base defines are `resolved` when
+    no analyzed subclass overrides `m`, and stay `probable` when one does. The reason
+    names the overriding class.
+  - These are `resolved` too: a module-level singleton's method (`store.save()`,
+    imported or not), a constructed local's method, `Class.m()` through a module-level
+    class or an import, and an attribute call on an analyzed module alias (`u.helper()`).
+  - JavaScript is unchanged (R2).
+
+  **This can make a passing gate fail.** CPLX005 counts the new edges in fan-out.
+  ASYNC001 reports a dropped coroutine from a promoted `self.m()` as a violation, not
+  unknown. INPUT001, PROV001 and GUARD001 follow the new sites. See STATUS.md for the
+  measured diff on MetaList and the third-party corpus. Existing findings keep their
+  fingerprints.
+
 ## [0.10.0] - 2026-10-18
 
 Property contracts (opt-in, milestones P1a to P3), STATE002, and MetaList's feedback on

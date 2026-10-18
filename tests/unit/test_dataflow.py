@@ -193,7 +193,8 @@ def test_input001_across_files_and_depth(
     assert [(path, line, confidence) for path, line, confidence, _ in found] == [
         ("app/shell.py", 11, "exact"),
         ("app/shell.py", 11, "exact"),
-        ("app/shell.py", 24, "approximate"),  # self._sink: a probable resolution
+        # self._sink: no analyzed subclass overrides it, so the resolution is exact (R1)
+        ("app/shell.py", 24, "exact"),
     ]
     messages = [m for _, _, _, m in found]
     assert "flask.request.args (app/shell.py:16)" in messages[0]

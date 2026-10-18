@@ -56,6 +56,65 @@ PY_MAIN = (
 PY_API = "from pkg.util import helper\n\nexported = helper\n"
 
 
+RECEIVERS_STORE = (
+    "from typing import Generic, TypeVar\n\n"
+    "T = TypeVar('T')\n\n\n"
+    "class Store:\n"
+    "    def save(self, x):\n        return x\n\n"
+    "    @property\n    def size(self):\n        return 0\n\n\n"
+    "class Loud(Store):\n    def save(self, x):\n        return x\n\n\n"
+    "class Typed(Generic[T]):\n    def get(self):\n        return self.peek()\n\n\n"
+    "store = Store()\n"
+    "twice = Store()\n"
+    "twice = Store()\n\n\n"
+    "def here(x):\n    return store.save(x) + twice.save(x)\n"
+)
+RECEIVERS_USE = (
+    "from pkg.store import Store, store\n\n\n"
+    "def imported(x):\n    return store.save(x)\n\n\n"
+    "def constructed(x):\n    local = Store()\n    return local.save(x) + local.size()\n\n\n"
+    "class Saver(Store):\n    def go(self, x):\n        return self.save(x)\n"
+)
+
+
+def test_methods_resolve_through_exact_receivers(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    report = _report(
+        empty_root,
+        strict_config,
+        {"pkg/__init__.py": "", "pkg/store.py": RECEIVERS_STORE, "pkg/use.py": RECEIVERS_USE},
+    )
+    save = "pkg/store.py::Store.save"
+    here = _edges(report, "pkg/store.py::here")
+    assert ("unit", save, "resolved", "call") in here  # a singleton, same module
+    assert ("unresolved", "twice.save", "unresolved", "call") in here  # bound twice
+    assert ("unit", save, "resolved", "call") in _edges(report, "pkg/use.py::imported")
+    constructed = _edges(report, "pkg/use.py::constructed")
+    assert ("unit", save, "resolved", "call") in constructed  # a constructed local
+    assert ("unresolved", "local.size", "unresolved", "call") in constructed  # a property
+    # Saver inherits Store.save; Loud overrides it, but Loud does not derive from Saver.
+    assert ("unit", save, "resolved", "call") in _edges(report, "pkg/use.py::Saver.go")
+    # Typed's base Generic[T] is not an analyzed class: self.peek() is not guessed.
+    typed = _edges(report, "pkg/store.py::Typed.get")
+    assert ("unresolved", "self.peek", "unresolved", "call") in typed
+
+
+def test_a_method_an_analyzed_subclass_overrides_stays_probable(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    source = (
+        "class Base:\n"
+        "    def save(self, x):\n        return x\n\n"
+        "    def run(self, x):\n        return self.save(x)\n\n\n"
+        "class Loud(Base):\n    def save(self, x):\n        return x\n"
+    )
+    report = _report(empty_root, strict_config, {"m.py": source})
+    assert _edges(report, "m.py::Base.run") == [("unit", "m.py::Base.save", "probable", "call")]
+    (edge,) = [e for e in report.metrics["graph"]["edges"] if e["from"] == "m.py::Base.run"]
+    assert edge["reason"] == "method of the class or a project base, overridden in m.py::Loud"
+
+
 def test_python_resolution_classes(empty_root: Path, strict_config: EffectiveConfig) -> None:
     report = _report(
         empty_root,
@@ -70,8 +129,9 @@ def test_python_resolution_classes(empty_root: Path, strict_config: EffectiveCon
     direct = _edges(report, "pkg/main.py::direct")
     assert ("unit", "pkg/util.py::helper", "resolved", "call") in direct  # from-import
     assert direct.count(("unit", "pkg/util.py::helper", "resolved", "call")) == 1
-    # u.helper() and pkg.util.helper(): attribute calls on module aliases are probable
-    assert direct.count(("unit", "pkg/util.py::helper", "probable", "call")) == 1
+    # u.helper(): an attribute call on a module alias names the function exactly, so it is
+    # resolved too (receivers R1) and shares the from-import's edge
+    assert direct.count(("unit", "pkg/util.py::helper", "probable", "call")) == 0
     resolved_targets = {e[1] for e in direct if e[2] == "resolved"}
     assert resolved_targets == {"pkg/util.py::helper"}  # local_helper and helper, deduplicated
 
@@ -98,9 +158,11 @@ def test_python_resolution_classes(empty_root: Path, strict_config: EffectiveCon
     assert unit["calls"]["unresolved"] == 4
 
     method = _edges(report, "pkg/main.py::K.m")
-    assert ("unit", "pkg/main.py::K.n", "probable", "call") in method  # self.n defined in class
-    assert ("unresolved", "self.run", "unresolved", "call") in method  # inherited: not guessed
-    assert ("unit", "pkg/main.py::K.m", "probable", "call") in method  # static K.m(self)
+    # Receivers R1: self.n is the class's own method and no analyzed subclass overrides it;
+    # self.run is inherited from the project base Base; K.m(self) names the method exactly.
+    assert ("unit", "pkg/main.py::K.n", "resolved", "call") in method
+    assert ("unit", "pkg/util.py::Base.run", "resolved", "call") in method
+    assert ("unit", "pkg/main.py::K.m", "resolved", "call") in method
     assert ("unit", "pkg/util.py::Base", "resolved", "call") in method  # imported class call
     nested = _edges(report, "pkg/main.py::K.n")
     assert nested == [("unit", "pkg/main.py::K.n.inner", "resolved", "call")]

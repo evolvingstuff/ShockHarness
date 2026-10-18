@@ -57,9 +57,9 @@ def test_async001_python_across_files_and_catalog(
     assert rows(report) == [
         ("ASYNC001", "src/app.py", 6, "violation"),
         ("ASYNC001", "src/app.py", 9, "violation"),
-        # self.flush(): the graph matches a method through self as probable (a subclass
-        # may override it), so the finding is unknown.
-        ("ASYNC001", "src/app.py", 19, "unknown"),
+        # self.flush(): the class defines flush and no analyzed subclass overrides it, so
+        # the graph resolves it (receivers R1) and the dropped coroutine is a violation.
+        ("ASYNC001", "src/app.py", 19, "violation"),
     ]
     first = next(f for f in report.findings if f.rule_id == "ASYNC001")
     assert first.message.startswith("write(...) is async; its coroutine is created and thrown away")

@@ -251,6 +251,22 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({"CONFIDENCE_UNRESOLVED"}),
         "graph edge confidence; no finding",
     ),
+    ("complexity/callgraph.py", "_Resolver._through_self"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence; no finding",
+    ),
+    ("complexity/callgraph.py", "_Resolver._through_definition"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence; no finding",
+    ),
+    ("complexity/callgraph.py", "_Resolver._through_local"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence; no finding",
+    ),
+    ("complexity/callgraph.py", "_Resolver._through_value"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence; no finding",
+    ),
     ("complexity/callgraph.py", "_classify"): (
         frozenset({"CONFIDENCE_UNRESOLVED"}),
         "graph edge confidence; no finding",

@@ -39,6 +39,7 @@ from shockharness.ir.python_functions import (
     collect_python_imports,
 )
 from shockharness.ir.python_guardrails import collect_python_guardrails
+from shockharness.ir.python_receivers import collect_python_receivers
 from shockharness.ir.python_sentinels import collect_python_sentinels
 from shockharness.ir.python_strings import collect_python_strings
 from shockharness.ir.python_verification import collect_python_verification
@@ -326,5 +327,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         sentinels=collect_python_sentinels(source, parsed),
         strings=collect_python_strings(source, parsed),
         dom=NO_DOM,  # the DOM is JavaScript's
+        receivers=collect_python_receivers(parsed),
         parse_failure=None,
     )

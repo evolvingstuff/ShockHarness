@@ -47,6 +47,8 @@ from shockharness.ir.model import (
     CallSite,
     ImportFact,
     ModuleBinding,
+    ReceiverClass,
+    ReceiverFacts,
     Span,
 )
 from shockharness.rules.registry import JAVASCRIPT_FAMILY, PYTHON
@@ -69,12 +71,15 @@ CONFIDENCE_DESCRIPTIONS: Mapping[str, str] = {
     CONFIDENCE_RESOLVED: (
         "direct call of a function or class defined in the module, nested in the caller, "
         "or bound by an import (target unit when the module is analyzed, external symbol "
-        "otherwise)"
+        "otherwise); in Python also a method through an exact receiver: self/cls when no "
+        "analyzed subclass overrides it, a module-level singleton, a constructed local, "
+        "an import or a module-level class that names it"
     ),
     CONFIDENCE_PROBABLE: (
-        "attribute call on a known module alias, method call on self/this that the class "
-        "body defines, static call on a module-level class, or a known function passed as "
-        "an argument; the binding is not proven"
+        "attribute call on a JavaScript module alias, method call on self/this that the "
+        "class body defines and a subclass may override, a call through an import the "
+        "module rebinds, or a known function passed as an argument; the binding is not "
+        "proven"
     ),
     CONFIDENCE_UNRESOLVED: (
         "computed callee, method call on a value of unknown type, unbound name, or an "
@@ -167,6 +172,11 @@ PYTHON_INIT = "/__init__.py"
 # A JavaScript default import binds the module's default export; attribute calls on it are
 # reported against the module (``lodash.map``), not against a member named "default".
 DEFAULT_EXPORT = "default"
+# How many re-exports and base classes receiver resolution follows (a bound, not a policy:
+# each step is one import or one base, and a cycle ends earlier).
+HIERARCHY_DEPTH = 8
+# The base every Python class has; it defines no method a project calls on a receiver.
+OBJECT_BASE = "object"
 PYTHON_SUFFIX = ".py"
 
 
@@ -234,6 +244,7 @@ class ModuleInput:
     units: tuple[UnitMetrics, ...]
     imports: tuple[ImportFact, ...]
     bindings: tuple[ModuleBinding, ...]
+    receivers: ReceiverFacts
 
 
 @dataclass(frozen=True)
@@ -426,6 +437,9 @@ class _Scope:
     imports: Mapping[str, _ImportBinding]  # local name -> import
     variables: frozenset[str]  # module-level variable names
     module_edges: Mapping[tuple[str, int, str], ModuleEdge]  # (specifier, level, imported)
+    singletons: Mapping[str, str]  # module-level name -> its constructor (Python)
+    constructed: Mapping[tuple[str, str], str]  # (unit name, local) -> its constructor
+    classes: Mapping[str, ReceiverClass]  # module-level classes (Python)
 
 
 def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
@@ -453,7 +467,17 @@ def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
         key = (edge.specifier, edge.level, edge.imported)
         if key not in edge_map:
             edge_map[key] = edge
-    return _Scope(units_by_name, frozenset(functions), imports, frozenset(variables), edge_map)
+    receivers = module.receivers
+    return _Scope(
+        units_by_name,
+        frozenset(functions),
+        imports,
+        frozenset(variables),
+        edge_map,
+        singletons=dict(receivers.singletons),
+        constructed={(unit, local): callee for unit, local, callee in receivers.constructed},
+        classes={c.name: c for c in receivers.classes},
+    )
 
 
 @dataclass(frozen=True)
@@ -476,6 +500,7 @@ class _Resolver:
             path: scope.units_by_name for path, scope in scopes.items()
         }
         self.languages = {m.path: m.language for m in modules}
+        self.ancestry: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
 
     def _imported(
         self, binding: _ImportBinding, scope: _Scope, attribute: str | None
@@ -592,54 +617,17 @@ class _Resolver:
         root = parts[0]
         rest = parts[1:]
         if receiver_self:
-            if unit.fact.class_name is None:
-                return _Resolution(
-                    Target(TARGET_UNRESOLVED, dotted),
-                    CONFIDENCE_UNRESOLVED,
-                    "receiver call outside a class body",
-                )
-            method = f"{unit.fact.class_name}.{rest[0]}" if len(rest) == 1 else None
-            if method is not None and method in scope.units_by_name:
-                return _Resolution(
-                    Target(TARGET_UNIT, scope.units_by_name[method]),
-                    CONFIDENCE_PROBABLE,
-                    "method defined in the enclosing class body; overriding is not ruled out",
-                )
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, dotted),
-                CONFIDENCE_UNRESOLVED,
-                "attribute of the receiver that the class body does not define "
-                "(inherited, assigned, or dynamic)",
-            )
+            return self._through_self(path, unit, dotted, rest)
         fact = unit.fact
         if root in fact.locals and root not in fact.globals_declared:
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, dotted),
-                CONFIDENCE_UNRESOLVED,
-                "method call on a parameter or local value of unknown type",
-            )
+            return self._through_local(path, unit, dotted, rest)
         if root in scope.imports:
-            binding = scope.imports[root]
-            return self._imported(binding, scope, ".".join(rest))
+            exact = root not in scope.variables  # an import the module never rebinds
+            return self._through_import(path, scope.imports[root], rest, exact=exact)
         if root in scope.functions:
-            static = ".".join([root, *rest])
-            if static in scope.units_by_name:
-                return _Resolution(
-                    Target(TARGET_UNIT, scope.units_by_name[static]),
-                    CONFIDENCE_PROBABLE,
-                    "static call on a module-level class",
-                )
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, dotted),
-                CONFIDENCE_UNRESOLVED,
-                "attribute of a module-level definition that is not itself defined",
-            )
+            return self._through_definition(path, dotted)
         if root in scope.variables:
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, dotted),
-                CONFIDENCE_UNRESOLVED,
-                "method call on a module-level value of unknown type",
-            )
+            return self._through_value(path, root, dotted, rest)
         if root in _builtins_for(self.languages[path]):
             return _Resolution(Target(TARGET_BUILTIN, dotted), CONFIDENCE_RESOLVED, "builtin")
         return _Resolution(
@@ -647,6 +635,268 @@ class _Resolver:
             CONFIDENCE_UNRESOLVED,
             "receiver of unknown type",
         )
+
+    # -- receivers (docs/proposal-receivers.md, R1; Python facts only) -------------------
+
+    def _through_self(
+        self, path: str, unit: UnitMetrics, dotted: str, rest: list[str]
+    ) -> _Resolution:
+        """``self.m()`` / ``cls.m()``: resolved when no analyzed subclass overrides ``m``;
+        probable when one does."""
+        scope = self.scopes[path]
+        class_name = unit.fact.class_name
+        if class_name is None:
+            return _Resolution(
+                Target(TARGET_UNRESOLVED, dotted),
+                CONFIDENCE_UNRESOLVED,
+                "receiver call outside a class body",
+            )
+        if len(rest) == 1 and class_name in scope.classes:
+            key, why = self._method(path, scope.classes[class_name], rest[0], HIERARCHY_DEPTH)
+            if key is not None:
+                overriding = self._overriding(path, scope.classes[class_name], rest[0])
+                if overriding is None:
+                    return _Resolution(
+                        Target(TARGET_UNIT, key),
+                        CONFIDENCE_RESOLVED,
+                        "method of the class or a project base; no analyzed subclass overrides it",
+                    )
+                return _Resolution(
+                    Target(TARGET_UNIT, key),
+                    CONFIDENCE_PROBABLE,
+                    f"method of the class or a project base, overridden in {overriding}",
+                )
+            if why == "":
+                return _Resolution(
+                    Target(TARGET_UNRESOLVED, dotted),
+                    CONFIDENCE_UNRESOLVED,
+                    "attribute of the receiver that neither the class nor its project "
+                    "bases define (assigned, or dynamic)",
+                )
+        method = f"{class_name}.{rest[0]}" if len(rest) == 1 else None
+        if method is not None and method in scope.units_by_name:
+            return _Resolution(
+                Target(TARGET_UNIT, scope.units_by_name[method]),
+                CONFIDENCE_PROBABLE,
+                "method defined in the enclosing class body; overriding is not ruled out",
+            )
+        return _Resolution(
+            Target(TARGET_UNRESOLVED, dotted),
+            CONFIDENCE_UNRESOLVED,
+            "attribute of the receiver that the class body does not define "
+            "(inherited, assigned, or dynamic)",
+        )
+
+    def _through_definition(self, path: str, dotted: str) -> _Resolution:
+        """``Class.m()`` on a module-level class: resolved in Python, probable in
+        JavaScript (R2)."""
+        scope = self.scopes[path]
+        if dotted not in scope.units_by_name:
+            return _Resolution(
+                Target(TARGET_UNRESOLVED, dotted),
+                CONFIDENCE_UNRESOLVED,
+                "attribute of a module-level definition that is not itself defined",
+            )
+        if self.languages[path] == PYTHON:
+            return _Resolution(
+                Target(TARGET_UNIT, scope.units_by_name[dotted]),
+                CONFIDENCE_RESOLVED,
+                "call through a module-level class",
+            )
+        return _Resolution(
+            Target(TARGET_UNIT, scope.units_by_name[dotted]),
+            CONFIDENCE_PROBABLE,
+            "static call on a module-level class",
+        )
+
+    def _through_local(
+        self, path: str, unit: UnitMetrics, dotted: str, rest: list[str]
+    ) -> _Resolution:
+        """``local.m()`` on a local the unit constructs once."""
+        scope = self.scopes[path]
+        key = (unit.name, dotted.split(".")[0])
+        if len(rest) == 1 and key in scope.constructed:
+            found = self._instance_method(path, scope.constructed[key], rest[0])
+            if found is not None:
+                return _Resolution(
+                    Target(TARGET_UNIT, found),
+                    CONFIDENCE_RESOLVED,
+                    "method of the class the local was constructed from",
+                )
+        return _Resolution(
+            Target(TARGET_UNRESOLVED, dotted),
+            CONFIDENCE_UNRESOLVED,
+            "method call on a parameter or local value of unknown type",
+        )
+
+    def _through_value(self, path: str, root: str, dotted: str, rest: list[str]) -> _Resolution:
+        """``value.m()`` on a module-level value: a singleton bound once to a constructor."""
+        scope = self.scopes[path]
+        if len(rest) == 1 and root in scope.singletons:
+            found = self._instance_method(path, scope.singletons[root], rest[0])
+            if found is not None:
+                return _Resolution(
+                    Target(TARGET_UNIT, found),
+                    CONFIDENCE_RESOLVED,
+                    "method of the class a module-level singleton was constructed from",
+                )
+        return _Resolution(
+            Target(TARGET_UNRESOLVED, dotted),
+            CONFIDENCE_UNRESOLVED,
+            "method call on a module-level value of unknown type",
+        )
+
+    def _through_import(
+        self, path: str, binding: _ImportBinding, rest: list[str], *, exact: bool
+    ) -> _Resolution:
+        """An attribute call through an import: an imported singleton's method, or a
+        function or method the import names exactly (``mod.f()``, ``Class.m()``); probable
+        as before when the module rebinds the imported name (``exact`` false)."""
+        scope = self.scopes[path]
+        if not exact or self.languages[path] != PYTHON:
+            return self._imported(binding, scope, ".".join(rest))
+        if len(rest) == 1:
+            reached = self._reach(scope, binding, [])
+            if reached is not None:
+                singleton = self._singleton_named(reached[0], reached[1], HIERARCHY_DEPTH)
+                if singleton is not None:
+                    found = self._instance_method(singleton[0], singleton[1], rest[0])
+                    if found is not None:
+                        return _Resolution(
+                            Target(TARGET_UNIT, found),
+                            CONFIDENCE_RESOLVED,
+                            "method of the class an imported singleton was constructed from",
+                        )
+        resolution = self._imported(binding, scope, ".".join(rest))
+        if resolution.target.kind == TARGET_UNIT:
+            return _Resolution(
+                resolution.target,
+                CONFIDENCE_RESOLVED,
+                f"{resolution.reason}: the import names the module and the attribute exactly",
+            )
+        return resolution
+
+    def _reach(
+        self, scope: _Scope, binding: _ImportBinding, rest: list[str]
+    ) -> tuple[str, str] | None:
+        """(analyzed module, name in it) that ``binding.rest`` names; None for anything
+        longer than one name in one module."""
+        qualified = "." * binding.level + binding.specifier
+        submodule = (qualified, binding.level, binding.imported)
+        if binding.imported != "" and submodule in scope.module_edges:
+            target = scope.module_edges[submodule].target
+            if target is None or len(rest) != 1:
+                return None
+            return target, rest[0]
+        whole = (qualified, binding.level, "")
+        if whole not in scope.module_edges:
+            return None
+        target = scope.module_edges[whole].target
+        if target is None:
+            return None
+        if binding.imported in ("", DEFAULT_EXPORT):
+            if len(rest) != 1:
+                return None
+            return target, rest[0]
+        if len(rest) != 0:
+            return None
+        return target, binding.imported
+
+    def _followed(self, path: str, name: str) -> tuple[str, str] | None:
+        """Where ``name``, imported into ``path``, comes from."""
+        scope = self.scopes[path]
+        if name not in scope.imports:
+            return None
+        return self._reach(scope, scope.imports[name], [])
+
+    def _class_named(self, path: str, name: str, depth: int) -> tuple[str, ReceiverClass] | None:
+        scope = self.scopes[path]
+        if name in scope.classes:
+            return path, scope.classes[name]
+        followed = self._followed(path, name)
+        if depth == 0 or followed is None:
+            return None
+        return self._class_named(followed[0], followed[1], depth - 1)
+
+    def _singleton_named(self, path: str, name: str, depth: int) -> tuple[str, str] | None:
+        """(module, constructor) of a module-level singleton, through re-exports."""
+        scope = self.scopes[path]
+        if name in scope.singletons:
+            return path, scope.singletons[name]
+        followed = self._followed(path, name)
+        if depth == 0 or followed is None:
+            return None
+        return self._singleton_named(followed[0], followed[1], depth - 1)
+
+    def _class_in(self, path: str, dotted: str) -> tuple[str, ReceiverClass] | None:
+        """The analyzed module-level class a plain or dotted name in ``path`` names."""
+        parts = dotted.split(".")
+        if len(parts) == 1:
+            return self._class_named(path, parts[0], HIERARCHY_DEPTH)
+        scope = self.scopes[path]
+        if parts[0] not in scope.imports:
+            return None
+        reached = self._reach(scope, scope.imports[parts[0]], parts[1:])
+        if reached is None:
+            return None
+        return self._class_named(reached[0], reached[1], HIERARCHY_DEPTH)
+
+    def _instance_method(self, path: str, constructor: str, method: str) -> str | None:
+        """The unit of ``method`` on an instance ``constructor`` built in ``path``."""
+        found = self._class_in(path, constructor)
+        if found is None:
+            return None
+        key, _why = self._method(found[0], found[1], method, HIERARCHY_DEPTH)
+        return key
+
+    def _method(
+        self, path: str, owner: ReceiverClass, method: str, depth: int
+    ) -> tuple[str | None, str]:
+        """(unit key, "") when ``owner`` or a project base defines ``method``, left to
+        right; (None, "") when none does; (None, why) when a base that is not an analyzed
+        class might."""
+        scope = self.scopes[path]
+        qualified = f"{owner.name}.{method}"
+        if method in owner.methods and qualified in scope.units_by_name:
+            return scope.units_by_name[qualified], ""
+        if depth == 0:
+            return None, f"the bases of {owner.name} are deeper than the analysis follows"
+        for base in owner.bases:
+            if base == OBJECT_BASE:
+                continue
+            parent = None
+            if base != "":
+                parent = self._class_in(path, base)
+            if parent is None:
+                return None, f"a base of {owner.name} is not an analyzed class"
+            key, why = self._method(parent[0], parent[1], method, depth - 1)
+            if key is not None or why != "":
+                return key, why
+        return None, ""
+
+    def _ancestors(self, path: str, owner: ReceiverClass) -> frozenset[tuple[str, str]]:
+        key = (path, owner.name)
+        if key not in self.ancestry:
+            self.ancestry[key] = frozenset()  # a cycle in the bases ends here
+            found: set[tuple[str, str]] = set()
+            for base in owner.bases:
+                parent = None
+                if base not in ("", OBJECT_BASE):
+                    parent = self._class_in(path, base)
+                if parent is not None:
+                    found.add((parent[0], parent[1].name))
+                    found.update(self._ancestors(parent[0], parent[1]))
+            self.ancestry[key] = frozenset(found)
+        return self.ancestry[key]
+
+    def _overriding(self, path: str, owner: ReceiverClass, method: str) -> str | None:
+        """An analyzed class deriving from ``owner`` whose own body defines ``method``."""
+        key = (path, owner.name)
+        for other_path, scope in sorted(self.scopes.items()):
+            for candidate in scope.classes.values():
+                if method in candidate.methods and key in self._ancestors(other_path, candidate):
+                    return f"{other_path}::{candidate.name}"
+        return None
 
 
 def _classify(

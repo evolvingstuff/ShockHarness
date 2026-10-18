@@ -764,6 +764,7 @@ def _module_inputs(pendings: Sequence[PendingFile]) -> list[ModuleInput]:
             units=pending.units,
             imports=pending.facts.imports,
             bindings=pending.facts.bindings,
+            receivers=pending.facts.receivers,
         )
         for pending in pendings
         if not pending.failed and pending.facts is not None and pending.source is not None

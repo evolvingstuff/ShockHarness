@@ -2360,7 +2360,7 @@ is EXC001.
 | 9 | `rules/defaults.py` `fact_status` (facts from `ir/python_defaults.py`) | DEF002 `m.get(k, v)`, `m.setdefault(k, v)`, `m.pop(k, v)` on a receiver not proven a mapping (corpus `def_mapping_get.py:19,35`) | approximate | **unknown** |
 | 10 | same | DEF002 review `m.get(k)` on a receiver not proven a mapping (corpus `def_mapping_get.py:20,47`) | approximate | **unknown** |
 | 11 | `rules/exceptions.py` `_manager_match`, `ir/python_catches.py` `_resolve_callee` | unresolved manager callee matched by bare name | approximate | violation (no unknown: the manager is listed by name) |
-| 12 | `complexity/callgraph.py` (7 functions), `complexity/coupling.py` (4) | unresolved call and module edges | unresolved | no finding: metrics only; CPLX005 counts resolved targets and names the unresolved count |
+| 12 | `complexity/callgraph.py` (11 functions; `_through_self`, `_through_definition`, `_through_local` and `_through_value` added by receivers R1), `complexity/coupling.py` (4) | unresolved call and module edges | unresolved | no finding: metrics only; CPLX005 counts resolved targets and names the unresolved count |
 | 13 | `rules/exceptions.py` `_finding` (EXC002, EXC003), `rules/defaults.py` `_finding` (other DEF kinds, DEF005), `rules/magic_numbers.py`, `rules/complexity.py`, `suppressions.py` (SUPP001, SUPP002) | everything else, including approximate EXC003 (unattributable statement), DEF003/DEF004 (non-constant fallback) and DEF005 (static trace): the approximation is about intent, not about whether the shape is present | exact/approximate | violation |
 | 14 | `contracts/report.py` `Reporter.check` (property contracts P1a and P1b, opt-in; `rules/property_contracts.py` until P1b) | PROP001 whose value's property set is not exact: unresolved callee, method on a value, await, generator, `.join` build, `*args`/`**kwargs`, a keyword argument to a library sink | exact | **unknown** (gates only with `rules.property_contracts.fail_on_unknown`); an exact set lacking the property is a violation |
 
@@ -5217,3 +5217,57 @@ On Tom's go-ahead (`docs/proposal-receivers.md`, with his position on its four q
   call graph.
 * Self-diff: `ProjectIndex._named` crossed NPath 200 and was split into
   `_local_receiver` and a module-name half. The self-gate has 200 findings, as before.
+
+## Receivers R1, part two: the call graph resolves Python methods — DONE (2026-10-18)
+
+* **Facts.** `ModuleFacts.receivers` (cache schema "21") carries, from
+  `ir/python_receivers.py`:
+  * the singletons and their constructors;
+  * each function's constructed locals;
+  * the module-level classes, with their bases as written and their methods (properties
+    excluded).
+
+  JavaScript records none (R2).
+* **Resolver** (`complexity/callgraph.py`). `resolve_attribute` dispatches to one helper
+  per receiver:
+  * `_through_self`: resolved when no analyzed class deriving from the enclosing one
+    defines the method, probable when one does. The method is looked up in the class
+    and its project bases, left to right. A base that is not an analyzed class, other
+    than `object`, keeps today's behaviour.
+  * `_through_local` and `_through_value`: a constructed local's or a module-level
+    singleton's method is resolved.
+  * `_through_import`: an imported singleton's method, and any unit an analyzed import
+    names exactly (`u.helper()`, `Class.m()`), are resolved. An import the module
+    rebinds stays probable.
+  * A Python `Class.m()` on a module-level class is resolved.
+  * Re-exports and bases are followed up to `HIERARCHY_DEPTH` (8) steps.
+
+  `CONFIDENCE_DESCRIPTIONS`, `docs/complexity.md` and `docs/limitations.md` describe the
+  new line.
+* **Tests:**
+  * Four tests changed, each to the new semantics with the reason in a comment:
+    * ASYNC001 on `self.flush()` is a violation, not unknown;
+    * INPUT001 through `self._sink` is exact;
+    * `u.helper()` is resolved;
+    * `self.n()`, an inherited `self.run()` and `K.m(self)` are resolved.
+  * Two new call graph tests cover each receiver kind, the cases that stay unresolved
+    (a value bound twice, a property, a `Generic[T]` base), and an override that stays
+    probable.
+  * Three inventory rows for the new helpers.
+
+**Measured** (read-only, `--no-cache`; part one's commit b984cdb against this tree):
+
+| | MetaList (its own config) | Corpus (pip, _pytest, hypothesis, build, hatchling, npm lib; strict) |
+|---|---|---|
+| Call edges, probable | 9,010 → 6,904 | 8,000 → 5,565 |
+| Call edges, resolved | 27,929 → 30,592 | 14,975 → 17,780 |
+| Call edges, unresolved | 20,177 → 19,618 | 14,489 → 14,113 |
+| Findings | 2,035 → 2,039 | 32,667 → 32,667 |
+| New findings | 4 CPLX005 fan-out warnings | none |
+| Changed messages | 8 CPLX005 (more targets counted as analyzed; same fingerprints) | 4 CPLX005 (same) |
+
+No ASYNC001, INPUT001, PROV001 or GUARD001 finding appeared or disappeared in either
+tree. The four new MetaList warnings are `AgentLoopMixin._run_agent_loop` (24
+targets) and three tests (21 to 23 targets): calls through singletons and `self` that
+were external or unresolved now count. The changelog says the change can make a passing
+gate fail (CPLX005 fan-out is a warning), which on these trees means four warnings.

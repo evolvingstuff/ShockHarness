@@ -1119,6 +1119,32 @@ class StringUse:
     callee: str
 
 
+# --- Receiver facts (docs/proposal-receivers.md, R1) ---------------------------------------
+# What the call graph needs to resolve a method call through its receiver. Python only;
+# JavaScript is R2.
+
+
+@dataclass(frozen=True)
+class ReceiverClass:
+    """A module-level class: its bases as written (``""`` for a base that is not a plain or
+    dotted name, such as ``Generic[T]``) and the methods its body defines (properties
+    excluded)."""
+
+    name: str
+    bases: tuple[str, ...]
+    methods: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReceiverFacts:
+    singletons: tuple[tuple[str, str], ...]  # (module-level name, its constructor)
+    constructed: tuple[tuple[str, str, str], ...]  # (unit name, local, its constructor)
+    classes: tuple[ReceiverClass, ...]
+
+
+NO_RECEIVER_FACTS = ReceiverFacts(singletons=(), constructed=(), classes=())
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1140,6 +1166,7 @@ class ModuleFacts:
     sentinels: tuple[SentinelUse, ...]
     strings: tuple[StringUse, ...]
     dom: DomFacts
+    receivers: ReceiverFacts
     parse_failure: ParseFailure | None
 
 
@@ -1165,5 +1192,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         sentinels=(),
         strings=(),
         dom=NO_DOM,
+        receivers=NO_RECEIVER_FACTS,
         parse_failure=failure,
     )
