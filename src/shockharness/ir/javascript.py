@@ -34,12 +34,12 @@ from shockharness.ir.javascript_functions import (
 from shockharness.ir.javascript_guardrails import collect_javascript_guardrails
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.javascript_numbers import parse_js_number
+from shockharness.ir.javascript_receivers import collect_javascript_receivers
 from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
 from shockharness.ir.javascript_strings import collect_javascript_strings
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
-    NO_RECEIVER_FACTS,
     AsyncFacts,
     CatalogFacts,
     Comment,
@@ -306,7 +306,7 @@ def _extract_facts(
         sentinels=collect_javascript_sentinels(source, root),
         strings=collect_javascript_strings(source, root),
         dom=collect_javascript_floating(source, root),
-        receivers=NO_RECEIVER_FACTS,  # JavaScript receivers are R2
+        receivers=collect_javascript_receivers(source, root),
         parse_failure=None,
     )
 

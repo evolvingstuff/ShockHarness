@@ -49,6 +49,7 @@ from shockharness.ir.model import (
     ModuleBinding,
     ReceiverClass,
     ReceiverFacts,
+    ReceiverObject,
     Span,
 )
 from shockharness.rules.registry import JAVASCRIPT_FAMILY, PYTHON
@@ -71,15 +72,15 @@ CONFIDENCE_DESCRIPTIONS: Mapping[str, str] = {
     CONFIDENCE_RESOLVED: (
         "direct call of a function or class defined in the module, nested in the caller, "
         "or bound by an import (target unit when the module is analyzed, external symbol "
-        "otherwise); in Python also a method through an exact receiver: self/cls when no "
-        "analyzed subclass overrides it, a module-level singleton, a constructed local, "
-        "an import or a module-level class that names it"
+        "otherwise); also a method through an exact receiver: self/cls/this when no "
+        "analyzed subclass overrides it, a module-level singleton or JavaScript object "
+        "literal, a constructed local, an import or a module-level class that names it"
     ),
     CONFIDENCE_PROBABLE: (
-        "attribute call on a JavaScript module alias, method call on self/this that the "
-        "class body defines and a subclass may override, a call through an import the "
-        "module rebinds, or a known function passed as an argument; the binding is not "
-        "proven"
+        "attribute call on an external module alias or a JavaScript default import, a "
+        "self/this method an analyzed subclass overrides, this in a JavaScript object "
+        "literal's method, a call through an import the module rebinds, or a known "
+        "function passed as an argument; the binding is not proven"
     ),
     CONFIDENCE_UNRESOLVED: (
         "computed callee, method call on a value of unknown type, unbound name, or an "
@@ -439,7 +440,10 @@ class _Scope:
     module_edges: Mapping[tuple[str, int, str], ModuleEdge]  # (specifier, level, imported)
     singletons: Mapping[str, str]  # module-level name -> its constructor (Python)
     constructed: Mapping[tuple[str, str], str]  # (unit name, local) -> its constructor
-    classes: Mapping[str, ReceiverClass]  # module-level classes (Python)
+    classes: Mapping[str, ReceiverClass]  # module-level classes
+    objects: Mapping[str, ReceiverObject]  # module-level object literals (JavaScript)
+    units_at: Mapping[tuple[int, int], str]  # where each unit starts -> its key
+    object_of: Mapping[str, str]  # an object literal's method unit -> the object's name
 
 
 def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
@@ -451,6 +455,23 @@ def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
             functions.add(binding.name)
         elif binding.kind == BINDING_VARIABLE:
             variables.add(binding.name)
+    imports = _import_table(module)
+    edge_map: dict[tuple[str, int, str], ModuleEdge] = {}
+    for edge in edges:
+        key = (edge.specifier, edge.level, edge.imported)
+        if key not in edge_map:
+            edge_map[key] = edge
+    return _Scope(
+        units_by_name,
+        frozenset(functions),
+        imports,
+        frozenset(variables),
+        edge_map,
+        **_receiver_tables(module),
+    )
+
+
+def _import_table(module: ModuleInput) -> dict[str, _ImportBinding]:
     imports: dict[str, _ImportBinding] = {}
     for fact in module.imports:
         if fact.kind in (IMPORT_REEXPORT, IMPORT_DYNAMIC):
@@ -462,22 +483,27 @@ def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
                 imports[local] = _ImportBinding(fact.module, fact.level, "", fact.kind)
             else:
                 imports[local] = _ImportBinding(fact.module, fact.level, imported, fact.kind)
-    edge_map: dict[tuple[str, int, str], ModuleEdge] = {}
-    for edge in edges:
-        key = (edge.specifier, edge.level, edge.imported)
-        if key not in edge_map:
-            edge_map[key] = edge
+    return imports
+
+
+def _receiver_tables(module: ModuleInput) -> dict[str, Any]:
+    """The receiver fields of a module's scope (docs/proposal-receivers.md)."""
     receivers = module.receivers
-    return _Scope(
-        units_by_name,
-        frozenset(functions),
-        imports,
-        frozenset(variables),
-        edge_map,
-        singletons=dict(receivers.singletons),
-        constructed={(unit, local): callee for unit, local, callee in receivers.constructed},
-        classes={c.name: c for c in receivers.classes},
-    )
+    units_at = {(u.fact.span.line, u.fact.span.column): u.key for u in module.units}
+    object_of = {
+        units_at[(line, column)]: o.name
+        for o in receivers.objects
+        for _method, line, column in o.methods
+        if (line, column) in units_at
+    }
+    return {
+        "singletons": dict(receivers.singletons),
+        "constructed": {(unit, local): callee for unit, local, callee in receivers.constructed},
+        "classes": {c.name: c for c in receivers.classes},
+        "objects": {o.name: o for o in receivers.objects},
+        "units_at": units_at,
+        "object_of": object_of,
+    }
 
 
 @dataclass(frozen=True)
@@ -646,13 +672,9 @@ class _Resolver:
         scope = self.scopes[path]
         class_name = unit.fact.class_name
         if class_name is None:
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, dotted),
-                CONFIDENCE_UNRESOLVED,
-                "receiver call outside a class body",
-            )
+            return self._through_object_this(path, unit, dotted, rest)
         if len(rest) == 1 and class_name in scope.classes:
-            key, why = self._method(path, scope.classes[class_name], rest[0], HIERARCHY_DEPTH)
+            key, _why = self._method(path, scope.classes[class_name], rest[0], HIERARCHY_DEPTH)
             if key is not None:
                 overriding = self._overriding(path, scope.classes[class_name], rest[0])
                 if overriding is None:
@@ -666,13 +688,8 @@ class _Resolver:
                     CONFIDENCE_PROBABLE,
                     f"method of the class or a project base, overridden in {overriding}",
                 )
-            if why == "":
-                return _Resolution(
-                    Target(TARGET_UNRESOLVED, dotted),
-                    CONFIDENCE_UNRESOLVED,
-                    "attribute of the receiver that neither the class nor its project "
-                    "bases define (assigned, or dynamic)",
-                )
+            # Not an instance method of the class or its bases (a static method, a
+            # property or accessor, or an attribute): the class body decides, as before.
         method = f"{class_name}.{rest[0]}" if len(rest) == 1 else None
         if method is not None and method in scope.units_by_name:
             return _Resolution(
@@ -687,9 +704,37 @@ class _Resolver:
             "(inherited, assigned, or dynamic)",
         )
 
+    def _through_object_this(
+        self, path: str, unit: UnitMetrics, dotted: str, rest: list[str]
+    ) -> _Resolution:
+        """``this.m()`` in a method of a JavaScript object literal: probable, since
+        ``this`` depends on how the method is called (``const f = Obj.m; f()`` loses it)."""
+        scope = self.scopes[path]
+        if len(rest) == 1 and unit.key in scope.object_of:
+            found = self._object_method(path, scope.object_of[unit.key], rest[0])
+            if found is not None:
+                return _Resolution(
+                    Target(TARGET_UNIT, found),
+                    CONFIDENCE_PROBABLE,
+                    "method of the object literal the calling method belongs to; this "
+                    "depends on how the method is called",
+                )
+        return _Resolution(
+            Target(TARGET_UNRESOLVED, dotted),
+            CONFIDENCE_UNRESOLVED,
+            "receiver call outside a class body",
+        )
+
+    def _object_method(self, path: str, name: str, method: str) -> str | None:
+        """The unit of ``method`` in the module-level object literal ``name``."""
+        scope = self.scopes[path]
+        for found, line, column in scope.objects[name].methods:
+            if found == method and (line, column) in scope.units_at:
+                return scope.units_at[(line, column)]
+        return None
+
     def _through_definition(self, path: str, dotted: str) -> _Resolution:
-        """``Class.m()`` on a module-level class: resolved in Python, probable in
-        JavaScript (R2)."""
+        """``Class.m()`` on a module-level class (receivers R1 and R2)."""
         scope = self.scopes[path]
         if dotted not in scope.units_by_name:
             return _Resolution(
@@ -697,16 +742,10 @@ class _Resolver:
                 CONFIDENCE_UNRESOLVED,
                 "attribute of a module-level definition that is not itself defined",
             )
-        if self.languages[path] == PYTHON:
-            return _Resolution(
-                Target(TARGET_UNIT, scope.units_by_name[dotted]),
-                CONFIDENCE_RESOLVED,
-                "call through a module-level class",
-            )
         return _Resolution(
             Target(TARGET_UNIT, scope.units_by_name[dotted]),
-            CONFIDENCE_PROBABLE,
-            "static call on a module-level class",
+            CONFIDENCE_RESOLVED,
+            "call through a module-level class",
         )
 
     def _through_local(
@@ -714,7 +753,10 @@ class _Resolver:
     ) -> _Resolution:
         """``local.m()`` on a local the unit constructs once."""
         scope = self.scopes[path]
-        key = (unit.name, dotted.split(".")[0])
+        where = unit.name
+        if self.languages[path] != PYTHON:
+            where = f"{unit.fact.span.line}:{unit.fact.span.column}"
+        key = (where, dotted.split(".")[0])
         if len(rest) == 1 and key in scope.constructed:
             found = self._instance_method(path, scope.constructed[key], rest[0])
             if found is not None:
@@ -730,8 +772,17 @@ class _Resolver:
         )
 
     def _through_value(self, path: str, root: str, dotted: str, rest: list[str]) -> _Resolution:
-        """``value.m()`` on a module-level value: a singleton bound once to a constructor."""
+        """``value.m()`` on a module-level value: a singleton bound once to a constructor,
+        or a JavaScript object literal."""
         scope = self.scopes[path]
+        if len(rest) == 1 and root in scope.objects:
+            found = self._object_method(path, root, rest[0])
+            if found is not None:
+                return _Resolution(
+                    Target(TARGET_UNIT, found),
+                    CONFIDENCE_RESOLVED,
+                    "method of a module-level object literal",
+                )
         if len(rest) == 1 and root in scope.singletons:
             found = self._instance_method(path, scope.singletons[root], rest[0])
             if found is not None:
@@ -753,28 +804,51 @@ class _Resolver:
         function or method the import names exactly (``mod.f()``, ``Class.m()``); probable
         as before when the module rebinds the imported name (``exact`` false)."""
         scope = self.scopes[path]
-        if not exact or self.languages[path] != PYTHON:
+        if not exact:
             return self._imported(binding, scope, ".".join(rest))
         if len(rest) == 1:
-            reached = self._reach(scope, binding, [])
-            if reached is not None:
-                singleton = self._singleton_named(reached[0], reached[1], HIERARCHY_DEPTH)
-                if singleton is not None:
-                    found = self._instance_method(singleton[0], singleton[1], rest[0])
-                    if found is not None:
-                        return _Resolution(
-                            Target(TARGET_UNIT, found),
-                            CONFIDENCE_RESOLVED,
-                            "method of the class an imported singleton was constructed from",
-                        )
+            found = self._imported_receiver(scope, binding, rest[0])
+            if found is not None:
+                return found
         resolution = self._imported(binding, scope, ".".join(rest))
-        if resolution.target.kind == TARGET_UNIT:
+        # A JavaScript default import's attribute is looked up as a member of the module:
+        # a convention, not a binding the import names.
+        guessed = self.languages[path] != PYTHON and binding.imported == DEFAULT_EXPORT
+        if resolution.target.kind == TARGET_UNIT and not guessed:
             return _Resolution(
                 resolution.target,
                 CONFIDENCE_RESOLVED,
                 f"{resolution.reason}: the import names the module and the attribute exactly",
             )
         return resolution
+
+    def _imported_receiver(
+        self, scope: _Scope, binding: _ImportBinding, method: str
+    ) -> _Resolution | None:
+        """``name.method()`` where ``name`` is an imported singleton or object literal."""
+        reached = self._reach(scope, binding, [])
+        if reached is None:
+            return None
+        target, name = reached
+        if name in self.scopes[target].objects:
+            found = self._object_method(target, name, method)
+            if found is not None:
+                return _Resolution(
+                    Target(TARGET_UNIT, found),
+                    CONFIDENCE_RESOLVED,
+                    "method of an imported module-level object literal",
+                )
+        singleton = self._singleton_named(target, name, HIERARCHY_DEPTH)
+        if singleton is None:
+            return None
+        found = self._instance_method(singleton[0], singleton[1], method)
+        if found is None:
+            return None
+        return _Resolution(
+            Target(TARGET_UNIT, found),
+            CONFIDENCE_RESOLVED,
+            "method of the class an imported singleton was constructed from",
+        )
 
     def _reach(
         self, scope: _Scope, binding: _ImportBinding, rest: list[str]

@@ -1120,8 +1120,8 @@ class StringUse:
 
 
 # --- Receiver facts (docs/proposal-receivers.md, R1) ---------------------------------------
-# What the call graph needs to resolve a method call through its receiver. Python only;
-# JavaScript is R2.
+# What the call graph needs to resolve a method call through its receiver: Python (R1)
+# and JavaScript (R2).
 
 
 @dataclass(frozen=True)
@@ -1136,13 +1136,25 @@ class ReceiverClass:
 
 
 @dataclass(frozen=True)
+class ReceiverObject:
+    """A JavaScript module-level object literal: each method's name and where its unit
+    starts (line, column), since object methods are not named after their object."""
+
+    name: str
+    methods: tuple[tuple[str, int, int], ...]
+
+
+@dataclass(frozen=True)
 class ReceiverFacts:
     singletons: tuple[tuple[str, str], ...]  # (module-level name, its constructor)
-    constructed: tuple[tuple[str, str, str], ...]  # (unit name, local, its constructor)
+    # (unit, local, its constructor): the unit by name in Python, by "line:column" of its
+    # start in JavaScript (object methods are not named after their object)
+    constructed: tuple[tuple[str, str, str], ...]
     classes: tuple[ReceiverClass, ...]
+    objects: tuple[ReceiverObject, ...]  # JavaScript only
 
 
-NO_RECEIVER_FACTS = ReceiverFacts(singletons=(), constructed=(), classes=())
+NO_RECEIVER_FACTS = ReceiverFacts(singletons=(), constructed=(), classes=(), objects=())
 
 
 @dataclass(frozen=True)

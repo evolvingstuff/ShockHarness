@@ -244,11 +244,65 @@ export class K extends Base {
 """
 
 
+JS_RECEIVERS_STORE = """export class Store {
+  save(x) { return x; }
+  get size() { return 0; }
+}
+export class Loud extends Store { save(x) { return x; } }
+export const store = new Store();
+export const Auth = {
+  init(x) { return this.check(x); },
+  check: (x) => x,
+  later() { return 1; },
+};
+Auth.later = () => 2;
+export default Auth;
+"""
+JS_RECEIVERS_USE = """import { Auth, Store, store } from "./store.js";
+import Default from "./store.js";
+
+export function imported(x) { return Auth.init(x) + store.save(x) + Auth.later(); }
+export function constructed(x) { const local = new Store(); return local.save(x); }
+export function defaulted(x) { return Default.init(x); }
+export class Saver extends Store { go(x) { return this.save(x); } }
+"""
+
+
+def test_javascript_methods_resolve_through_exact_receivers(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    report = _report(
+        empty_root,
+        strict_config,
+        {"src/store.js": JS_RECEIVERS_STORE, "src/use.js": JS_RECEIVERS_USE},
+    )
+    imported = _edges(report, "src/use.js::imported")
+    assert ("unit", "src/store.js::init", "resolved", "call") in imported  # an object literal
+    assert ("unit", "src/store.js::Store.save", "resolved", "call") in imported  # a singleton
+    # Auth.later is assigned again in its module: not a method of the literal.
+    assert all(e[1] != "src/store.js::later" for e in imported)
+    constructed = _edges(report, "src/use.js::constructed")
+    assert ("unit", "src/store.js::Store.save", "resolved", "call") in constructed
+    # A default import's attribute is looked up as a member of the module: not exact.
+    assert all(
+        e[2] != "resolved" or e[0] != "unit" for e in _edges(report, "src/use.js::defaulted")
+    )
+    # this in an object literal's method depends on the call: probable.
+    assert ("unit", "src/store.js::check", "probable", "call") in _edges(
+        report, "src/store.js::init"
+    )
+    # Saver inherits Store.save; Loud overrides it but does not derive from Saver.
+    saver = _edges(report, "src/use.js::Saver.go")
+    assert ("unit", "src/store.js::Store.save", "resolved", "call") in saver
+
+
 def test_javascript_resolution_classes(empty_root: Path, strict_config: EffectiveConfig) -> None:
     report = _report(empty_root, strict_config, {"src/util.js": JS_UTIL, "src/main.js": JS_MAIN})
     direct = _edges(report, "src/main.js::direct")
-    assert direct.count(("unit", "src/util.js::helper", "resolved", "call")) == 1  # h, helper
-    assert direct.count(("unit", "src/util.js::helper", "probable", "call")) == 1  # ns.*, u.*
+    # h, helper, and (receivers R2) ns.helper and u.helper: a namespace import and a
+    # required module name the function exactly
+    assert direct.count(("unit", "src/util.js::helper", "resolved", "call")) == 1
+    assert direct.count(("unit", "src/util.js::helper", "probable", "call")) == 0
     external = _edges(report, "src/main.js::external")
     assert ("external", "lodash.map", "probable", "call") in external
     assert ("unit", "src/util.js::helper", "probable", "argument") in external
@@ -264,8 +318,10 @@ def test_javascript_resolution_classes(empty_root: Path, strict_config: Effectiv
     assert {e[2] for e in dynamic} == {"unresolved"}
     assert len(dynamic) == 3  # o[k](), o.method(), (n ? h : helper)(); import/require are not calls
     method = _edges(report, "src/main.js::K.m")
-    assert ("unit", "src/main.js::K.n", "probable", "call") in method
-    assert ("unresolved", "this.run", "unresolved", "call") in method
+    # Receivers R2: this.n is K's own method, which no analyzed subclass overrides;
+    # this.run is inherited from the imported Base.
+    assert ("unit", "src/main.js::K.n", "resolved", "call") in method
+    assert ("unit", "src/util.js::Base.run", "resolved", "call") in method
     assert ("unit", "src/util.js::Base", "resolved", "new") in method
     assert ("unit", "src/main.js::K", "resolved", "new") in method
     assert _edges(report, "src/main.js::K.n") == [

@@ -12,6 +12,12 @@ imports and module-level definitions to one of:
 * nothing the analysis can name (``unknown``).
 
 A project file is one of the analyzed files, or a file under the analyzed root.
+
+A method resolves through its receiver when the receiver is exact
+(docs/proposal-receivers.md, R2): ``this.m()`` in a class no analyzed subclass overrides
+``m`` in, a module-level object literal or ``new`` singleton (in its module or imported
+by name), a local the function constructs, and ``new C().m()``. ``this`` in an object
+literal's method is not exact: it depends on how the method is called.
 """
 
 import posixpath
@@ -47,6 +53,12 @@ from shockharness.ir.javascript_functions import (
     dotted_name,
 )
 from shockharness.ir.javascript_nodes import Field, Kind
+from shockharness.ir.javascript_receivers import (
+    CLASS_DECLARATIONS,
+    JsClass,
+    JsReceivers,
+    module_receivers,
+)
 from shockharness.ir.model import IMPORT_MODULE, IMPORT_NAMES, IMPORT_REEXPORT
 from shockharness.schema import ConfigIssue
 from shockharness.source import SourceText
@@ -68,6 +80,7 @@ DECLARATIONS_OF_VALUES = frozenset({Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECL
 INDEX_FILES = tuple(f"/index{suffix}" for suffix in JAVASCRIPT_SUFFIXES)
 TYPESCRIPT_SOURCES = {".js": (".ts", ".tsx"), ".mjs": (".mts",), ".cjs": (".cts",)}
 DEFAULT_KEYWORD = "default"
+THIS = "this"
 NAMESPACE = ""  # the imported "name" of a whole-module import
 
 
@@ -88,6 +101,19 @@ class JsModule:
     reexports: Mapping[str, Imported]  # export name -> where it comes from
     star_exports: tuple[str, ...]  # export * from "..."
     values: frozenset[str]  # other module-level bindings
+    receivers: JsReceivers  # its object literals, singletons and classes
+
+
+@dataclass(frozen=True)
+class JsUnitReceivers:
+    """One unit's receivers: the class ``this`` is an instance of (an instance method of
+    a module-level class), and the locals it constructs."""
+
+    owner: JsClass | None
+    constructed: Mapping[str, Node]
+
+
+NO_JS_RECEIVERS = JsUnitReceivers(None, {})
 
 
 @dataclass(frozen=True)
@@ -145,6 +171,11 @@ def _declared(node: Node, tables: _Tables) -> list[str]:
             return [node_text(name)]
     if node.type in DECLARATIONS_OF_VALUES:
         return _declarators(node, tables)
+    if node.type in CLASS_DECLARATIONS:
+        name = node.child_by_field_name(Field.NAME)
+        if name is not None:
+            tables.values.add(node_text(name))  # a class: its methods resolve by receiver
+            return [node_text(name)]
     return []
 
 
@@ -225,6 +256,7 @@ def build_module(path: str, text: str) -> JsModule:
         reexports=reexports,
         star_exports=tuple(stars),
         values=frozenset(tables.values - set(tables.definitions)),
+        receivers=module_receivers(root),
     )
 
 
@@ -265,6 +297,8 @@ class JsProjectIndex:
         self.texts = dict(analyzed)
         self.modules: dict[str, JsModule | None] = {}
         self.unreadable: dict[str, str] = {}
+        self.ancestry: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
+        self.definers: dict[str, list[tuple[JsModule, JsClass]]] | None = None
 
     def is_runtime(self, path: str) -> bool:
         return path in self.runtime
@@ -346,17 +380,33 @@ class JsProjectIndex:
             return self.export(path, name, frozenset())
         return _library(reference)
 
-    def callee(self, module: JsModule, function: Node, local: frozenset[str]) -> JsTarget:
+    def callee(
+        self,
+        module: JsModule,
+        function: Node,
+        local: frozenset[str],
+        receivers: JsUnitReceivers,
+    ) -> JsTarget:
         dotted = dotted_name(function)
         if dotted is None:
-            return js_unknown("the callee is computed")
+            return self._on_new(module, function)
         root, _dot, rest = dotted.partition(".")
+        if rest != "" and "." not in rest:
+            method = self._local_receiver(module, root, rest, receivers)
+            if method is not None:
+                return method
         if root in local:
             return js_unknown(f"{dotted}(...) is called on a local value, not resolved")
+        return self._module_name(module, root, rest, dotted)
+
+    def _module_name(self, module: JsModule, root: str, rest: str, dotted: str) -> JsTarget:
+        """A call through a module-level name: an import, a definition, a value."""
         if root in module.imports:
             return self._through_import(module, module.imports[root], rest, dotted)
         if root in module.definitions and rest == "":
             return self.local(module, root, frozenset())
+        if rest != "" and "." not in rest and root in module.values:
+            return self.on_value(module, root, rest)
         if root in module.values or root in module.definitions:
             return js_unknown(f"{dotted}(...) is called on a module-level value, not resolved")
         if root in JAVASCRIPT_GLOBALS:
@@ -377,7 +427,185 @@ class JsProjectIndex:
         ):
             # ns.f() of a namespace import; Pkg.f() of a package's default export
             return self.imported(module.path, Imported(imported.specifier, rest), frozenset())
+        if found.kind == PATH and imported.name != DEFAULT_EXPORT:
+            target = self.module(found.target)
+            if target is not None and imported.name in target.exports:
+                return self.on_value(target, target.exports[imported.name], rest)
         return js_unknown(f"{dotted}(...) is a method of an imported value, not resolved")
+
+    # -- methods through their receivers (docs/proposal-receivers.md, R2) ---------------
+
+    def _on_new(self, module: JsModule, function: Node) -> JsTarget:
+        """``new C(...).m()``; any other computed callee is unknown."""
+        if function.type == Kind.MEMBER_EXPRESSION:
+            receiver = function.child_by_field_name(Field.OBJECT)
+            prop = function.child_by_field_name(Field.PROPERTY)
+            if receiver is not None and prop is not None and receiver.type == Kind.NEW_EXPRESSION:
+                constructor = receiver.child_by_field_name(Field.CONSTRUCTOR)
+                if constructor is not None and dotted_name(constructor) is not None:
+                    return self.on_instance(module, constructor, node_text(prop))
+        return js_unknown("the callee is computed")
+
+    def _local_receiver(
+        self, module: JsModule, root: str, method: str, receivers: JsUnitReceivers
+    ) -> JsTarget | None:
+        """``this.m()`` in a class's instance method, ``local.m()`` on a constructed
+        local; None for any other root."""
+        if root == THIS and receivers.owner is not None:
+            return self.through_this(module, receivers.owner, method)
+        if root == THIS:
+            return js_unknown(
+                f"this.{method}(...): this is not an instance of a module-level class here "
+                "(in an object literal's method it depends on how the method is called)"
+            )
+        if root in receivers.constructed:
+            return self.on_instance(module, receivers.constructed[root], method)
+        return None
+
+    def on_value(self, module: JsModule, name: str, method: str) -> JsTarget:
+        """``name.method()`` on a module-level value of ``module``."""
+        receivers = module.receivers
+        if name in receivers.objects:
+            objects = receivers.objects[name]
+            if method in objects.methods:
+                node = objects.methods[method]
+                reference = f"{module.path}:{name}.{method}"
+                return JsTarget(UNIT, reference, "", module, node)
+            return js_unknown(f"{module.path}:{name} has no method {method} the analysis can see")
+        if name in receivers.singletons:
+            return self.on_instance(module, receivers.singletons[name], method)
+        return js_unknown(f"{name}.{method}(...) is called on a module-level value, not resolved")
+
+    def on_instance(self, module: JsModule, constructor: Node, method: str) -> JsTarget:
+        found = self.class_of(module, node_text(constructor))
+        if found is None:
+            return js_unknown(
+                f"{method}(...) is called on an instance of {node_text(constructor)}, which "
+                "is not a project class"
+            )
+        return self.method(found[0], found[1], method)
+
+    def class_of(self, module: JsModule, name: str) -> tuple[JsModule, JsClass] | None:
+        """The project class ``name`` (plain, or ``ns.Class`` through a namespace import)
+        names in ``module``."""
+        root, _dot, rest = name.partition(".")
+        if rest == "" and root in module.receivers.classes:
+            return module, module.receivers.classes[root]
+        if root not in module.imports or "." in rest:
+            return None
+        imported = module.imports[root]
+        exported = _exported(imported, rest)
+        if exported is None:
+            return None
+        return self._exported_class(module, imported.specifier, exported)
+
+    def _exported_class(
+        self, module: JsModule, specifier: str, exported: str
+    ) -> tuple[JsModule, JsClass] | None:
+        """The class a project module exports as ``exported``."""
+        found = self.specifier(module.path, specifier)
+        if found.kind != PATH:
+            return None
+        target = self.module(found.target)
+        if target is None or exported not in target.exports:
+            return None
+        local = target.exports[exported]
+        if local not in target.receivers.classes:
+            return None
+        return target, target.receivers.classes[local]
+
+    def method(self, module: JsModule, owner: JsClass, name: str) -> JsTarget:
+        found = self._lookup(module, owner, name, frozenset())
+        if found is None:
+            return js_unknown(f"{module.path}:{owner.name} defines no method {name}")
+        return found
+
+    def _lookup(
+        self, module: JsModule, owner: JsClass, name: str, seen: frozenset[tuple[str, str]]
+    ) -> JsTarget | None:
+        """``name`` in ``owner`` or its project base; None when neither defines it;
+        unknown when a base the analysis cannot read might."""
+        key = (module.path, owner.name)
+        if key in seen:
+            return js_unknown(f"the bases of {module.path}:{owner.name} form a cycle")
+        if name in owner.methods:
+            reference = f"{module.path}:{owner.name}.{name}"
+            return JsTarget(UNIT, reference, "", module, owner.methods[name])
+        if owner.base is None:
+            return None
+        parent = None
+        if dotted_name(owner.base) is not None:
+            parent = self.class_of(module, node_text(owner.base))
+        if parent is None:
+            return js_unknown(
+                f"{module.path}:{owner.name} does not define {name}, and its base "
+                f"{node_text(owner.base)} is not a project class"
+            )
+        return self._lookup(parent[0], parent[1], name, seen | {key})
+
+    def through_this(self, module: JsModule, owner: JsClass, method: str) -> JsTarget:
+        """``this.method()``: the class's method, unless an analyzed subclass overrides
+        it (``this`` may be an instance of that subclass)."""
+        target = self.method(module, owner, method)
+        if target.kind != UNIT:
+            return target
+        overriding = self._overriding(module, owner, method)
+        if overriding is not None:
+            return js_unknown(
+                f"{module.path}:{owner.name}.{method} is overridden in {overriding}; this "
+                "may be an instance of it"
+            )
+        return target
+
+    def _ancestors(self, module: JsModule, owner: JsClass) -> frozenset[tuple[str, str]]:
+        key = (module.path, owner.name)
+        if key not in self.ancestry:
+            self.ancestry[key] = frozenset()  # a cycle in the bases ends here
+            found: set[tuple[str, str]] = set()
+            parent = None
+            if owner.base is not None and dotted_name(owner.base) is not None:
+                parent = self.class_of(module, node_text(owner.base))
+            if parent is not None:
+                found.add((parent[0].path, parent[1].name))
+                found.update(self._ancestors(parent[0], parent[1]))
+            self.ancestry[key] = frozenset(found)
+        return self.ancestry[key]
+
+    def _overriding(self, module: JsModule, owner: JsClass, name: str) -> str | None:
+        """An analyzed class deriving from ``owner`` whose own body defines ``name``."""
+        key = (module.path, owner.name)
+        if self.definers is None:
+            self.definers = self._definers()
+        if name not in self.definers:
+            return None
+        for candidate, other in self.definers[name]:
+            if key in self._ancestors(candidate, other):
+                return f"{candidate.path}:{other.name}"
+        return None
+
+    def _definers(self) -> dict[str, list[tuple[JsModule, JsClass]]]:
+        """Method name -> the analyzed module-level classes whose bodies define it."""
+        found: dict[str, list[tuple[JsModule, JsClass]]] = {}
+        for path in sorted(self.texts):
+            candidate = self.module(path)
+            if candidate is None:
+                continue
+            for other in candidate.receivers.classes.values():
+                for method in other.methods:
+                    if method not in found:
+                        found[method] = []
+                    found[method].append((candidate, other))
+        return found
+
+
+def _exported(imported: Imported, rest: str) -> str | None:
+    """The export ``imported.rest`` names: ``rest`` of a namespace import, the imported
+    name itself when there is no ``rest``."""
+    if imported.name == NAMESPACE:
+        return rest
+    if rest != "":
+        return None
+    return imported.name
 
 
 # -- references (§8.1) --------------------------------------------------------------------

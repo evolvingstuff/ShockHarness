@@ -92,13 +92,18 @@ silent, and each says why. The usual causes:
 
 * **A method on a value whose class is not exact**: a parameter (`store.get(x)` on an
   argument), an attribute (`self.cipher.redact(x)`), a callable in a container
-  (`ops["f"](x)`), `self.m()` where an analyzed subclass overrides `m`. In Python a
-  method does resolve when its receiver's class is exact: `self.m()` and `cls.m()` in a
-  class no analyzed subclass overrides `m` in, a module-level singleton bound once
-  (`store = Store()`, used in its module or imported), a local the function constructs
-  (`s = Store()`), `Store.m()` and `Store().m()`. The call's arguments start after the
-  `self` or `cls` the receiver supplies. JavaScript methods are R2 of
-  `docs/proposal-receivers.md`.
+  (`ops["f"](x)`), `self.m()` where an analyzed subclass overrides `m`, `this.m()` in
+  an object literal's method. A method does resolve when its receiver is exact:
+  * `self.m()`, `cls.m()` and `this.m()` in a class no analyzed subclass overrides `m`
+    in;
+  * a module-level singleton bound once (`store = Store()`,
+    `export const store = new Store()`), used in its module or imported by name;
+  * a JavaScript module-level object literal (`export const Auth = { init() {...} }`);
+  * a local the function constructs (`s = Store()`, `const s = new Store()`);
+  * `Store.m()`, `Store().m()` and `new Store().m()`.
+
+  In Python the call's arguments start after the `self` or `cls` the receiver supplies
+  (`docs/proposal-receivers.md`, R1 and R2).
 * **Framework injection** (FastAPI `Depends`, a callback registered by name) and
   **dynamic imports** (`await import(...)`): the callee is not visible.
 * **A call deeper than `max_depth`**, or recursion.
@@ -213,6 +218,6 @@ loosening.
 
 * Annotation forms of the declarations (`Annotated[T, Prop("p")]`, branded types) and
   Hypothesis integration are P4, with the two MetaList measurements.
-* JavaScript methods are not resolved through their receivers (R2), and Python
-  annotations do not type a receiver. Catalog preserving operations (slicing) are not
-  implemented.
+* Annotations do not type a receiver (R3), and JavaScript static methods and default
+  imports are not resolved through their receivers. Catalog preserving operations
+  (slicing) are not implemented.

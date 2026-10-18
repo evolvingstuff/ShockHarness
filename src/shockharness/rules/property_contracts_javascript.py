@@ -47,10 +47,12 @@ from shockharness.contracts.javascript_flow import (
     run_js_unit,
 )
 from shockharness.contracts.javascript_index import (
+    NO_JS_RECEIVERS,
     RUNTIME_MARKER,
     JsModule,
     JsProjectIndex,
     JsTarget,
+    JsUnitReceivers,
 )
 from shockharness.contracts.python_flow import (
     EMPTY,
@@ -85,6 +87,7 @@ from shockharness.ir.javascript_functions import (
     string_value,
 )
 from shockharness.ir.javascript_nodes import Field, Kind
+from shockharness.ir.javascript_receivers import JsClass, constructed_locals
 from shockharness.rules.registry import (
     PROP001,
     PROP002,
@@ -175,6 +178,21 @@ def _names(nodes: Sequence[Node]) -> set[str]:
     }
 
 
+def _owner(module: JsModule, function: Node) -> JsClass | None:
+    """The module-level class whose body defines ``function`` as an instance method:
+    what ``this`` is an instance of."""
+    if function.type != Kind.METHOD_DEFINITION:
+        return None
+    body = function.parent
+    if body is None:
+        return None
+    for owner in module.receivers.classes.values():
+        if owner.node.child_by_field_name(Field.BODY) == body:
+            if function in owner.methods.values():
+                return owner
+    return None
+
+
 def _body(function: Node) -> tuple[list[Node], list[Node]]:
     """(statements, [expression]): an arrow with an expression body returns it."""
     body = field_nodes(function, Field.BODY)
@@ -197,6 +215,7 @@ class JsUnit:
     body: Sequence[Node]
     expression: Sequence[Node]  # an arrow's expression body, which it returns
     local: frozenset[str]
+    receivers: JsUnitReceivers  # this in a class's instance method; constructed locals
     bound: frozenset[str]
     read: frozenset[str]
     parameters: tuple[str | None, ...]
@@ -410,15 +429,17 @@ class JsAnalysis:
         body, expression = children(module.root), []
         parameters: tuple[str | None, ...] = ()
         local: frozenset[str] = frozenset()  # module level: the module's own tables
+        receivers = NO_JS_RECEIVERS
         if function is not None:
             body, expression = _body(function)
             parameters = tuple(_parameters(function))
+            receivers = JsUnitReceivers(_owner(module, function), constructed_locals(function))
         top = [*body, *expression]
         bound = {name for node in own_nodes(top) for name in _bindings(node)}
         if function is not None:
             bound |= _parameter_bindings(function)
             local = frozenset(bound)
-        declarations, issues = self._declarations(module, top, local)
+        declarations, issues = self._declarations(module, top, local, receivers)
         header = JsHeader({}, frozenset(), ())
         if function is not None:
             header = _header(function, body, declarations)
@@ -428,6 +449,7 @@ class JsAnalysis:
             body=body,
             expression=expression,
             local=local,
+            receivers=receivers,
             bound=frozenset(bound),
             read=frozenset(_names(top)),
             parameters=parameters,
@@ -438,7 +460,11 @@ class JsAnalysis:
         )
 
     def _declarations(
-        self, module: JsModule, top: Sequence[Node], local: frozenset[str]
+        self,
+        module: JsModule,
+        top: Sequence[Node],
+        local: frozenset[str],
+        receivers: JsUnitReceivers,
     ) -> tuple[dict[int, JsDeclaration], list[Issue]]:
         declarations: dict[int, JsDeclaration] = {}
         issues: list[Issue] = []
@@ -446,7 +472,7 @@ class JsAnalysis:
             function = field(node, Field.FUNCTION) if node.type == Kind.CALL_EXPRESSION else None
             if function is None:
                 continue
-            target = self.index.callee(module, function, local)
+            target = self.index.callee(module, function, local, receivers)
             if target.reference == ENABLE_REFERENCE:
                 issues.extend(enable_issues(node, self.static))
                 continue
@@ -719,7 +745,8 @@ class JsUnitHooks:
     def call(self, call: Node, arguments: Sequence[PropSet], reporting: bool) -> PropSet:
         function = field(call, Field.FUNCTION)
         assert function is not None, "a call has a callee"
-        target = self.analysis.index.callee(self.unit.module, function, self.unit.local)
+        unit = self.unit
+        target = self.analysis.index.callee(unit.module, function, unit.local, unit.receivers)
         if target.kind == UNKNOWN:
             return _unresolved(call, target)
         contract = None

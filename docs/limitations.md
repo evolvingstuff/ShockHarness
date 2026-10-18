@@ -213,16 +213,18 @@ Stated so that a clean report is never read as more than it is.
   gaps, not errors: computed callees (`o[k]()`, `getattr(o, n)()`, `f()()`),
   method calls on parameters, locals and other values of unknown type,
   unbound names (JavaScript globals outside the fixed builtin list included),
-  and `self`/`this` attributes neither the class nor (in Python) its analyzed
-  bases define (assigned, decorated, dynamic) are never guessed. A Python
-  method through an exact receiver resolves (`docs/proposal-receivers.md`,
-  R1), on a closed world: a subclass outside the analyzed files that overrides
-  the method is not seen. Inheritance in JavaScript, decorators
-  that rebind, `__getattr__`, star imports, `exec`/`eval`, runtime rebinding,
-  event handlers and callbacks registered elsewhere are not followed. A
-  `probable` edge says the binding was not proven (a JavaScript module alias
-  may be rebound; `self.m()` is overridden in an analyzed subclass, or, in
-  JavaScript, may be).
+  and `self`/`this` attributes neither the class nor its analyzed bases define
+  (assigned, decorated, dynamic) are never guessed. A method through an exact
+  receiver resolves (`docs/proposal-receivers.md`, R1 for Python, R2 for
+  JavaScript), on a closed world: a subclass outside the analyzed files that
+  overrides the method is not seen, and a JavaScript object literal's method
+  that another module reassigns is not seen either. Decorators that rebind,
+  `__getattr__`, star imports, `exec`/`eval`, runtime rebinding, event
+  handlers and callbacks registered elsewhere are not followed. A `probable`
+  edge says the binding was not proven (a JavaScript default import's
+  attribute is looked up as a module member; `self.m()` / `this.m()` is
+  overridden in an analyzed subclass; `this` in an object literal's method
+  depends on the call).
 * Module edges resolve only among the analyzed files. A Python module's name
   starts at the first package (`__init__.py`) on its path; files outside any
   package answer to their basename. Namespace packages, `sys.path` tricks,

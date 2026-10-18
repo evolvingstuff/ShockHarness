@@ -97,6 +97,7 @@ def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None
         "javascript/innerhtml",
         "javascript/object-methods",
         "javascript/parametric",
+        "javascript/receivers",
         "python/callee_sink",
         "python/complete",
         "python/declarations",
@@ -535,6 +536,31 @@ def test_prop005_reports_properties_verify_mode_has_no_predicate_for(empty_root:
     assert found[0].span.line == 8  # the registration_module line
     with pytest.raises(ConfigError, match="needs the module that registers"):
         contracts_config(empty_root, 'runtime_mode_required = "verify"\n')
+
+
+def test_prop005_reads_a_javascript_registration_module(empty_root: Path) -> None:
+    # Receivers R1 passed the Python index's receivers to the JavaScript index here
+    # (0.11.0 and 0.12.0): a JavaScript registration_module crashed the run.
+    registrations = (
+        'import { register } from "./contracts.js";\n\n'
+        'register("redacted", (text) => !text.includes("@"), "no addresses");\n'
+    )
+    files = {"app/__init__.py": "", "app/text.py": TEXT, "app/predicates.js": registrations}
+    extra = (
+        'runtime_mode_required = "verify"\nregistration_module = "app/predicates.js"\n'
+        + "\n"
+        + PROPERTY.format(name="other").replace('"static"', '"check"')
+        + '\n[tool.shockharness.rules.property_contracts.severities]\nPROP005 = "review"\n'
+    )
+    catalog = CATALOG.replace(
+        'runtime_module = ["app/contracts.py"]',
+        'runtime_module = ["app/contracts.py", "app/contracts.js"]',
+    )
+    write_project(empty_root, {".shockharness.toml": catalog.format(extra=extra), **files})
+    report = analyze_paths([empty_root], empty_root, load_config(empty_root, None), OPTIONS)
+    found = [f for f in report.findings if f.rule_id == "PROP005"]
+    assert len(found) == 1
+    assert "'other'" in found[0].message
 
 
 def depth_change(root: Path, base: str, depth: int) -> tuple[list[str], list[str]]:

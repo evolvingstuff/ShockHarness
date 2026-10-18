@@ -1,0 +1,10 @@
+[
+  {"path": "src/store.js", "rule": "PROP001", "line": 28, "column": 21, "status": "violation", "severity": "review", "message": "src/store.js:Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 10, "column": 14, "status": "violation", "severity": "review", "message": "src/store.js:Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 15, "column": 17, "status": "violation", "severity": "review", "message": "src/store.js:Redactor.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 21, "column": 14, "status": "violation", "severity": "review", "message": "src/store.js:Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 26, "column": 27, "status": "violation", "severity": "review", "message": "src/store.js:Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 30, "column": 18, "status": "unknown", "severity": "review", "message": "src/use.js:deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: this.clean(...): this is not an instance of a module-level class here (in an object literal's method it depends on how the method is called)"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 47, "column": 20, "status": "violation", "severity": "review", "message": "src/use.js:deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "src/use.js", "rule": "PROP001", "line": 57, "column": 20, "status": "unknown", "severity": "review", "message": "src/use.js:deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: src/use.js:Base.clean is overridden in src/use.js:Loud; this may be an instance of it"}
+]

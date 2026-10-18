@@ -5363,3 +5363,68 @@ are identical, `coverage.cache` gains `contracts`, and the cache directory gains
 `contracts.json`.
 Published by `publish.yml` (run 39159016091, 18 of 18 jobs). PyPI lists 0.12.0 with a
 wheel and an sdist.
+
+## Receivers R2: JavaScript methods through their receivers — DONE (2026-10-18)
+
+* **Facts.** `ir/javascript_receivers.py` reads them from the syntax. `ReceiverFacts`
+  gains `objects` (cache schema "22").
+  * **Objects:** module-level object literals (`const X = {...}`,
+    `Object.freeze({...})`). Their methods are method definitions and function or
+    arrow properties, by where each unit starts, because object methods are not named
+    after their object. A method the module assigns again, or an object it writes into
+    otherwise, is dropped.
+  * **Singletons:** `const x = new C()` at module level.
+  * **Classes:** each base, and its instance methods (static methods, getters and
+    setters excluded).
+  * **Constructed locals:** `const x = new C()` in a unit's own body, keyed by where
+    the unit starts.
+* **Call graph:**
+  * `this.m()` in a class: resolved, or probable when an analyzed subclass overrides
+    `m`. A name that is not an instance method falls back to the class-body rule, as
+    before.
+  * `this.m()` in an object literal's method: probable.
+  * Objects and singletons, local or imported by name: resolved.
+  * Constructed locals: resolved.
+  * `Class.m()`, and `ns.f()` / `u.f()` on an analyzed module: resolved.
+  * A default import's attribute stays probable.
+* **Contracts index** (`contracts/javascript_index.py`), each resolved by receiver:
+  * `this.m()` in a class's instance method, with the override check (an index by
+    method name, built once);
+  * objects and singletons, through `on_value`, imported or not;
+  * constructed locals;
+  * `new C().m()`.
+
+  `this` in an object literal is unknown, with its reason. The index now records
+  exported classes, which it never did, so `export class` was unreachable from another
+  module.
+* **Found on the way:** R1 passed the Python `NO_RECEIVERS` to the JavaScript index in
+  `property_registrations.py`, so PROP005 with a JavaScript `registration_module`
+  failed with a `TypeError` in 0.11.0 and 0.12.0. Fixed, with a test that fails on
+  v0.12.0's source.
+* **Tests:**
+  * the fixture `javascript/receivers`: 6 violations and 2 unknown;
+  * a call graph test for every JavaScript receiver kind;
+  * the JavaScript resolution test updated to the new semantics, with the reasons;
+  * the registration regression test;
+  * an inventory row.
+
+**Measured** (read-only, `--no-cache`, v0.12.0 against this tree):
+
+| | MetaList | Corpus |
+|---|---|---|
+| Call edges, probable | 6,909 → 5,375 | 5,565 → 5,452 |
+| Call edges, resolved | 30,682 → 32,623 | 17,780 → 17,899 |
+| Call edges, unresolved | 19,631 → 19,224 | 14,113 → 14,107 |
+| Findings | 2,043 → 2,045 | 32,667 → 32,667 |
+| New findings | 2 ASYNC001 violations | none |
+| Changed messages | 4 CPLX005 (same fingerprints) | none |
+
+**The two ASYNC001 findings are real.** `export const CommandPalette = new
+CommandPaletteController()` is a singleton, and its `async notifyAppUpdate()` is called
+without `await` in `main.js:64` and `modules/auth.js:688`. The promise is dropped, and so
+is any rejection. The PROP findings on MetaList are unchanged: its JavaScript declares no
+contracts. npm's `lib` is CommonJS, which the facts do not read as objects.
+
+A first measurement had 31 more unresolved edges on the corpus. They were `this.m()`
+calls to static methods and accessors, which the facts exclude from instance methods.
+Those now fall back to the class-body rule, as before.

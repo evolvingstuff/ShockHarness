@@ -245,4 +245,4 @@ def collect_python_receivers(tree: ast.Module) -> ReceiverFacts:
         )
     )
     classes = tuple(_receiver_class(n) for n in tree.body if isinstance(n, ast.ClassDef))
-    return ReceiverFacts(singletons, constructed, classes)
+    return ReceiverFacts(singletons, constructed, classes, ())

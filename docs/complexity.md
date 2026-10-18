@@ -245,8 +245,8 @@ never presented as resolved.
 
 | Confidence | Meaning |
 |---|---|
-| `resolved` | a direct call of a name that is a function or class defined in the module (or nested in the caller), or a name bound by an import: the target is the unit when the imported module is among the analyzed files and defines that name, an `external` symbol otherwise. In Python also a method through an exact receiver (`docs/proposal-receivers.md`, R1): `self.m()` / `cls.m()` that the class or a project base defines when no analyzed subclass overrides `m`; a module-level singleton bound once to a constructor (`store.save()`, imported or not); a local the function constructs once; `Class.m()`; and an attribute call on an analyzed module alias (`u.helper()`) |
-| `probable` | an attribute call on a JavaScript module alias (`ns.helper()`, `u.helper()` after `const u = require(...)`) or on an external Python one (`os.path.join`), a `self.m()` / `this.m()` call that the enclosing class body defines and an analyzed subclass overrides (or, in JavaScript, may), a call through a Python import the module rebinds, a static call on a JavaScript module-level class, or a known function passed as an argument (higher-order use: whether it is called is not known) |
+| `resolved` | a direct call of a name that is a function or class defined in the module (or nested in the caller), or a name bound by an import: the target is the unit when the imported module is among the analyzed files and defines that name, an `external` symbol otherwise. Also a method through an exact receiver (`docs/proposal-receivers.md`, R1 for Python, R2 for JavaScript): `self.m()` / `cls.m()` / `this.m()` that the class or a project base defines when no analyzed subclass overrides `m`; a module-level singleton bound once to a constructor (`store.save()`, imported by name or not); a JavaScript module-level object literal's method (`Auth.init()`), unless its module assigns that method again; a local the function constructs once; `Class.m()`; and an attribute call on an analyzed module alias (`u.helper()`, `ns.helper()`) |
+| `probable` | an attribute call on an external module alias (`os.path.join`) or on a JavaScript default import, a `self.m()` / `this.m()` call that an analyzed subclass overrides, `this.m()` in a JavaScript object literal's method (`this` depends on how the method is called), a call through a Python import the module rebinds, or a known function passed as an argument (higher-order use: whether it is called is not known) |
 | `unresolved` | a computed callee (`o[k]()`, `getattr(o, n)()`, `f()()`, `(c ? f : g)()`), a method call on a parameter, local or other value of unknown type, an unbound name, or an attribute of `self` / `this` that the class body does not define (inherited, assigned or dynamic) |
 
 Targets are `unit` (a key in `metrics.complexity.functions`), `external` (a
@@ -332,7 +332,7 @@ measurable part of the heuristic in the specification: work that moved out of
 sight rather than away. Every entry carries `confidence: approximate` and
 `experimental: true`, there is no rule ID for it, and delegation is not
 declared bad by it; probable and unresolved edges are not followed, so a
-helper reached through a JavaScript module alias is invisible to it.
+helper reached through a JavaScript default import is invisible to it.
 
 ## Metamorphic properties
 

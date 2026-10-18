@@ -5,6 +5,32 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **JavaScript methods through exact receivers** (`docs/proposal-receivers.md`, R2;
+  cache schema "22"), in property contracts and in the call graph:
+  - `this.m()` in a class's instance method, resolved when no analyzed subclass
+    overrides `m` and probable when one does;
+  - a module-level object literal's method (`export const Auth = { init() {...} }`,
+    `Object.freeze({...})` too), unless its module assigns that method again;
+  - a module-level `new` singleton (`export const store = new Store()`), in its module
+    or imported by name;
+  - a constructed local, and `new Store().m()`;
+  - in the call graph also `Class.m()`, and `ns.f()` / `u.f()` through a namespace
+    import or `require`.
+
+  `this` in an object literal's method is probable in the graph and unknown to the
+  contracts: it depends on how the method is called. A default import's attribute stays
+  probable.
+
+  **This can make a passing gate fail**, like R1. On MetaList it adds two ASYNC001
+  violations: `CommandPalette.notifyAppUpdate()` is an `async` method of a singleton,
+  called without `await` in `main.js` and `auth.js`. Four CPLX005 messages change
+  wording and keep their fingerprints. On the corpus nothing changes.
+
+### Fixed
+- **PROP005 with a JavaScript `registration_module` crashed** (0.11.0 and 0.12.0) with a
+  `TypeError`, because R1 passed the Python index's receivers to the JavaScript index.
+
 ## [0.12.0] - 2026-10-18
 
 Faster warm runs, from MetaList's report ("41 seconds WITH cached files").

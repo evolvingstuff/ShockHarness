@@ -1,8 +1,8 @@
 # Proposal: resolving method calls through their receivers
 
-Status: **R1 (Python) built (2026-10-18), on Tom's position below; for Fable to confirm or
-change. R2 (JavaScript) and R3 (annotations) are not started.** Measured: STATUS.md,
-"Receivers R1".
+Status: **R1 (Python) and R2 (JavaScript) built (2026-10-18), on Tom's position below;
+for Fable to confirm or change. R3 (annotations) is not started.** Measured: STATUS.md,
+"Receivers R1" and "Receivers R2".
 
 ## The problem
 
