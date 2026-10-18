@@ -15,6 +15,7 @@ The role scopes ``[[overrides]]`` entries written with ``roles = [...]`` and the
 MAGIC001 configuration-file exemption; it never decides whether a file is analyzed.
 """
 
+import ast
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -30,7 +31,15 @@ from shockharness.complexity.callgraph import (
     build_call_graph,
 )
 from shockharness.complexity.metrics import UnitMetrics, measure_units
-from shockharness.config import UNSUPPORTED_FAIL, UNSUPPORTED_SOURCES_KEY, EffectiveConfig
+from shockharness.config import (
+    UNSUPPORTED_FAIL,
+    UNSUPPORTED_SOURCES_KEY,
+    EffectiveConfig,
+    is_opt_in,
+    switched_off,
+)
+from shockharness.contracts.catalog import python_runtime_modules
+from shockharness.contracts.python_index import ProjectIndex
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
@@ -71,8 +80,10 @@ from shockharness.rules.exceptions import (
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001, run_magic004
+from shockharness.rules.property_contracts import ContractFile, run_property_contracts
 from shockharness.rules.registry import (
     CATALOG_SECTIONS,
+    CONTRACT_RULES,
     DATAFLOW_SECTIONS,
     GUARDRAIL_SECTIONS,
     SENTINEL_SECTIONS,
@@ -257,10 +268,7 @@ def _disabled_rules(
     disabled: dict[str, RuleDisable] = {}
     rules_config: Mapping[str, Any] = config.values["rules"]
     for rule in registry.implemented_rules():
-        if rule.config_section is None:
-            continue
-        section = config.section(rule.config_section)
-        if section["enabled"] is False:
+        if switched_off(config.values, rule.config_section):
             disabled[rule.rule_id] = RuleDisable(
                 rule.rule_id, f"{rule.config_section}.enabled = false", ORIGIN_CONFIG
             )
@@ -339,6 +347,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         *DATAFLOW_SECTIONS,
         *SENTINEL_SECTIONS,
         *STRING_SECTIONS,
+        registry.PROPERTY_CONTRACTS_SECTION,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -397,10 +406,12 @@ def _policy_rules(
             registry.MAGIC003,
             registry.MAGIC002,
             registry.DOM002,
+            *CONTRACT_RULES,
         )
         if rule.rule_id not in disabled_ids
         and language in rule.languages
         and _in_scope(rule, role, config)
+        and _opted_in(rule, config)
     )
     applied = [
         *sorted(guardrails),
@@ -421,6 +432,12 @@ def _policy_rules(
             run_magic003(facts, source, relative_path, language, rules["sentinels"], magic)
         )
     return applied, findings
+
+
+def _opted_in(rule: registry.RuleSpec, config: EffectiveConfig) -> bool:
+    """An opt-in family's rules apply only once the repository turns it on."""
+    section = rule.config_section
+    return section is None or not is_opt_in(section) or config.section(section)["enabled"] is True
 
 
 def _active_async(
@@ -958,6 +975,34 @@ def consistency_findings(
     return found
 
 
+def contract_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """PROP001, PROP003, PROP006, PROP007 (property contracts, P1a, opt-in): declarations
+    checked at call sites and catalog sinks, reading resolved callees' own contracts from
+    the analyzed files, or from the project's files under the root for the others."""
+    parsed = [
+        p
+        for p in pendings
+        if not p.failed and p.source is not None and p.language == registry.PYTHON
+    ]
+    files: list[ContractFile] = []
+    for pending in parsed:
+        applies = frozenset(r.rule_id for r in CONTRACT_RULES if r.rule_id in pending.rules_applied)
+        if len(applies) > 0:
+            assert pending.source is not None, "a parsed file has its source"
+            files.append(ContractFile(pending.path, pending.source, applies))
+    if len(files) == 0:
+        return {}
+    settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
+    # Each of these files parsed in the per-file phase; the same text parses again.
+    trees = {
+        p.path: ast.parse(p.source.text, filename=p.path) for p in parsed if p.source is not None
+    }
+    index = ProjectIndex(config.root, trees, python_runtime_modules(settings))
+    return run_property_contracts(files, index, settings)
+
+
 # The cross-file rules that need the call graph or the module graph (built here when
 # complexity did not build it), and the phases that compute them, in report order.
 GRAPH_RULES = (
@@ -979,6 +1024,7 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
+    contract_findings,
 )
 
 

@@ -2362,6 +2362,7 @@ is EXC001.
 | 11 | `rules/exceptions.py` `_manager_match`, `ir/python_catches.py` `_resolve_callee` | unresolved manager callee matched by bare name | approximate | violation (no unknown: the manager is listed by name) |
 | 12 | `complexity/callgraph.py` (7 functions), `complexity/coupling.py` (4) | unresolved call and module edges | unresolved | no finding: metrics only; CPLX005 counts resolved targets and names the unresolved count |
 | 13 | `rules/exceptions.py` `_finding` (EXC002, EXC003), `rules/defaults.py` `_finding` (other DEF kinds, DEF005), `rules/magic_numbers.py`, `rules/complexity.py`, `suppressions.py` (SUPP001, SUPP002) | everything else, including approximate EXC003 (unattributable statement), DEF003/DEF004 (non-constant fallback) and DEF005 (static trace): the approximation is about intent, not about whether the shape is present | exact/approximate | violation |
+| 14 | `rules/property_contracts.py` `Reporter.check` (property contracts P1a, opt-in) | PROP001 whose value's property set is not exact: unresolved callee, method on a value, await, generator, `.join` build, `*args`/`**kwargs`, a keyword argument to a library sink | exact | **unknown** (gates only with `rules.property_contracts.fail_on_unknown`); an exact set lacking the property is a violation |
 
 Not turned into unknown findings (they would add findings, which H1 must not
 do; recorded in `docs/limitations.md`): a capture manager with one readable
@@ -4457,3 +4458,167 @@ MetaList's rule A, on Tom's go-ahead, at review severity.
 **Tests:** `tests/unit/test_state002.py` covers the global and self forms; a
 build-first, a rebinding, a lowercase factory and `__init__` are not reported. Also
 severity and roles. 1216 tests pass.
+
+## Property contracts, milestone P1a (Python) — DONE (2026-10-17)
+
+On Tom's request, from the kickoff prompt of `docs/shockharness_property_contracts_spec.md`
+(v0.5, §17). The family is off by default and in every profile, is **not** enabled on
+ShockHarness's own source, and nothing is published to any registry.
+
+**Built:**
+* **Catalog** (`contracts/catalog.py`). Configuration: `rules.property_contracts`
+  (`enabled`, `roles`, `fail_on_unknown`, `runtime_module`, `allow_undeclared`,
+  `properties` with `producers` and `runtime`, callee `sinks` as `callee:N`,
+  `severities`).
+  * These are errors at load: shape, property names, sink callees, sinks naming unknown
+    properties, an enabled family with no Python runtime module.
+  * `config validate` and every analysis resolve each Python reference against the
+    project's files (§8.1).
+  * Opt-in means off is no deviation, no disabled rule, and not in
+    `rules_disabled_globally` (`config.switched_off`).
+* **Analysis** (`contracts/python_index.py`, `contracts/python_flow.py`,
+  `rules/property_contracts.py`), run as a cross-file phase.
+  * Calls resolve through each file's imports, relative imports included. The runtime
+    module is recognized by name, even when excluded.
+  * Property sets flow through each function and module body (§5.2).
+  * One-hop contracts: a callee's own header `requires` and declared result. The
+    callee's file is read from the analyzed set, or from disk under the root, so
+    analyzing one file still sees its producers (`EffectiveConfig.root`, new).
+  * Callee-sink checks, with keyword-to-position mapping for project callees.
+  * Rules: PROP001, PROP003 (error, or review with `allow_undeclared`), PROP006, PROP007.
+  * Every await, yield, generator, async for/with, generator-consuming library call and
+    `.join` build is unknown.
+* **VERIFY003** (`loosening.py`). These are reported: the family off; `fail_on_unknown`
+  off; `allow_undeclared` on. While the family is on: a sink removed or requiring less, a
+  `runtime` lowered, `producers` dropped or widened, a role or runtime module removed, a
+  severity lowered.
+* **RESULT001** permits the four declarations only when they resolve to the runtime
+  module.
+* **Runtime file** (`contracts/runtime/contracts.py`). Identity until
+  `enable("check", static_properties)`; `check` mode; static properties counted by
+  `report()`; generic `TypeVar` signatures; `ContractError(AssertionError)`.
+* **`contracts install`.** `shockharness contracts install --language python --dest PATH
+  [--project DIR] [--force]` and `--check` (`contracts/install.py`), recorded in
+  `.shockharness-contracts.json` in the skills-manifest format.
+* **Docs:** `docs/rules.md`, `docs/configuration.md`, README table, CHANGELOG,
+  `docs/ideas.md` rows. Unknown-inventory row 14.
+* **Spec, the four wording leftovers only:**
+  * Python 3.11+ (what CI tests);
+  * `docs/property-contracts.md` in place of "the library's README";
+  * no `py.typed` for a copied file (§6.3a, the P1a row, the kickoff);
+  * `contracts.d.ts` next to `contracts.js`.
+  The rest of the spec diff in this commit is Tom's and Fable's v0.5 text.
+
+**The milestone's "done when" (§14):**
+
+| Criterion | Evidence |
+|---|---|
+| §11.1 and a Python callee-sink fixture yield exactly their expected findings, with the cross-file producer resolved | `tests/fixtures/property_contracts/python/{stats,callee_sink}` (plus `flow`, `declarations`, `generators`), each with a catalog, `expected.json` and `rationale.md`; `test_fixture_yields_exactly_its_expected_findings`; `test_the_producer_is_read_from_disk_when_only_the_caller_is_analyzed` |
+| A revision diff that removes the sink is VERIFY003 | `tests/cli/test_property_contracts_cli.py::test_removing_a_sink_is_a_verify003_loosening` (real git history, `gate --base`, exit 1) |
+| `contracts install` copies, records in the manifest, `--check` detects an edit | `tests/unit/test_contracts_runtime.py` (install, edit, stale, refusal without `--force`, CLI) |
+| The runtime file passes `check` under `strict` | `test_the_runtime_file_passes_strict_as_production_code` (0 findings, no suppression); also in a scratch project as `app/contracts.py`: 0 findings, gate PASS |
+
+**Where the spec was ambiguous, and what I chose** (for Tom and Fable):
+1. **§11.1 contradicts §5.2.** `normalize` produces only `normalized`, the division
+   destroys `numeric`, and `fit` requires both, so `pipeline` cannot be "satisfied".
+   The fixture's `normalize` produces both; there is a row in `docs/ideas.md` for Fable.
+2. **"Facts in the IR."** Declarations are not stored in the per-file IR or the cache.
+   The cross-file phase re-parses the Python files, only when the family applies to
+   some file, so the cache schema stays "20" and nothing changes for projects that
+   don't opt in.
+3. **Partial property sets.** A set is "these properties, and maybe more", so
+   `produces` on a value the analysis cannot follow still proves its own property. An
+   exact set lacking a property is a violation; an inexact one is unknown. Library and
+   builtin calls carry nothing (exact). A method on a value, a callable in a variable or
+   container, and a class call are unknown.
+4. **One hop.** A callee with no `produces` or `preserves` declares no result: its
+   result is ∅, per the §5.2 row "project unit with no contract". A callee with one has
+   its result computed with every further project call inside it unknown, per §5.3.
+5. **`enable(mode, static_properties)`.** The runtime cannot read the catalog, so test
+   code passes the `runtime = "static"` names. It is a second required argument, with no
+   default. `enable("verify")` raises "not available in this version" (P2).
+   `ContractError.function` is always None (no stack walk).
+6. **Registry.** §6.3 says to set `__shockharness_properties__` on objects and to use a
+   `WeakKeyDictionary`. Instead, the registry is keyed by `id()`: weakly referenceable
+   values are held by a weak reference with a callback that forgets them, and others
+   (lists, dicts, slotted objects) strongly. It never mutates user objects (frozen
+   dataclasses, `__slots__`, `__eq__` or serialization), and a `WeakKeyDictionary`
+   would conflate equal values and refuse unhashable ones. The state lives in one
+   module-level registry object; it is process state by design (§6.2), and STATE001
+   does not report it.
+7. **The manifest.** The skills manifest lives in an agent's skills directory and is
+   keyed by skill. The runtime copy goes in its own `.shockharness-contracts.json` at
+   the project root, in the same format (`agent = "contracts"`, entries keyed by
+   language).
+8. **When references are resolved.** In `config validate` and before every analysis, not
+   at configuration load: VERIFY003 and `diff` load configurations of bare revisions
+   without their files.
+9. **Library method sinks** (`sqlite3.Cursor.execute:0`) validate but never match in P1a,
+   because methods are not resolved through receivers.
+10. **PROP003.** Without `allow_undeclared` the name is dropped from the declaration, so a
+    typo gives PROP003 alone and no PROP001 as well. With it, the finding is review and
+    the name counts.
+11. **PROP007 and rebinding.** A parameter the body rebinds is a local afterwards, and a
+    `requires` on it is a mid-body check. Otherwise `x = normalize(x); requires(x, ...)`
+    would be PROP007. A misplaced `requires` is not also checked as a mid-body check.
+12. **Elements.** A loop variable, a `with ... as` name, an unpacked name and a match
+    capture carry nothing when their container's set is exact, and are unknown
+    otherwise (it may be a generator). `a or b` and `a if c else b` are the intersection
+    of their operands, since the result is one of them.
+13. **Enabled with no Python `runtime_module`** is a configuration error, since otherwise
+    no declaration could resolve and nothing would be checked.
+14. **VERIFY003 scope.** Changes to sinks, properties, roles, runtime modules and
+    severities count only while the family is on in both revisions; turning it off is
+    reported by itself. Removing a role or a runtime module is reported though §8 does
+    not list it, because each stops checks.
+15. **`--dest` must be inside the project**, where `runtime_module` resolves.
+
+**Limitations:**
+* Methods and constructors are unknown. Expect many unknown findings on real code (§5.3).
+* No catalog preserving operations (slicing); no PROP002, PROP004, PROP005, PROP008.
+* No tracking of properties known to be absent: `preserves_except` on an inexact source
+  is unknown, not a violation.
+* A `finally` block is checked once, from the meet of the try's start and its exits.
+* Module-level values read inside a function are unknown.
+* The `exceptions` command does not list sinks.
+* `docs/property-contracts.md` (P2) is not written.
+* The runtime file was run on 3.14 only; it uses no syntax newer than 3.10.
+* Self-gate remedies, disclosed:
+  * two one-file boundaries for `contracts/catalog.py` (OSError and UnicodeDecodeError
+    reading a referenced project file; SyntaxError parsing it). The self-diff reports
+    them as two VERIFY003 warnings;
+  * `skills/install.py`'s `read_bytes`/`write_bytes` made public so the runtime install
+    reuses its declared boundaries.
+
+**Evidence** (2026-10-17, macOS arm64, CPython 3.14.7):
+
+```text
+$ ruff check src tests scripts evals
+All checks passed!
+$ ruff format --check src tests scripts evals
+195 files already formatted
+
+$ pytest -q
+1263 passed in 60.21s (0:01:00)
+$ pytest -q tests/unit/test_property_contracts.py tests/unit/test_contracts_runtime.py tests/cli/test_property_contracts_cli.py
+47 passed in 1.32s
+
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 189 file(s), 189 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+
+$ shockharness config validate
+shockharness: configuration is valid (dedicated: .../.shockharness.toml; profile strict)
+
+# on a scratch clone with this tree committed as HEAD:
+$ shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD
+shockharness 0.9.0 diff: base refs/tags/shockharness-policy-accepted (cb177429c668) -> head HEAD (9adfa39f9d6f); 11 new, 13 fixed, 192 unchanged finding(s)
+gate: PASS (exit 0)
+$ shockharness diff --base 1401d42 --head HEAD
+shockharness 0.9.0 diff: base 1401d42 (1401d4238781) -> head HEAD (9adfa39f9d6f); 2 new, 1 fixed, 200 unchanged finding(s)
+  complexity regressions against base: 0 (gates.complexity_regressions = "warn")
+gate: PASS (exit 0)
+```
+
+The 2 new findings against 1401d42 are the two VERIFY003 warnings for the catalog
+boundaries above.

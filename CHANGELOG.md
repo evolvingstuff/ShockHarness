@@ -6,6 +6,24 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Property contracts, milestone P1a (opt-in, Python; spec v0.5). The family is off by
+  default and in every profile.
+  - **Declarations:** `requires` / `produces` / `preserves` / `preserves_except`.
+  - **Checks:** at call sites against the callee's own declared contract (one hop,
+    across files) and at catalog callee sinks (`callee:N`, keyword arguments mapped for
+    project callees).
+  - **Rules:** `PROP001` (review), `PROP003` (error unless `allow_undeclared`),
+    `PROP006` and `PROP007` (review).
+  - **Unknown:** every await, generator and `.join` build.
+  - **Configuration:** `rules.property_contracts` with `config validate` resolving the
+    catalog's references. VERIFY003 covers every key.
+  - **Runtime:** the runtime file `src/shockharness/contracts/runtime/contracts.py`
+    (identity until `enable("check", static_properties)`; `check` mode; static
+    properties counted by `report()`).
+  - **Install:** `shockharness contracts install --language python --dest PATH` and
+    `--check`, recorded in `.shockharness-contracts.json`. Nothing is published.
+  - `RESULT001` permits the four declarations as statements when they resolve to the
+    runtime module.
 - `STATE002` (`rules.module_state`, review, Python): a shared object published before
   it is initialized. A global, or `self.<attr>` outside a constructor, is assigned a
   new object and then has its fields set in the same function, so another thread can

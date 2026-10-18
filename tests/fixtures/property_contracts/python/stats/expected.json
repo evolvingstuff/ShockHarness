@@ -1,0 +1,5 @@
+[
+  {"path": "app/stats.py", "rule": "PROP001", "line": 26, "column": 16, "status": "violation", "severity": "review", "message": "app.stats.fit requires 'normalized' on x; the value passed here has {numeric}"},
+  {"path": "app/stats.py", "rule": "PROP001", "line": 32, "column": 16, "status": "violation", "severity": "review", "message": "app.stats.fit requires 'normalized', 'numeric' on x; the value passed here has {}"},
+  {"path": "app/stats.py", "rule": "PROP001", "line": 38, "column": 16, "status": "unknown", "severity": "review", "message": "app.stats.fit requires 'normalized', 'numeric' on x; the analysis cannot tell whether the value passed here carries them: the callee is computed"}
+]

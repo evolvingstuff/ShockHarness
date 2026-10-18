@@ -1,0 +1,13 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["app/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "redacted"
+description = "text with addresses masked"
+producers = []
+runtime = "static"

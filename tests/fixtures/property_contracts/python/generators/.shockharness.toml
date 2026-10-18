@@ -1,0 +1,14 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+# A package name: a project that packages the runtime file itself.
+runtime_module = ["contracts_runtime"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "redacted"
+description = "text with addresses masked"
+producers = []
+runtime = "static"

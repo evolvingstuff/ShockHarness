@@ -1,0 +1,9 @@
+[
+  {"path": "app/decl.py", "rule": "PROP003", "line": 7, "column": 20, "status": "violation", "severity": "error", "message": "'redcated' is not a property of the catalog"},
+  {"path": "app/decl.py", "rule": "PROP006", "line": 12, "column": 20, "status": "violation", "severity": "review", "message": "a property of requires(...) must be a string literal"},
+  {"path": "app/decl.py", "rule": "PROP006", "line": 13, "column": 12, "status": "violation", "severity": "review", "message": "produces(...) names no property"},
+  {"path": "app/decl.py", "rule": "PROP006", "line": 17, "column": 12, "status": "violation", "severity": "review", "message": "produces(...) takes positional arguments only, no keyword or starred argument"},
+  {"path": "app/decl.py", "rule": "PROP007", "line": 22, "column": 5, "status": "violation", "severity": "review", "message": "requires(text, ...) on a parameter is not at the top of the body (after a use of the parameter, or in a branch, loop, try or with); it is not part of the contract"},
+  {"path": "app/decl.py", "rule": "PROP007", "line": 28, "column": 9, "status": "violation", "severity": "review", "message": "requires(text, ...) on a parameter is not at the top of the body (after a use of the parameter, or in a branch, loop, try or with); it is not part of the contract"},
+  {"path": "app/decl.py", "rule": "PROP001", "line": 34, "column": 14, "status": "violation", "severity": "review", "message": "requires(text, ...) checks for 'redacted' here; the value passed here has {}"}
+]

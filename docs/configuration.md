@@ -899,6 +899,68 @@ function is not found in an analyzed file is an `unknown` DOM002 finding.
 Removing a class or a role is a policy deviation; adding a narrower class
 (`HTMLButtonElement`) reports those filters too.
 
+## Property contracts (PROP001, PROP003, PROP006, PROP007)
+
+Opt-in (`docs/shockharness_property_contracts_spec.md`, milestone P1a, Python). Off is
+the default in every profile and is not a deviation. The rules are described in
+`docs/rules.md`.
+
+```toml
+[tool.shockharness.rules.property_contracts]
+enabled = false                    # true turns the family on for this repository
+roles = ["production"]             # the file roles checked
+fail_on_unknown = false            # whether unknown PROP001 findings gate
+runtime_module = []                # where `shockharness contracts install` put the file:
+                                   # "app/contracts.py" (a project path, flat or src layout;
+                                   # it may be excluded from analysis) or a package name
+allow_undeclared = false           # PROP003 is error; true: review, and the name counts
+
+[tool.shockharness.rules.property_contracts.severities]
+PROP001 = "review"
+PROP003 = "error"
+PROP006 = "review"
+PROP007 = "review"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "cloud_disclosable"         # lower_snake_case, listed once
+description = "content the privacy evaluator permits to leave the machine"
+producers = ["app.privacy.evaluate"]   # dotted references to project functions; [] = any
+runtime = "static"                 # "static" | "check" | "verify": what the runtime checks
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+callee = "app.cloud.send_messages:0"   # a project or library callee; the argument by position
+requires = ["cloud_disclosable"]       # catalog properties
+reason = "nothing reaches the provider without the privacy evaluator"
+producer = "app.privacy.evaluate"      # optional; the finding names it
+```
+
+**Checks.** A malformed `callee` (not `<reference>:<N>`), a sink requiring a property
+the catalog does not list, a duplicate or badly spelled property name, and an enabled
+family with no Python `runtime_module` are configuration errors (exit 2) whenever the
+configuration is loaded. When the family is enabled, `config validate` and every
+analysis also resolve each Python reference against the project's files:
+
+* every producer must be a function of the project;
+* a sink callee in a project module must exist there;
+* a sink callee in no project module is a library callee and is accepted.
+
+An unresolved reference is a configuration error that names the key.
+
+**The runtime file.** `shockharness contracts install --language python --dest
+app/contracts.py` copies the runtime into the project. `--project DIR` names the root
+(default: the current directory). The copy is recorded in `.shockharness-contracts.json`,
+in the manifest format `skills install` writes. An edited copy, or a file this manifest
+did not write, is never replaced without `--force`.
+`shockharness contracts install --check` writes nothing and exits 1 when a recorded copy
+is edited, missing or older than the shipped runtime. Nothing is published to any package
+registry, and the project depends on its own copy, not on `shockharness`. Test code calls
+`enable("check", static_properties)` once, before any declaration has run, with the
+properties marked `runtime = "static"`. Until then, and in production, every declaration
+is the identity.
+
+Every key is covered by VERIFY003 (see `docs/rules.md`).
+
 ## History
 
 `[tool.shockharness.history]` controls `metrics.history` in every CLI report

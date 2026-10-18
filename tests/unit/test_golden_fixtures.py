@@ -21,7 +21,10 @@ def test_every_fixture_file_has_expectations() -> None:
     present = sorted(
         p.relative_to(FIXTURES).as_posix()
         for p in FIXTURES.rglob("*")
-        if p.is_file() and p.suffix in {".py", ".js", ".mjs", ".cjs"}
+        if p.is_file()
+        and p.suffix in {".py", ".js", ".mjs", ".cjs"}
+        # Multi-file projects with their own catalog (tests/unit/test_property_contracts.py).
+        and p.relative_to(FIXTURES).parts[0] != "property_contracts"
     )
     assert present == sorted(EXPECTED)
 

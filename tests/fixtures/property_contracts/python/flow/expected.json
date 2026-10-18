@@ -1,0 +1,8 @@
+[
+  {"path": "app/flow.py", "rule": "PROP001", "line": 19, "column": 20, "status": "violation", "severity": "review", "message": "app.flow.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/flow.py", "rule": "PROP001", "line": 26, "column": 20, "status": "violation", "severity": "review", "message": "app.flow.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/flow.py", "rule": "PROP001", "line": 48, "column": 20, "status": "violation", "severity": "review", "message": "app.flow.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/flow.py", "rule": "PROP001", "line": 55, "column": 14, "status": "violation", "severity": "review", "message": "requires(plain, ...) checks for 'redacted' here; the value passed here has {}"},
+  {"path": "app/flow.py", "rule": "PROP001", "line": 65, "column": 24, "status": "violation", "severity": "review", "message": "app.flow.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/flow.py", "rule": "PROP001", "line": 70, "column": 20, "status": "unknown", "severity": "review", "message": "app.flow.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: service.redact(...) is called on a local value, not resolved"}
+]

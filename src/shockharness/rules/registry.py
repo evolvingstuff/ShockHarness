@@ -2365,6 +2365,161 @@ MAGIC004 = RuleSpec(
 )
 
 
+# --- PROP001, PROP003, PROP006, PROP007 (property contracts, milestone P1a) --------------
+# docs/shockharness_property_contracts_spec.md. Opt-in: rules.property_contracts.enabled is
+# false by default and in every profile, and off is not a deviation.
+
+PROPERTY_CONTRACTS_SECTION = "rules.property_contracts"
+PROPERTY_CONTRACTS_FAMILY = "property_contracts"
+PROPERTY_CONTRACTS_REMEDIATION_COMMON = (
+    " Declarations are requires(value, property, ...), produces(value, property, ...), "
+    "preserves(result, source) and preserves_except(result, source, property, ...) from the "
+    "installed runtime module; properties are string literals named in "
+    "rules.property_contracts.properties."
+)
+
+PROP001 = RuleSpec(
+    rule_id="PROP001",
+    version="1",
+    name="value missing a required property",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        'A value reaches a parameter whose function requires a property (requires(x, "p") at '
+        "the top of its body), or a catalog sink that requires one, without that property."
+    ),
+    rationale=(
+        "Some facts about a value cannot be seen in the value: normalized, redacted, issued "
+        "by a registry. A declared requirement makes the fact part of the function's contract, "
+        "and the check makes every path to the function prove it."
+    ),
+    guarantees=(
+        "Python, P1a. Property sets are tracked through one function in source order: "
+        "assignment copies; produces adds; preserves copies the source's set; preserves_except "
+        "removes the named properties; a call to a project function reads that function's own "
+        "declared result (one hop); any other operation, library call or literal carries "
+        "nothing; branches meet in the intersection; loops reach a fixed point; an except "
+        "handler starts from the set at the start of its try. A call that cannot be resolved "
+        "(a method on a value, a callable in a variable or container, getattr) and every "
+        "await, generator and .join build make the set unknown, reported as unknown."
+    ),
+    limitations=(
+        "One hop: a callee whose result comes from a further call it does not declare carries "
+        "only what it declares itself. Methods of classes are not resolved through their "
+        "receivers. JavaScript, assignment-target sinks, compositions (f-strings, template "
+        "literals) and literal_satisfies are milestone P1b."
+    ),
+    remediation=(
+        "Route the value through the property's declared producer, or, if the property is "
+        'established by something the analyzer cannot see, add produces(x, "p") at the point '
+        "where it is established and make sure a test exercises it. Never remove the "
+        "requirement to satisfy this finding." + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example=(
+        'def fit(x):\n    requires(x, "normalized")\n    ...\n\n'
+        "def shortcut(raw):\n    return fit(raw)"
+    ),
+    compliant_example="def pipeline(raw):\n    return fit(normalize(raw))",
+)
+
+PROP003 = RuleSpec(
+    rule_id="PROP003",
+    version="1",
+    name="property not in the catalog",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_ERROR,
+    implemented=True,
+    languages=(PYTHON,),
+    summary="A declaration names a property that rules.property_contracts.properties does not.",
+    rationale=(
+        "A misspelled property is a requirement nothing ever satisfies or checks: the silent "
+        "success the tool exists to refuse. It is an error while allow_undeclared is false."
+    ),
+    guarantees=(
+        "Every string-literal property argument of a resolved requires, produces or "
+        "preserves_except call. Severity rules.property_contracts.severities.PROP003 (error), "
+        "review when allow_undeclared is true."
+    ),
+    limitations="Non-literal property arguments are PROP006 and are not checked here.",
+    remediation=(
+        "Fix the spelling, or add the property to the catalog with its description, "
+        "producers and runtime level." + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example='requires(x, "normalised")  # the catalog says "normalized"',
+    compliant_example='requires(x, "normalized")',
+)
+
+PROP006 = RuleSpec(
+    rule_id="PROP006",
+    version="1",
+    name="malformed declaration",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A declaration the analysis cannot read: a property that is not a string literal, the "
+        "wrong number of arguments, a keyword or starred argument."
+    ),
+    rationale=(
+        "The analysis reads properties from the source, so a computed name is a declaration "
+        "nobody can check; the call contributes nothing."
+    ),
+    guarantees=(
+        "Resolved requires / produces / preserves / preserves_except calls: a property argument "
+        "that is not a plain string literal; requires or produces with no value; produces with "
+        "no property; preserves without exactly a result and a source; preserves_except "
+        "without a property; any keyword or starred argument."
+    ),
+    limitations="Calls that do not resolve to the runtime module are ordinary calls.",
+    remediation=(
+        "Write each property as a string literal and pass the arguments positionally."
+        + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example="requires(x, PROPERTY)",
+    compliant_example='requires(x, "normalized")',
+)
+
+PROP007 = RuleSpec(
+    rule_id="PROP007",
+    version="1",
+    name="misplaced parameter requirement",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A requires on a parameter that is not a statement at the top of the body, before any "
+        "other use of the parameter, outside branches and loops."
+    ),
+    rationale=(
+        "A function's requirements belong where a reader looks for its signature; a "
+        "requirement after a use or under a condition is not part of the contract."
+    ),
+    guarantees=(
+        "A resolved requires whose first argument is a parameter of the enclosing function, "
+        "when it is nested in a branch, loop, try or with, or when an earlier statement of the "
+        "body (the docstring aside) uses the parameter. It is not counted in the contract."
+    ),
+    limitations="A requires on a local or a call result is a mid-body check and may be anywhere.",
+    remediation=(
+        "Move the requires to the top of the function body, before the parameter's first use."
+        + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example='def fit(x):\n    y = x.copy()\n    requires(x, "normalized")',
+    compliant_example='def fit(x):\n    requires(x, "normalized")\n    y = x.copy()',
+)
+
+
+CONTRACT_RULES: tuple[RuleSpec, ...] = (PROP001, PROP003, PROP006, PROP007)
+
+
 # --- STATE002 (MetaList, 2026-10-17) ----------------------------------------------------
 
 STATE002 = RuleSpec(
@@ -2676,6 +2831,10 @@ RULES: tuple[RuleSpec, ...] = (
     MAGIC004,
     EXC005,
     STATE002,
+    PROP001,
+    PROP003,
+    PROP006,
+    PROP007,
     DOM001,
     DOM002,
 )
@@ -2735,6 +2894,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     CONSISTENCY_FAMILY: CATEGORY_CONTRACT,
     SENTINELS_FAMILY: CATEGORY_CONTRACT,
     "dom": CATEGORY_CONTRACT,
+    PROPERTY_CONTRACTS_FAMILY: CATEGORY_CONTRACT,
 }
 
 

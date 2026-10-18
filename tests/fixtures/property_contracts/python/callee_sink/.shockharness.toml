@@ -1,0 +1,28 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+# The vendored runtime copy is pinned and excluded; imports into it still resolve.
+exclude = ["app/vendor/**"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["app/vendor/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "cloud_disclosable"
+description = "content the privacy evaluator permits to leave the machine"
+producers = ["app.privacy.evaluate"]
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+callee = "app.cloud.send_messages:0"
+requires = ["cloud_disclosable"]
+reason = "nothing reaches the provider without the privacy evaluator"
+producer = "app.privacy.evaluate"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+callee = "json.dumps:0"
+requires = ["cloud_disclosable"]
+reason = "serialized content is what the uploader sends"

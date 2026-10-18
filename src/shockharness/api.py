@@ -31,8 +31,9 @@ from shockharness.cache.store import (
     open_cache,
 )
 from shockharness.config import EffectiveConfig, load_config
+from shockharness.contracts.catalog import reference_issues
 from shockharness.discovery import discover
-from shockharness.errors import UsageError
+from shockharness.errors import ConfigError, UsageError
 from shockharness.gate import NO_REGRESSIONS, GateResult
 from shockharness.gating.baseline import Baseline
 from shockharness.gating.baseline import apply_baseline as apply_baseline_fingerprints
@@ -84,6 +85,7 @@ def analyze_paths(
     is applied. Complexity never affects the gate here.
     """
     started = time.perf_counter()
+    check_contract_references(root, config)
     discovery = discover(root, list(paths), config)
     cache, cache_coverage = _open_cache(root, config, options)
     outcome = analyze_files(discovery.files, config, options, cache)
@@ -113,6 +115,18 @@ def analyze_paths(
         attempts,
         attempt_roles,
     )
+
+
+def check_contract_references(root: Path, config: EffectiveConfig) -> None:
+    """Property contracts (enabled): every Python producer and sink reference must resolve
+    in the project (spec §8.1); an unresolved one is a configuration error (exit 2)."""
+    issues = reference_issues(root, config.values)
+    if len(issues) > 0:
+        raise ConfigError(
+            "property contract references do not resolve:\n  "
+            + "\n  ".join(issue.render() for issue in issues),
+            config.source.path,
+        )
 
 
 def _open_cache(

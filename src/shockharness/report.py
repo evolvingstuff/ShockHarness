@@ -30,6 +30,7 @@ from shockharness.config import (
     UNSUPPORTED_IGNORE,
     UNSUPPORTED_SOURCES_KEY,
     EffectiveConfig,
+    switched_off,
 )
 from shockharness.constants import ELAPSED_DECIMALS, REPORT_SCHEMA_VERSION, SUMMARY_TOP_FILES
 from shockharness.discovery import DiscoveryResult
@@ -148,10 +149,7 @@ def _coverage(
         roles[file.role] += 1
     disabled_globally: list[str] = []
     for rule in registry.implemented_rules():
-        if (
-            rule.config_section is not None
-            and config.section(rule.config_section)["enabled"] is False
-        ):
+        if switched_off(config.values, rule.config_section):
             disabled_globally.append(rule.rule_id)
     return {
         "host_python": platform.python_version(),

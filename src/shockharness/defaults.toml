@@ -706,3 +706,31 @@ complexity_regressions = "warn"
 [tool.shockharness.cache]
 enabled = true
 directory = ".shockharness-cache"
+
+# Property contracts (docs/shockharness_property_contracts_spec.md, milestone P1a, Python):
+# requires / produces / preserves declarations checked at call sites and catalog sinks.
+# Opt-in: off by default and in every profile; off is not a deviation. A property used in
+# code must be in `properties` (PROP003). See docs/configuration.md.
+[tool.shockharness.rules.property_contracts]
+enabled = false
+roles = ["production"]
+# Whether an unknown PROP001 (the value's properties cannot be established) gates.
+fail_on_unknown = false
+# Where the runtime module was installed (`shockharness contracts install`): project-relative
+# paths ("app/contracts.py") or module names; calls resolve to it through the imports.
+runtime_module = []
+# PROP003 is an error while false; true makes it review (an undeclared name is accepted).
+allow_undeclared = false
+# [[tool.shockharness.rules.property_contracts.properties]]: name, description, producers
+# (dotted references; empty: any unit may produce it), runtime ("static" | "check" | "verify").
+properties = []
+# [[tool.shockharness.rules.property_contracts.sinks]]: language, callee ("ref:N", the
+# argument by position), requires, reason, producer (optional, for the remediation).
+sinks = []
+
+[tool.shockharness.rules.property_contracts.severities]
+PROP001 = "review"
+PROP003 = "error"
+PROP006 = "review"
+PROP007 = "review"
+

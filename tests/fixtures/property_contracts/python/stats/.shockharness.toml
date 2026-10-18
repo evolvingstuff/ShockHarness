@@ -1,0 +1,20 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+# The runtime file need not exist or be analyzed: only its module name is needed.
+runtime_module = ["app/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "numeric"
+description = "a numeric series"
+producers = []
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "normalized"
+description = "centered and divided by its standard deviation"
+producers = ["app.stats.normalize"]
+runtime = "check"

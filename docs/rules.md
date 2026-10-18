@@ -1234,6 +1234,92 @@ from one (never `currentTarget`, the element the listener is on); `C` is in
 `HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
 TypeScript; exact.
 
+### PROP001, PROP003, PROP006, PROP007: property contracts (opt-in; Python, milestone P1a)
+
+The family of `docs/shockharness_property_contracts_spec.md`, milestone P1a. It is off
+by default and no profile turns it on. Off is not a deviation, does not list the rules
+as disabled, and adds nothing to `coverage.rules_disabled_globally`. Enable it with
+`rules.property_contracts.enabled = true`, a catalog of properties, and the
+`runtime_module` that `shockharness contracts install` wrote (see
+`docs/configuration.md`, "Property contracts").
+
+**Declarations.** There are four declarations, imported from the installed runtime
+file: `requires(value, "p", ...)`, `produces(value, "p", ...)`, `preserves(result,
+source)` and `preserves_except(result, source, "p", ...)`. Each returns its first
+argument. A call counts only when it resolves, through the file's imports, to a module
+that `runtime_module` names. That module may be excluded from analysis, because only
+its name is needed. A function named `requires` from anywhere else is an ordinary call.
+A function's contract is read from its own body:
+
+* the `requires` statements on parameters at the top of the body, before any other use
+  of the parameter;
+* the result set of its own returns.
+
+There is no separate declaration.
+
+**The analysis.** Each function, and each module body, is walked in source order:
+
+* **What carries properties.** Assignment copies a value's property set. `produces`
+  adds to it. `preserves` copies the source's set, and `preserves_except` removes the
+  named properties. `a or b` and `a if c else b` are the intersection of their operands.
+* **What destroys them.** Any other operation, literal, f-string or library call
+  carries nothing.
+* **Control flow.** Branches meet in the intersection, and loops iterate to a fixed
+  point. An except handler starts from the set at the start of its try. A parameter
+  starts with what the function requires of it; a parameter with no `requires` starts
+  with nothing (the `declared` level).
+* **Calls (one hop).** A call that resolves to a project function is checked against
+  that function's contract. Its result carries the function's own declared result set,
+  computed with every further project call inside it unknown. A function with no
+  `produces` or `preserves` declares no result, so its result carries nothing. The
+  function's file is read from the analyzed files, or else from the project under the
+  root, so a check of one file still sees its imports' contracts.
+* **Unknown sets.** Some calls cannot be resolved: a method on a value, a callable in a
+  variable or a container, a class. Every `await`, `yield`, generator expression,
+  generator function result, `async for`, `async with`, and a library call that consumes
+  a generator, makes the set unknown. So does a `.join` build. These are P2 semantics.
+
+| Rule | Reports | Default |
+|---|---|---|
+| `PROP001` | a value reaching a parameter whose function `requires` a property, a catalog sink (`callee:N`), or a mid-body `requires` on a local, without that property. When the value's set is unknown, the finding is `unknown` and gates only with `fail_on_unknown = true` | review |
+| `PROP003` | a property name the catalog does not list. The name is not counted, so a misspelled requirement is never silently checked. With `allow_undeclared = true` it is `review` and counted | **error** |
+| `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing | review |
+| `PROP007` | a `requires` on a parameter that is not at the top of the body (after a use of the parameter, or inside a branch, loop, try or with). It is not part of the contract. A parameter the body rebinds is a local after that, and a `requires` on it is a mid-body check | review |
+
+**Sinks.** A catalog sink is either a project callee or a library callee, resolved
+through imports (`app.cloud.send_messages:0`, `json.dumps:0`). Its argument is
+addressed by position. A keyword argument maps to its position through a project
+callee's parameter list. For a library callee a keyword argument is unknown, and so is
+an argument passed through `*args` or `**kwargs`. A sink entry may name its `producer`,
+and the finding repeats it.
+
+**Severities** are `rules.property_contracts.severities.PROP001` and so on. Lowering one
+is a VERIFY003 loosening. So are these:
+
+* turning the family off;
+* `fail_on_unknown` true to false;
+* `allow_undeclared` false to true;
+* while the family is on: removing a sink or a property from a sink's `requires`;
+  lowering a property's `runtime`; dropping or widening its `producers`; removing a role
+  or a runtime module.
+
+`RESULT001` never reports the four declarations as discarded results when they resolve
+to the runtime module.
+
+**Not in P1a** (spec §14):
+
+* JavaScript and TypeScript;
+* assignment-target sinks (`el.innerHTML = ...`);
+* compositions and `literal_satisfies`;
+* catalog preserving operations (slicing);
+* transitive summaries;
+* the `await`/generator semantics;
+* `PROP002`, `PROP004`, `PROP005`, `PROP008`;
+* `complete`, `verify` mode, and the skills.
+
+Methods are not resolved through their receivers, and a class call (a constructor) is
+unknown.
+
 ## Registered, not implemented
 
 None since MAGIC002 landed. A rule registered before it is built is listed in

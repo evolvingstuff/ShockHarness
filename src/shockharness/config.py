@@ -32,6 +32,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from shockharness.contracts.catalog import catalog_issues
 from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
 from shockharness.loosening import loosenings
@@ -71,6 +72,27 @@ SEVERITY_SECTIONS: Mapping[str, str] = {
 # The rule families with a `fail_on_unknown` switch (H1): the dotted section that holds
 # it, and the rules it covers. A family is named after the last part of its section.
 FAIL_ON_UNKNOWN_KEY = "fail_on_unknown"
+# Rule sections a repository opts into; off is their default and not a deviation.
+OPT_IN_SECTIONS = frozenset({"property_contracts"})
+
+
+def is_opt_in(section: str) -> bool:
+    """``rules.property_contracts`` and the like: off by default, and off is no deviation."""
+    parts = section.split(".")
+    return parts[len(parts) - 1] in OPT_IN_SECTIONS
+
+
+def switched_off(values: Mapping[str, Any], section: str | None) -> bool:
+    """A family turned off with ``enabled = false``. An opt-in family that is off is in
+    its default state, not switched off: no deviation, no disabled rules."""
+    if section is None or is_opt_in(section):
+        return False
+    node: Any = values
+    for key in section.split("."):
+        node = node[key]
+    return node["enabled"] is False
+
+
 FAIL_ON_UNKNOWN_SECTIONS: Mapping[str, str] = {
     "rules.magic_numbers": "MAGIC001",
     "rules.exceptions": "EXC001-EXC003",
@@ -78,6 +100,7 @@ FAIL_ON_UNKNOWN_SECTIONS: Mapping[str, str] = {
     "complexity": "CPLX001-CPLX006",
     "rules.verification": "VERIFY001, VERIFY002, VERIFY004",
     "rules.async_lifecycle": "ASYNC001-ASYNC003",
+    "rules.property_contracts": "PROP001",
 }
 # The legacy spelling of the config role's globs (H1): merged into file_roles.config.
 LEGACY_CONFIGURATION_FILES = "rules.magic_numbers.configuration_files"
@@ -180,6 +203,10 @@ class EffectiveConfig:
     # The project's console scripts, "module:function", from [project.scripts] of the
     # root pyproject.toml: entry points for DEF005 (spec 21.1 decision 37).
     entry_points: tuple[str, ...]
+    # The analyzed root the configuration was loaded for: property contracts read a
+    # resolved callee's declared contract from its project file when that file is not
+    # among the analyzed ones (spec §5.3, one hop). Not part of the digest.
+    root: Path
 
     def section(self, dotted: str) -> Mapping[str, Any]:
         node: Any = self.values
@@ -340,7 +367,7 @@ def _discover_source(
 
 
 def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
-    issues: list[ConfigIssue] = []
+    issues: list[ConfigIssue] = list(catalog_issues(values))
     for list_key in ("include", "exclude"):
         for index, pattern in enumerate(values[list_key]):
             problem = validate_glob(pattern)
@@ -768,7 +795,7 @@ def _deviations(values: Mapping[str, Any], strict_values: Mapping[str, Any]) -> 
         )
     rules = values["rules"]
     for section_name in sorted(rules):
-        if rules[section_name]["enabled"] is False:
+        if switched_off(values, f"rules.{section_name}"):
             found.append(f"rules.{section_name} is disabled")
     for section_name in SEVERITY_SECTIONS:
         if rules[section_name]["severity"] != SECTION_SEVERITIES[0]:
@@ -1170,6 +1197,7 @@ def _effective(
         policy=policy,
         policy_attempts=tuple(attempts),
         entry_points=entry_points,
+        root=root,
     )
 
 

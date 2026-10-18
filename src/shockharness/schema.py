@@ -245,6 +245,28 @@ GUARDRAIL_COMMON: dict[str, Field] = {
     "roles": ListField(EnumField(ROLES)),
 }
 
+# Property contracts (spec P1a): a catalog property and a callee sink.
+CONTRACT_RUNTIME_LEVELS = ("static", "check", "verify")
+CONTRACT_PROPERTY_SCHEMA = TableField(
+    fields={
+        "name": StrField(allow_empty=False),
+        "description": StrField(allow_empty=False),
+        "producers": ListField(StrField(allow_empty=False)),
+        "runtime": EnumField(CONTRACT_RUNTIME_LEVELS),
+    },
+    required=("name", "description", "producers", "runtime"),
+)
+CONTRACT_SINK_SCHEMA = TableField(
+    fields={
+        "language": EnumField(LANGUAGES),
+        "callee": StrField(allow_empty=False),
+        "requires": ListField(StrField(allow_empty=False)),
+        "reason": StrField(allow_empty=False),
+        "producer": StrField(allow_empty=False),
+    },
+    required=("language", "callee", "requires", "reason"),
+)
+
 # `[[tool.shockharness.rules.module_state.allowed]]`: a deliberate process-wide binding.
 ALLOWED_STATE_SCHEMA = TableField(
     fields={
@@ -461,6 +483,25 @@ CONFIG_SCHEMA = TableField(
                         "javascript_validators": ListField(StrField(allow_empty=False)),
                         "python_config_reads": ListField(StrField(allow_empty=False)),
                         "javascript_config_reads": ListField(StrField(allow_empty=False)),
+                    },
+                    required=(),
+                ),
+                "property_contracts": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "roles": ListField(EnumField(ROLES)),
+                        "fail_on_unknown": BoolField(),
+                        "runtime_module": ListField(StrField(allow_empty=False)),
+                        "allow_undeclared": BoolField(),
+                        "properties": ListField(CONTRACT_PROPERTY_SCHEMA),
+                        "sinks": ListField(CONTRACT_SINK_SCHEMA),
+                        "severities": TableField(
+                            fields={
+                                rule: EnumField(VERIFICATION_SEVERITIES)
+                                for rule in ("PROP001", "PROP003", "PROP006", "PROP007")
+                            },
+                            required=(),
+                        ),
                     },
                     required=(),
                 ),

@@ -15,7 +15,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from shockharness.analysis import CACHE_BYPASSED, CACHE_CONFIGURED, AnalysisOptions
-from shockharness.api import analyze_paths, apply_baseline, with_accepted_policy, with_history
+from shockharness.api import (
+    analyze_paths,
+    apply_baseline,
+    check_contract_references,
+    with_accepted_policy,
+    with_history,
+)
 from shockharness.config import (
     DEDICATED_FILENAME,
     DEDICATED_FILENAMES,
@@ -35,6 +41,8 @@ from shockharness.constants import (
     EXIT_OK,
     JSON_INDENT,
 )
+from shockharness.contracts.install import CONTRACTS_MANIFEST, check_runtime, install_runtime
+from shockharness.contracts.install import LANGUAGES as CONTRACT_LANGUAGES
 from shockharness.errors import ShockHarnessError, UsageError
 from shockharness.gate import GATE_ERROR, as_advisory, process_exit_code
 from shockharness.gating.baseline import Baseline, build_baseline, load_baseline, render_baseline
@@ -91,6 +99,7 @@ COMMAND_CHECK = "check"
 COMMAND_SCAN = "scan"  # hidden alias of check, kept so Milestone A-D invocations keep working
 COMMAND_VERSION = "version"
 COMMAND_SKILLS = "skills"
+COMMAND_CONTRACTS = "contracts"
 COMMAND_HOOK = "hook"
 HOOK_DEFAULT_FAIL_ON = "warning"
 COMMAND_EXCEPTIONS = "exceptions"
@@ -207,6 +216,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init.add_argument("--force", action="store_true", help="overwrite an existing file")
 
+    _add_skills_parser(commands)
+    _add_contracts_parser(commands)
+    return parser
+
+
+def _add_skills_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     skills = commands.add_parser(
         COMMAND_SKILLS, help="install, update or inspect the bundled agent skills"
     )
@@ -228,7 +243,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="write nothing; exit 1 when any installed skill is stale, edited, missing, new "
         "or removed relative to the installed package",
     )
-    return parser
+
+
+def _add_contracts_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
+    contracts = commands.add_parser(
+        COMMAND_CONTRACTS,
+        help="copy the property-contracts runtime file into a project (nothing is published)",
+    )
+    contracts_commands = contracts.add_subparsers(
+        dest="contracts_command", required=True, metavar="SUBCOMMAND"
+    )
+    install = contracts_commands.add_parser(
+        "install",
+        help=f"copy the runtime file to --dest and record it in {CONTRACTS_MANIFEST}; "
+        "with --check, report installed copies that are edited, missing or stale",
+    )
+    install.add_argument("--language", choices=CONTRACT_LANGUAGES, help="the runtime's language")
+    install.add_argument(
+        "--dest", type=Path, help="where the file goes, relative to --project (app/contracts.py)"
+    )
+    install.add_argument(
+        "--project", type=Path, default=Path.cwd(), help="project root (default: current directory)"
+    )
+    install.add_argument(
+        "--force", action="store_true", help="replace a file that was edited or not installed here"
+    )
+    install.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 when an installed copy is edited, missing or stale",
+    )
 
 
 def _add_skills_install_parser(
@@ -586,6 +630,7 @@ def _run_gate(args: argparse.Namespace) -> int:
 def _run_config(args: argparse.Namespace) -> int:
     config = _load_config(args)
     if args.config_command == "validate":
+        check_contract_references(args.root, config)
         sys.stdout.write(
             f"{PROGRAM}: configuration is valid ({config.source.tier}: {config.source.path}; "
             f"profile {config.values['profile']})\n"
@@ -796,6 +841,30 @@ def _run_skills(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def _run_contracts(args: argparse.Namespace) -> int:
+    if args.check:
+        if args.language is not None or args.dest is not None:
+            raise UsageError("contracts install --check takes no --language or --dest", None)
+        result = check_runtime(args.project)
+        verb = "checked"
+    else:
+        if args.language is None or args.dest is None:
+            raise UsageError("contracts install needs --language and --dest (or --check)", None)
+        result = install_runtime(args.project, args.language, args.dest, args.force)
+        verb = "installed"
+    sys.stdout.write(f"{PROGRAM}: {verb} contracts runtime ({version_string()})\n")
+    for file in result.files:
+        detail = "" if file.detail == "" else f" ({file.detail})"
+        sys.stdout.write(f"  {file.status:<11}{file.language:<11}{file.path}{detail}\n")
+    sys.stdout.write(f"  manifest   {result.manifest_path}\n")
+    if not args.check:
+        sys.stdout.write(
+            "List the path under rules.property_contracts.runtime_module; the project owns "
+            "the file from now on.\n"
+        )
+    return result.exit_code
+
+
 def _run_hook(args: argparse.Namespace) -> int:
     """The agent's hook protocol (Claude Code): 2 feeds stderr back to the agent, 1 is a
     notice to the user, 0 is clean. A configuration error is the usual exit 2: the agent
@@ -823,6 +892,7 @@ def _dispatch(args: argparse.Namespace) -> int:
         "rules": _run_rules,
         "init": _run_init,
         COMMAND_SKILLS: _run_skills,
+        COMMAND_CONTRACTS: _run_contracts,
         COMMAND_HOOK: _run_hook,
     }
     if args.command not in runners:

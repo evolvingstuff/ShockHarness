@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from shockharness.complexity.callgraph import ModuleEdge
+from shockharness.contracts.catalog import runtime_callees
 from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.model import (
     CHECK_TRUE,
@@ -205,10 +206,18 @@ def _count(text: str | None) -> int | None:
 
 
 def _result001(
-    facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
+    facts: ModuleFacts,
+    source: SourceText,
+    path: str,
+    language: str,
+    settings: Mapping[str, Any],
+    permitted: frozenset[str],
 ) -> list[Finding]:
+    """``permitted``: the property-contracts runtime declarations (requires, produces,
+    preserves, preserves_except of the runtime module), statements by design (§10)."""
     key = "python_must_use" if language == PYTHON else "javascript_must_use"
-    entries = _must_use([str(e) for e in settings[key]])
+    listed = _must_use([str(e) for e in settings[key]])
+    entries = {name: entry for name, entry in listed.items() if name not in permitted}
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for call in facts.asynchrony.discarded_calls:
@@ -474,7 +483,8 @@ def run_catalog_rules(
     if PROCESS001.rule_id in active:
         found.extend(_process001(facts, source, path, language, rules["processes"]))
     if RESULT001.rule_id in active:
-        found.extend(_result001(facts, source, path, language, rules["results"]))
+        permitted = runtime_callees(rules["property_contracts"])
+        found.extend(_result001(facts, source, path, language, rules["results"], permitted))
     if TYPE001.rule_id in active and language in (PYTHON, TYPESCRIPT):
         found.extend(_type001(facts, source, path, language, rules["types"]))
     if SLEEP001.rule_id in active:

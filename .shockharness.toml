@@ -50,6 +50,18 @@ exception = "UnicodeDecodeError"
 reason = "Config file bytes are external input; non-UTF-8 becomes a ConfigError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/contracts/catalog.py"
+language = "python"
+exceptions = ["OSError", "UnicodeDecodeError"]
+reason = "Reading a project file the property-contracts catalog names; an unreadable one makes the reference unresolved, a configuration error that names it"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/contracts/catalog.py"
+language = "python"
+exception = "SyntaxError"
+reason = "A project file the catalog names is external source; one that does not parse makes the reference unresolved, a configuration error that names it"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/rules/accepted_policy.py"
 language = "python"
 exception = "shockharness.errors.ConfigError"

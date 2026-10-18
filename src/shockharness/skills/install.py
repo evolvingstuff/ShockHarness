@@ -119,7 +119,7 @@ def render_manifest(manifest: Manifest) -> str:
     return json.dumps(manifest.to_json_dict(), indent=JSON_INDENT, sort_keys=True) + "\n"
 
 
-def _read_bytes(path: Path) -> bytes:
+def read_bytes(path: Path) -> bytes:
     # Boundary (declared in .shockharness.toml): reading a file in the user's destination.
     try:
         return path.read_bytes()
@@ -132,7 +132,7 @@ def _create_parent_and_write(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def _write_bytes(path: Path, data: bytes) -> None:
+def write_bytes(path: Path, data: bytes) -> None:
     # Boundary (declared in .shockharness.toml): writing into the user's destination.
     try:
         _create_parent_and_write(path, data)
@@ -179,7 +179,7 @@ def parse_manifest(text: str, origin: str) -> Manifest:
 
 
 def load_manifest(path: Path) -> Manifest:
-    data = _read_bytes(path)
+    data = read_bytes(path)
     # Boundary (declared in .shockharness.toml): manifest bytes are external input.
     try:
         text = data.decode("utf-8")
@@ -207,9 +207,9 @@ def install_skills(destination: Path, agent: str, force: bool) -> SkillsResult:
         )
     files: list[FileReport] = []
     for name, data in contents.items():
-        _write_bytes(targets[name], data)
+        write_bytes(targets[name], data)
         files.append(FileReport(name, targets[name], STATUS_WRITTEN, STATUS_WRITTEN, ""))
-    _write_bytes(manifest_path, render_manifest(build_manifest(agent, contents)).encode("utf-8"))
+    write_bytes(manifest_path, render_manifest(build_manifest(agent, contents)).encode("utf-8"))
     return SkillsResult(destination, manifest_path, tuple(files), EXIT_OK)
 
 
@@ -242,7 +242,7 @@ def _classify(
         if not path.is_file():
             rows.append((name, path, STATUS_MISSING, "in the manifest but absent on disk"))
             continue
-        current = sha256_hex(_read_bytes(path))
+        current = sha256_hex(read_bytes(path))
         if current != recorded:
             rows.append((name, path, STATUS_EDITED, "content differs from the manifest hash"))
         elif shipped != recorded:
@@ -308,7 +308,7 @@ def update_skills(destination: Path, agent: str, check: bool) -> SkillsResult:
         elif status == STATUS_NEW:
             action = ACTION_ADDED
         if status in (STATUS_STALE, STATUS_MISSING, STATUS_NEW) and not check:
-            _write_bytes(path, contents[name])
+            write_bytes(path, contents[name])
             written[name] = contents[name]
         if check and action not in (ACTION_NONE, ACTION_CONFLICT, ACTION_REPORTED):
             action = f"would be {action}"
@@ -333,7 +333,7 @@ def update_skills(destination: Path, agent: str, check: bool) -> SkillsResult:
         agent=agent,
         skills=entries,
     )
-    _write_bytes(manifest_path, render_manifest(new_manifest).encode("utf-8"))
+    write_bytes(manifest_path, render_manifest(new_manifest).encode("utf-8"))
     conflicts = sum(1 for file in files if file.status == STATUS_EDITED)
     exit_code = EXIT_OK if conflicts == 0 else EXIT_VIOLATIONS
     return SkillsResult(destination, manifest_path, tuple(files), exit_code)
@@ -369,7 +369,7 @@ def _settings_document(path: Path) -> dict[str, Any]:
     """The project's Claude Code settings, or an empty object when there are none."""
     if not path.exists():
         return {}
-    data = _read_bytes(path)
+    data = read_bytes(path)
     # Boundary (declared in .shockharness.toml): the settings file is external input.
     try:
         text = data.decode("utf-8")
@@ -454,10 +454,10 @@ def install_claude_hook(project_root: Path, command: str) -> tuple[Path, str]:
             return path, HOOK_PRESENT
         status = updated
     text = json.dumps(document, indent=JSON_INDENT) + "\n"
-    _write_bytes(path, text.encode("utf-8"))
+    write_bytes(path, text.encode("utf-8"))
     return path, status
 
 
 def write_lock(path: Path, text: str) -> None:
     """Write the ``--lock`` policy file (its directory is created)."""
-    _write_bytes(path, text.encode("utf-8"))
+    write_bytes(path, text.encode("utf-8"))
