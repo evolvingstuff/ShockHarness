@@ -341,6 +341,7 @@ def test_store_is_inert_before_open_and_open_cache_opens(
 
 
 @pytest.mark.slow
+@pytest.mark.serial
 def test_warm_run_over_the_repository_is_at_most_half_the_cold_run(tmp_path: Path) -> None:
     """A sanity bound, not a benchmark: the repository's own src/ and tests/ with a fresh
     cache directory under tmp_path."""

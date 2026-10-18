@@ -5112,3 +5112,23 @@ What the round still shows:
 
 Next: rerun the fifteen with the fixed runner (needs Tom's go-ahead), after release
 0.10.0 so that the skills' pin names a release that knows property contracts.
+
+## Tests run in parallel (2026-10-18)
+
+On Tom's go-ahead: `pytest-xdist` is in the dev extra. `pytest -q -n auto -m "not serial"`
+runs the suite on every core, and `pytest -q -m serial` then runs the one timing bound
+(`test_warm_run_over_the_repository_is_at_most_half_the_cold_run`) alone: under load from
+other tests, its warm run measured 6.7 s against a 13.3 s cold run and failed the
+half-bound. CI runs the two as separate steps. Locally (8 cores) the suite went from
+96 s to 21 s plus 22 s for the timing test. Four parallel runs passed all 1313 tests.
+Before this, CI's test step took 160 to 385 s per job, with Windows py3.11 the slowest.
+
+## Release 0.10.0 (2026-10-18)
+
+On Tom's go-ahead, after CI was green on 16ed2a7 (run 39132719335, 16 of 16 jobs).
+`version.py` is 0.10.0, with every pin moved from 0.9.0: the README, docs, both
+examples, the seven skills' adoption section, and the tests that check the pins. The
+changelog's `[0.10.0]` section says no change makes a passing gate fail: property
+contracts are opt-in, STATE002 is `review`, ASYNC003 reports less, and the cache
+schema is "20". Published by `publish.yml` (run 39133613342, 18 of 18 jobs). PyPI lists
+0.10.0 with a wheel and an sdist.

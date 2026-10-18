@@ -33,7 +33,9 @@ jobs:
           ruff check src tests scripts evals
           ruff format --check src tests scripts evals
       - name: Tests
-        run: pytest -q
+        run: pytest -q -n auto -m "not serial"
+      - name: Timing tests (alone)
+        run: pytest -q -m serial
       - name: Self-compliance gate
         run: shockharness check src tests scripts evals --format text
       - name: Config validates

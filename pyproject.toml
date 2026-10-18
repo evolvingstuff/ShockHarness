@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8",
+  "pytest-xdist>=3.6",
   "hypothesis>=6",
   "ruff>=0.6",
   "build>=1.2",
@@ -66,7 +67,10 @@ include = ["src/shockharness", "tests", "docs", "schemas", "evals", "README.md",
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-markers = ["slow: tests that run subprocesses or large inputs"]
+markers = [
+  "slow: tests that run subprocesses or large inputs",
+  "serial: a timing bound that other tests running beside it would break; run with -m serial, never under -n",
+]
 
 [tool.ruff]
 line-length = 100
