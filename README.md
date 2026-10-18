@@ -28,6 +28,36 @@ score; complexity never fails a plain `check`.
 ShockHarness complements Ruff and ESLint; it is not a formatter or a general
 linter. It runs offline, needs no LLM, and never uploads source.
 
+## What ShockHarness insists on
+
+Each rule family enforces one of these. `docs/rules.md` has the rules, and the
+`write-compliant-code` skill teaches the same list to coding agents.
+
+* **Failures are visible.** A failure is raised and reaches someone. Code catches
+  only at a declared boundary, where the program meets the outside world, and there
+  the failure becomes a typed error, never a success-shaped value. A `finally` does
+  not swallow it, a batch loop does not log it away, a retry gives up.
+  (`EXC001`-`EXC005`, `DEF005`, `BATCH001`, `RETRY001`, `ASYNC001`-`ASYNC003`)
+* **Absence is a decision, not a default.** Missing data fails loudly, once, where it
+  enters. No parameter defaults, `.get(k, v)`, `x or v`, `x ?? v` or environment
+  fallbacks. A value that is really optional says so in its type, and the code
+  branches on it by name. (`DEF001`-`DEF006`, `INPUT001`, `INPUT002`)
+* **Numbers have reasons.** Every number other than 0 and 1 is a configuration
+  parameter or a named constant that says what it is for, and a constant is never
+  named after its value. (`MAGIC001`, `MAGIC003`, `MAGIC004`)
+* **The verifier is not negotiable.** A change does not get through by skipping a
+  test, weakening an assertion, raising a threshold, widening a suppression or
+  loosening the policy file. Each of these is reported at review.
+  (`VERIFY001`-`VERIFY004`, `ROLE001`, `SUPP001`, `SUPP002`)
+* **Unfinished work says so.** A stub, a mock in production code or a check that
+  always passes is reported, never mistaken for an implementation.
+  (`STUB001`-`STUB003`)
+* **What a value must carry is written down.** Facts the value cannot show, such as
+  normalized, redacted or sanitized, are declared where they are established and
+  checked on every path to where they are needed. (`PROP001`-`PROP008`, opt-in)
+* **Hard rules are not averaged.** A violation is never offset by a good score.
+  Complexity is advisory and never fails a plain `check`.
+
 ## Status
 
 Pre-release. Milestones A (skeleton and contracts), B (parsers and
