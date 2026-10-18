@@ -13,7 +13,7 @@ Two kinds of check, at two moments:
 
 import ast
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -348,11 +348,18 @@ def runtime_callees(settings: Mapping[str, Any]) -> frozenset[str]:
 
 def module_file(root: Path, module: Sequence[str]) -> Path | None:
     """The project file of a dotted module, in the flat or the src layout."""
+    return probed_module_file(root, module, Path.is_file)
+
+
+def probed_module_file(
+    root: Path, module: Sequence[str], is_file: Callable[[Path], bool]
+) -> Path | None:
+    """``module_file`` with each existence check made by ``is_file`` (a logged probe)."""
     for base in (root, root / SOURCE_DIRECTORY):
         directory = base.joinpath(*module)
         candidates = (directory.with_suffix(PYTHON_SUFFIX), directory / PACKAGE_INIT)
         for candidate in candidates:
-            if candidate.is_file():
+            if is_file(candidate):
                 return candidate
     return None
 
@@ -372,6 +379,11 @@ def read_module(path: Path) -> tuple[ast.Module | None, str]:
     text, why = read_text(path)
     if text is None:
         return None, why
+    return parse_module(path, text)
+
+
+def parse_module(path: Path, text: str) -> tuple[ast.Module | None, str]:
+    """(tree, "") or (None, why) for a module's text read from ``path``."""
     filename = str(path)
     # Boundary (declared in .shockharness.toml): the file's text is external input.
     try:

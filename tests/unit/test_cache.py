@@ -146,6 +146,7 @@ def test_second_run_is_identical_and_every_file_is_a_hit(
         "invalidated": 0,
         "errors": 0,
         "problems": [],
+        "contracts": "off",  # the family is off
     }
     assert cache_block(warm)["hits"] == 3 == json.loads(warm)["execution_summary"]["files"]
     assert cache_block(warm)["misses"] == 0
@@ -360,3 +361,71 @@ def test_warm_run_over_the_repository_is_at_most_half_the_cold_run(tmp_path: Pat
     block = cache_block(warm)
     assert block["misses"] == 0 and block["hits"] == json.loads(warm)["execution_summary"]["files"]
     assert warm_seconds <= cold_seconds / 2, (cold_seconds, warm_seconds)
+
+
+CONTRACTS_CONFIG = """[tool.shockharness]
+include = ["app/use.py", "app/__init__.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["app/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "redacted"
+description = "text with addresses masked"
+producers = []
+runtime = "static"
+"""
+# app/use.py is the one analyzed module; the contracts read app/model.py from disk and
+# look for app/later.py, which does not exist yet.
+CONTRACTS_USE = (
+    "from app.later import keep\n"
+    "from app.model import send\n\n\n"
+    "def deliver(note):\n    return send(note)\n\n\n"
+    "def hold(note):\n    return keep(note)\n"
+)
+REQUIRES = (
+    "from app.contracts import requires\n\n\n"
+    "def {name}(note):\n    requires(note, 'redacted')\n    return note\n"
+)
+FREE = "def {name}(note):\n    return note\n"
+
+
+def contracts_run(root: Path) -> tuple[str, list[int]]:
+    """(coverage.cache.contracts, the lines of the PROP001 findings) of one run."""
+    report = analyze_paths([root], root, load_config(root, None), OPTIONS)
+    out = json_output.render(report)
+    lines = [f["span"]["line"] for f in json.loads(out)["findings"] if f["rule_id"] == "PROP001"]
+    return str(cache_block(out)["contracts"]), lines
+
+
+def test_the_contracts_phase_is_reused_while_nothing_it_read_changed(tmp_path: Path) -> None:
+    write(tmp_path, ".shockharness.toml", CONTRACTS_CONFIG)
+    write(tmp_path, "app/__init__.py", "")
+    write(tmp_path, "app/use.py", CONTRACTS_USE)
+    write(tmp_path, "app/model.py", REQUIRES.format(name="send"))
+    assert contracts_run(tmp_path) == ("miss", [6])
+    assert contracts_run(tmp_path) == ("hit", [6])
+    # A file the phase read from disk changes: the key matches, the entry is stale.
+    write(tmp_path, "app/model.py", FREE.format(name="send"))
+    assert contracts_run(tmp_path) == ("stale", [])
+    assert contracts_run(tmp_path) == ("hit", [])
+    # A file the phase looked for and did not find appears: stale.
+    write(tmp_path, "app/later.py", REQUIRES.format(name="keep"))
+    assert contracts_run(tmp_path) == ("stale", [10])
+    # An analyzed file changes: another key.
+    write(tmp_path, "app/use.py", CONTRACTS_USE + "\n")
+    assert contracts_run(tmp_path) == ("miss", [10])
+    # Another configuration: another header.
+    write(tmp_path, ".shockharness.toml", CONTRACTS_CONFIG.replace("static", "check"))
+    assert contracts_run(tmp_path)[0] == "miss"
+
+
+def test_without_the_cache_the_contracts_phase_is_not_cached(tmp_path: Path) -> None:
+    write(tmp_path, ".shockharness.toml", CONTRACTS_CONFIG)
+    write(tmp_path, "app/__init__.py", "")
+    write(tmp_path, "app/use.py", CONTRACTS_USE)
+    write(tmp_path, "app/model.py", REQUIRES.format(name="send"))
+    report = analyze_paths([tmp_path], tmp_path, load_config(tmp_path, None), NO_CACHE)
+    assert cache_block(json_output.render(report))["contracts"] == "off"
+    assert not (tmp_path / ".shockharness-cache" / "contracts.json").exists()

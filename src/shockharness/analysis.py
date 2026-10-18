@@ -15,13 +15,15 @@ The role scopes ``[[overrides]]`` entries written with ``roles = [...]`` and the
 MAGIC001 configuration-file exemption; it never decides whether a file is analyzed.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from shockharness.cache.codec import from_plain, to_plain
-from shockharness.cache.store import FileCache
+from shockharness.cache.contracts import ContractsResult, decode_contracts, encode_contracts
+from shockharness.cache.store import CONTRACTS_HIT, CONTRACTS_STALE, FileCache
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
 from shockharness.complexity.callgraph import (
     CONFIDENCE_RESOLVED,
@@ -38,6 +40,7 @@ from shockharness.config import (
     switched_off,
 )
 from shockharness.contracts.catalog import complete_scope
+from shockharness.contracts.disk import new_log, text_digest, unchanged
 from shockharness.contracts.report import ContractFile
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
@@ -980,11 +983,13 @@ def consistency_findings(
 
 
 def contract_findings(
-    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+    pendings: Sequence[PendingFile], config: EffectiveConfig, cache: FileCache | None
 ) -> dict[str, list[Finding]]:
     """PROP001, PROP003, PROP005-PROP007 (property contracts, opt-in): declarations checked
     at call sites and catalog sinks, reading resolved callees' own contracts from the
-    analyzed files, or from the project's files under the root for the others."""
+    analyzed files, or from the project's files under the root for the others. The one
+    cross-file phase the cache covers: its findings are reused while every analyzed file
+    and every other file it probed or read is unchanged."""
     parsed = [p for p in pendings if not p.failed and p.source is not None]
     files: list[ContractFile] = []
     sources: dict[str, tuple[str, SourceText]] = {}
@@ -1000,7 +1005,58 @@ def contract_findings(
             )
     if len(files) == 0:
         return {}
-    return property_contract_findings(files, sources, config.root, settings)
+    if cache is None:
+        return property_contract_findings(
+            files, sources, config.root, settings, new_log(config.root)
+        )
+    return _cached_contracts(files, sources, config, cache)
+
+
+def _cached_contracts(
+    files: Sequence[ContractFile],
+    sources: Mapping[str, tuple[str, SourceText]],
+    config: EffectiveConfig,
+    cache: FileCache,
+) -> dict[str, list[Finding]]:
+    """The last run's findings when nothing the phase read changed; else the phase, with
+    its result stored for the next run."""
+    key = {"contracts": _contracts_key(files, sources)}
+    reused = cache.lookup_contracts(key, decode_contracts)
+    if reused is not None and unchanged(config.root, reused.probes, reused.reads):
+        cache.contracts_status(CONTRACTS_HIT)
+        return {path: list(findings) for path, findings in reused.findings}
+    if reused is not None:
+        cache.contracts_status(CONTRACTS_STALE)
+    disk = new_log(config.root)
+    settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
+    found = property_contract_findings(files, sources, config.root, settings, disk)
+    result = ContractsResult(
+        tuple((path, tuple(found[path])) for path in sorted(found)),
+        dict(disk.probes),
+        dict(disk.reads),
+    )
+    cache.store_contracts(key, encode_contracts(result))
+    return found
+
+
+def _contracts_key(
+    files: Sequence[ContractFile], sources: Mapping[str, tuple[str, SourceText]]
+) -> str:
+    """One digest of everything the phase reads from the run: each analyzed file's path,
+    language and text, and which contract rules and scope apply to each checked file."""
+    checked = {file.path: (sorted(file.applies), file.complete) for file in files}
+    material = [
+        [path, language, text_digest(source.text), *_checked(checked, path)]
+        for path, (language, source) in sorted(sources.items())
+    ]
+    return text_digest(json.dumps(material, separators=(",", ":")))
+
+
+def _checked(checked: Mapping[str, tuple[list[str], bool]], path: str) -> list[Any]:
+    if path not in checked:
+        return []
+    rules, complete = checked[path]
+    return [rules, complete]
 
 
 # The cross-file rules that need the call graph or the module graph (built here when
@@ -1024,12 +1080,14 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
-    contract_findings,
 )
 
 
 def complete(
-    pendings: Sequence[PendingFile], config: EffectiveConfig, options: AnalysisOptions
+    pendings: Sequence[PendingFile],
+    config: EffectiveConfig,
+    options: AnalysisOptions,
+    cache: FileCache | None,
 ) -> AnalysisOutcome:
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
@@ -1042,6 +1100,7 @@ def complete(
     phases = (
         outcome.graph_findings,
         *(phase(pendings, config, graph) for phase in GRAPH_PHASES),
+        contract_findings(pendings, config, cache),
         string_findings(pendings, config),
     )
     results: list[FileResult] = []
@@ -1114,7 +1173,7 @@ def analyze_files(
     """The whole pipeline for a set of discovered files; per-file results come from
     ``cache`` when it is open and the key matches, cross-file work is always recomputed."""
     pendings = [prepare_file(file, config, cache) for file in files]
-    return complete(pendings, config, options)
+    return complete(pendings, config, options, cache)
 
 
 def analyze_text(
@@ -1125,12 +1184,12 @@ def analyze_text(
     options: AnalysisOptions,
 ) -> FileResult:
     """One in-memory file through the whole pipeline (its graph is the file alone)."""
-    outcome = complete([prepare_text(relative_path, language, text, config)], config, options)
+    outcome = complete([prepare_text(relative_path, language, text, config)], config, options, None)
     return outcome.files[0]
 
 
 def analyze_file(
     file: DiscoveredFile, config: EffectiveConfig, options: AnalysisOptions
 ) -> FileResult:
-    outcome = complete([prepare_file(file, config, None)], config, options)
+    outcome = complete([prepare_file(file, config, None)], config, options, None)
     return outcome.files[0]

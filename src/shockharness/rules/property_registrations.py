@@ -20,6 +20,7 @@ from shockharness.contracts.catalog import (
     read_module,
     static_properties,
 )
+from shockharness.contracts.disk import new_log
 from shockharness.contracts.javascript_flow import field_nodes, inner
 from shockharness.contracts.javascript_index import RUNTIME_MARKER, JsProjectIndex
 from shockharness.contracts.python_index import NO_RECEIVERS, ProjectIndex
@@ -42,7 +43,7 @@ def _python_registrations(root: Path, module: str, runtime: frozenset[str]) -> f
     tree, _why = read_module(found)
     if tree is None:
         return frozenset()
-    index = ProjectIndex(root, {found.relative_to(root).as_posix(): tree}, runtime)
+    index = ProjectIndex(root, {found.relative_to(root).as_posix(): tree}, runtime, new_log(root))
     project = index.by_path[found.relative_to(root).as_posix()]
     targets = {f"{name}.{REGISTER}" for name in runtime}
     names: set[str] = set()
@@ -61,7 +62,7 @@ def _python_registrations(root: Path, module: str, runtime: frozenset[str]) -> f
 
 
 def _javascript_registrations(root: Path, path: str, runtime: frozenset[str]) -> frozenset[str]:
-    index = JsProjectIndex(root, {}, runtime)
+    index = JsProjectIndex(root, {}, runtime, new_log(root))
     module = index.module(path)
     if module is None:
         return frozenset()

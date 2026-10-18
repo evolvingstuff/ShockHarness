@@ -37,6 +37,7 @@ from shockharness.contracts.catalog import (
     static_properties,
 )
 from shockharness.contracts.compose import Compositions
+from shockharness.contracts.disk import DiskLog, new_log
 from shockharness.contracts.javascript_index import JsProjectIndex
 from shockharness.contracts.python_flow import (
     EMPTY,
@@ -969,9 +970,11 @@ def property_contract_findings(
     sources: Mapping[str, tuple[str, SourceText]],
     root: Path,
     settings: Mapping[str, Any],
+    disk: DiskLog,
 ) -> dict[str, list[Finding]]:
     """Both languages: each file's language decides its index and its checks. ``sources``
-    are every analyzed file, where resolved callees' contracts are read first."""
+    are every analyzed file, where resolved callees' contracts are read first; ``disk``
+    logs every other file the indexes probe or read."""
     found: dict[str, list[Finding]] = {}
     python_files = [file for file in files if file.language == PYTHON]
     if len(python_files) > 0:
@@ -981,7 +984,7 @@ def property_contract_findings(
             for path, (language, source) in sources.items()
             if language == PYTHON
         }
-        index = ProjectIndex(root, trees, python_runtime_modules(settings))
+        index = ProjectIndex(root, trees, python_runtime_modules(settings), disk)
         found.update(run_property_contracts(python_files, index, settings))
     script_files = [file for file in files if file.language in SCRIPT_LANGUAGES]
     if len(script_files) > 0:
@@ -990,7 +993,7 @@ def property_contract_findings(
             for path, (language, source) in sources.items()
             if language in SCRIPT_LANGUAGES
         }
-        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings))
+        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings), disk)
         found.update(run_javascript_contracts(script_files, scripts, settings))
     return found
 
@@ -1021,7 +1024,7 @@ def considered_declarations(
             for path, (language, source) in sources.items()
             if language == PYTHON
         }
-        index = ProjectIndex(root, trees, python_runtime_modules(settings))
+        index = ProjectIndex(root, trees, python_runtime_modules(settings), new_log(root))
         analysis = Analysis(index, settings)
         for file in python_files:
             found.extend(_python_considered(analysis, index.by_path[file.path], file.path))
@@ -1032,6 +1035,6 @@ def considered_declarations(
             for path, (language, source) in sources.items()
             if language in SCRIPT_LANGUAGES
         }
-        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings))
+        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings), new_log(root))
         found.extend(javascript_considered(script_files, scripts, settings))
     return sorted(found, key=lambda c: (c.path, c.line))

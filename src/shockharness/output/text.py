@@ -4,6 +4,12 @@ import textwrap
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from shockharness.cache.store import (
+    CONTRACTS_HIT,
+    CONTRACTS_MISS,
+    CONTRACTS_OFF,
+    CONTRACTS_STALE,
+)
 from shockharness.cache.store import STATUS_ENABLED as CACHE_ENABLED
 from shockharness.complexity.coupling import STATUS_AVAILABLE as METRICS_AVAILABLE
 from shockharness.config import SUPPORTED_EXTENSIONS, EffectiveConfig
@@ -150,6 +156,13 @@ def finding_lines(findings: Sequence[Finding]) -> list[str]:
     return lines
 
 
+CONTRACTS_WORDS = {
+    CONTRACTS_HIT: "reused (no file they read changed)",
+    CONTRACTS_MISS: "computed",
+    CONTRACTS_STALE: "computed (a file they read from disk changed)",
+}
+
+
 def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
     if cache["status"] != CACHE_ENABLED:
         return [f"  cache: {cache['status']} ({cache['reason']})"]
@@ -157,6 +170,8 @@ def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
         f"  cache: {cache['directory']}: {cache['hits']} hit(s), {cache['misses']} miss(es), "
         f"{cache['invalidated']} invalidated, {cache['errors']} error(s)"
     ]
+    if cache["contracts"] != CONTRACTS_OFF:
+        lines.append(f"  cache: property contracts: {CONTRACTS_WORDS[cache['contracts']]}")
     lines.extend(f"  warning: cache: {problem}" for problem in cache["problems"])
     return lines
 

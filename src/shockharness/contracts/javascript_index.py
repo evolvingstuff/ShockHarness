@@ -34,9 +34,9 @@ from shockharness.contracts.catalog import (
     SECTION_PATH,
     TYPESCRIPT,
     is_javascript_path,
-    read_text,
     split_sink_callee,
 )
+from shockharness.contracts.disk import DiskLog, new_log
 from shockharness.contracts.python_index import LIBRARY, RUNTIME, UNIT, UNKNOWN
 from shockharness.ir.javascript import parse_tree
 from shockharness.ir.javascript_catches import node_text
@@ -252,8 +252,15 @@ PATH = "path"
 class JsProjectIndex:
     """Project modules by path, loaded on demand; analyzed files win over disk."""
 
-    def __init__(self, root: Path, analyzed: Mapping[str, str], runtime: frozenset[str]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        analyzed: Mapping[str, str],
+        runtime: frozenset[str],
+        disk: DiskLog,
+    ) -> None:
         self.root = root
+        self.disk = disk  # every probe and read of a file that is not analyzed
         self.runtime = runtime
         self.texts = dict(analyzed)
         self.modules: dict[str, JsModule | None] = {}
@@ -270,14 +277,14 @@ class JsProjectIndex:
     def _load(self, path: str) -> JsModule | None:
         if path in self.texts:
             return build_module(path, self.texts[path])
-        text, why = read_text(self.root / path)
+        text, why = self.disk.read_text(self.root / path)
         if text is None:
             self.unreadable[path] = why
             return None
         return build_module(path, text)
 
     def _exists(self, path: str) -> bool:
-        return path in self.texts or (self.root / path).is_file()
+        return path in self.texts or self.disk.is_file(self.root / path)
 
     def specifier(self, importer: str, specifier: str) -> Specifier:
         if not specifier.startswith((".", "/")):
@@ -428,7 +435,7 @@ def _references(settings: Mapping[str, Any]) -> list[tuple[str, str, bool]]:
 
 def javascript_reference_issues(root: Path, values: Mapping[str, Any]) -> list[ConfigIssue]:
     settings = values["rules"]["property_contracts"]
-    index = JsProjectIndex(root, {}, frozenset())
+    index = JsProjectIndex(root, {}, frozenset(), new_log(root))
     issues: list[ConfigIssue | None] = []
     for where, reference, must_be_project in _references(settings):
         check = _producer_issue if must_be_project else _callee_issue

@@ -5,6 +5,8 @@ Layout under the cache directory::
     CACHEDIR.TAG                 the Cache Directory Tagging convention marker
     index.json                   {schema_version, tool_version, config_digest, host}
     entries/ab/<sha256(path)>.json   one entry per analyzed file
+    contracts.json               the property-contracts phase of the last run
+
 
 The index header names the tool version, the effective configuration digest and
 the host (interpreter and JavaScript grammar) the entries were produced with; any
@@ -14,6 +16,11 @@ part of the key is equal. Writes are atomic (temporary file in the same director
 then ``os.replace``). Nothing here raises for a cache problem: an unreadable,
 corrupt or mismatched index or entry is counted, described once, and ignored, and
 the file is analyzed afresh. Nothing read from the cache is ever executed.
+
+Cross-file work is recomputed on every run, with one exception: the property-contracts
+phase, whose findings are reused when the header, every analyzed file (path, language,
+text, rules applied) and every other file the phase probed or read are unchanged
+(``contracts.json``; the caller checks the files on disk).
 """
 
 import hashlib
@@ -33,6 +40,12 @@ from shockharness.ir.javascript import PARSER_NAME as JAVASCRIPT_PARSER
 from shockharness.version import __version__
 
 INDEX_FILENAME = "index.json"
+CONTRACTS_FILENAME = "contracts.json"
+# coverage.cache.contracts: what the property-contracts phase did with its entry.
+CONTRACTS_OFF = "off"  # the phase did not run (the family is off, or no file applies)
+CONTRACTS_HIT = "hit"
+CONTRACTS_MISS = "miss"  # no entry, another key, or an entry that could not be read
+CONTRACTS_STALE = "stale"  # the key matched; a file the phase read or probed has changed
 ENTRIES_DIRNAME = "entries"
 TAG_FILENAME = "CACHEDIR.TAG"
 TAG_CONTENT = (
@@ -77,6 +90,7 @@ def cache_coverage_without_cache(status: str, directory: str, reason: str) -> di
         "invalidated": 0,
         "errors": 0,
         "problems": [],
+        "contracts": CONTRACTS_OFF,
     }
 
 
@@ -113,6 +127,7 @@ class FileCache:
         }
         self.counters = _Counters(0, 0, 0, 0, [])
         self.writable = False
+        self.contracts = CONTRACTS_OFF
 
     # --- opening -----------------------------------------------------------------------
 
@@ -223,6 +238,46 @@ class FileCache:
         payload = json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
         self._write_atomic(self._entry_path(relative_path), payload)
 
+    # --- the property-contracts phase ----------------------------------------------------
+
+    def lookup_contracts(self, key: Mapping[str, str], decode: Callable[[Any], Any]) -> Any | None:
+        """The decoded result of the last run's contracts phase when ``key`` (with the
+        header) matches; ``None`` otherwise. The caller still checks the files on disk."""
+        self.contracts = CONTRACTS_MISS
+        path = self.directory / CONTRACTS_FILENAME
+        if not path.is_file():
+            return None
+        document = self._read_json(path, "the property-contracts entry")
+        if document is None:
+            return None
+        if not isinstance(document, dict) or set(document) != {"key", "result"}:
+            self.counters.problem(
+                "the property-contracts entry does not have the expected shape; the phase "
+                "ran afresh"
+            )
+            return None
+        if document["key"] != {**self.header, **key}:
+            return None
+        # Boundary (declared in .shockharness.toml): an entry's content is external data.
+        try:
+            decoded = decode(document["result"])
+        except CacheEntryError as exc:
+            self.counters.problem(
+                f"the property-contracts entry could not be decoded ({exc}); the phase ran afresh"
+            )
+            return None
+        return decoded
+
+    def contracts_status(self, status: str) -> None:
+        self.contracts = status
+
+    def store_contracts(self, key: Mapping[str, str], plain: Any) -> None:
+        if not self.writable:
+            return
+        document = {"key": {**self.header, **key}, "result": plain}
+        payload = json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        self._write_atomic(self.directory / CONTRACTS_FILENAME, payload)
+
     # --- I/O ---------------------------------------------------------------------------
 
     def _read_json(self, path: Path, label: str) -> Any | None:
@@ -289,6 +344,7 @@ class FileCache:
             "invalidated": counters.invalidated,
             "errors": counters.errors,
             "problems": list(counters.problems),
+            "contracts": self.contracts,
         }
 
 

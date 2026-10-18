@@ -5,6 +5,21 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **Faster warm runs.**
+  - The cache decoder builds one decoder per type, instead of reading type hints and
+    building an error path for each of millions of objects.
+  - The property contracts look up method overrides by name, and walk each unit's body
+    once.
+  - **The property-contracts phase is cached** (`contracts.json`). Its findings are
+    reused while every analyzed file and every other file it looked at or read is
+    unchanged. `coverage.cache.contracts` says `hit`, `miss`, `stale` or `off`. This is
+    the one exception to "cross-file work is recomputed on every run".
+
+  On MetaList's tree (981 files, contracts on, every file cached), 0.11.0 took 26.4 s.
+  It now takes 16.6 s when the contracts are computed and 8.2 s when they are reused.
+  The findings are identical.
+
 ## [0.11.0] - 2026-10-18
 
 Methods through their receivers, in Python (`docs/proposal-receivers.md`, R1), and

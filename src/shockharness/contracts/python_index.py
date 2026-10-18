@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shockharness.complexity.callgraph import PYTHON_BUILTINS
-from shockharness.contracts.catalog import DECLARATIONS, module_file, read_module
+from shockharness.contracts.catalog import DECLARATIONS, parse_module, probed_module_file
+from shockharness.contracts.disk import DiskLog
 from shockharness.ir.python_receivers import (
     METHOD_INSTANCE,
     METHOD_STATIC,
@@ -199,9 +200,14 @@ class ProjectIndex:
     """Project modules by dotted name, loaded on demand; analyzed files win over disk."""
 
     def __init__(
-        self, root: Path, analyzed: Mapping[str, ast.Module], runtime: frozenset[str]
+        self,
+        root: Path,
+        analyzed: Mapping[str, ast.Module],
+        runtime: frozenset[str],
+        disk: DiskLog,
     ) -> None:
         self.root = root
+        self.disk = disk  # every probe and read of a file that is not analyzed
         self.runtime = runtime
         self.by_path: dict[str, Module] = {}
         self.by_name: dict[str, Module | None] = {}
@@ -229,13 +235,16 @@ class ProjectIndex:
         return self.by_name[dotted]
 
     def _load(self, dotted: str) -> Module | None:
-        found = module_file(self.root, dotted.split("."))
+        found = probed_module_file(self.root, dotted.split("."), self.disk.is_file)
         if found is None:
             return None
         path = found.relative_to(self.root).as_posix()
         if path in self.by_path:
             return self.by_path[path]
-        tree, why = read_module(found)
+        text, why = self.disk.read_text(found)
+        tree = None
+        if text is not None:
+            tree, why = parse_module(found, text)
         if tree is None:
             self.unreadable[dotted] = why
             return None

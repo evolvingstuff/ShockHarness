@@ -5304,3 +5304,52 @@ counts the newly resolved calls, which on MetaList is 4 new warnings. Published 
 `publish.yml` (run 39145853010, 18 of 18 jobs). PyPI lists 0.11.0 with a wheel and an
 sdist. MetaList can drop its PROP001/PROP004 override for JavaScript once it moves to
 0.11.0.
+
+## Faster warm runs; the property-contracts phase is cached (2026-10-18)
+
+From MetaList: "41 seconds WITH cached files". On a read-only copy of its tree (981
+files, contracts on, every file a cache hit), 0.11.0 took about 26 to 31 s depending on
+machine load. A profile of the warm run:
+* the property-contracts phase was about 60%;
+* decoding the cache entries was about 28%;
+* the rest about 10%.
+
+**Changes** (findings identical on MetaList, 2,043 before and after):
+1. **The codec** (`cache/codec.py`) builds one decoder per type hint, cached. Before, it
+   read hints, `dataclasses.fields` and `typing.get_origin` for each of about 7 million
+   objects. An error path is a cheap pair, rendered only for an error message. A hint
+   no decoder handles is now a `TypeError` when the decoder is built: a model type the
+   codec cannot read is a bug in the tool, not a bad entry.
+2. **The contracts index.** Overrides are looked up in an index of the classes that
+   define each method name, built once. Before, every `self.m()` scanned every
+   analyzed class, which was R1's own regression, 6 s in the profile. The receiver
+   facts come from one walk per scope, and each unit's nodes are collected once and
+   reused for its bindings, declarations, reads, header and parametric parameters.
+3. **The phase is cached** (Tom's decision: the one exception to "cross-file work is
+   recomputed on every run").
+   * `contracts/disk.py`: a `DiskLog` that both indexes probe and read through.
+   * `cache/contracts.py`: the entry, `contracts.json`, holding the findings with that
+     log.
+   * `cache/store.py`: `lookup_contracts` and `store_contracts`.
+   * The key is the header plus one digest of every analyzed file's path, language and
+     text, and of the contract rules and `complete` scope of each checked file.
+   * Before reuse, every logged probe and read is checked again (`disk.unchanged`).
+   * `coverage.cache.contracts` is `off`, `hit`, `miss` or `stale`, and the text report
+     says so.
+
+**Measured** on the copy, alternating runs:
+
+| | Warm run |
+|---|---|
+| 0.11.0 | 26.4 s, 26.6 s |
+| Now, contracts computed (any analyzed file changed) | 16.6 s |
+| Now, contracts reused (no file changed) | 8.3 s, 8.1 s |
+
+**Tests:**
+* `test_cache.py` covers hit, stale on a changed disk read, stale when a file the phase
+  looked for appears, miss on a changed analyzed file, miss on a changed
+  configuration, and no entry under `--no-cache`.
+* The cache block's shape test gained `contracts`.
+
+**Not done:** a run that changes one file still recomputes the whole phase (about 9 s of
+the 16.6). Making it incremental would need the contracts' dependency graph.

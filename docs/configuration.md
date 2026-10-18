@@ -1072,12 +1072,27 @@ language, and the SHA-256 of the file's bytes. The `cache` table itself is not
 part of the configuration digest, so moving or disabling the cache changes
 neither the digest a baseline records nor the key. Everything cross-file (the
 call graph and its cycles, suppressions and fingerprints, baseline matching,
-diffs, history) is recomputed on every run; a hit yields byte-identical
-findings and metrics for that file.
+diffs, history) is recomputed on every run, with one exception below; a hit
+yields byte-identical findings and metrics for that file.
+
+**The property-contracts phase** is the one cross-file phase the cache covers
+(0.12.0). It is the most expensive, and it only runs when
+`rules.property_contracts.enabled` is true. Its findings are reused when all of
+these are unchanged:
+* the header (tool version, configuration digest, host);
+* every analyzed file's path, language and text, and which contract rules and
+  `complete` scope apply to it;
+* every other file the phase looked at. The contract indexes resolve callees
+  into project files that may not be analyzed, so each existence check (a file
+  that was there, or was not) and each read (the digest of its text) is
+  recorded with the result, and all of them are checked again before the result
+  is reused.
+
+A run that changes any analyzed file computes the phase afresh.
 
 **Layout.** `index.json` holds the key header; `entries/<ab>/<sha256 of the
-path>.json` holds one JSON entry per file (never a pickle; nothing read from the
-cache is executed). Writes go through a temporary file in the same directory
+path>.json` holds one JSON entry per file, and `contracts.json` the last
+contracts phase (never a pickle; nothing read from the cache is executed). Writes go through a temporary file in the same directory
 and an atomic rename. A header that differs (another tool version,
 configuration or host) invalidates every entry. An unreadable, corrupt or
 schema-mismatched index or entry never fails the run and never yields a
@@ -1086,7 +1101,9 @@ analyzed afresh; a corrupt index rebuilds the cache.
 
 **Reporting.** `coverage.cache` carries `status` (`enabled`, `disabled`,
 `bypassed`), `directory`, `reason`, the counters `hits`, `misses`,
-`invalidated`, `errors`, and the distinct `problems`. It is the one block of
+`invalidated`, `errors`, the distinct `problems`, and `contracts`: `off` (the
+phase did not run, or the cache is not open), `hit`, `miss`, or `stale` (the key
+matched, but a file the phase read or looked for changed). It is the one block of
 the JSON report that legitimately differs between a cold and a warm run over
 the same tree; a determinism comparison (two runs byte-identical) must drop it,
 as the tool's own tests do. The text output prints one `cache:` line and a
@@ -1097,6 +1114,7 @@ $ shockharness check .                  # cold: every file analyzed and stored
   cache: .shockharness-cache: 0 hit(s), 906 miss(es), 0 invalidated, 0 error(s)
 $ shockharness check .                  # warm: only cross-file work runs
   cache: .shockharness-cache: 906 hit(s), 0 miss(es), 0 invalidated, 0 error(s)
+  cache: property contracts: reused (no file they read changed)
 ```
 
 On a CI runner, restoring `.shockharness-cache/` between jobs (keyed by the
