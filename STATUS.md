@@ -5428,3 +5428,12 @@ contracts. npm's `lib` is CommonJS, which the facts do not read as objects.
 A first measurement had 31 more unresolved edges on the corpus. They were `this.m()`
 calls to static methods and accessors, which the facts exclude from instance methods.
 Those now fall back to the class-body rule, as before.
+
+## Release 0.13.0 (2026-10-18)
+
+On Tom's go-ahead. CI was green on 540ddb5 (run 39167317384) and on the release commit
+ef5d463 (run 39167678778), 16 of 16 jobs each. Every pin moved from 0.12.0. The
+changelog's `[0.13.0]` section says one change can make a passing gate fail: ASYNC001
+sees async methods of JavaScript singletons and objects, which on MetaList is two real
+violations. The cache schema is "22". Published by `publish.yml` (run 39168032012, 18 of
+18 jobs). PyPI lists 0.13.0 with a wheel and an sdist.
