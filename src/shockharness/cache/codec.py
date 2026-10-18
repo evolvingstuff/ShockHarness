@@ -93,6 +93,23 @@ def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+# Where a value sits in the entry, for an error message: the root's name, or a pair
+# (parent, ".field"). A pair costs nothing to build; it is rendered only on an error.
+Where = str | tuple[Any, str]
+Decoder = Callable[[Any, Any], Any]
+
+
+def _render(where: Where) -> str:
+    parts: list[str] = []
+    node: Any = where
+    while isinstance(node, tuple):
+        parent, part = node
+        parts.append(part)
+        node = parent
+    parts.append(node)
+    return "".join(reversed(parts))
+
+
 @functools.cache
 def _hints(cls: type) -> dict[str, Any]:
     return typing.get_type_hints(cls)
@@ -100,67 +117,87 @@ def _hints(cls: type) -> dict[str, Any]:
 
 def from_plain(hint: Any, data: Any, where: str) -> Any:
     """Rebuild a value of type ``hint`` from ``data``; strict about shape and types."""
+    return _decoder(hint)(data, where)
+
+
+@functools.cache
+def _decoder(hint: Any) -> Decoder:
+    """The decoder for one type hint, built once: the hints are read when the decoder is
+    built, never per value."""
     if hint is ControlNode:
-        if not isinstance(data, dict) or set(data) != {CONTROL_KEY}:
-            raise CacheEntryError(f"{where}: expected a control tree")
-        return _rebuild_control(data[CONTROL_KEY], where)
+        return _control_from_plain
     if isinstance(hint, type) and dataclasses.is_dataclass(hint):
-        return _dataclass_from_plain(hint, data, where)
+        return _dataclass_decoder(hint)
     origin = typing.get_origin(hint)
     if origin is types.UnionType or origin is typing.Union:
-        return _union_from_plain(typing.get_args(hint), data, where)
+        return _union_decoder(typing.get_args(hint))
     if origin is tuple:
-        return _tuple_from_plain(typing.get_args(hint), data, where)
+        return _tuple_decoder(typing.get_args(hint))
     if origin is frozenset:
         (item_hint,) = typing.get_args(hint)
+        return _frozenset_decoder(_decoder(item_hint))
+    if hint not in _SCALAR_CHECKERS:
+        # The model's own types are fixed: a hint no decoder handles is a bug in the
+        # tool, not a malformed entry.
+        raise TypeError(f"the cache codec has no decoder for {hint!r}")
+    return _SCALAR_CHECKERS[hint]
+
+
+def _control_from_plain(data: Any, where: Where) -> ControlNode:
+    if not isinstance(data, dict) or set(data) != {CONTROL_KEY}:
+        raise CacheEntryError(f"{_render(where)}: expected a control tree")
+    return _rebuild_control(data[CONTROL_KEY], _render(where))
+
+
+def _frozenset_decoder(item: Decoder) -> Decoder:
+    def decode(data: Any, where: Where) -> frozenset[Any]:
         if not isinstance(data, list):
-            raise CacheEntryError(f"{where}: expected a list")
-        return frozenset(from_plain(item_hint, item, where) for item in data)
-    if hint in _SCALAR_CHECKERS:
-        return _SCALAR_CHECKERS[hint](data, where)
-    raise CacheEntryError(f"{where}: unsupported type {hint!r}")
+            raise CacheEntryError(f"{_render(where)}: expected a list")
+        return frozenset(item(value, where) for value in data)
+
+    return decode
 
 
-def _check_bool(data: Any, where: str) -> bool:
+def _check_bool(data: Any, where: Where) -> bool:
     if not isinstance(data, bool):
-        raise CacheEntryError(f"{where}: expected a boolean")
+        raise CacheEntryError(f"{_render(where)}: expected a boolean")
     return data
 
 
-def _check_int(data: Any, where: str) -> int:
+def _check_int(data: Any, where: Where) -> int:
     if not _is_int(data):
-        raise CacheEntryError(f"{where}: expected an integer")
+        raise CacheEntryError(f"{_render(where)}: expected an integer")
     return data
 
 
-def _check_float(data: Any, where: str) -> float:
+def _check_float(data: Any, where: Where) -> float:
     if isinstance(data, bool) or not isinstance(data, int | float):
-        raise CacheEntryError(f"{where}: expected a number")
+        raise CacheEntryError(f"{_render(where)}: expected a number")
     return float(data)
 
 
-def _check_str(data: Any, where: str) -> str:
+def _check_str(data: Any, where: Where) -> str:
     if not isinstance(data, str):
-        raise CacheEntryError(f"{where}: expected a string")
+        raise CacheEntryError(f"{_render(where)}: expected a string")
     return data
 
 
-def _check_none(data: Any, where: str) -> None:
+def _check_none(data: Any, where: Where) -> None:
     if data is not None:
-        raise CacheEntryError(f"{where}: expected null")
+        raise CacheEntryError(f"{_render(where)}: expected null")
     return None
 
 
-def _check_complex(data: Any, where: str) -> complex:
+def _check_complex(data: Any, where: Where) -> complex:
     if not isinstance(data, dict) or set(data) != {COMPLEX_KEY}:
-        raise CacheEntryError(f"{where}: expected a complex number")
+        raise CacheEntryError(f"{_render(where)}: expected a complex number")
     parts = data[COMPLEX_KEY]
     if not isinstance(parts, list) or len(parts) != 1 + 1:
-        raise CacheEntryError(f"{where}: expected a complex number")
+        raise CacheEntryError(f"{_render(where)}: expected a complex number")
     return complex(_check_float(parts[0], where), _check_float(parts[1], where))
 
 
-_SCALAR_CHECKERS: dict[Any, Callable[[Any, str], Any]] = {
+_SCALAR_CHECKERS: dict[Any, Decoder] = {
     bool: _check_bool,
     int: _check_int,
     float: _check_float,
@@ -170,24 +207,34 @@ _SCALAR_CHECKERS: dict[Any, Callable[[Any, str], Any]] = {
 }
 
 
-def _dataclass_from_plain(cls: type, data: Any, where: str) -> Any:
-    if not isinstance(data, dict):
-        raise CacheEntryError(f"{where}: expected an object for {cls.__name__}")
+def _dataclass_decoder(cls: type) -> Decoder:
     hints = _hints(cls)
-    names = [f.name for f in dataclasses.fields(cls)]
-    if set(data) != set(names):
-        raise CacheEntryError(f"{where}: fields of {cls.__name__} do not match")
-    values = {name: from_plain(hints[name], data[name], f"{where}.{name}") for name in names}
-    return cls(**values)
+    names = tuple(f.name for f in dataclasses.fields(cls))
+    expected = frozenset(names)
+    fields = tuple((name, "." + name, _decoder(hints[name])) for name in names)
+
+    def decode(data: Any, where: Where) -> Any:
+        if not isinstance(data, dict):
+            raise CacheEntryError(f"{_render(where)}: expected an object for {cls.__name__}")
+        if data.keys() != expected:
+            raise CacheEntryError(f"{_render(where)}: fields of {cls.__name__} do not match")
+        return cls(**{name: field(data[name], (where, part)) for name, part, field in fields})
+
+    return decode
 
 
-def _union_from_plain(members: tuple[Any, ...], data: Any, where: str) -> Any:
+def _union_decoder(members: tuple[Any, ...]) -> Decoder:
     """The unions of the model are ``X | None`` and ``int | float | complex``: the JSON
     shape of ``data`` selects the member, so no member is tried speculatively."""
-    for member in members:
-        if _shape_matches(member, data):
-            return from_plain(member, data, where)
-    raise CacheEntryError(f"{where}: no member of the union accepts the value")
+    choices = tuple((member, _decoder(member)) for member in members)
+
+    def decode(data: Any, where: Where) -> Any:
+        for member, member_decoder in choices:
+            if _shape_matches(member, data):
+                return member_decoder(data, where)
+        raise CacheEntryError(f"{_render(where)}: no member of the union accepts the value")
+
+    return decode
 
 
 def _shape_matches(member: Any, data: Any) -> bool:
@@ -208,11 +255,23 @@ def _shape_matches(member: Any, data: Any) -> bool:
     return isinstance(data, list)
 
 
-def _tuple_from_plain(args: tuple[Any, ...], data: Any, where: str) -> tuple[Any, ...]:
-    if not isinstance(data, list):
-        raise CacheEntryError(f"{where}: expected a list")
+def _tuple_decoder(args: tuple[Any, ...]) -> Decoder:
     if len(args) == 1 + 1 and args[1] is Ellipsis:
-        return tuple(from_plain(args[0], item, where) for item in data)
-    if len(data) != len(args):
-        raise CacheEntryError(f"{where}: expected {len(args)} items")
-    return tuple(from_plain(arg, item, where) for arg, item in zip(args, data, strict=True))
+        item = _decoder(args[0])
+
+        def decode_all(data: Any, where: Where) -> tuple[Any, ...]:
+            if not isinstance(data, list):
+                raise CacheEntryError(f"{_render(where)}: expected a list")
+            return tuple(item(value, where) for value in data)
+
+        return decode_all
+    positions = tuple(_decoder(arg) for arg in args)
+
+    def decode_fixed(data: Any, where: Where) -> tuple[Any, ...]:
+        if not isinstance(data, list):
+            raise CacheEntryError(f"{_render(where)}: expected a list")
+        if len(data) != len(positions):
+            raise CacheEntryError(f"{_render(where)}: expected {len(positions)} items")
+        return tuple(d(value, where) for d, value in zip(positions, data, strict=True))
+
+    return decode_fixed

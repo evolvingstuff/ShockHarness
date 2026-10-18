@@ -18,6 +18,7 @@ contracts index and the call graph resolve names differently.
 import ast
 from collections import Counter
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 
 from shockharness.ir.model import ReceiverClass, ReceiverFacts
 
@@ -68,8 +69,27 @@ def _alias_name(alias: ast.alias) -> str:
     return alias.name.split(".")[0]
 
 
-def _binding_counts(statements: Sequence[ast.AST]) -> Counter[str]:
-    return Counter(name for node in _own_nodes(statements) for name in _bound_names(node))
+@dataclass(frozen=True)
+class _Scope:
+    """What one pass over a scope's own nodes finds."""
+
+    counts: Counter[str]  # how many times each name is bound
+    constructions: dict[str, ast.expr]  # name -> the callee of name = callee(...)
+    declared: frozenset[str]  # names a global or nonlocal statement names
+
+
+def _scope(statements: Sequence[ast.AST]) -> _Scope:
+    counts: Counter[str] = Counter()
+    constructions: dict[str, ast.expr] = {}
+    declared: set[str] = set()
+    for node in _own_nodes(statements):
+        counts.update(_bound_names(node))
+        if isinstance(node, ast.Global | ast.Nonlocal):
+            declared.update(node.names)
+        construction = _construction(node)
+        if construction is not None:
+            constructions[construction[0]] = construction[1]
+    return _Scope(counts, constructions, frozenset(declared))
 
 
 def is_dotted(node: ast.expr) -> bool:
@@ -79,19 +99,17 @@ def is_dotted(node: ast.expr) -> bool:
     return isinstance(node, ast.Name)
 
 
-def _constructions(statements: Sequence[ast.AST]) -> dict[str, ast.expr]:
-    """name -> the callee of each ``name = callee(...)`` / ``name: T = callee(...)``."""
-    found: dict[str, ast.expr] = {}
-    for node in _own_nodes(statements):
-        target: ast.expr | None = None
-        value: ast.expr | None = None
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target, value = node.targets[0], node.value
-        elif isinstance(node, ast.AnnAssign):
-            target, value = node.target, node.value
-        if isinstance(target, ast.Name) and isinstance(value, ast.Call) and is_dotted(value.func):
-            found[target.id] = value.func
-    return found
+def _construction(node: ast.AST) -> tuple[str, ast.expr] | None:
+    """(name, callee) of ``name = callee(...)`` / ``name: T = callee(...)``."""
+    target: ast.expr | None = None
+    value: ast.expr | None = None
+    if isinstance(node, ast.Assign) and len(node.targets) == 1:
+        target, value = node.targets[0], node.value
+    elif isinstance(node, ast.AnnAssign):
+        target, value = node.target, node.value
+    if isinstance(target, ast.Name) and isinstance(value, ast.Call) and is_dotted(value.func):
+        return target.id, value.func
+    return None
 
 
 def singleton_constructors(tree: ast.Module) -> dict[str, ast.expr]:
@@ -102,11 +120,11 @@ def singleton_constructors(tree: ast.Module) -> dict[str, ast.expr]:
         if isinstance(node, ast.Global | ast.Nonlocal)
         for name in node.names
     }
-    counts = _binding_counts(tree.body)
+    scope = _scope(tree.body)
     return {
         name: callee
-        for name, callee in _constructions(tree.body).items()
-        if counts[name] == 1 and name not in rebound
+        for name, callee in scope.constructions.items()
+        if scope.counts[name] == 1 and name not in rebound
     }
 
 
@@ -120,19 +138,21 @@ def parameter_names(arguments: ast.arguments) -> list[str]:
 
 def constructed_locals(function: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, ast.expr]:
     """A function's constructed locals: name -> the callee that built it."""
-    declared = {
-        name
-        for node in _own_nodes(function.body)
-        if isinstance(node, ast.Global | ast.Nonlocal)
-        for name in node.names
-    }
-    counts = _binding_counts(function.body)
-    excluded = declared | set(parameter_names(function.args))
-    return {
+    return method_receivers(function)[1]
+
+
+def method_receivers(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[str | None, dict[str, ast.expr]]:
+    """(the receiver parameter, the constructed locals) of a function, in one pass."""
+    scope = _scope(function.body)
+    excluded = scope.declared | set(parameter_names(function.args))
+    constructed = {
         name: callee
-        for name, callee in _constructions(function.body).items()
-        if counts[name] == 1 and name not in excluded
+        for name, callee in scope.constructions.items()
+        if scope.counts[name] == 1 and name not in excluded
     }
+    return _receiver(function, scope), constructed
 
 
 def _decorator_name(decorator: ast.expr) -> str:
@@ -176,6 +196,10 @@ def class_methods(node: ast.ClassDef) -> dict[str, ast.FunctionDef | ast.AsyncFu
 def receiver_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
     """The parameter a method receives its instance or class in, when the body never
     rebinds it; None for a static method, a property or a method with no parameters."""
+    return method_receivers(function)[0]
+
+
+def _receiver(function: ast.FunctionDef | ast.AsyncFunctionDef, scope: _Scope) -> str | None:
     kind = method_kind(function)
     if kind is None or kind == METHOD_STATIC:
         return None
@@ -183,7 +207,7 @@ def receiver_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str 
     if len(positional) == 0:
         return None
     name = positional[0].arg
-    if _binding_counts(function.body)[name] > 0:
+    if scope.counts[name] > 0:
         return None
     return name
 

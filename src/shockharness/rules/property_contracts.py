@@ -123,6 +123,8 @@ class Unit:
     module: Module
     function: ast.FunctionDef | ast.AsyncFunctionDef | None  # None: the module body
     body: Sequence[ast.stmt]
+    nodes: tuple[ast.AST, ...]  # the unit's own nodes, collected once (own_nodes)
+    stored: frozenset[str]  # every name the body binds (global declarations included)
     local: frozenset[str]  # names bound in a function: a call through one is unknown
     receivers: Receivers  # the method's self / cls and the locals it constructs
     bound: frozenset[str]  # names the unit binds: unbound until a path binds them
@@ -178,22 +180,15 @@ def _bindings(node: ast.AST) -> list[str]:
     return []
 
 
-def _stored(statements: Sequence[ast.stmt]) -> set[str]:
-    return {name for node in own_nodes(statements) for name in _bindings(node)}
-
-
 def _import_local(alias: ast.alias) -> str:
     if alias.asname is not None:
         return alias.asname
     return alias.name.split(".")[0]
 
 
-def _declared_global(body: Sequence[ast.stmt]) -> set[str]:
+def _declared_global(nodes: Sequence[ast.AST]) -> set[str]:
     return {
-        name
-        for node in own_nodes(body)
-        if isinstance(node, ast.Global | ast.Nonlocal)
-        for name in node.names
+        name for node in nodes if isinstance(node, ast.Global | ast.Nonlocal) for name in node.names
     }
 
 
@@ -337,12 +332,13 @@ def _header_requirements(
 def _header(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     declarations: Mapping[ast.Call, Declaration],
+    stored: frozenset[str],
 ) -> Header:
     """PROP007 for a requires on a parameter elsewhere; a parameter the body rebinds is a
     local after that, and a requires on it is a mid-body check."""
     parameters = frozenset(_parameters(function.args))
     requirements, calls = _header_requirements(function.body, parameters, declarations)
-    fixed = parameters - _stored(function.body)
+    fixed = parameters - stored
     misplaced = tuple(
         d
         for d in declarations.values()
@@ -412,21 +408,25 @@ class Analysis:
         parameters: tuple[str, ...] = ()
         local: frozenset[str] = frozenset()  # module level: the module's own tables
         receivers = NO_RECEIVERS
-        bound = _stored(body)
+        nodes = tuple(own_nodes(body))
+        stored = frozenset(name for node in nodes for name in _bindings(node))
+        bound = stored
         if function is not None:
             parameters = tuple(_parameters(function.args))
-            bound = bound - _declared_global(body)
+            bound = stored - _declared_global(nodes)
             local = frozenset(bound | set(parameters))
             receivers = receivers_of(_owner(module.tree, function), function)
-        declarations, issues = self._declarations(module, body, local, receivers)
+        declarations, issues = self._declarations(module, nodes, local, receivers)
         header = Header({}, frozenset(), ())
         if function is not None:
-            header = _header(function, declarations)
-        read = frozenset(n.id for n in own_nodes(body) if isinstance(n, ast.Name))
+            header = _header(function, declarations, stored)
+        read = frozenset(n.id for n in nodes if isinstance(n, ast.Name))
         return Unit(
             module=module,
             function=function,
             body=body,
+            nodes=nodes,
+            stored=stored,
             local=local,
             receivers=receivers,
             bound=frozenset(bound),
@@ -435,19 +435,19 @@ class Analysis:
             declarations=declarations,
             issues=tuple(issues),
             header=header,
-            parametric=_parametric(function, body, declarations, header),
+            parametric=_parametric(function, stored, declarations, header),
         )
 
     def _declarations(
         self,
         module: Module,
-        body: Sequence[ast.stmt],
+        nodes: Sequence[ast.AST],
         local: frozenset[str],
         receivers: Receivers,
     ) -> tuple[dict[ast.Call, Declaration], list[Issue]]:
         declarations: dict[ast.Call, Declaration] = {}
         issues: list[Issue] = []
-        for node in own_nodes(body):
+        for node in nodes:
             if not isinstance(node, ast.Call):
                 continue
             target = self.index.callee(module, node.func, local, receivers)
@@ -554,15 +554,15 @@ def _qualname(tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef
 def _shaped(unit: Unit, summary: Summary) -> PropSet:
     """A generator function gives a generator of its items, an async function a
     coroutine of its result (§5.2c), any other function its result."""
-    if _is_generator(unit.body):
+    if _is_generator(unit.nodes):
         return generator(summary.items)
     if isinstance(unit.function, ast.AsyncFunctionDef):
         return coroutine(summary.result)
     return summary.result
 
 
-def _is_generator(body: Sequence[ast.stmt]) -> bool:
-    return any(isinstance(node, ast.Yield | ast.YieldFrom) for node in own_nodes(body))
+def _is_generator(nodes: Sequence[ast.AST]) -> bool:
+    return any(isinstance(node, ast.Yield | ast.YieldFrom) for node in nodes)
 
 
 def entry_state(unit: Unit) -> Env:
@@ -642,7 +642,7 @@ def _library_result(target: Target, passed: Sequence[PropSet]) -> PropSet:
 
 def _parametric(
     function: ast.FunctionDef | ast.AsyncFunctionDef | None,
-    body: Sequence[ast.stmt],
+    rebound: frozenset[str],
     declarations: Mapping[ast.Call, Declaration],
     header: Header,
 ) -> frozenset[str]:
@@ -655,7 +655,6 @@ def _parametric(
         for name in _parameters(function.args)
         if name not in header.requirements or len(header.requirements[name]) == 0
     }
-    rebound = {name for node in own_nodes(body) for name in _bindings(node)}
     sources = {
         d.call.args[1].id
         for d in declarations.values()
@@ -897,7 +896,7 @@ def _complete_findings(unit: Unit, reporter: Reporter) -> None:
                 f"or that it needs nothing (requires({parameter.arg}))"
             )
             reporter.add(PROP008, parameter, message, STATUS_VIOLATION)
-    for node in own_nodes(unit.body):
+    for node in unit.nodes:
         if isinstance(node, ast.Return) and node.value is not None:
             if not _declared_return(unit, node.value):
                 message = (

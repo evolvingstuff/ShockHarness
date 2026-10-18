@@ -25,11 +25,10 @@ from shockharness.ir.python_receivers import (
     THROUGH_CLASS,
     THROUGH_INSTANCE,
     class_methods,
-    constructed_locals,
     implicit_parameters,
     is_dotted,
     method_kind,
-    receiver_parameter,
+    method_receivers,
     singleton_constructors,
 )
 from shockharness.rules.defaults import module_names
@@ -98,10 +97,10 @@ def receivers_of(
     through = THROUGH_INSTANCE
     if kind is not None and kind not in (METHOD_INSTANCE, METHOD_STATIC):
         through = THROUGH_CLASS
-    name = None
-    if owner is not None:
-        name = receiver_parameter(function)
-    return Receivers(name, owner, through, constructed_locals(function))
+    name, constructed = method_receivers(function)
+    if owner is None:
+        name = None
+    return Receivers(name, owner, through, constructed)
 
 
 def _module_level(statements: Sequence[ast.stmt]) -> list[ast.stmt]:
@@ -209,6 +208,10 @@ class ProjectIndex:
         self.unreadable: dict[str, str] = {}
         self.analyzed: list[Module] = []
         self.ancestry: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
+        self.definers: dict[str, list[tuple[Module, ast.ClassDef]]] | None = None
+        self.class_bodies: dict[
+            ast.ClassDef, Mapping[str, ast.FunctionDef | ast.AsyncFunctionDef]
+        ] = {}
         for path, tree in sorted(analyzed.items()):
             names = module_names(path)
             module = build_module(_shortest(names), path, tree)
@@ -415,7 +418,7 @@ class ProjectIndex:
         key = (module.path, owner.name)
         if key in seen:
             return unknown_target(f"the bases of {module.name}.{owner.name} form a cycle")
-        methods = class_methods(owner)
+        methods = self.methods(owner)
         if name in methods:
             return self._method_target(module, owner, methods[name], through)
         for base in owner.bases:
@@ -467,10 +470,29 @@ class ProjectIndex:
     def _overriding(self, module: Module, owner: ast.ClassDef, name: str) -> str | None:
         """An analyzed class that derives from ``owner`` and defines ``name`` itself."""
         key = (module.path, owner.name)
+        if self.definers is None:
+            self.definers = self._definers()
+        if name not in self.definers:
+            return None
+        for candidate, node in self.definers[name]:
+            if key in self._ancestors(candidate, node):
+                return f"{candidate.name}.{node.name}"
+        return None
+
+    def _definers(self) -> dict[str, list[tuple[Module, ast.ClassDef]]]:
+        """Method name -> the analyzed module-level classes whose bodies define it."""
+        found: dict[str, list[tuple[Module, ast.ClassDef]]] = {}
         for candidate in self.analyzed:
             for node in candidate.tree.body:
-                if not isinstance(node, ast.ClassDef) or name not in class_methods(node):
+                if not isinstance(node, ast.ClassDef):
                     continue
-                if key in self._ancestors(candidate, node):
-                    return f"{candidate.name}.{node.name}"
-        return None
+                for method in self.methods(node):
+                    if method not in found:
+                        found[method] = []
+                    found[method].append((candidate, node))
+        return found
+
+    def methods(self, owner: ast.ClassDef) -> Mapping[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+        if owner not in self.class_bodies:
+            self.class_bodies[owner] = class_methods(owner)
+        return self.class_bodies[owner]
