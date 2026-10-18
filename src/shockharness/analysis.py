@@ -47,7 +47,7 @@ from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
 from shockharness.ir.model import NO_VERIFICATION, CatchFact, ModuleFacts, ParseFailure
 from shockharness.ir.python import extract_python_facts
-from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, FileRole, role_classifier
+from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, ROLE_TEST, FileRole, role_classifier
 from shockharness.rules import registry
 from shockharness.rules.api_catalog import (
     CATALOG_RULES,
@@ -341,6 +341,10 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
     """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
     scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
     section = rule.config_section
+    if rule is registry.PROP005:
+        # The test bootstrap's enable(...) lives in test code (conftest.py is config by
+        # default), whatever the family's roles say.
+        return role.role in (ROLE_TEST, ROLE_CONFIG)
     if section is None or section not in (
         *GUARDRAIL_SECTIONS,
         *CATALOG_SECTIONS,

@@ -97,6 +97,7 @@ Implemented rules:
 | `STATE002` | a shared object assigned before its fields are set (`G = Thing()` then `G.x = ...`) | review |
 | `PROP001` | opt-in property contracts: a value reaching a `requires` or a catalog sink without the property it requires (Python) | review |
 | `PROP003` | opt-in property contracts: a property name the catalog does not list | error |
+| `PROP005` | opt-in property contracts: a test bootstrap's `enable(...)` whose static-property list disagrees with the catalog | review |
 | `PROP006` | opt-in property contracts: a declaration the analysis cannot read (a computed property, wrong arguments) | review |
 | `PROP007` | opt-in property contracts: a parameter `requires` that is not at the top of the function | review |
 | `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |

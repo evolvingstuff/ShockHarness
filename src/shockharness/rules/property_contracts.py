@@ -24,6 +24,7 @@ from shockharness.contracts.catalog import (
     REQUIRES,
     CalleeSink,
     load_catalog,
+    static_properties,
 )
 from shockharness.contracts.python_flow import (
     EMPTY,
@@ -47,7 +48,7 @@ from shockharness.contracts.python_index import (
 from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
 from shockharness.ir.model import CONFIDENCE_EXACT, Span
 from shockharness.ir.python_catches import node_span
-from shockharness.rules.registry import PROP001, PROP003, PROP006, PROP007, RuleSpec
+from shockharness.rules.registry import PROP001, PROP003, PROP005, PROP006, PROP007, RuleSpec
 from shockharness.source import SourceText
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -57,6 +58,8 @@ VALUE_ONLY = 1
 RESULT_AND_SOURCE = 2
 RESULT_DECLARATIONS = (PRODUCES, PRESERVES, PRESERVES_EXCEPT)
 JOIN = "join"
+ENABLE = "enable"
+ENABLE_ARGUMENTS = 2  # enable(mode, static_properties)
 SEVERITY_ERROR = "error"
 SEVERITY_REVIEW = "review"
 
@@ -73,6 +76,9 @@ class Issue:
     rule: RuleSpec
     node: ast.expr
     message: str
+    # The rule whose scope decides whether it is reported: the rule itself, or PROP005
+    # for a malformed enable(...) in a test bootstrap (PROP006 there, spec §6.2).
+    scope: RuleSpec
 
 
 @dataclass(frozen=True)
@@ -186,24 +192,73 @@ def parse_declaration(
     issues: list[Issue] = []
     arity = _arity_issue(kind, call)
     if arity != "":
-        issues.append(Issue(PROP006, call, arity))
+        issues.append(Issue(PROP006, call, arity, PROP006))
     leading = RESULT_AND_SOURCE if kind in (PRESERVES, PRESERVES_EXCEPT) else VALUE_ONLY
     named: set[str] = set()
     for argument in call.args[leading:]:
         if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
             issues.append(
-                Issue(PROP006, argument, f"a property of {kind}(...) must be a string literal")
+                Issue(
+                    PROP006,
+                    argument,
+                    f"a property of {kind}(...) must be a string literal",
+                    PROP006,
+                )
             )
             continue
         if argument.value not in catalog:
             issues.append(
-                Issue(PROP003, argument, f"{argument.value!r} is not a property of the catalog")
+                Issue(
+                    PROP003,
+                    argument,
+                    f"{argument.value!r} is not a property of the catalog",
+                    PROP003,
+                )
             )
             if not allow_undeclared:
                 continue  # a misspelled property is never silently checked
         named.add(argument.value)
     valid = not any(issue.rule is PROP006 for issue in issues)
     return Declaration(kind, call, frozenset(named), valid), issues
+
+
+def _static_list(node: ast.expr) -> frozenset[str] | None:
+    """The names of a literal list of string literals; None for anything else."""
+    if not isinstance(node, ast.List):
+        return None
+    names = [e.value for e in node.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+    if len(names) != len(node.elts):
+        return None
+    return frozenset(names)
+
+
+def enable_issues(call: ast.Call, static: frozenset[str]) -> list[Issue]:
+    """PROP005: a test bootstrap's enable(mode, [...]) must list exactly the catalog's
+    runtime = "static" properties; a list the analysis cannot read is PROP006 (§6.2)."""
+    if len(call.args) != ENABLE_ARGUMENTS or len(call.keywords) > 0:
+        message = "enable(mode, static_properties) takes exactly two positional arguments"
+        return [Issue(PROP006, call, message, PROP005)]
+    listed = _static_list(call.args[1])
+    if listed is None:
+        message = (
+            "the static properties of enable(...) must be a literal list of string literals, "
+            "so they can be compared with the catalog"
+        )
+        return [Issue(PROP006, call.args[1], message, PROP005)]
+    if listed == static:
+        return []
+    differences = []
+    if len(static - listed) > 0:
+        differences.append(f"missing {_quoted(static - listed)}")
+    if len(listed - static) > 0:
+        differences.append(
+            f"lists {_quoted(listed - static)}, which the catalog does not mark static"
+        )
+    message = (
+        f'enable(...) disagrees with the catalog\'s runtime = "static" properties: '
+        f"{'; '.join(differences)} (`shockharness contracts static-properties` prints the list)"
+    )
+    return [Issue(PROP005, call.args[1], message, PROP005)]
 
 
 def _statement_requires(
@@ -282,6 +337,7 @@ class Analysis:
         catalog = load_catalog(settings)
         self.catalog = frozenset(catalog.properties)
         self.allow_undeclared = catalog.allow_undeclared
+        self.static = frozenset(static_properties(settings))
         self.sinks = self._sinks(catalog.sinks)
         self.units: dict[ast.AST, Unit] = {}
         self.contracts: dict[ast.AST, Contract] = {}
@@ -351,9 +407,12 @@ class Analysis:
             if not isinstance(node, ast.Call):
                 continue
             target = self.index.callee(module, node.func, local)
+            owner, _dot, kind = target.reference.rpartition(".")
+            if owner in self.index.runtime and kind == ENABLE:
+                issues.extend(enable_issues(node, self.static))
+                continue
             if target.kind != RUNTIME:
                 continue
-            _module, _dot, kind = target.reference.rpartition(".")
             declaration, found = parse_declaration(kind, node, self.catalog, self.allow_undeclared)
             declarations[node] = declaration
             issues.extend(found)
@@ -426,8 +485,14 @@ class Reporter:
         return severity
 
     def add(self, rule: RuleSpec, node: ast.AST, message: str, status: str) -> None:
-        if rule.rule_id not in self.file.applies:
-            return
+        if rule.rule_id in self.file.applies:
+            self._record(rule, node, message, status)
+
+    def add_issue(self, issue: Issue) -> None:
+        if issue.scope.rule_id in self.file.applies:
+            self._record(issue.rule, issue.node, issue.message, STATUS_VIOLATION)
+
+    def _record(self, rule: RuleSpec, node: ast.AST, message: str, status: str) -> None:
         span = self._span(node)
         key = (rule.rule_id, span.line, span.column, message)
         if key in self.found:
@@ -645,7 +710,7 @@ def _file_findings(analysis: Analysis, module: Module, reporter: Reporter) -> No
     units.extend(analysis.function_unit(module, function) for function in _functions(module.tree))
     for unit in units:
         for issue in unit.issues:
-            reporter.add(issue.rule, issue.node, issue.message, STATUS_VIOLATION)
+            reporter.add_issue(issue)
         for declaration in unit.header.misplaced:
             reporter.add(
                 PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION

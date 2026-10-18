@@ -1234,7 +1234,7 @@ from one (never `currentTarget`, the element the listener is on); `C` is in
 `HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
 TypeScript; exact.
 
-### PROP001, PROP003, PROP006, PROP007: property contracts (opt-in; Python, milestone P1a)
+### PROP001, PROP003, PROP005, PROP006, PROP007: property contracts (opt-in; Python, milestone P1a)
 
 The family of `docs/shockharness_property_contracts_spec.md`, milestone P1a. It is off
 by default and no profile turns it on. Off is not a deviation, does not list the rules
@@ -1261,7 +1261,9 @@ There is no separate declaration.
 
 * **What carries properties.** Assignment copies a value's property set. `produces`
   adds to it. `preserves` copies the source's set, and `preserves_except` removes the
-  named properties. `a or b` and `a if c else b` are the intersection of their operands.
+  named properties. Calls nest and are evaluated inside out:
+  `produces(preserves(expr, x), "p")` gives a result computed from `x` by an undeclared
+  operation `x`'s set plus `p` (spec §4.2). `a or b` and `a if c else b` are the intersection of their operands.
 * **What destroys them.** Any other operation, literal, f-string or library call
   carries nothing.
 * **Control flow.** Branches meet in the intersection, and loops iterate to a fixed
@@ -1283,7 +1285,8 @@ There is no separate declaration.
 |---|---|---|
 | `PROP001` | a value reaching a parameter whose function `requires` a property, a catalog sink (`callee:N`), or a mid-body `requires` on a local, without that property. When the value's set is unknown, the finding is `unknown` and gates only with `fail_on_unknown = true` | review |
 | `PROP003` | a property name the catalog does not list. The name is not counted, so a misspelled requirement is never silently checked. With `allow_undeclared = true` it is `review` and counted | **error** |
-| `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing | review |
+| `PROP005` | a test bootstrap's `enable(mode, [...])` (in a test-role or config-role file such as `conftest.py`, whatever `roles` says) whose literal list is not the catalog's `runtime = "static"` set. The finding names what is missing and what the catalog does not mark static. `shockharness contracts static-properties` prints the list to paste. The predicate half (`verify`) is P2 | review |
+| `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing. In a test bootstrap, an `enable(...)` whose second argument is not a literal list of string literals | review |
 | `PROP007` | a `requires` on a parameter that is not at the top of the body (after a use of the parameter, or inside a branch, loop, try or with). It is not part of the contract. A parameter the body rebinds is a local after that, and a `requires` on it is a mid-body check | review |
 
 **Sinks.** A catalog sink is either a project callee or a library callee, resolved
@@ -1314,7 +1317,7 @@ to the runtime module.
 * catalog preserving operations (slicing);
 * transitive summaries;
 * the `await`/generator semantics;
-* `PROP002`, `PROP004`, `PROP005`, `PROP008`;
+* `PROP002`, `PROP004`, `PROP008`, and PROP005's predicate half;
 * `complete`, `verify` mode, and the skills.
 
 Methods are not resolved through their receivers, and a class call (a constructor) is

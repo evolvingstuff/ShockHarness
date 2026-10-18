@@ -41,6 +41,8 @@ from shockharness.constants import (
     EXIT_OK,
     JSON_INDENT,
 )
+from shockharness.contracts.catalog import SECTION_PATH as PROPERTY_CONTRACTS_SECTION
+from shockharness.contracts.catalog import static_properties
 from shockharness.contracts.install import CONTRACTS_MANIFEST, check_runtime, install_runtime
 from shockharness.contracts.install import LANGUAGES as CONTRACT_LANGUAGES
 from shockharness.errors import ShockHarnessError, UsageError
@@ -253,6 +255,14 @@ def _add_contracts_parser(commands: "argparse._SubParsersAction[argparse.Argumen
     contracts_commands = contracts.add_subparsers(
         dest="contracts_command", required=True, metavar="SUBCOMMAND"
     )
+    static = contracts_commands.add_parser(
+        "static-properties",
+        help='print the catalog\'s runtime = "static" properties as the list enable(...) takes',
+    )
+    static.add_argument(
+        "--root", type=Path, default=Path.cwd(), help="project root (default: current directory)"
+    )
+    static.add_argument("--config", type=Path, default=None, help="explicit configuration file")
     install = contracts_commands.add_parser(
         "install",
         help=f"copy the runtime file to --dest and record it in {CONTRACTS_MANIFEST}; "
@@ -842,6 +852,11 @@ def _run_skills(args: argparse.Namespace) -> int:
 
 
 def _run_contracts(args: argparse.Namespace) -> int:
+    if args.contracts_command == "static-properties":
+        config = load_config_with_overrides(args.root, args.config, NO_OVERRIDES)
+        settings = config.section(PROPERTY_CONTRACTS_SECTION)
+        sys.stdout.write(json.dumps(static_properties(settings)) + "\n")
+        return EXIT_OK
     if args.check:
         if args.language is not None or args.dest is not None:
             raise UsageError("contracts install --check takes no --language or --dest", None)

@@ -189,10 +189,10 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: violation",
     ),
     # Property contracts, P1a (opt-in).
-    ("rules/property_contracts.py", "Reporter.add"): (
+    ("rules/property_contracts.py", "Reporter._record"): (
         frozenset({FINDING_CONSTRUCTOR}),
-        "the status is decided by the caller: PROP003, PROP006, PROP007 violation; PROP001 "
-        "by Reporter.check",
+        "the status is decided by the caller: PROP003, PROP005, PROP006, PROP007 violation; "
+        "PROP001 by Reporter.check",
     ),
     ("rules/property_contracts.py", "Reporter.check"): (
         frozenset({"STATUS_UNKNOWN"}),

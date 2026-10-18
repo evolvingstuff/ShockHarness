@@ -498,7 +498,7 @@ CONFIG_SCHEMA = TableField(
                         "severities": TableField(
                             fields={
                                 rule: EnumField(VERIFICATION_SEVERITIES)
-                                for rule in ("PROP001", "PROP003", "PROP006", "PROP007")
+                                for rule in ("PROP001", "PROP003", "PROP005", "PROP006", "PROP007")
                             },
                             required=(),
                         ),

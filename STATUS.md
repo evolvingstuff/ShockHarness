@@ -4622,3 +4622,58 @@ gate: PASS (exit 0)
 
 The 2 new findings against 1401d42 are the two VERIFY003 warnings for the catalog
 boundaries above.
+
+## Property contracts P1a aligned with spec v0.6 (2026-10-17)
+
+Fable's v0.6 answered the two P1a points: decision 37 (the nesting idiom) and decision 38
+(`enable` takes the static list). On Tom's request:
+* **The runtime file.** `enable` raises `ContractError` unless its second argument is a
+  list of strings, checked before the mode, the second-call and the late-call checks.
+* **The §11.1 fixture.** `stats` uses `produces(preserves(center(x) / x.std(), x),
+  "normalized")`. Its findings are unchanged, so `pipeline` is satisfied through the
+  idiom; nested calls were already evaluated inside out.
+* **PROP005** (review), the `enable` half.
+  * A call resolving to the runtime module's `enable`, in a test-role or config-role
+    file, has its literal list compared with the catalog's `runtime = "static"` set as a
+    set. The finding names what is missing and what the catalog does not mark static.
+  * A second argument that is not a literal list of string literals, or the wrong
+    arguments, is PROP006 there.
+  * **A choice:** the spec says "test-role file", but `conftest.py`, the spec's own
+    bootstrap, is config-role by default. Both roles are checked, whatever
+    `rules.property_contracts.roles` says; production files are not.
+  * The predicate half stays in P2.
+* **`shockharness contracts static-properties [--root DIR] [--config FILE]`** prints the
+  sorted list as JSON (`["alpha", "zeta"]`), which is valid in both Python and JavaScript.
+* **Tests:** `test_prop005_compares_a_test_bootstrap_enable_with_the_catalog`,
+  `test_enable_takes_the_static_properties_as_a_list_of_strings`,
+  `test_static_properties_prints_the_list_to_paste`. Docs, README, CHANGELOG, the ideas
+  row (§11.1 done) and unknown-inventory key `Reporter._record` are updated.
+
+The spec file in this commit is v0.6 as Tom gave it. That text predates the four P1a
+wording fixes and restores their old wording (Python 3.10+, "the library's README",
+`py.typed` in §6.3a, the P1a row and the kickoff, `.d.ts` "with both builds"). Tom is
+passing that back to Fable; I did not edit the spec.
+
+**Evidence** (2026-10-17, macOS arm64, CPython 3.14.7):
+
+```text
+$ ruff check src tests scripts evals
+All checks passed!
+$ ruff format --check src tests scripts evals
+195 files already formatted
+$ pytest -q
+1266 passed in 64.95s (0:01:04)
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 189 file(s), 189 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+$ shockharness config validate          # exit 0
+
+# on a scratch clone with this tree committed as HEAD:
+$ shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD
+shockharness 0.9.0 diff: base refs/tags/shockharness-policy-accepted (cb177429c668) -> head HEAD (8bf526b38fc7); 11 new, 13 fixed, 192 unchanged finding(s)
+gate: PASS (exit 0)
+$ shockharness diff --base 0646f8d --head HEAD
+shockharness 0.9.0 diff: base 0646f8d (0646f8d9a8a4) -> head HEAD (8bf526b38fc7); 0 new, 0 fixed, 200 unchanged finding(s)
+  complexity regressions against base: 0 (gates.complexity_regressions = "warn")
+gate: PASS (exit 0)
+```

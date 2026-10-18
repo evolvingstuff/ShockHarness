@@ -899,7 +899,7 @@ function is not found in an analyzed file is an `unknown` DOM002 finding.
 Removing a class or a role is a policy deviation; adding a narrower class
 (`HTMLButtonElement`) reports those filters too.
 
-## Property contracts (PROP001, PROP003, PROP006, PROP007)
+## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 Opt-in (`docs/shockharness_property_contracts_spec.md`, milestone P1a, Python). Off is
 the default in every profile and is not a deviation. The rules are described in
@@ -918,6 +918,7 @@ allow_undeclared = false           # PROP003 is error; true: review, and the nam
 [tool.shockharness.rules.property_contracts.severities]
 PROP001 = "review"
 PROP003 = "error"
+PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"
 
@@ -955,8 +956,11 @@ did not write, is never replaced without `--force`.
 `shockharness contracts install --check` writes nothing and exits 1 when a recorded copy
 is edited, missing or older than the shipped runtime. Nothing is published to any package
 registry, and the project depends on its own copy, not on `shockharness`. Test code calls
-`enable("check", static_properties)` once, before any declaration has run, with the
-properties marked `runtime = "static"`. Until then, and in production, every declaration
+`enable("check", static_properties)` once, before any declaration has run. The second
+argument is a list of the properties marked `runtime = "static"`: it is required, and is
+`[]` when there are none. `shockharness contracts static-properties [--root DIR]` prints
+it in the form to paste. PROP005 reports a bootstrap whose literal list disagrees with
+the catalog. Until then, and in production, every declaration
 is the identity.
 
 Every key is covered by VERIFY003 (see `docs/rules.md`).

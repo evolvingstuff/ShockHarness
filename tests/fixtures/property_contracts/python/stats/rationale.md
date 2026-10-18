@@ -9,8 +9,7 @@
 - `through_registry`: `ops["normalize"]` is a computed callee, so this is PROP001
   (unknown). Unknown findings gate only with `fail_on_unknown = true`.
 
-One deviation from the spec's text. In §11.1, `normalize` returns `produces(..., "normalized")`
-and `fit` requires both `normalized` and `numeric`. By §5.2's own rules, the division
-destroys `numeric`, so `pipeline` would be a violation there, not "satisfied". Here
-`normalize` produces both properties, so the fixture matches the expectation the spec
-states.
+`normalize` uses the nesting idiom of spec §4.2 (v0.6, decision 37):
+`produces(preserves(expr, x), "normalized")`. The division is an undeclared operation
+and destroys every property; `preserves` gives the result `x`'s set (`numeric`), and
+`produces` then adds `normalized`. Nested calls are evaluated inside out.

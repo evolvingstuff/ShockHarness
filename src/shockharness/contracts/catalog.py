@@ -27,6 +27,7 @@ PYTHON_REFERENCE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)
 POSITION_SEPARATOR = ":"
 PYTHON = "python"
 PYTHON_SUFFIX = ".py"
+RUNTIME_STATIC = "static"
 PACKAGE_INIT = "__init__.py"
 SOURCE_DIRECTORY = "src"
 JAVASCRIPT_SUFFIXES = (".js", ".mjs", ".ts")
@@ -161,6 +162,12 @@ def catalog_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
             )
         )
     return issues
+
+
+def static_properties(settings: Mapping[str, Any]) -> list[str]:
+    """The catalog's ``runtime = "static"`` properties, sorted: the list a test bootstrap
+    passes to ``enable`` (spec §6.2)."""
+    return sorted(str(p["name"]) for p in settings["properties"] if p["runtime"] == RUNTIME_STATIC)
 
 
 def python_runtime_modules(settings: Mapping[str, Any]) -> frozenset[str]:

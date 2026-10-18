@@ -366,3 +366,30 @@ def test_a_sink_requiring_less_is_reported_and_tightenings_are_not(empty_root: P
     ]
     tightened = loosenings(after.values, after.deviations, before.values, before.deviations)
     assert tightened == []
+
+
+def test_prop005_compares_a_test_bootstrap_enable_with_the_catalog(empty_root: Path) -> None:
+    bootstrap = (
+        "from app.contracts import enable\n\n"
+        'enable("check", ["redacted"])\n'
+        'enable("check", ["redacted", "other"])\n'
+        'enable("check", [])\n'
+        'enable("check", STATIC)\n'
+        'enable("check")\n'
+    )
+    production = 'from app.contracts import enable\n\nenable("check", [])\n'
+    files = {
+        "app/__init__.py": "",
+        "app/text.py": TEXT,
+        "app/start.py": production,
+        "tests/conftest.py": bootstrap,
+        "tests/test_boot.py": bootstrap,
+    }
+    rows = [(r["path"], r["line"], r["rule"]) for r in prop_rows(run(empty_root, files, ""))]
+    expected = [(4, "PROP005"), (5, "PROP005"), (6, "PROP006"), (7, "PROP006")]
+    assert rows == [("tests/conftest.py", *e) for e in expected] + [
+        ("tests/test_boot.py", *e) for e in expected
+    ]
+    messages = [r["message"] for r in prop_rows(run(empty_root, files, "")) if r["line"] == 4]
+    assert "lists 'other', which the catalog does not mark static" in messages[0]
+    assert "contracts static-properties" in messages[0]

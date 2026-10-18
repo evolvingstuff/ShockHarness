@@ -3,7 +3,7 @@ from app.contracts import produces, preserves, requires
 
 def normalize(x):
     requires(x, "numeric")
-    return produces(center(x) / x.std(), "normalized", "numeric")
+    return produces(preserves(center(x) / x.std(), x), "normalized")
 
 
 def center(x):

@@ -131,12 +131,22 @@ class _Registry:
 _REGISTRY = _Registry()
 
 
-def enable(mode: str, static_properties: Iterable[str]) -> None:
+def enable(mode: str, static_properties: list[str]) -> None:
     """Turn checking on, once, from test code, before any declaration has run.
 
-    ``static_properties``: the properties the catalog marks ``runtime = "static"``; they
-    are counted, never recorded or checked.
+    ``static_properties``: the list of properties the catalog marks ``runtime =
+    "static"`` (``[]`` when there are none); they are counted, never recorded or checked.
+    ``shockharness contracts static-properties`` prints it, and the analyzer reports a
+    literal list that disagrees with the catalog (PROP005).
     """
+    if not isinstance(static_properties, list) or not all(
+        isinstance(name, str) for name in static_properties
+    ):
+        raise ContractError(
+            "enable takes the catalog's static properties as a list of strings, not "
+            f"{type(static_properties).__name__}",
+            None,
+        )
     if mode == MODE_VERIFY:
         raise ContractError("verify mode (predicates) is not available in this version", None)
     if mode != MODE_CHECK:

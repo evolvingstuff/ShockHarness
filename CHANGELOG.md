@@ -24,6 +24,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     `--check`, recorded in `.shockharness-contracts.json`. Nothing is published.
   - `RESULT001` permits the four declarations as statements when they resolve to the
     runtime module.
+  - Spec v0.6 (decisions 37 and 38):
+    - `enable` raises unless its second argument is a list of strings.
+    - `PROP005` (review) reports a test bootstrap's `enable(...)` whose literal list is
+      not the catalog's `runtime = "static"` set, and a non-literal list is `PROP006`.
+    - `shockharness contracts static-properties` prints the list to paste.
+    - The §11.1 fixture uses the `produces(preserves(expr, x), "p")` idiom.
 - `STATE002` (`rules.module_state`, review, Python): a shared object published before
   it is initialized. A global, or `self.<attr>` outside a constructor, is assigned a
   new object and then has its fields set in the same function, so another thread can

@@ -162,6 +162,7 @@ IMPLEMENTED_IN_ORDER = (
     "STATE002",
     "PROP001",
     "PROP003",
+    "PROP005",
     "PROP006",
     "PROP007",
     "DOM001",

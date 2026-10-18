@@ -731,6 +731,7 @@ sinks = []
 [tool.shockharness.rules.property_contracts.severities]
 PROP001 = "review"
 PROP003 = "error"
+PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"
 

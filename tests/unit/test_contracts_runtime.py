@@ -216,3 +216,29 @@ def test_the_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "up-to-date python" in out
     assert "runtime_module" in out
+
+
+def test_enable_takes_the_static_properties_as_a_list_of_strings(contracts: ModuleType) -> None:
+    for wrong in (("redacted",), {"redacted"}, "redacted", [1], None):
+        with pytest.raises(contracts.ContractError, match="list of strings"):
+            contracts.enable("check", wrong)
+    contracts.enable("check", [])
+    assert contracts.report()["mode"] == "check"
+
+
+def test_static_properties_prints_the_list_to_paste(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "stats"
+    root.mkdir()
+    (root / ".shockharness.toml").write_text(
+        "[tool.shockharness.rules.property_contracts]\n"
+        + "".join(
+            "[[tool.shockharness.rules.property_contracts.properties]]\n"
+            f'name = "{name}"\ndescription = "d"\nproducers = []\nruntime = "{level}"\n'
+            for name, level in (("zeta", "static"), ("alpha", "static"), ("beta", "check"))
+        ),
+        encoding="utf-8",
+    )
+    assert main(["contracts", "static-properties", "--root", str(root)]) == EXIT_OK
+    assert capsys.readouterr().out == '["alpha", "zeta"]\n'

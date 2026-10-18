@@ -2365,7 +2365,7 @@ MAGIC004 = RuleSpec(
 )
 
 
-# --- PROP001, PROP003, PROP006, PROP007 (property contracts, milestone P1a) --------------
+# --- PROP001, PROP003, PROP005, PROP006, PROP007 (property contracts, milestone P1a) --------------
 # docs/shockharness_property_contracts_spec.md. Opt-in: rules.property_contracts.enabled is
 # false by default and in every profile, and off is not a deviation.
 
@@ -2453,6 +2453,47 @@ PROP003 = RuleSpec(
     compliant_example='requires(x, "normalized")',
 )
 
+PROP005 = RuleSpec(
+    rule_id="PROP005",
+    version="1",
+    name="runtime configuration disagrees with the catalog",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A test bootstrap's enable(mode, [...]) lists static properties that are not the "
+        'catalog\'s runtime = "static" set.'
+    ),
+    rationale=(
+        "The copied runtime cannot read the catalog, so the test bootstrap states the static "
+        "properties a second time. A list that drifted makes the runtime track a property "
+        "that cannot carry runtime state, or skip one it should check."
+    ),
+    guarantees=(
+        "Every call in a test-role or config-role file (conftest.py is config by default) that "
+        "resolves to the runtime module's enable, whatever rules.property_contracts.roles "
+        "says: a literal list of string literals as its second "
+        'argument is compared, as a set, with the catalog\'s runtime = "static" properties, '
+        "and the finding names those missing from the call and those the catalog does not mark "
+        "static. A second argument that is not such a literal is PROP006 in the same file. "
+        "`shockharness contracts static-properties` prints the list to paste."
+    ),
+    limitations=(
+        "The predicate half of PROP005 (a verify-level property with no registered predicate) "
+        "is milestone P2. Calls in production files are not checked (production never calls "
+        "enable)."
+    ),
+    remediation=(
+        "Replace the list with the output of `shockharness contracts static-properties`, or "
+        "change the property's runtime level in the catalog if the bootstrap is right."
+        + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example='enable("check", ["redacted"])  # the catalog marks two static',
+    compliant_example='enable("check", ["cloud_disclosable", "redacted"])',
+)
+
 PROP006 = RuleSpec(
     rule_id="PROP006",
     version="1",
@@ -2517,7 +2558,7 @@ PROP007 = RuleSpec(
 )
 
 
-CONTRACT_RULES: tuple[RuleSpec, ...] = (PROP001, PROP003, PROP006, PROP007)
+CONTRACT_RULES: tuple[RuleSpec, ...] = (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 
 # --- STATE002 (MetaList, 2026-10-17) ----------------------------------------------------
@@ -2833,6 +2874,7 @@ RULES: tuple[RuleSpec, ...] = (
     STATE002,
     PROP001,
     PROP003,
+    PROP005,
     PROP006,
     PROP007,
     DOM001,
