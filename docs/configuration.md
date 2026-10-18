@@ -114,9 +114,9 @@ repository so it is never inside the workspace:
 ```yaml
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.13.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.14.0
     with:
-      shockharness-version: "0.13.0"
+      shockharness-version: "0.14.0"
       base: ${{ github.event.pull_request.base.sha }}
       policy-repository: my-org/engineering-policy   # cloned into $RUNNER_TEMP
       policy-ref: main                               # a branch or tag
@@ -1077,7 +1077,7 @@ diffs, history) is recomputed on every run, with one exception below; a hit
 yields byte-identical findings and metrics for that file.
 
 **The property-contracts phase** is the one cross-file phase the cache covers
-(0.13.0). It is the most expensive, and it only runs when
+(0.14.0). It is the most expensive, and it only runs when
 `rules.property_contracts.enabled` is true. Its findings are reused when all of
 these are unchanged:
 * the header (tool version, configuration digest, host);

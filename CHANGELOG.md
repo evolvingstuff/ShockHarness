@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-18
+
+MAGIC005, the disguised numbers of the under-the-gate rounds, and skill wording from the
+same experiment.
+
+**Upgrading from 0.13.0.** One change can make a passing gate fail: **MAGIC005 is a new
+warning**, reported where MAGIC001 applies. On MetaList and the third-party corpus it
+reports nothing. To lower it, set `rules.magic_numbers.magic005_severity = "review"`
+(VERIFY003 reports that as a loosening). The cache schema is "23".
+
 ### Added
 - **MAGIC005 (warning): a number written as something else**, the disguises agents used
   under the gate:

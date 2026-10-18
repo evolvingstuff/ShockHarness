@@ -115,7 +115,7 @@ Verdict: PASS | BLOCKED (<first blocking item>)
 Scope: src/app/settings.py, src/app/pages.py, tests/test_pages.py
 Config: shockharness config validate -> exit 0; profile strict; deviations: tests/** disables MAGIC001, DEF001 (reason: fixtures encode literal expected outputs)
 Analyzer: shockharness check . -> exit 0
-  shockharness 0.13.0: 7 file(s), 7 analyzed, 0 failed; 1 finding(s), 1 suppressed
+  shockharness 0.14.0: 7 file(s), 7 analyzed, 0 failed; 1 finding(s), 1 suppressed
   gate: PASS (exit 0)
 Gate vs base: shockharness gate --base origin/main --head HEAD -> exit 0; 0 new, 2 fixed, 1 unchanged finding(s)
 Suppressions in this change: none (the existing MAGIC001 suppression on src/app/http.py:9, RFC 9110 section 15.5.5, is unchanged)
@@ -132,7 +132,7 @@ Config: shockharness config validate -> exit 0; profile strict; deviations: none
 Analyzer: shockharness check . -> exit 1
   src/client.js:12:5: DEF005 error: catch clause converts the exception into a fallback value: return null; (EXC002 classification return_fallback; the handler is reported once, here)  [} catch (err) {]
   src/client.js:12:5: EXC001 error: catch clause is forbidden: untyped catch binds every error; a JavaScript catch passes only inside an approved boundary whose error class the handler checks with instanceof and otherwise rethrows  [} catch (err) {]
-  shockharness 0.13.0: 3 file(s), 3 analyzed, 0 failed; 2 finding(s), 0 suppressed
+  shockharness 0.14.0: 3 file(s), 3 analyzed, 0 failed; 2 finding(s), 0 suppressed
   gate: FAIL (exit 1)
 Gate vs base: not run (working tree uncommitted)
 Suppressions in this change: none
@@ -190,9 +190,9 @@ root.
 The version is always an exact pin; nothing updates to `latest`. Pick one:
 
 ```bash
-uv tool install 'shockharness==0.13.0'                    # isolated tool environment; any repository, JavaScript included
-uvx --from 'shockharness==0.13.0' shockharness version     # one-off run, nothing installed
-pip install 'shockharness==0.13.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
+uv tool install 'shockharness==0.14.0'                    # isolated tool environment; any repository, JavaScript included
+uvx --from 'shockharness==0.14.0' shockharness version     # one-off run, nothing installed
+pip install 'shockharness==0.14.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
@@ -259,12 +259,12 @@ permissions:
   contents: read
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.13.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.14.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.13.0"
+      shockharness-version: "0.14.0"
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
 
@@ -312,7 +312,7 @@ Each command's output confirms one step.
 
 | Step | Command | Output that confirms it |
 |---|---|---|
-| Install | `shockharness version` | `shockharness 0.13.0` |
+| Install | `shockharness version` | `shockharness 0.14.0` |
 | Policy | `shockharness config validate` | a line starting `shockharness: configuration is valid` naming `profile strict`, exit 0 |
 | Analysis | `shockharness check .` | a report whose last lines start with `gate: PASS (exit 0)` or `gate: FAIL (exit 1)`; exit 2 or 3 means the setup is wrong, not the code |
 | Baseline, if used | `shockharness check . --baseline .shockharness-baseline.json` | `gate: PASS (exit 0)` followed by `N legacy finding(s) matched the baseline` |
