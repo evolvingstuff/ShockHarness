@@ -18,13 +18,13 @@ Pick one. In every case the version is an exact pin.
 
 ```bash
 # Python project: a development dependency (Dependabot-visible)
-#   pyproject.toml -> [project.optional-dependencies] dev = ["shockharness==0.11.0"]
-#   or requirements-dev.txt -> shockharness==0.11.0
+#   pyproject.toml -> [project.optional-dependencies] dev = ["shockharness==0.12.0"]
+#   or requirements-dev.txt -> shockharness==0.12.0
 pip install -e ".[dev]"
 
 # JavaScript project or any repository: an isolated tool environment
-uv tool install 'shockharness==0.11.0'
-pipx install 'shockharness==0.11.0'
+uv tool install 'shockharness==0.12.0'
+pipx install 'shockharness==0.12.0'
 ```
 
 Runtime dependencies are `tree-sitter` and `tree-sitter-javascript` only.
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install -r requirements-lint.txt   # pins shockharness==0.11.0
+      - run: pip install -r requirements-lint.txt   # pins shockharness==0.12.0
       - run: shockharness check . --format sarif --output shockharness.sarif
 ```
 
@@ -86,7 +86,7 @@ defaults to 3.12 independently of the project's matrix.
 ### A. Direct invocation (any CI system)
 
 ```yaml
-- run: pip install "shockharness==0.11.0"   # or: pip install -e ".[dev]" with the pin in pyproject.toml
+- run: pip install "shockharness==0.12.0"   # or: pip install -e ".[dev]" with the pin in pyproject.toml
 - run: shockharness check . --format sarif --output shockharness.sarif
 ```
 
@@ -131,12 +131,12 @@ permissions:
   contents: read
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.11.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.12.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.11.0"
+      shockharness-version: "0.12.0"
       config: .shockharness.toml
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
@@ -145,7 +145,7 @@ Pinned to a full commit SHA (strongest reproducibility; the comment keeps the
 human-readable tag next to it, which is also what Dependabot updates):
 
 ```yaml
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@0123456789abcdef0123456789abcdef01234567  # v0.11.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@0123456789abcdef0123456789abcdef01234567  # v0.12.0
 ```
 
 **The workflow ref and the analyzer version are two separate pins.** The
@@ -183,8 +183,8 @@ Rules that make this work:
 * **The pin must live where an updater can see it**: `pyproject.toml`
   (`[project.dependencies]` or `[project.optional-dependencies]`), a
   requirements file, or a workflow input. **Never inside a shell string** such
-  as `uvx --from shockharness==0.11.0 shockharness check .` or
-  `pip install shockharness==0.11.0` in a `run:` line: Dependabot does not
+  as `uvx --from shockharness==0.12.0 shockharness check .` or
+  `pip install shockharness==0.12.0` in a `run:` line: Dependabot does not
   read shell commands, and that pin would silently rot.
 * Dependabot's `github-actions` ecosystem updates the `uses:` ref of the
   reusable workflow. It does **not** rewrite the `shockharness-version` input;

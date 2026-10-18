@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-18
+
+Faster warm runs, from MetaList's report ("41 seconds WITH cached files").
+
+**Upgrading from 0.11.0.** No change makes a passing gate fail: the findings are
+identical. The report's `coverage.cache` block gains `contracts`, and a cache directory
+gains `contracts.json`.
+
 ### Changed
 - **Faster warm runs.**
   - The cache decoder builds one decoder per type, instead of reading type hints and
