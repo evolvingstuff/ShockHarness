@@ -23,7 +23,8 @@ Each case runs ``--runs`` times (default 5): one sample proves nothing.
     python evals/behavior/run.py --case magic001/listener-arguments --runs 5 \\
         --agent claude --judge claude
 
-Standard library only; ``shockharness`` must be on PATH (or ``--shockharness``).
+Standard library only; ``shockharness`` must be on PATH (or ``--shockharness``). The
+agent runs with that CLI's directory first on its PATH.
 """
 
 import argparse
@@ -74,6 +75,8 @@ SOLUTION_MESSAGE = "FINAL_MESSAGE.md"
 DELETED_LIST = "DELETED"
 CONFIG_FILE = ".shockharness.toml"
 TESTS_DIR = "tests"
+# The analyzer's cache: left out of the diff the judge and the detectors read.
+CACHE_DIR = ".shockharness-cache"
 HIDDEN_DIR = "tests_hidden"
 
 # Known-evasion detectors: a name and a pattern over the lines the change adds to source
@@ -225,15 +228,27 @@ def apply_solution(case: Case, overlay: Path, workspace: Path) -> str:
     return message
 
 
-def run_agent(case: Case, workspace: Path, agent: str, model: str) -> str:
+def agent_path(shockharness: str) -> str:
+    """PATH for the agent, with the directory of the CLI under test first, so the agent
+    runs the build being measured and not whatever release it can find."""
+    resolved = shutil.which(shockharness)
+    if resolved is None:
+        raise FileNotFoundError(f"{shockharness!r} is not an executable on PATH")
+    return str(Path(resolved).parent) + os.pathsep + os.environ["PATH"]
+
+
+def run_agent(case: Case, workspace: Path, options: argparse.Namespace) -> str:
     """Claude Code, headless, on task.md; the final message it printed."""
+    agent = options.agent
+    model = options.model
     if agent != "claude":
         raise ValueError(f"unsupported agent {agent!r}")
     argv = ["claude", "-p", (case.root / "task.md").read_text(encoding="utf-8")]
     argv += ["--output-format", "json", "--permission-mode", "bypassPermissions"]
     if model != "":
         argv += ["--model", model]
-    result = run_command(argv, workspace, AGENT_TIMEOUT_SECONDS, environment({}))
+    path = agent_path(options.shockharness)
+    result = run_command(argv, workspace, AGENT_TIMEOUT_SECONDS, environment({"PATH": path}))
     if result.exit_code != 0:
         return f"[agent exited {result.exit_code}] {result.output[-DIFF_SHOWN_CHARS:]}"
     last = result.output.strip().splitlines()
@@ -440,6 +455,11 @@ def detectors(diff: str, workspace: Path, base_sources: dict[str, str]) -> dict[
     return fired
 
 
+def change_diff(workspace: Path, base: str, head: str) -> str:
+    """The agent's change, without the installed skills and the analyzer's cache."""
+    return git(workspace, "diff", base, head, "--", ".", ":!.claude", f":!{CACHE_DIR}")
+
+
 def test_edits(workspace: Path, base: str, head: str) -> list[str]:
     """Files under tests/ the change added, modified, deleted or renamed."""
     status = git(workspace, "diff", "--name-status", "-M", base, head)
@@ -554,7 +574,7 @@ def evaluate(
         for name in git(workspace, "ls-tree", "-r", "--name-only", base).split()
         if name.startswith("src/") and name.endswith(".py")
     }
-    diff = git(workspace, "diff", base, head, "--", ".", ":!.claude")
+    diff = change_diff(workspace, base, head)
     results: dict[str, object] = {
         "diff": diff,
         "final_message": message,
@@ -579,7 +599,7 @@ def one_run(case: Case, index: int, options: argparse.Namespace) -> Run:
         elif options.candidate is not None:
             message = apply_solution(case, options.candidate, workspace)
         else:
-            message = run_agent(case, workspace, options.agent, options.model)
+            message = run_agent(case, workspace, options)
         head = commit_all(workspace, "head")
         scratch = Path(directory) / "scratch"
         scratch.mkdir()

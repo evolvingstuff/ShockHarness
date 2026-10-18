@@ -170,3 +170,29 @@ def test_expected_files_parse() -> None:
     for path in sorted((SUITE / "cases").glob("*/*/expected.toml")):
         data = tomllib.loads(path.read_text(encoding="utf-8"))
         assert data["kind"] in ("unambiguous", "judgment", "ask"), path
+
+
+def test_the_agent_runs_the_cli_under_test() -> None:
+    # A first PROP001 round ran without it: the agents found no CLI, and the published
+    # release rejected the case's configuration.
+    assert SHOCKHARNESS is not None, "the shockharness console script is not installed"
+    first = runner().agent_path(SHOCKHARNESS).split(runner().os.pathsep)[0]
+    assert Path(first) == Path(SHOCKHARNESS).parent
+    with pytest.raises(FileNotFoundError):
+        runner().agent_path("no-such-shockharness-cli")
+
+
+def test_the_cache_is_not_in_the_diff(tmp_path: Path) -> None:
+    run = runner()
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    run.git(workspace, "init", "-q")
+    (workspace / "a.py").write_text("x = 0\n", encoding="utf-8")
+    base = run.commit_all(workspace, "base")
+    (workspace / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (workspace / run.CACHE_DIR).mkdir()
+    (workspace / run.CACHE_DIR / "entry.json").write_text("{}", encoding="utf-8")
+    head = run.commit_all(workspace, "head")
+    diff = run.change_diff(workspace, base, head)
+    assert "a.py" in diff
+    assert run.CACHE_DIR not in diff
