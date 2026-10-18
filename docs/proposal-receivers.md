@@ -1,6 +1,7 @@
 # Proposal: resolving method calls through their receivers
 
-Status: **proposed (2026-10-18), for Fable and Tom.** Nothing is built.
+Status: **proposed (2026-10-18). Tom's position is recorded below, for Fable. R1 is in
+progress.**
 
 ## The problem
 
@@ -79,6 +80,29 @@ About **2,570** calls are resolvable. MetaList's JavaScript is built from export
 object literals (`export const Auth = { init() {...} }`), so the imported-object case
 is the largest after `this`.
 
+**The third-party corpus** (the installed pip, `_pytest`, hypothesis, build and
+hatchling, tests excluded: 672 modules, 1,362 classes, 21,681 attribute calls; and npm's
+`lib`, 110 modules):
+
+| Receiver | Python calls | Resolvable |
+|---|---|---|
+| `self.m()`, `m` defined in the class, no analyzed subclass overrides it | 2,331 | 2,331 |
+| `self.m()`, inherited from a project base | 192 | 192 |
+| `self.m()`, overridden in an analyzed subclass | 115 | 115 |
+| a parameter annotated with a project class | 639 | 617 |
+| a static or class method | 374 | 361 |
+| a local built by a project constructor (including `with C() as x`) | 341 | 321 |
+| `self.attr.m()`, the attribute built or annotated as a project class | 186 | 149 |
+| a module-level singleton (same module and imported) | 56 | 49 |
+| `C(...).m()` | 33 | 31 |
+
+About **4,170** calls are resolvable. Libraries differ from MetaList in one way that
+matters: singletons are rare (49 against MetaList's 677), and `self` methods and
+annotations carry the weight. 115 `self.m()` calls (4%) go to a method an analyzed
+subclass overrides, which is what keeps those probable. npm's `lib` is CommonJS
+(`require`), which the scratch script does not follow; of its 321 `this.m()` calls in a
+class, 230 are defined in the class.
+
 ## What to resolve, and at what confidence
 
 Each kind needs a reason it cannot be wrong, or it stays probable.
@@ -143,6 +167,18 @@ applies to.
 * **R3, if decision 33 lands:** annotations resolve when a checker is configured.
 
 ## Questions for Fable and Tom
+
+Tom's position (2026-10-18), for Fable to confirm or change:
+
+1. **Closed world: yes.** `self.m()` is resolved when no analyzed subclass overrides `m`,
+   and the edge's reason says "no override among the analyzed files".
+2. **No switch.** The promotions ship in the next release with a changelog note, as
+   decision 34 did, after the finding diff on MetaList and the corpus is measured and
+   recorded.
+3. **Annotations: probable** without a configured type checker, resolved with one.
+4. **The corpus: measured** (above), before R1.
+
+The questions as asked:
 
 1. Is a closed world over the analyzed files acceptable for promoting `self.m()` to
    resolved? Or should it be resolved only for classes the project does not export or
