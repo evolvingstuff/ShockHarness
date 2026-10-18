@@ -114,9 +114,9 @@ repository so it is never inside the workspace:
 ```yaml
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.9.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.10.0
     with:
-      shockharness-version: "0.9.0"
+      shockharness-version: "0.10.0"
       base: ${{ github.event.pull_request.base.sha }}
       policy-repository: my-org/engineering-policy   # cloned into $RUNNER_TEMP
       policy-ref: main                               # a branch or tag

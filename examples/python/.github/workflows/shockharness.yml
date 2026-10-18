@@ -11,14 +11,14 @@ permissions:
 jobs:
   shockharness:
     # Pin the workflow to a release tag or, for the strongest guarantee, a full commit SHA:
-    #   uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@<40-hex-sha>  # v0.9.0
+    #   uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@<40-hex-sha>  # v0.10.0
     # The ref pins the workflow only; the analyzer version is the input below.
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.9.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.10.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.9.0"   # keep equal to the pin in pyproject.toml
+      shockharness-version: "0.10.0"   # keep equal to the pin in pyproject.toml
       config: .shockharness.toml
       # On pull requests gate only new findings against the base branch; on pushes check everything.
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}

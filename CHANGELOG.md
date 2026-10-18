@@ -5,7 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-18
+
+Property contracts (opt-in, milestones P1a to P3), STATE002, and MetaList's feedback on
+0.9.0.
+
+**Upgrading from 0.9.0.** No change makes a passing gate fail:
+- **Property contracts are off** in every profile until
+  `rules.property_contracts.enabled = true`. Their findings are `review`, except PROP003
+  (an unknown property name), which only a repository that turned the family on can hit.
+- **STATE002 ships at `review`** and only reports.
+- **ASYNC003** reports fewer findings (a top-level batch checked on the next line).
+- The cache schema is "20", so the first run after the upgrade analyzes every file.
+
 ### Added
+- The README section "What ShockHarness insists on": the disciplines each rule family
+  enforces.
 - Property contracts, milestone P3 (spec v0.12):
   - **Parametric summaries (decision 48).** `preserves(result, x)` on a parameter that
     requires nothing passes on what each caller's argument carried, in both languages.
