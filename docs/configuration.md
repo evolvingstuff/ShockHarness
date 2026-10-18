@@ -901,7 +901,8 @@ Removing a class or a role is a policy deviation; adding a narrower class
 
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
-Opt-in (`docs/shockharness_property_contracts_spec.md`, milestone P1a, Python). Off is
+Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a and P1b, Python
+and JavaScript). Off is
 the default in every profile and is not a deviation. The rules are described in
 `docs/rules.md`.
 
@@ -928,6 +929,26 @@ description = "content the privacy evaluator permits to leave the machine"
 producers = ["app.privacy.evaluate"]   # dotted references to project functions; [] = any
 runtime = "static"                 # "static" | "check" | "verify": what the runtime checks
 
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "sanitized_html"
+description = "markup that may be assigned to the page"
+producers = ["static/js/sanitize.js:sanitize"]   # JavaScript: path:export
+runtime = "static"
+literal_satisfies = true           # optional: "" and "<hr>" carry it by themselves
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "javascript"            # "python": "fstring" | "concat" | "format"
+operation = "template_literal"     # "javascript": "template_literal" | "concat"
+inputs_require = ["escaped_html"]  # every non-literal part must carry these
+produces = "sanitized_html"
+reason = "constant markup around escaped text is safe markup"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "javascript"
+target = "innerHTML"               # an assignment: <any>.innerHTML = value ("headers[]": a subscript)
+requires = ["sanitized_html"]
+reason = "unsanitized markup reaching the page is the XSS path"
+
 [[tool.shockharness.rules.property_contracts.sinks]]
 language = "python"
 callee = "app.cloud.send_messages:0"   # a project or library callee; the argument by position
@@ -936,20 +957,34 @@ reason = "nothing reaches the provider without the privacy evaluator"
 producer = "app.privacy.evaluate"      # optional; the finding names it
 ```
 
-**Checks.** A malformed `callee` (not `<reference>:<N>`), a sink requiring a property
-the catalog does not list, a duplicate or badly spelled property name, and an enabled
-family with no Python `runtime_module` are configuration errors (exit 2) whenever the
-configuration is loaded. When the family is enabled, `config validate` and every
+**Checks.** These are configuration errors (exit 2) whenever the configuration is
+loaded:
+
+* a sink with both or neither of `callee` and `target`; a malformed `callee` (not
+  `<reference>:<N>`) or `target`;
+* a sink or composition naming a property the catalog does not list;
+* a composition operation the language does not have;
+* a duplicate or badly spelled property name;
+* an enabled family with no `runtime_module`. When the family is enabled, `config validate` and every
 analysis also resolve each Python reference against the project's files:
 
-* every producer must be a function of the project;
-* a sink callee in a project module must exist there;
-* a sink callee in no project module is a library callee and is accepted.
+* every producer must be a function of the project: a dotted Python reference, or a
+  JavaScript `path:export` that the file exports (re-exports followed);
+* a sink callee in a project module or file must exist there;
+* a sink callee in no project module is a library callee and is accepted: Python
+  `json.dumps`, JavaScript `dompurify:sanitize` or a global such as `fetch`.
 
 An unresolved reference is a configuration error that names the key.
 
 **The runtime file.** `shockharness contracts install --language python --dest
-app/contracts.py` copies the runtime into the project. `--project DIR` names the root
+app/contracts.py` copies the runtime into the project. `--language javascript --dest
+static/js/vendor/shockharness-contracts.js` copies the ES module and writes
+`shockharness-contracts.d.ts` beside it (`.mjs` gets `.d.mts`). In a browser, where the
+page's modules run before a harness could call `enable`, there are two options. A
+test-entry page can call it in a module script before the application's. An init script
+(Playwright's `addInitScript`, Puppeteer's `evaluateOnNewDocument`) can set
+`globalThis.__shockharnessContracts = { mode: "check", static: [...] }`; the module
+reads that once at load, treats it as `enable`, and deletes it. `--project DIR` names the root
 (default: the current directory). The copy is recorded in `.shockharness-contracts.json`,
 in the manifest format `skills install` writes. An edited copy, or a file this manifest
 did not write, is never replaced without `--force`.

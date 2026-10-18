@@ -2362,7 +2362,7 @@ is EXC001.
 | 11 | `rules/exceptions.py` `_manager_match`, `ir/python_catches.py` `_resolve_callee` | unresolved manager callee matched by bare name | approximate | violation (no unknown: the manager is listed by name) |
 | 12 | `complexity/callgraph.py` (7 functions), `complexity/coupling.py` (4) | unresolved call and module edges | unresolved | no finding: metrics only; CPLX005 counts resolved targets and names the unresolved count |
 | 13 | `rules/exceptions.py` `_finding` (EXC002, EXC003), `rules/defaults.py` `_finding` (other DEF kinds, DEF005), `rules/magic_numbers.py`, `rules/complexity.py`, `suppressions.py` (SUPP001, SUPP002) | everything else, including approximate EXC003 (unattributable statement), DEF003/DEF004 (non-constant fallback) and DEF005 (static trace): the approximation is about intent, not about whether the shape is present | exact/approximate | violation |
-| 14 | `rules/property_contracts.py` `Reporter.check` (property contracts P1a, opt-in) | PROP001 whose value's property set is not exact: unresolved callee, method on a value, await, generator, `.join` build, `*args`/`**kwargs`, a keyword argument to a library sink | exact | **unknown** (gates only with `rules.property_contracts.fail_on_unknown`); an exact set lacking the property is a violation |
+| 14 | `contracts/report.py` `Reporter.check` (property contracts P1a and P1b, opt-in; `rules/property_contracts.py` until P1b) | PROP001 whose value's property set is not exact: unresolved callee, method on a value, await, generator, `.join` build, `*args`/`**kwargs`, a keyword argument to a library sink | exact | **unknown** (gates only with `rules.property_contracts.fail_on_unknown`); an exact set lacking the property is a violation |
 
 Not turned into unknown findings (they would add findings, which H1 must not
 do; recorded in `docs/limitations.md`): a capture manager with one readable
@@ -4674,6 +4674,130 @@ shockharness 0.9.0 diff: base refs/tags/shockharness-policy-accepted (cb177429c6
 gate: PASS (exit 0)
 $ shockharness diff --base 0646f8d --head HEAD
 shockharness 0.9.0 diff: base 0646f8d (0646f8d9a8a4) -> head HEAD (8bf526b38fc7); 0 new, 0 fixed, 200 unchanged finding(s)
+  complexity regressions against base: 0 (gates.complexity_regressions = "warn")
+gate: PASS (exit 0)
+```
+
+## Property contracts, milestone P1b (JavaScript) — DONE (2026-10-17)
+
+On Tom's request ("do this task here"), from the §14 P1b row of the spec (v0.7). There is
+no P1b kickoff prompt; §17 covers P1a only. The family stays off by default, is not
+enabled on ShockHarness's source, and nothing is published.
+
+**Built:**
+* **Catalog.**
+  * Sinks are a `callee` or an assignment `target`: `"innerHTML"` (that attribute on any
+    receiver), or `"headers[]"` (a subscript of a named receiver).
+  * `compositions` (`template_literal`, `concat`, `fstring`, `format`) and
+    `literal_satisfies`.
+  * Load-time checks: exactly one of callee/target; target form; operations per
+    language; composition properties in the catalog.
+  * JavaScript references in `config validate` and before an analysis: `path:export`
+    must be exported, with re-exports followed; `package:name` and globals are accepted
+    (`contracts/references.py`).
+* **Compositions, both languages** (`contracts/compose.py`).
+  * A string literal carries the `literal_satisfies` properties.
+  * A composition carries a rule's `produces` when every non-literal part satisfies one
+    of the rules for that operation and `produces`. One part known to fall short makes it
+    carry nothing, and the note names the part; an unknown part makes it unknown.
+  * Python: f-strings, `+` chains with a string literal or an f-string, `"...".format`,
+    `"..." % x`. JavaScript: template literals, `+` chains with a string or template
+    literal.
+* **Assignment-target sinks, both languages.** `x.attr = v` and `x.attr += v`, and
+  subscripts of a named receiver.
+* **JavaScript and TypeScript analysis** (`contracts/javascript_index.py`,
+  `contracts/javascript_flow.py`, `rules/property_contracts_javascript.py`).
+  * The same transfer rules as Python, over tree-sitter: branches, loops, `switch` with
+    `break`, `try`/`catch`/`finally`, destructuring, `?:`/`||`/`??`.
+  * Calls resolve through `import`, `require`, namespace and default imports,
+    re-exports and `export default`.
+  * One-hop contracts, read from the analyzed files or from disk under the root.
+  * Callee sinks (project, package, global) and target sinks.
+  * PROP001, PROP003, PROP005 (enable bootstraps), PROP006, PROP007.
+  * Every await, yield, `for await`, `new` and `.join` build is unknown.
+  * The rules' languages are now Python, JavaScript and TypeScript.
+* **JavaScript runtime** (`contracts/runtime/contracts.js`, with `contracts.d.ts`).
+  * Identity until `enable("check", staticProperties)`, which raises on a non-array
+    list, `verify`, another mode, a second call, or a call after a declaration.
+  * The pre-load object `globalThis.__shockharnessContracts = { mode, static }` is read
+    once at load, validated like `enable`, and deleted.
+  * Check mode keeps a `WeakMap` registry; static skips are counted; a check-level
+    property on a primitive throws; `report()`.
+  * Both files pass `check` under `strict` as production code with 0 findings and no
+    suppression.
+* **`contracts install --language javascript --dest x.js`** writes `x.js` and `x.d.ts`
+  (`.mjs` gives `.d.mts`). Both are recorded in the manifest (`javascript`,
+  `javascript-types`) and checked by `--check`.
+* **VERIFY003** reports a composition rule accepting more (an added rule, a property
+  removed from `inputs_require`, a changed `produces`), `literal_satisfies` set, and a
+  target sink removed.
+* **Refactors.** `contracts/report.py` holds the Reporter and Issue for both languages.
+  The inventory keys moved there, and STATUS row 14 is updated.
+
+**The milestone's "done when" (§14):**
+
+| Criterion | Evidence |
+|---|---|
+| The `innerHTML` fixture yields exactly its expected findings with the cross-file producer resolved | `tests/fixtures/property_contracts/javascript/innerhtml`: literal, composition and the `sanitize` producer in another file pass; `` `<b>${tag}</b>` `` is PROP001 naming `tag`; the mixed concat is PROP001; `.map().join()` is unknown |
+| The f-string fixtures likewise in Python | `tests/fixtures/property_contracts/python/fstring`, including `.format`, `%`, and a `body` target sink |
+| A revision diff that adds a composition rule is VERIFY003 | `test_each_loosening_of_the_p1b_keys_is_reported` (the loosening function, as the P1a unit tests do; the P1a end-to-end gate test covers the VERIFY003 path itself) |
+| The pre-load `enable` and the test-entry page work | Node: `test_the_preload_object_enables_once_and_is_deleted`, `test_a_bad_preload_object_throws_at_load_and_none_is_identity`, `test_enable_then_a_dynamic_import_works_and_a_static_import_first_does_not`. Browser, by hand in the built-in browser against a local static server: a test-entry page (an `enable` module script before the app's) gave `mode: "check"` and a ContractError for a missing property; a classic script setting the pre-load object before the app's module gave the same and the object was deleted; the plain page stayed `off` and identity |
+
+Also: `tests/fixtures/property_contracts/javascript/calls` (§11.1 in JavaScript,
+cross-file, `fetch:1`, PROP003/005/006/007) and 8 Node tests of the runtime
+(`tests/unit/test_contracts_runtime_js.py`; skipped when `node` is absent, as the eval
+tests are).
+
+**Choices where the spec was ambiguous** (for Tom and Fable):
+1. **Concatenation needs a string literal in the chain**, Python and JavaScript. `a + b`
+   with no literal is arithmetic as far as the analysis knows, so it destroys. Otherwise
+   `normalize(x) + 1` would be "composed" whenever a concat rule exists.
+2. **Mixed parts.** With the typical one-rule catalog of §5.2a (inputs `escaped_html`),
+   `"<p>" + sanitize(x)` is PROP001, because the sanitized part is not escaped. The
+   fixtures add a second concat rule, sanitized from sanitized, which is what a project
+   would declare. The spec could say this is expected.
+3. **Nested compositions** apply recursively and literally: an inner template's result is
+   a part like any other, and must satisfy the outer rule.
+4. **Target forms.** An attribute name on any receiver, or `name[]` for a subscript of a
+   named receiver; `+=` checks the right side. `insertAdjacentHTML` and other method
+   sinks cannot match, because methods are not resolved.
+5. **JavaScript references.** `path:export`, where the path has a JavaScript suffix, is a
+   project function; anything else before the colon is a package; a bare name is a global
+   (`fetch:1`, `document.write:0`). `Pkg.f()` on a default import of a package is
+   `package:f`, as the call graph already reports it.
+6. **`preserves_except` keeps the snake_case name in JavaScript** ("the same names in all
+   three languages"); `report()` returns `static_skips` in both.
+7. **Browser tests in CI.** The spec asks for a browser-harness test with an init script
+   and one with a test-entry page. That needs Playwright or Puppeteer, which are new
+   packages, so they are not added. The two patterns were verified by hand in the built-in
+   browser (above), and the same semantics are tested in Node.
+
+**Limitations:**
+* TypeScript is read as JavaScript; there is no TypeScript fixture (P2).
+* JavaScript methods and classes are unknown; `this.x` is not tracked.
+* A `switch` case's fallthrough into the next case is not followed.
+* RESULT001's permission covers the Python declarations only.
+
+**Evidence** (2026-10-17, macOS arm64, CPython 3.14.7, Node 24.7.0):
+
+```text
+$ ruff check src tests scripts evals
+All checks passed!
+$ ruff format --check src tests scripts evals
+202 files already formatted
+$ pytest -q
+1284 passed in 63.08s (0:01:03)
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 196 file(s), 196 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+$ shockharness config validate          # exit 0
+
+# on a scratch clone with this tree committed as HEAD:
+$ shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD
+shockharness 0.9.0 diff: base refs/tags/shockharness-policy-accepted (cb177429c668) -> head HEAD (5145e83abd60); 11 new, 13 fixed, 192 unchanged finding(s)
+gate: PASS (exit 0)
+$ shockharness diff --base 22e7ac7 --head HEAD
+shockharness 0.9.0 diff: base 22e7ac7 (22e7ac74cda5) -> head HEAD (5145e83abd60); 0 new, 0 fixed, 200 unchanged finding(s)
   complexity regressions against base: 0 (gates.complexity_regressions = "warn")
 gate: PASS (exit 0)
 ```

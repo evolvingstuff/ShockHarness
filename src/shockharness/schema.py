@@ -253,18 +253,34 @@ CONTRACT_PROPERTY_SCHEMA = TableField(
         "description": StrField(allow_empty=False),
         "producers": ListField(StrField(allow_empty=False)),
         "runtime": EnumField(CONTRACT_RUNTIME_LEVELS),
+        # A string literal with no interpolation carries the property (spec §5.2a).
+        "literal_satisfies": BoolField(),
     },
     required=("name", "description", "producers", "runtime"),
 )
+# A sink is a callee ("callee:N") or an assignment target ("innerHTML", "headers[]");
+# catalog_issues requires exactly one of the two.
 CONTRACT_SINK_SCHEMA = TableField(
     fields={
         "language": EnumField(LANGUAGES),
         "callee": StrField(allow_empty=False),
+        "target": StrField(allow_empty=False),
         "requires": ListField(StrField(allow_empty=False)),
         "reason": StrField(allow_empty=False),
         "producer": StrField(allow_empty=False),
     },
-    required=("language", "callee", "requires", "reason"),
+    required=("language", "requires", "reason"),
+)
+CONTRACT_OPERATIONS = ("template_literal", "concat", "fstring", "format")
+CONTRACT_COMPOSITION_SCHEMA = TableField(
+    fields={
+        "language": EnumField(LANGUAGES),
+        "operation": EnumField(CONTRACT_OPERATIONS),
+        "inputs_require": ListField(StrField(allow_empty=False)),
+        "produces": StrField(allow_empty=False),
+        "reason": StrField(allow_empty=False),
+    },
+    required=("language", "operation", "inputs_require", "produces", "reason"),
 )
 
 # `[[tool.shockharness.rules.module_state.allowed]]`: a deliberate process-wide binding.
@@ -495,6 +511,7 @@ CONFIG_SCHEMA = TableField(
                         "allow_undeclared": BoolField(),
                         "properties": ListField(CONTRACT_PROPERTY_SCHEMA),
                         "sinks": ListField(CONTRACT_SINK_SCHEMA),
+                        "compositions": ListField(CONTRACT_COMPOSITION_SCHEMA),
                         "severities": TableField(
                             fields={
                                 rule: EnumField(VERIFICATION_SEVERITIES)

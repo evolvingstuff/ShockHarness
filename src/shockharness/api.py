@@ -31,7 +31,7 @@ from shockharness.cache.store import (
     open_cache,
 )
 from shockharness.config import EffectiveConfig, load_config
-from shockharness.contracts.catalog import reference_issues
+from shockharness.contracts.references import reference_issues
 from shockharness.discovery import discover
 from shockharness.errors import ConfigError, UsageError
 from shockharness.gate import NO_REGRESSIONS, GateResult

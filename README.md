@@ -95,7 +95,7 @@ Implemented rules:
 | `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
 | `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
 | `STATE002` | a shared object assigned before its fields are set (`G = Thing()` then `G.x = ...`) | review |
-| `PROP001` | opt-in property contracts: a value reaching a `requires` or a catalog sink without the property it requires (Python) | review |
+| `PROP001` | opt-in property contracts: a value reaching a `requires` or a catalog sink (a call or an assignment such as `el.innerHTML = ...`) without the property it requires (Python, JavaScript) | review |
 | `PROP003` | opt-in property contracts: a property name the catalog does not list | error |
 | `PROP005` | opt-in property contracts: a test bootstrap's `enable(...)` whose static-property list disagrees with the catalog | review |
 | `PROP006` | opt-in property contracts: a declaration the analysis cannot read (a computed property, wrong arguments) | review |

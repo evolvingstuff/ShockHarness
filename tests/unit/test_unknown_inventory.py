@@ -188,13 +188,13 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: violation",
     ),
-    # Property contracts, P1a (opt-in).
-    ("rules/property_contracts.py", "Reporter._record"): (
+    # Property contracts, P1a and P1b (opt-in), both languages.
+    ("contracts/report.py", "Reporter._record"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "the status is decided by the caller: PROP003, PROP005, PROP006, PROP007 violation; "
         "PROP001 by Reporter.check",
     ),
-    ("rules/property_contracts.py", "Reporter.check"): (
+    ("contracts/report.py", "Reporter.check"): (
         frozenset({"STATUS_UNKNOWN"}),
         "PROP001: violation when the value's property set is exact and lacks a required "
         "property; unknown when the set is not exact (an unresolved callee, a method on a "

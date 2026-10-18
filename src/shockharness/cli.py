@@ -870,7 +870,7 @@ def _run_contracts(args: argparse.Namespace) -> int:
     sys.stdout.write(f"{PROGRAM}: {verb} contracts runtime ({version_string()})\n")
     for file in result.files:
         detail = "" if file.detail == "" else f" ({file.detail})"
-        sys.stdout.write(f"  {file.status:<11}{file.language:<11}{file.path}{detail}\n")
+        sys.stdout.write(f"  {file.status:<11}{file.language:<17}{file.path}{detail}\n")
     sys.stdout.write(f"  manifest   {result.manifest_path}\n")
     if not args.check:
         sys.stdout.write(

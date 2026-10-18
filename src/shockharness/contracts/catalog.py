@@ -1,14 +1,14 @@
-"""The property-contracts catalog (``rules.property_contracts``, spec milestone P1a).
+"""The property-contracts catalog (``rules.property_contracts``, spec milestones P1a, P1b).
 
 Two kinds of check, at two moments:
 
-* :func:`catalog_issues` is about the configuration alone (property names, the sink
-  ``callee:N`` form, sinks naming catalog properties) and runs whenever a configuration
-  is loaded, a committed one included;
-* :func:`reference_issues` resolves every Python producer and sink reference against the
-  project's files (spec §8.1) and runs before an analysis and in ``config validate``. A
-  producer must be a function of the project; a sink callee whose module is not a project
-  module is a library callee and is accepted. JavaScript references are checked in P1b.
+* :func:`catalog_issues` is about the configuration alone (property names, sinks as a
+  ``callee:N`` or an assignment ``target``, sinks and compositions naming catalog
+  properties) and runs whenever a configuration is loaded, a committed one included;
+* the reference checks (:mod:`shockharness.contracts.references`) resolve every producer
+  and sink reference against the project's files (spec §8.1) before an analysis and in
+  ``config validate``. A producer must be a function of the project; a sink callee in no
+  project module (a Python library, a JavaScript package or global) is accepted.
 """
 
 import ast
@@ -24,19 +24,36 @@ from shockharness.schema import ConfigIssue
 SECTION_PATH = "rules.property_contracts"
 PROPERTY_NAME = re.compile(r"[a-z][a-z0-9_]*")
 PYTHON_REFERENCE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+")
+# An assignment target: an attribute on any receiver ("innerHTML"), or a subscript of a
+# named receiver ("headers[]", "os.environ[]").
+TARGET = re.compile(r"(?P<attribute>[A-Za-z_$][\w$]*)|(?P<receiver>[A-Za-z_$][\w$.]*)\[\]")
 POSITION_SEPARATOR = ":"
 PYTHON = "python"
+JAVASCRIPT = "javascript"
+TYPESCRIPT = "typescript"
 PYTHON_SUFFIX = ".py"
 RUNTIME_STATIC = "static"
 PACKAGE_INIT = "__init__.py"
 SOURCE_DIRECTORY = "src"
-JAVASCRIPT_SUFFIXES = (".js", ".mjs", ".ts")
+JAVASCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")
+# Which composition operations each language has (spec §5.2a).
+OPERATIONS = {
+    PYTHON: ("fstring", "concat", "format"),
+    JAVASCRIPT: ("template_literal", "concat"),
+    TYPESCRIPT: ("template_literal", "concat"),
+}
+LITERAL_SATISFIES = "literal_satisfies"
+# Keys of a sink entry: a call or an assignment, and the optional producer.
+CALLEE = "callee"
+TARGET_KEY = "target"
+PRODUCER = "producer"
 # The four declarations of the runtime module (spec §4.1).
 REQUIRES = "requires"
 PRODUCES = "produces"
 PRESERVES = "preserves"
 PRESERVES_EXCEPT = "preserves_except"
 DECLARATIONS = (REQUIRES, PRODUCES, PRESERVES, PRESERVES_EXCEPT)
+ENABLE = "enable"
 # A reference names a function (module.function) or a method (module.Class.method).
 FUNCTION_PARTS = 1
 METHOD_PARTS = 2
@@ -48,12 +65,13 @@ class ContractProperty:
     name: str
     producers: tuple[str, ...]
     runtime: str
+    literal_satisfies: bool
 
 
 @dataclass(frozen=True)
 class CalleeSink:
     language: str
-    callee: str  # the dotted reference, without the position
+    callee: str  # the reference, without the position
     position: int
     requires: frozenset[str]
     reason: str
@@ -61,9 +79,33 @@ class CalleeSink:
 
 
 @dataclass(frozen=True)
+class TargetSink:
+    """An assignment: ``<any>.<attribute> = value`` or ``<receiver>[...] = value``."""
+
+    language: str
+    text: str  # as written in the catalog
+    attribute: str | None
+    receiver: str | None
+    requires: frozenset[str]
+    reason: str
+    producer: str | None
+
+
+@dataclass(frozen=True)
+class Composition:
+    language: str
+    operation: str
+    inputs_require: frozenset[str]
+    produces: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class Catalog:
     properties: Mapping[str, ContractProperty]
     sinks: tuple[CalleeSink, ...]
+    targets: tuple[TargetSink, ...]
+    compositions: tuple[Composition, ...]
     runtime_modules: tuple[str, ...]
     allow_undeclared: bool
 
@@ -76,36 +118,73 @@ def split_sink_callee(text: str) -> tuple[str, int] | None:
     return reference, int(position)
 
 
+def _optional(entry: Mapping[str, Any], key: str) -> str | None:
+    """An optional key of the schema: its text, or None when the entry does not set it."""
+    found: str | None = None
+    if key in entry:
+        found = str(entry[key])
+    return found
+
+
+def _flag(entry: Mapping[str, Any], key: str) -> bool:
+    """An optional boolean key that is on only when written true."""
+    return key in entry and entry[key] is True
+
+
+def _property(entry: Mapping[str, Any]) -> ContractProperty:
+    return ContractProperty(
+        name=str(entry["name"]),
+        producers=tuple(str(p) for p in entry["producers"]),
+        runtime=str(entry["runtime"]),
+        literal_satisfies=_flag(entry, LITERAL_SATISFIES),
+    )
+
+
+def _callee_sink(entry: Mapping[str, Any]) -> CalleeSink:
+    split = split_sink_callee(str(entry[CALLEE]))
+    assert split is not None, "catalog_issues rejects a malformed callee"
+    return CalleeSink(
+        language=str(entry["language"]),
+        callee=split[0],
+        position=split[1],
+        requires=frozenset(str(r) for r in entry["requires"]),
+        reason=str(entry["reason"]),
+        producer=_optional(entry, PRODUCER),
+    )
+
+
+def _target_sink(entry: Mapping[str, Any]) -> TargetSink:
+    match = TARGET.fullmatch(str(entry[TARGET_KEY]))
+    assert match is not None, "catalog_issues rejects a malformed target"
+    return TargetSink(
+        language=str(entry["language"]),
+        text=str(entry[TARGET_KEY]),
+        attribute=match.group("attribute"),
+        receiver=match.group("receiver"),
+        requires=frozenset(str(r) for r in entry["requires"]),
+        reason=str(entry["reason"]),
+        producer=_optional(entry, PRODUCER),
+    )
+
+
+def _composition(entry: Mapping[str, Any]) -> Composition:
+    return Composition(
+        language=str(entry["language"]),
+        operation=str(entry["operation"]),
+        inputs_require=frozenset(str(r) for r in entry["inputs_require"]),
+        produces=str(entry["produces"]),
+        reason=str(entry["reason"]),
+    )
+
+
 def load_catalog(settings: Mapping[str, Any]) -> Catalog:
     """The catalog of a configuration that passed :func:`catalog_issues`."""
-    properties = {
-        str(entry["name"]): ContractProperty(
-            name=str(entry["name"]),
-            producers=tuple(str(p) for p in entry["producers"]),
-            runtime=str(entry["runtime"]),
-        )
-        for entry in settings["properties"]
-    }
-    sinks: list[CalleeSink] = []
-    for entry in settings["sinks"]:
-        split = split_sink_callee(str(entry["callee"]))
-        assert split is not None, "catalog_issues rejects a malformed callee"
-        producer: str | None = None
-        if "producer" in entry:
-            producer = str(entry["producer"])
-        sinks.append(
-            CalleeSink(
-                language=str(entry["language"]),
-                callee=split[0],
-                position=split[1],
-                requires=frozenset(str(r) for r in entry["requires"]),
-                reason=str(entry["reason"]),
-                producer=producer,
-            )
-        )
+    properties = {str(entry["name"]): _property(entry) for entry in settings["properties"]}
     return Catalog(
         properties=properties,
-        sinks=tuple(sinks),
+        sinks=tuple(_callee_sink(e) for e in settings["sinks"] if CALLEE in e),
+        targets=tuple(_target_sink(e) for e in settings["sinks"] if TARGET_KEY in e),
+        compositions=tuple(_composition(e) for e in settings["compositions"]),
         runtime_modules=tuple(str(m) for m in settings["runtime_module"]),
         allow_undeclared=bool(settings["allow_undeclared"]),
     )
@@ -125,22 +204,59 @@ def _property_issues(entries: Sequence[Mapping[str, Any]]) -> list[ConfigIssue]:
     return issues
 
 
+def _unknown_properties(
+    where: str, listed: Sequence[Any], names: frozenset[str]
+) -> list[ConfigIssue]:
+    return [
+        ConfigIssue(where, f"{name!r} is not a catalog property")
+        for name in listed
+        if str(name) not in names
+    ]
+
+
+def _sink_form_issue(where: str, entry: Mapping[str, Any]) -> ConfigIssue | None:
+    if (CALLEE in entry) == (TARGET_KEY in entry):
+        return ConfigIssue(
+            where, "a sink names exactly one of callee (a call) or target (an assignment)"
+        )
+    if CALLEE in entry and split_sink_callee(str(entry[CALLEE])) is None:
+        message = f"{entry[CALLEE]!r} is not <reference>:<position> (callee:N, by position)"
+        return ConfigIssue(f"{where}.callee", message)
+    if TARGET_KEY in entry and TARGET.fullmatch(str(entry[TARGET_KEY])) is None:
+        message = (
+            f"{entry[TARGET_KEY]!r} is not an attribute (innerHTML) or a subscript (headers[])"
+        )
+        return ConfigIssue(f"{where}.target", message)
+    return None
+
+
 def _sink_issues(entries: Sequence[Mapping[str, Any]], names: frozenset[str]) -> list[ConfigIssue]:
     issues: list[ConfigIssue] = []
     for index, entry in enumerate(entries):
         where = f"{SECTION_PATH}.sinks[{index}]"
-        if split_sink_callee(str(entry["callee"])) is None:
+        form = _sink_form_issue(where, entry)
+        if form is not None:
+            issues.append(form)
+        issues.extend(_unknown_properties(f"{where}.requires", entry["requires"], names))
+    return issues
+
+
+def _composition_issues(
+    entries: Sequence[Mapping[str, Any]], names: frozenset[str]
+) -> list[ConfigIssue]:
+    issues: list[ConfigIssue] = []
+    for index, entry in enumerate(entries):
+        where = f"{SECTION_PATH}.compositions[{index}]"
+        language, operation = str(entry["language"]), str(entry["operation"])
+        if operation not in OPERATIONS[language]:
+            allowed = ", ".join(OPERATIONS[language])
             issues.append(
-                ConfigIssue(
-                    f"{where}.callee",
-                    f"{entry['callee']!r} is not <reference>:<position> (callee:N, by position)",
-                )
+                ConfigIssue(f"{where}.operation", f"{language} has {allowed}, not {operation!r}")
             )
-        for required in entry["requires"]:
-            if str(required) not in names:
-                issues.append(
-                    ConfigIssue(f"{where}.requires", f"{required!r} is not a catalog property")
-                )
+        issues.extend(
+            _unknown_properties(f"{where}.inputs_require", entry["inputs_require"], names)
+        )
+        issues.extend(_unknown_properties(f"{where}.produces", [entry["produces"]], names))
     return issues
 
 
@@ -151,14 +267,15 @@ def catalog_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
     issues = [
         *_property_issues(settings["properties"]),
         *_sink_issues(settings["sinks"], names),
+        *_composition_issues(settings["compositions"], names),
     ]
-    if settings["enabled"] is True and len(python_runtime_modules(settings)) == 0:
+    if settings["enabled"] is True and len(settings["runtime_module"]) == 0:
         issues.append(
             ConfigIssue(
                 f"{SECTION_PATH}.runtime_module",
-                "the family is enabled but names no Python runtime module, so no requires, "
-                "produces or preserves call can be recognized; list where `shockharness "
-                "contracts install` put the file",
+                "the family is enabled but names no runtime module, so no requires, produces "
+                "or preserves call can be recognized; list where `shockharness contracts "
+                "install` put the file",
             )
         )
     return issues
@@ -170,18 +287,31 @@ def static_properties(settings: Mapping[str, Any]) -> list[str]:
     return sorted(str(p["name"]) for p in settings["properties"] if p["runtime"] == RUNTIME_STATIC)
 
 
+def is_javascript_path(text: str) -> bool:
+    return text.endswith(JAVASCRIPT_SUFFIXES)
+
+
 def python_runtime_modules(settings: Mapping[str, Any]) -> frozenset[str]:
     """The dotted names the Python runtime module is imported as: a project-relative
-    ``.py`` path gives its module names (flat or src layout), a dotted name is itself;
-    JavaScript paths are P1b. The file need not be analyzed or even included (§8)."""
+    ``.py`` path gives its module names (flat or src layout), a dotted name is itself.
+    The file need not be analyzed or even included (§8)."""
     names: set[str] = set()
     for entry in settings["runtime_module"]:
         text = str(entry)
         if text.endswith(PYTHON_SUFFIX):
             names.update(module_names(text))
-        elif not text.endswith(JAVASCRIPT_SUFFIXES):
+        elif not is_javascript_path(text):
             names.add(text)
     return frozenset(names)
+
+
+def javascript_runtime_modules(settings: Mapping[str, Any]) -> frozenset[str]:
+    """What a JavaScript import of the runtime resolves to: a project-relative path
+    (``static/js/vendor/shockharness-contracts.js``), or a package specifier for a project
+    that packages the file itself. Excluded paths count (§8)."""
+    return frozenset(
+        str(entry) for entry in settings["runtime_module"] if not str(entry).endswith(PYTHON_SUFFIX)
+    )
 
 
 def runtime_callees(settings: Mapping[str, Any]) -> frozenset[str]:
@@ -208,13 +338,21 @@ def module_file(root: Path, module: Sequence[str]) -> Path | None:
     return None
 
 
-def read_module(path: Path) -> tuple[ast.Module | None, str]:
-    """(tree, "") or (None, why)."""
+def read_text(path: Path) -> tuple[str | None, str]:
+    """(text, "") or (None, why)."""
     # Boundary (declared in .shockharness.toml): a project file named by the catalog.
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         return None, f"{path} cannot be read ({exc})"
+    return text, ""
+
+
+def read_module(path: Path) -> tuple[ast.Module | None, str]:
+    """(tree, "") or (None, why)."""
+    text, why = read_text(path)
+    if text is None:
+        return None, why
     filename = str(path)
     # Boundary (declared in .shockharness.toml): the file's text is external input.
     try:
@@ -292,22 +430,22 @@ def _python_references(settings: Mapping[str, Any]) -> list[tuple[str, str, bool
     for index, entry in enumerate(settings["properties"]):
         for position, producer in enumerate(entry["producers"]):
             if POSITION_SEPARATOR in str(producer):
-                continue  # path:export, a JavaScript producer (checked in P1b)
+                continue  # path:export, a JavaScript producer (javascript_index)
             found.append(
                 (f"{SECTION_PATH}.properties[{index}].producers[{position}]", str(producer), True)
             )
     for index, entry in enumerate(settings["sinks"]):
-        if entry["language"] != PYTHON:
+        if entry["language"] != PYTHON or CALLEE not in entry:
             continue
-        split = split_sink_callee(str(entry["callee"]))
+        split = split_sink_callee(str(entry[CALLEE]))
         if split is not None:
             found.append((f"{SECTION_PATH}.sinks[{index}].callee", split[0], False))
-        if "producer" in entry:
-            found.append((f"{SECTION_PATH}.sinks[{index}].producer", str(entry["producer"]), True))
+        if PRODUCER in entry:
+            found.append((f"{SECTION_PATH}.sinks[{index}].producer", str(entry[PRODUCER]), True))
     return found
 
 
-def reference_issues(root: Path, values: Mapping[str, Any]) -> list[ConfigIssue]:
+def python_reference_issues(root: Path, values: Mapping[str, Any]) -> list[ConfigIssue]:
     """Unresolved Python references of an enabled section; nothing when it is off."""
     settings = values["rules"]["property_contracts"]
     if settings["enabled"] is not True:

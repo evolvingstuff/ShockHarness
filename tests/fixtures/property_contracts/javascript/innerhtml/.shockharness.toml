@@ -1,0 +1,50 @@
+[tool.shockharness]
+profile = "strict"
+include = ["static/**/*.js"]
+# The vendored runtime copy is pinned and excluded; imports into it still resolve.
+exclude = ["static/js/vendor/**"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["static/js/vendor/shockharness-contracts.js"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "escaped_html"
+description = "text run through the project's HTML escaper; safe to interpolate into markup"
+producers = ["static/js/html.js:escapeHtml"]
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "sanitized_html"
+description = "markup that may be assigned to the page"
+producers = ["static/js/sanitize.js:sanitize"]
+runtime = "static"
+literal_satisfies = true
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "javascript"
+operation = "template_literal"
+inputs_require = ["escaped_html"]
+produces = "sanitized_html"
+reason = "constant markup around escaped text is safe markup"
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "javascript"
+operation = "concat"
+inputs_require = ["escaped_html"]
+produces = "sanitized_html"
+reason = "the same rule for string concatenation"
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "javascript"
+operation = "concat"
+inputs_require = ["sanitized_html"]
+produces = "sanitized_html"
+reason = "safe markup joined to safe markup is safe markup"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "javascript"
+target = "innerHTML"
+requires = ["sanitized_html"]
+reason = "unsanitized markup reaching the page is the XSS path"
+producer = "static/js/sanitize.js:sanitize"

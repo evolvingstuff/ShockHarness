@@ -242,3 +242,17 @@ def test_static_properties_prints_the_list_to_paste(
     )
     assert main(["contracts", "static-properties", "--root", str(root)]) == EXIT_OK
     assert capsys.readouterr().out == '["alpha", "zeta"]\n'
+
+
+def test_install_javascript_writes_the_module_and_its_declarations(tmp_path: Path) -> None:
+    result = install_runtime(tmp_path, "javascript", Path("static/js/vendor/c.js"), force=False)
+    assert [(f.language, f.path.name) for f in result.files] == [
+        ("javascript", "c.js"),
+        ("javascript-types", "c.d.ts"),
+    ]
+    assert (tmp_path / "static/js/vendor/c.d.ts").read_bytes() == runtime_bytes("javascript-types")
+    assert check_runtime(tmp_path).exit_code == EXIT_OK
+    (tmp_path / "static/js/vendor/c.d.ts").write_text("// edited\n", encoding="utf-8")
+    assert [f.status for f in check_runtime(tmp_path).files] == ["up-to-date", "edited"]
+    with pytest.raises(UsageError, match=r"ends in \.js or \.mjs"):
+        install_runtime(tmp_path, "javascript", Path("static/js/c.ts"), force=False)

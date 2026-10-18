@@ -18,8 +18,14 @@ from shockharness.loosening import loosenings
 from tests.conftest import FIXTURES
 
 OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED)
-CASES = FIXTURES / "property_contracts" / "python"
-CASE_NAMES = sorted(p.name for p in CASES.iterdir() if p.is_dir())
+CASES = FIXTURES / "property_contracts"
+CASE_NAMES = sorted(
+    f"{language.name}/{case.name}"
+    for language in CASES.iterdir()
+    if language.is_dir()
+    for case in language.iterdir()
+    if case.is_dir()
+)
 
 CATALOG = """\
 [tool.shockharness]
@@ -76,7 +82,7 @@ def run(root: Path, files: dict[str, str], extra: str) -> Any:
 
 @pytest.mark.parametrize("case", CASE_NAMES)
 def test_fixture_yields_exactly_its_expected_findings(case: str, tmp_path: Path) -> None:
-    root = tmp_path / case
+    root = tmp_path / case.replace("/", "-")
     shutil.copytree(CASES / case, root)
     report = analyze_paths([root], root, load_config(root, None), OPTIONS)
     expected = json.loads((CASES / case / "expected.json").read_text(encoding="utf-8"))
@@ -84,7 +90,16 @@ def test_fixture_yields_exactly_its_expected_findings(case: str, tmp_path: Path)
 
 
 def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None:
-    assert CASE_NAMES == ["callee_sink", "declarations", "flow", "generators", "stats"]
+    assert CASE_NAMES == [
+        "javascript/calls",
+        "javascript/innerhtml",
+        "python/callee_sink",
+        "python/declarations",
+        "python/flow",
+        "python/fstring",
+        "python/generators",
+        "python/stats",
+    ]
     for case in CASE_NAMES:
         for name in (".shockharness.toml", "expected.json", "rationale.md"):
             assert (CASES / case / name).is_file(), (case, name)
@@ -92,7 +107,7 @@ def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None
 
 def test_an_excluded_runtime_module_resolves_and_is_not_analyzed(tmp_path: Path) -> None:
     root = tmp_path / "callee_sink"
-    shutil.copytree(CASES / "callee_sink", root)
+    shutil.copytree(CASES / "python" / "callee_sink", root)
     report = analyze_paths([root], root, load_config(root, None), OPTIONS)
     assert not any(f.path.startswith("app/vendor/") for f in report.files)
     assert any(row["path"] == "app/chat.py" for row in prop_rows(report))
@@ -100,7 +115,7 @@ def test_an_excluded_runtime_module_resolves_and_is_not_analyzed(tmp_path: Path)
 
 def test_the_producer_is_read_from_disk_when_only_the_caller_is_analyzed(tmp_path: Path) -> None:
     root = tmp_path / "callee_sink"
-    shutil.copytree(CASES / "callee_sink", root)
+    shutil.copytree(CASES / "python" / "callee_sink", root)
     config = load_config(root, None)
     alone = analyze_paths([root / "app" / "chat.py"], root, config, OPTIONS)
     together = analyze_paths([root], root, config, OPTIONS)
@@ -268,7 +283,7 @@ def test_catalog_shape_errors_are_configuration_errors(empty_root: Path) -> None
     assert "not a catalog property" in config_error(
         empty_root, "\n" + PROPERTY.format(name="p") + unknown
     )
-    assert "no Python runtime module" in config_error(empty_root, "enabled = true\n")
+    assert "names no runtime module" in config_error(empty_root, "enabled = true\n")
     runtime = PROPERTY.format(name="p").replace('"static"', '"sometimes"')
     assert "runtime" in config_error(empty_root, "\n" + runtime)
 
@@ -393,3 +408,82 @@ def test_prop005_compares_a_test_bootstrap_enable_with_the_catalog(empty_root: P
     messages = [r["message"] for r in prop_rows(run(empty_root, files, "")) if r["line"] == 4]
     assert "lists 'other', which the catalog does not mark static" in messages[0]
     assert "contracts static-properties" in messages[0]
+
+
+def test_javascript_references_resolve_or_are_errors(empty_root: Path) -> None:
+    write_project(
+        empty_root,
+        {"static/js/html.js": "export function escapeHtml(t) { return t; }\n"},
+    )
+    body = (
+        'enabled = true\nruntime_module = ["static/js/vendor/c.js"]\n\n'
+        '[[tool.shockharness.rules.property_contracts.properties]]\nname = "p"\n'
+        'description = "d"\nproducers = ["static/js/html.js:escapeHtml", '
+        '"static/js/html.js:missing", "dompurify:sanitize", "static/js/gone.js:f"]\n'
+        'runtime = "static"\n\n'
+        '[[tool.shockharness.rules.property_contracts.sinks]]\nlanguage = "javascript"\n'
+        'callee = "static/js/html.js:nothing:0"\nrequires = ["p"]\nreason = "r"\n\n'
+        '[[tool.shockharness.rules.property_contracts.sinks]]\nlanguage = "javascript"\n'
+        'callee = "fetch:1"\nrequires = ["p"]\nreason = "r"\n'
+    )
+    config = contracts_config(empty_root, body)
+    with pytest.raises(ConfigError) as caught:
+        analyze_paths([empty_root], empty_root, config, OPTIONS)
+    message = str(caught.value)
+    assert "producers[0]" not in message
+    assert "producers[1]" in message and "exports no missing" in message
+    assert "producers[2]" in message and "not a function of this project" in message
+    assert "producers[3]" in message and "cannot be read" in message
+    assert "sinks[0].callee" in message and "sinks[1]" not in message
+
+
+def test_sink_forms_and_compositions_are_checked_at_load(empty_root: Path) -> None:
+    both = (
+        '[[tool.shockharness.rules.property_contracts.sinks]]\nlanguage = "javascript"\n'
+        'callee = "fetch:0"\ntarget = "innerHTML"\nrequires = ["p"]\nreason = "r"\n'
+    )
+    assert "exactly one of callee" in config_error(
+        empty_root, "\n" + PROPERTY.format(name="p") + both
+    )
+    target = both.replace('callee = "fetch:0"\n', "").replace("innerHTML", "inner HTML")
+    assert "not an attribute" in config_error(empty_root, "\n" + PROPERTY.format(name="p") + target)
+    rule = (
+        '[[tool.shockharness.rules.property_contracts.compositions]]\nlanguage = "javascript"\n'
+        'operation = "fstring"\ninputs_require = ["q"]\nproduces = "p"\nreason = "r"\n'
+    )
+    message = config_error(empty_root, "\n" + PROPERTY.format(name="p") + rule)
+    assert "javascript has template_literal, concat, not 'fstring'" in message
+    assert "'q' is not a catalog property" in message
+
+
+COMPOSED = (
+    ENABLED
+    + PROPERTY.format(name="q")
+    + '\n[[tool.shockharness.rules.property_contracts.compositions]]\nlanguage = "python"\n'
+    'operation = "fstring"\ninputs_require = ["q", "p"]\nproduces = "p"\nreason = "r"\n'
+    '\n[[tool.shockharness.rules.property_contracts.sinks]]\nlanguage = "python"\n'
+    'target = "body"\nrequires = ["p"]\nreason = "r"\n'
+)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "needle"),
+    [
+        ('inputs_require = ["q", "p"]', 'inputs_require = ["p"]', "now accepts parts that carry p"),
+        ('produces = "p"', 'produces = "q"', "python fstring -> q now accepts"),
+        ('target = "body"', 'target = "html"', "no longer lists the sink python target body"),
+        (
+            'runtime = "check"\n',
+            'runtime = "check"\nliteral_satisfies = true\n',
+            "literal_satisfies set",
+        ),
+    ],
+)
+def test_each_loosening_of_the_p1b_keys_is_reported(
+    empty_root: Path, old: str, new: str, needle: str
+) -> None:
+    before = contracts_config(empty_root, COMPOSED)
+    assert old in COMPOSED
+    after = contracts_config(empty_root, COMPOSED.replace(old, new, 1))
+    found = loosenings(before.values, before.deviations, after.values, after.deviations)
+    assert any(needle in item.message for item in found), [i.message for i in found]

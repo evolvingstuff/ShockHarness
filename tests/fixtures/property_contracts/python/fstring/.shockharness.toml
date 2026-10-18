@@ -1,0 +1,54 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["app/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "escaped_html"
+description = "text run through the project's HTML escaper"
+producers = ["app.markup.escape"]
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "sanitized_html"
+description = "markup that may be sent to the browser"
+producers = ["app.markup.sanitize"]
+runtime = "static"
+literal_satisfies = true
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "python"
+operation = "fstring"
+inputs_require = ["escaped_html"]
+produces = "sanitized_html"
+reason = "constant markup around escaped text is safe markup"
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "python"
+operation = "concat"
+inputs_require = ["sanitized_html"]
+produces = "sanitized_html"
+reason = "safe markup joined to safe markup is safe markup"
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "python"
+operation = "format"
+inputs_require = ["escaped_html"]
+produces = "sanitized_html"
+reason = "str.format and % with escaped arguments, like an f-string"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+callee = "app.page.send_html:0"
+requires = ["sanitized_html"]
+reason = "markup sent to the browser must be safe"
+producer = "app.markup.sanitize"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+target = "body"
+requires = ["sanitized_html"]
+reason = "a response body is rendered as markup"

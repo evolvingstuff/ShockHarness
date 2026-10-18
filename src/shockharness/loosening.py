@@ -22,8 +22,10 @@ Three sources of looseness, each reported once per key:
    ``exclude``; a pattern removed from ``include``.
 4. **Property contracts** (``rules.property_contracts``, opt-in): turning the family,
    ``fail_on_unknown`` or ``allow_undeclared`` the loose way; while it is on, a sink
-   removed or requiring less, a property's ``runtime`` lowered or its ``producers``
-   dropped or widened, a role or runtime module removed, a severity lowered.
+   (callee or assignment target) removed or requiring less, a property's ``runtime``
+   lowered, its ``producers`` dropped or widened or ``literal_satisfies`` set, a
+   composition rule that accepts more, a role or runtime module removed, a severity
+   lowered.
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -197,6 +199,8 @@ CONTRACTS = "rules.property_contracts"
 # Strictest first, as in ORDERED_SETTINGS.
 CONTRACT_RUNTIME_LEVELS = ("verify", "check", "static")
 CONTRACT_SEVERITIES = ("error", "warning", "review")
+LITERAL_SATISFIES = "literal_satisfies"
+SINK_CALLEE = "callee"
 # (key, its strict value, what turning it away from that value means)
 CONTRACT_SWITCHES = (
     ("enabled", True, "the property-contracts family is off"),
@@ -216,10 +220,17 @@ def _contract_switches(before: Mapping[str, Any], after: Mapping[str, Any]) -> l
     return found
 
 
+def _sink_key(sink: Mapping[str, Any]) -> str:
+    """``python app.cloud.send:0`` for a callee, ``javascript target innerHTML``."""
+    if SINK_CALLEE in sink:
+        return f"{sink['language']} {sink['callee']}"
+    return f"{sink['language']} target {sink['target']}"
+
+
 def _sink_requirements(settings: Mapping[str, Any]) -> dict[str, set[str]]:
     required: dict[str, set[str]] = {}
     for sink in settings["sinks"]:
-        key = f"{sink['language']} {sink['callee']}"
+        key = _sink_key(sink)
         if key not in required:
             required[key] = set()
         required[key].update(str(p) for p in sink["requires"])
@@ -255,6 +266,9 @@ def _property_loosening(name: str, old: Mapping[str, Any], new: Mapping[str, Any
     elif len(old_producers) > 0 and len(new_producers - old_producers) > 0:
         added = ", ".join(sorted(new_producers - old_producers))
         reasons.append(f"property {name!r}: producers widened with {added}")
+    was = LITERAL_SATISFIES in old and old[LITERAL_SATISFIES] is True
+    if LITERAL_SATISFIES in new and new[LITERAL_SATISFIES] is True and not was:
+        reasons.append(f"property {name!r}: literal_satisfies set (string literals carry it)")
     return reasons
 
 
@@ -269,6 +283,33 @@ def _contract_properties(before: Mapping[str, Any], after: Mapping[str, Any]) ->
                 Loosening(key, f"{key}: {reason}")
                 for reason in _property_loosening(name, entry, new[name])
             )
+    return found
+
+
+def _rules(settings: Mapping[str, Any]) -> dict[str, list[frozenset[str]]]:
+    """Composition rules by ``language operation -> produces``: their inputs_require."""
+    found: dict[str, list[frozenset[str]]] = {}
+    for rule in settings["compositions"]:
+        key = f"{rule['language']} {rule['operation']} -> {rule['produces']}"
+        if key not in found:
+            found[key] = []
+        found[key].append(frozenset(str(p) for p in rule["inputs_require"]))
+    return found
+
+
+def _contract_compositions(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
+    """A rule that accepts a part no earlier rule of the same operation and produces did:
+    an added rule, a property removed from inputs_require, a widened produces."""
+    old, new = _rules(before), _rules(after)
+    key = f"{CONTRACTS}.compositions"
+    found: list[Loosening] = []
+    earlier = [(composition, inputs) for composition, rules in old.items() for inputs in rules]
+    for composition, rules in sorted(new.items()):
+        for inputs in rules:
+            if not any(c == composition and previous <= inputs for c, previous in earlier):
+                needed = ", ".join(sorted(inputs)) if len(inputs) > 0 else "nothing"
+                message = f"{key}: {composition} now accepts parts that carry {needed}"
+                found.append(Loosening(key, message))
     return found
 
 
@@ -303,6 +344,7 @@ def _property_contracts(
         *found,
         *_contract_sinks(before, after),
         *_contract_properties(before, after),
+        *_contract_compositions(before, after),
         *_contract_lists(before, after),
     ]
 

@@ -6,6 +6,23 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Property contracts, milestone P1b (JavaScript; spec v0.7):
+  - **JavaScript and TypeScript files.** `requires` / `produces` / `preserves` /
+    `preserves_except` are checked at call sites. Contracts are read one hop through
+    `import`, `require`, re-exports and `export default`, as `path:export`.
+  - **Callee sinks**: project, package and global, such as `fetch:1`.
+  - **Assignment-target sinks** in both languages: `target = "innerHTML"`, or
+    `"headers[]"` for a subscript of a named receiver.
+  - **Compositions** (`template_literal`, `concat`, `fstring`, `format`) and
+    `literal_satisfies`. The finding names the part that falls short.
+  - **The JavaScript runtime file** `contracts.js` with `contracts.d.ts`, installed by
+    `shockharness contracts install --language javascript`. It is identity until
+    `enable("check", staticProperties)` or the pre-load object
+    `globalThis.__shockharnessContracts`.
+  - **Checks:** PROP005 and PROP006 for JavaScript test bootstraps, and `config
+    validate` for JavaScript references.
+  - **VERIFY003** reports added or wider composition rules, `literal_satisfies` set, and
+    target sinks removed.
 - Property contracts, milestone P1a (opt-in, Python; spec v0.5). The family is off by
   default and in every profile.
   - **Declarations:** `requires` / `produces` / `preserves` / `preserves_except`.

@@ -1234,9 +1234,10 @@ from one (never `currentTarget`, the element the listener is on); `C` is in
 `HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
 TypeScript; exact.
 
-### PROP001, PROP003, PROP005, PROP006, PROP007: property contracts (opt-in; Python, milestone P1a)
+### PROP001, PROP003, PROP005, PROP006, PROP007: property contracts (opt-in; Python and JavaScript, milestones P1a and P1b)
 
-The family of `docs/shockharness_property_contracts_spec.md`, milestone P1a. It is off
+The family of `docs/shockharness_property_contracts_spec.md`, milestones P1a (Python)
+and P1b (JavaScript, TypeScript read as JavaScript). It is off
 by default and no profile turns it on. Off is not a deviation, does not list the rules
 as disabled, and adds nothing to `coverage.rules_disabled_globally`. Enable it with
 `rules.property_contracts.enabled = true`, a catalog of properties, and the
@@ -1247,8 +1248,9 @@ as disabled, and adds nothing to `coverage.rules_disabled_globally`. Enable it w
 file: `requires(value, "p", ...)`, `produces(value, "p", ...)`, `preserves(result,
 source)` and `preserves_except(result, source, "p", ...)`. Each returns its first
 argument. A call counts only when it resolves, through the file's imports, to a module
-that `runtime_module` names. That module may be excluded from analysis, because only
-its name is needed. A function named `requires` from anywhere else is an ordinary call.
+that `runtime_module` names: a Python module path or name, or a JavaScript path or
+package (`import { requires } from "./vendor/shockharness-contracts.js"`). That module
+may be excluded from analysis, because only its name is needed. A function named `requires` from anywhere else is an ordinary call.
 A function's contract is read from its own body:
 
 * the `requires` statements on parameters at the top of the body, before any other use
@@ -1263,9 +1265,16 @@ There is no separate declaration.
   adds to it. `preserves` copies the source's set, and `preserves_except` removes the
   named properties. Calls nest and are evaluated inside out:
   `produces(preserves(expr, x), "p")` gives a result computed from `x` by an undeclared
-  operation `x`'s set plus `p` (spec §4.2). `a or b` and `a if c else b` are the intersection of their operands.
-* **What destroys them.** Any other operation, literal, f-string or library call
-  carries nothing.
+  operation `x`'s set plus `p` (spec §4.2). `a or b`, `a if c else b`, `a || b`,
+  `a ?? b` and `c ? a : b` are the intersection of their operands.
+* **Literals and compositions (spec §5.2a).** A string literal with no interpolation
+  carries every property marked `literal_satisfies`. A composition carries a catalog
+  rule's `produces` when every non-literal part carries one of the rules' `inputs_require`
+  for that operation and `produces`. The compositions are an f-string, a JavaScript
+  template literal, a `+` chain with a string literal in it, `"...".format(...)` and
+  `"..." % x`. Literal parts are not checked. One part known to fall short makes the
+  whole carry nothing, and the finding names that part; an unknown part makes it unknown.
+* **What destroys them.** Any other operation, literal or library call carries nothing.
 * **Control flow.** Branches meet in the intersection, and loops iterate to a fixed
   point. An except handler starts from the set at the start of its try. A parameter
   starts with what the function requires of it; a parameter with no `requires` starts
@@ -1277,9 +1286,14 @@ There is no separate declaration.
   function's file is read from the analyzed files, or else from the project under the
   root, so a check of one file still sees its imports' contracts.
 * **Unknown sets.** Some calls cannot be resolved: a method on a value, a callable in a
-  variable or a container, a class. Every `await`, `yield`, generator expression,
-  generator function result, `async for`, `async with`, and a library call that consumes
-  a generator, makes the set unknown. So does a `.join` build. These are P2 semantics.
+  variable or a container, a class or `new`. Every `await`, `yield`, generator
+  expression, generator function result, `async for`, `for await`, `async with`, and a
+  library call that consumes a generator, makes the set unknown. So does a `.join`
+  build. These are P2 semantics.
+* **JavaScript calls.** Functions resolve through `import`/`require`, re-exports and
+  `export default` to `path:export` (`static/js/html.js:escapeHtml`). Package callees are
+  `package:name`, with `Pkg.f()` on a default import as `package:f`. Globals are
+  `fetch` or `JSON.stringify`.
 
 | Rule | Reports | Default |
 |---|---|---|
@@ -1289,12 +1303,15 @@ There is no separate declaration.
 | `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing. In a test bootstrap, an `enable(...)` whose second argument is not a literal list of string literals | review |
 | `PROP007` | a `requires` on a parameter that is not at the top of the body (after a use of the parameter, or inside a branch, loop, try or with). It is not part of the contract. A parameter the body rebinds is a local after that, and a `requires` on it is a mid-body check | review |
 
-**Sinks.** A catalog sink is either a project callee or a library callee, resolved
-through imports (`app.cloud.send_messages:0`, `json.dumps:0`). Its argument is
-addressed by position. A keyword argument maps to its position through a project
-callee's parameter list. For a library callee a keyword argument is unknown, and so is
-an argument passed through `*args` or `**kwargs`. A sink entry may name its `producer`,
-and the finding repeats it.
+**Sinks.** A catalog sink is a callee or an assignment target. A callee is a project or
+library callee resolved through imports (`app.cloud.send_messages:0`, `json.dumps:0`,
+`static/js/api.js:post:1`, `fetch:1`), and its argument is addressed by position. A
+Python keyword argument maps to its position through a project callee's parameter list.
+For a library callee a keyword argument is unknown, and so is an argument passed through
+`*args`, `**kwargs` or a spread. An assignment target is `target = "innerHTML"` (that
+attribute on any receiver: `el.innerHTML = v`, and `+=`) or `target = "headers[]"` (a
+subscript of the named receiver). A sink entry may name its `producer`, and the finding
+repeats it.
 
 **Severities** are `rules.property_contracts.severities.PROP001` and so on. Lowering one
 is a VERIFY003 loosening. So are these:
@@ -1302,18 +1319,22 @@ is a VERIFY003 loosening. So are these:
 * turning the family off;
 * `fail_on_unknown` true to false;
 * `allow_undeclared` false to true;
-* while the family is on: removing a sink or a property from a sink's `requires`;
-  lowering a property's `runtime`; dropping or widening its `producers`; removing a role
-  or a runtime module.
+* while the family is on:
+  * removing a sink (callee or target), or a property from a sink's `requires`;
+  * lowering a property's `runtime`; dropping or widening its `producers`; setting
+    `literal_satisfies`;
+  * a composition rule that accepts parts no earlier rule with the same language,
+    operation and `produces` accepted: an added rule, a property removed from
+    `inputs_require`, a changed `produces`;
+  * removing a role or a runtime module.
 
-`RESULT001` never reports the four declarations as discarded results when they resolve
-to the runtime module.
+`RESULT001` never reports the four Python declarations as discarded results when they
+resolve to the runtime module.
 
-**Not in P1a** (spec §14):
+**Not in P1a and P1b** (spec §14):
 
-* JavaScript and TypeScript;
-* assignment-target sinks (`el.innerHTML = ...`);
-* compositions and `literal_satisfies`;
+* TypeScript-specific behaviour: annotations are ignored, and there is no TypeScript
+  fixture yet (P2);
 * catalog preserving operations (slicing);
 * transitive summaries;
 * the `await`/generator semantics;
@@ -1321,7 +1342,8 @@ to the runtime module.
 * `complete`, `verify` mode, and the skills.
 
 Methods are not resolved through their receivers, and a class call (a constructor) is
-unknown.
+unknown. A JavaScript method sink (`insertAdjacentHTML`) can therefore not match, and
+the subscript form of a target matches only a named receiver.
 
 ## Registered, not implemented
 

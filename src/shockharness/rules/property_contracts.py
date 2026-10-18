@@ -1,4 +1,5 @@
-"""Property contracts, Python, milestone P1a: PROP001, PROP003, PROP006 and PROP007.
+"""Property contracts, Python (milestones P1a, P1b): PROP001, PROP003, PROP005, PROP006,
+PROP007.
 
 Every function of a file the rules apply to (and the module body) is walked once with
 :mod:`shockharness.contracts.python_flow`. A call that resolves to a project function is
@@ -8,29 +9,41 @@ computed with every further project call inside it unknown. A function with no
 ``produces``/``preserves`` declares no result: its result carries nothing. A call whose
 resolved reference is a catalog sink (``callee:N``) is checked at that argument; a
 keyword argument maps to its position for a project callee and is unknown for a library
-callee. Contracts are inferred from the body, never from a separate declaration.
+callee. An assignment to a catalog target (``obj.html = v``, ``headers[k] = v``) is checked
+at the value. String literals, f-strings, concatenations and formats carry what the
+catalog's ``literal_satisfies`` and composition rules say (:mod:`..contracts.compose`).
+Contracts are inferred from the body, never from a separate declaration.
 """
 
 import ast
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from shockharness.contracts.catalog import (
+    JAVASCRIPT,
     PRESERVES,
     PRESERVES_EXCEPT,
     PRODUCES,
     PYTHON,
     REQUIRES,
+    TYPESCRIPT,
     CalleeSink,
+    TargetSink,
+    javascript_runtime_modules,
     load_catalog,
+    python_runtime_modules,
     static_properties,
 )
+from shockharness.contracts.compose import Compositions
+from shockharness.contracts.javascript_index import JsProjectIndex
 from shockharness.contracts.python_flow import (
     EMPTY,
     UNBOUND,
     Declaration,
     Env,
+    Part,
     PropSet,
     lazy_unknown,
     run_unit,
@@ -45,10 +58,20 @@ from shockharness.contracts.python_index import (
     ProjectIndex,
     Target,
 )
-from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
-from shockharness.ir.model import CONFIDENCE_EXACT, Span
+from shockharness.contracts.report import (
+    ASSIGNED,
+    PASSED,
+    ContractFile,
+    Issue,
+    Located,
+    Reporter,
+    Requirement,
+    quoted,
+)
+from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.python_catches import node_span
-from shockharness.rules.registry import PROP001, PROP003, PROP005, PROP006, PROP007, RuleSpec
+from shockharness.rules.property_contracts_javascript import run_javascript_contracts
+from shockharness.rules.registry import PROP001, PROP003, PROP005, PROP006, PROP007
 from shockharness.source import SourceText
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -58,27 +81,9 @@ VALUE_ONLY = 1
 RESULT_AND_SOURCE = 2
 RESULT_DECLARATIONS = (PRODUCES, PRESERVES, PRESERVES_EXCEPT)
 JOIN = "join"
+SCRIPT_LANGUAGES = (JAVASCRIPT, TYPESCRIPT)
 ENABLE = "enable"
 ENABLE_ARGUMENTS = 2  # enable(mode, static_properties)
-SEVERITY_ERROR = "error"
-SEVERITY_REVIEW = "review"
-
-
-@dataclass(frozen=True)
-class ContractFile:
-    path: str
-    source: SourceText
-    applies: frozenset[str]  # the PROP rule IDs applied to this file
-
-
-@dataclass(frozen=True)
-class Issue:
-    rule: RuleSpec
-    node: ast.expr
-    message: str
-    # The rule whose scope decides whether it is reported: the rule itself, or PROP005
-    # for a malformed enable(...) in a test bootstrap (PROP006 there, spec §6.2).
-    scope: RuleSpec
 
 
 @dataclass(frozen=True)
@@ -165,10 +170,6 @@ def _declared_global(body: Sequence[ast.stmt]) -> set[str]:
     }
 
 
-def _quoted(properties: frozenset[str]) -> str:
-    return ", ".join(repr(p) for p in sorted(properties))
-
-
 # -- declarations (PROP003, PROP006) ------------------------------------------------------
 
 
@@ -249,10 +250,10 @@ def enable_issues(call: ast.Call, static: frozenset[str]) -> list[Issue]:
         return []
     differences = []
     if len(static - listed) > 0:
-        differences.append(f"missing {_quoted(static - listed)}")
+        differences.append(f"missing {quoted(static - listed)}")
     if len(listed - static) > 0:
         differences.append(
-            f"lists {_quoted(listed - static)}, which the catalog does not mark static"
+            f"lists {quoted(listed - static)}, which the catalog does not mark static"
         )
     message = (
         f'enable(...) disagrees with the catalog\'s runtime = "static" properties: '
@@ -339,6 +340,8 @@ class Analysis:
         self.allow_undeclared = catalog.allow_undeclared
         self.static = frozenset(static_properties(settings))
         self.sinks = self._sinks(catalog.sinks)
+        self.targets = tuple(target for target in catalog.targets if target.language == PYTHON)
+        self.compositions = Compositions(catalog, PYTHON)
         self.units: dict[ast.AST, Unit] = {}
         self.contracts: dict[ast.AST, Contract] = {}
 
@@ -471,74 +474,6 @@ def entry_state(unit: Unit) -> Env:
 # -- checks (PROP001) ---------------------------------------------------------------------
 
 
-class Reporter:
-    def __init__(self, file: ContractFile, settings: Mapping[str, Any]) -> None:
-        self.file = file
-        self.severities = settings["severities"]
-        self.allow_undeclared = settings["allow_undeclared"] is True
-        self.found: dict[tuple[str, int, int, str], Finding] = {}
-
-    def severity(self, rule: RuleSpec) -> str:
-        severity = str(self.severities[rule.rule_id])
-        if rule is PROP003 and self.allow_undeclared and severity == SEVERITY_ERROR:
-            return SEVERITY_REVIEW  # the catalog accepted unlisted names (§7)
-        return severity
-
-    def add(self, rule: RuleSpec, node: ast.AST, message: str, status: str) -> None:
-        if rule.rule_id in self.file.applies:
-            self._record(rule, node, message, status)
-
-    def add_issue(self, issue: Issue) -> None:
-        if issue.scope.rule_id in self.file.applies:
-            self._record(issue.rule, issue.node, issue.message, STATUS_VIOLATION)
-
-    def _record(self, rule: RuleSpec, node: ast.AST, message: str, status: str) -> None:
-        span = self._span(node)
-        key = (rule.rule_id, span.line, span.column, message)
-        if key in self.found:
-            return  # a loop or a finally block walked twice
-        self.found[key] = Finding(
-            rule_id=rule.rule_id,
-            rule_version=rule.version,
-            severity=self.severity(rule),
-            path=self.file.path,
-            span=span,
-            message=message,
-            evidence=ast.unparse(node),
-            confidence=CONFIDENCE_EXACT,
-            status=status,
-            remediation=rule.remediation,
-            safe_autofix=False,
-            scope=None,
-            suppression=None,
-            fingerprint=None,
-            baseline=None,
-        )
-
-    def _span(self, node: ast.AST) -> Span:
-        assert isinstance(node, ast.expr | ast.stmt), "a located node"
-        return node_span(self.file.source, node)
-
-    def check(
-        self, node: ast.AST, value: PropSet, required: frozenset[str], subject: str, where: str
-    ) -> None:
-        """PROP001 unless ``value`` carries ``required``: "<subject> <properties><where>"."""
-        missing = required - value.known
-        if len(missing) == 0:
-            return
-        stated = f"{subject} {_quoted(missing)}{where}"
-        if value.exact:
-            message = f"{stated}; the value passed here has {value.render()}"
-            self.add(PROP001, node, message, STATUS_VIOLATION)
-            return
-        pronoun = "it" if len(missing) == 1 else "them"
-        message = (
-            f"{stated}; the analysis cannot tell whether the value passed here carries "
-            f"{pronoun}: {value.why}"
-        )
-        self.add(PROP001, node, message, STATUS_UNKNOWN)
-
-
 @dataclass(frozen=True)
 class Passed:
     value: PropSet
@@ -598,6 +533,31 @@ def _call_result(target: Target, contract: Contract | None, passed: Sequence[Pro
     return EMPTY  # a library or builtin callee carries nothing
 
 
+def _reason(sink: CalleeSink | TargetSink) -> str:
+    if sink.producer is not None:
+        return f"{sink.reason}; its producer is {sink.producer}"
+    return sink.reason
+
+
+def _dotted(node: ast.expr) -> str | None:
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.insert(0, node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return ".".join([node.id, *parts])
+
+
+def _matches(sink: TargetSink, target: ast.expr) -> bool:
+    """``<any>.attribute = v`` or ``receiver[...] = v``."""
+    if isinstance(target, ast.Attribute):
+        return sink.attribute == target.attr
+    if isinstance(target, ast.Subscript):
+        return sink.receiver is not None and sink.receiver == _dotted(target.value)
+    return False
+
+
 class UnitHooks:
     """What calls do inside one unit. ``reporter`` None: computing a callee's own result
     set, where a further project call is unknown (one hop) and nothing is reported."""
@@ -606,6 +566,22 @@ class UnitHooks:
         self.analysis = analysis
         self.unit = unit
         self.reporter = reporter
+
+    def literal(self) -> PropSet:
+        return self.analysis.compositions.literal_set()
+
+    def compose(self, operation: str, parts: Sequence[Part]) -> PropSet:
+        return self.analysis.compositions.compose(operation, parts)
+
+    def assigned(
+        self, target: ast.expr, value: ast.expr, value_set: PropSet, reporting: bool
+    ) -> None:
+        if self.reporter is None or not reporting:
+            return
+        for sink in self.analysis.targets:
+            if _matches(sink, target):
+                stated = Requirement(f"sink {sink.text} requires", f" ({_reason(sink)})", ASSIGNED)
+                self.reporter.check(value, value_set, sink.requires, stated)
 
     def is_declaration(self, call: ast.Call) -> bool:
         return call in self.unit.declarations
@@ -621,13 +597,8 @@ class UnitHooks:
         if self.reporter is None or not reporting:
             return
         subject = ast.unparse(declaration.call.args[0])
-        self.reporter.check(
-            declaration.call.args[0],
-            value,
-            declaration.properties,
-            f"requires({subject}, ...) checks for",
-            " here",
-        )
+        stated = Requirement(f"requires({subject}, ...) checks for", " here", PASSED)
+        self.reporter.check(declaration.call.args[0], value, declaration.properties, stated)
 
     def call(
         self,
@@ -666,11 +637,9 @@ class UnitHooks:
             passed = _argument(call, arguments, keywords, sink.position, parameter)
             if passed is None:
                 continue
-            reason = sink.reason
-            if sink.producer is not None:
-                reason = f"{reason}; its producer is {sink.producer}"
             subject = f"sink {sink.callee}:{sink.position} requires"
-            self.reporter.check(passed.node, passed.value, sink.requires, subject, f" ({reason})")
+            stated = Requirement(subject, f" ({_reason(sink)})", PASSED)
+            self.reporter.check(passed.node, passed.value, sink.requires, stated)
 
     def _requirements(
         self,
@@ -689,8 +658,8 @@ class UnitHooks:
             passed = _argument(call, arguments, keywords, position, named)
             if passed is None:
                 continue
-            subject = f"{target.reference} requires"
-            self.reporter.check(passed.node, passed.value, required, subject, f" on {parameter}")
+            stated = Requirement(f"{target.reference} requires", f" on {parameter}", PASSED)
+            self.reporter.check(passed.node, passed.value, required, stated)
 
 
 def _functions(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
@@ -719,6 +688,14 @@ def _file_findings(analysis: Analysis, module: Module, reporter: Reporter) -> No
             run_unit(UnitHooks(analysis, unit, reporter), unit.body, entry_state(unit))
 
 
+def _locator(source: SourceText) -> Callable[[object], Located]:
+    def locate(node: object) -> Located:
+        assert isinstance(node, ast.expr | ast.stmt), "a located Python node"
+        return Located(node_span(source, node), ast.unparse(node))
+
+    return locate
+
+
 def run_property_contracts(
     files: Sequence[ContractFile], index: ProjectIndex, settings: Mapping[str, Any]
 ) -> dict[str, list[Finding]]:
@@ -728,7 +705,38 @@ def run_property_contracts(
         module = index.by_path[file.path]
         if len(file.applies) == 0 or index.is_runtime(module):
             continue
-        reporter = Reporter(file, settings)
+        reporter = Reporter(file, settings, _locator(file.source))
         _file_findings(analysis, module, reporter)
         found[file.path] = sorted(reporter.found.values(), key=lambda f: f.sort_key())
+    return found
+
+
+def property_contract_findings(
+    files: Sequence[ContractFile],
+    sources: Mapping[str, tuple[str, SourceText]],
+    root: Path,
+    settings: Mapping[str, Any],
+) -> dict[str, list[Finding]]:
+    """Both languages: each file's language decides its index and its checks. ``sources``
+    are every analyzed file, where resolved callees' contracts are read first."""
+    found: dict[str, list[Finding]] = {}
+    python_files = [file for file in files if file.language == PYTHON]
+    if len(python_files) > 0:
+        # Each of these files parsed in the per-file phase; the same text parses again.
+        trees = {
+            path: ast.parse(source.text, filename=path)
+            for path, (language, source) in sources.items()
+            if language == PYTHON
+        }
+        index = ProjectIndex(root, trees, python_runtime_modules(settings))
+        found.update(run_property_contracts(python_files, index, settings))
+    script_files = [file for file in files if file.language in SCRIPT_LANGUAGES]
+    if len(script_files) > 0:
+        texts = {
+            path: source.text
+            for path, (language, source) in sources.items()
+            if language in SCRIPT_LANGUAGES
+        }
+        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings))
+        found.update(run_javascript_contracts(script_files, scripts, settings))
     return found

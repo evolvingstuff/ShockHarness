@@ -35,9 +35,15 @@ CONTRACTS_MANIFEST = ".shockharness-contracts.json"
 MANIFEST_AGENT = "contracts"
 RUNTIME_PACKAGE = "shockharness.contracts"
 RUNTIME_DIRECTORY = "runtime"
-# The runtime file of each language (JavaScript and its .d.ts are milestone P1b).
-RUNTIME_FILES = {"python": "contracts.py"}
-LANGUAGES = tuple(RUNTIME_FILES)
+PYTHON = "python"
+JAVASCRIPT = "javascript"
+TYPES = "javascript-types"
+# The shipped files, keyed as the manifest records them, and the files of each language:
+# the JavaScript module gets its type declarations beside it (``x.js`` -> ``x.d.ts``).
+RUNTIME_FILES = {PYTHON: "contracts.py", JAVASCRIPT: "contracts.js", TYPES: "contracts.d.ts"}
+LANGUAGE_FILES = {PYTHON: (PYTHON,), JAVASCRIPT: (JAVASCRIPT, TYPES)}
+LANGUAGES = tuple(LANGUAGE_FILES)
+DECLARATION_SUFFIXES = {".js": ".d.ts", ".mjs": ".d.mts"}
 
 
 @dataclass(frozen=True)
@@ -55,11 +61,11 @@ class ContractsResult:
     exit_code: int
 
 
-def runtime_bytes(language: str) -> bytes:
-    """The exact bytes of the shipped runtime file (LF line endings on every platform)."""
-    if language not in RUNTIME_FILES:
-        raise UsageError(f"no runtime file for language {language!r}", None)
-    name = RUNTIME_FILES[language]
+def runtime_bytes(key: str) -> bytes:
+    """The exact bytes of a shipped runtime file (LF line endings on every platform)."""
+    if key not in RUNTIME_FILES:
+        raise UsageError(f"no runtime file {key!r}", None)
+    name = RUNTIME_FILES[key]
     raw = resources.files(RUNTIME_PACKAGE).joinpath(RUNTIME_DIRECTORY).joinpath(name).read_bytes()
     return raw.replace(b"\r\n", b"\n")
 
@@ -97,26 +103,45 @@ def _refusal(manifest: Manifest, relative: str, target: Path) -> str:
     return ""
 
 
+def _destinations(language: str, destination: Path) -> list[tuple[str, Path]]:
+    """(manifest key, destination) for each file of ``language``."""
+    if language not in LANGUAGE_FILES:
+        raise UsageError(f"no runtime for language {language!r}", None)
+    if language == PYTHON:
+        return [(PYTHON, destination)]
+    if destination.suffix not in DECLARATION_SUFFIXES:
+        raise UsageError("the JavaScript runtime is an ES module: --dest ends in .js or .mjs", None)
+    types = destination.with_suffix("").with_suffix(DECLARATION_SUFFIXES[destination.suffix])
+    return [(JAVASCRIPT, destination), (TYPES, types)]
+
+
 def install_runtime(
     project: Path, language: str, destination: Path, force: bool
 ) -> ContractsResult:
-    """Copy the runtime file for ``language`` to ``destination`` (relative to ``project``)
-    and record it in the manifest."""
-    data = runtime_bytes(language)
-    relative = _relative(project, destination)
-    target = project / relative
+    """Copy the runtime file(s) for ``language`` to ``destination`` (relative to
+    ``project``) and record them in the manifest. Nothing is written when any target was
+    edited or not installed here, unless ``force``."""
     manifest = _manifest(project)
-    refusal = _refusal(manifest, relative, target)
-    if refusal != "" and not force:
-        raise UsageError(f"{refusal}; pass --force to replace it", str(target))
-    write_bytes(target, data)
+    planned = []
+    for key, path in _destinations(language, destination):
+        relative = _relative(project, path)
+        refusal = _refusal(manifest, relative, project / relative)
+        if refusal != "" and not force:
+            raise UsageError(f"{refusal}; pass --force to replace it", str(project / relative))
+        planned.append((key, relative))
     entries = dict(manifest.skills)
-    entries[language] = ManifestEntry(path=relative, sha256=sha256_hex(data))
+    written: list[InstalledFile] = []
+    for key, relative in planned:
+        data = runtime_bytes(key)
+        write_bytes(project / relative, data)
+        entries[key] = ManifestEntry(path=relative, sha256=sha256_hex(data))
+        written.append(
+            InstalledFile(key, project / relative, STATUS_WRITTEN, f"from {__version__}")
+        )
     updated = Manifest(SKILLS_MANIFEST_SCHEMA_VERSION, __version__, MANIFEST_AGENT, entries)
     manifest_path = project / CONTRACTS_MANIFEST
     write_bytes(manifest_path, render_manifest(updated).encode("utf-8"))
-    written = InstalledFile(language, target, STATUS_WRITTEN, f"from {__version__}")
-    return ContractsResult(manifest_path, (written,), EXIT_OK)
+    return ContractsResult(manifest_path, tuple(written), EXIT_OK)
 
 
 def _status(project: Path, language: str, entry: ManifestEntry) -> InstalledFile:

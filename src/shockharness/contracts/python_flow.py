@@ -103,7 +103,29 @@ class Declaration:
     valid: bool  # False: PROP006, the call is the identity and contributes nothing
 
 
+@dataclass(frozen=True)
+class Part:
+    """A non-literal part of a composition: its set, and its text for the note."""
+
+    value: PropSet
+    text: str
+
+
 class Hooks(Protocol):
+    def literal(self) -> PropSet:
+        """What a string literal with no interpolation carries (``literal_satisfies``)."""
+        ...
+
+    def compose(self, operation: str, parts: Sequence[Part]) -> PropSet:
+        """A composition's set, by the catalog's rules for ``operation``."""
+        ...
+
+    def assigned(
+        self, target: ast.expr, value: ast.expr, value_set: PropSet, reporting: bool
+    ) -> None:
+        """An assignment to an attribute or subscript: an assignment-target sink."""
+        ...
+
     def is_declaration(self, call: ast.Call) -> bool:
         """Whether the call resolves to one of the runtime module's four functions."""
         ...
@@ -185,8 +207,14 @@ class Flow:
     def assign(self, node: ast.Assign, env: Env) -> Env:
         for target in node.targets:
             if not self._pairwise(target, node.value, env):
-                self.bind(target, self.expression(node.value, env), env)
+                value = self.expression(node.value, env)
+                self._assigned(target, node.value, value)
+                self.bind(target, value, env)
         return env
+
+    def _assigned(self, target: ast.expr, value: ast.expr, value_set: PropSet) -> None:
+        if isinstance(target, ast.Attribute | ast.Subscript):
+            self.hooks.assigned(target, value, value_set, self.reporting)
 
     def _pairwise(self, target: ast.expr, value: ast.expr, env: Env) -> bool:
         """``a, b = x, y``: each name takes its own element's set."""
@@ -205,11 +233,14 @@ class Flow:
 
     def annotated(self, node: ast.AnnAssign, env: Env) -> Env:
         if node.value is not None:
-            self.bind(node.target, self.expression(node.value, env), env)
+            value = self.expression(node.value, env)
+            self._assigned(node.target, node.value, value)
+            self.bind(node.target, value, env)
         return env
 
     def augmented(self, node: ast.AugAssign, env: Env) -> Env:
-        self.expression(node.value, env)
+        value = self.expression(node.value, env)
+        self._assigned(node.target, node.value, value)  # el.html += part: the part reaches it
         self.bind(node.target, EMPTY, env)  # x += 1 is an operation
         return env
 
@@ -374,6 +405,31 @@ class Flow:
         return env[node.id]  # the entry state lists every name the unit reads
 
     def constant(self, node: ast.Constant, env: Env) -> PropSet:
+        if isinstance(node.value, str):
+            return self.hooks.literal()
+        return EMPTY
+
+    def _parts(self, nodes: Sequence[ast.expr], env: Env) -> list[Part]:
+        return [Part(self.expression(node, env), ast.unparse(node)) for node in nodes]
+
+    def fstring(self, node: ast.JoinedStr, env: Env) -> PropSet:
+        values = [v.value for v in node.values if isinstance(v, ast.FormattedValue)]
+        if len(values) == 0:
+            return self.hooks.literal()
+        return self.hooks.compose(FSTRING, self._parts(values, env))
+
+    def binary(self, node: ast.BinOp, env: Env) -> PropSet:
+        """``"a" + b + "c"`` is a concatenation and ``"%s" % x`` a format when a string
+        literal is part of it; any other arithmetic is an undeclared operation."""
+        if isinstance(node.op, ast.Mod) and _is_text(node.left):
+            values = node.right.elts if isinstance(node.right, ast.Tuple) else [node.right]
+            return self.hooks.compose(FORMAT, self._parts(values, env))
+        leaves = _concatenated(node)
+        if isinstance(node.op, ast.Add) and any(_is_text(leaf) for leaf in leaves):
+            others = [leaf for leaf in leaves if not _is_literal(leaf)]
+            return self.hooks.compose(CONCAT, self._parts(others, env))
+        self.expression(node.left, env)
+        self.expression(node.right, env)
         return EMPTY
 
     def lambda_(self, node: ast.Lambda, env: Env) -> PropSet:
@@ -430,6 +486,10 @@ class Flow:
     def call(self, node: ast.Call, env: Env) -> PropSet:
         if self.hooks.is_declaration(node):
             return self.declared(self.hooks.declaration(node), env)
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == FORMAT and _is_literal(func.value):
+            values = [*node.args, *(kw.value for kw in node.keywords)]
+            return self.hooks.compose(FORMAT, self._parts(values, env))
         self.expression(node.func, env)
         arguments = [self.expression(argument, env) for argument in node.args]
         keywords = [(kw.arg, self.expression(kw.value, env)) for kw in node.keywords]
@@ -478,6 +538,32 @@ class Flow:
         return source
 
 
+def _is_literal(node: ast.expr) -> bool:
+    """A string literal with no interpolation."""
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _is_text(node: ast.expr) -> bool:
+    """A string literal or an f-string: what makes ``+`` a concatenation."""
+    return _is_literal(node) or isinstance(node, ast.JoinedStr)
+
+
+def _concatenated(node: ast.BinOp) -> list[ast.expr]:
+    """The operands of a left-nested chain of ``+`` (``a + b + c``)."""
+    leaves: list[ast.expr] = [node.right]
+    current: ast.expr = node.left
+    while isinstance(current, ast.BinOp) and isinstance(current.op, ast.Add):
+        leaves.append(current.right)
+        current = current.left
+    leaves.append(current)
+    leaves.reverse()
+    return leaves
+
+
+FSTRING = "fstring"
+CONCAT = "concat"
+FORMAT = "format"
+
 ASYNCHRONOUS = {ast.Await: "an await", ast.Yield: "a yield", ast.YieldFrom: "a yield from"}
 
 STATEMENTS = {
@@ -517,6 +603,8 @@ EXPRESSIONS = {
     ast.DictComp: Flow.comprehension,
     ast.GeneratorExp: Flow.comprehension,
     ast.Call: Flow.call,
+    ast.JoinedStr: Flow.fstring,
+    ast.BinOp: Flow.binary,
 }
 
 

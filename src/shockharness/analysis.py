@@ -15,7 +15,6 @@ The role scopes ``[[overrides]]`` entries written with ``roles = [...]`` and the
 MAGIC001 configuration-file exemption; it never decides whether a file is analyzed.
 """
 
-import ast
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -38,8 +37,7 @@ from shockharness.config import (
     is_opt_in,
     switched_off,
 )
-from shockharness.contracts.catalog import python_runtime_modules
-from shockharness.contracts.python_index import ProjectIndex
+from shockharness.contracts.report import ContractFile
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
@@ -80,7 +78,7 @@ from shockharness.rules.exceptions import (
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.magic_numbers import run_magic001, run_magic004
-from shockharness.rules.property_contracts import ContractFile, run_property_contracts
+from shockharness.rules.property_contracts import property_contract_findings
 from shockharness.rules.registry import (
     CATALOG_SECTIONS,
     CONTRACT_RULES,
@@ -982,29 +980,22 @@ def consistency_findings(
 def contract_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
-    """PROP001, PROP003, PROP006, PROP007 (property contracts, P1a, opt-in): declarations
-    checked at call sites and catalog sinks, reading resolved callees' own contracts from
-    the analyzed files, or from the project's files under the root for the others."""
-    parsed = [
-        p
-        for p in pendings
-        if not p.failed and p.source is not None and p.language == registry.PYTHON
-    ]
+    """PROP001, PROP003, PROP005-PROP007 (property contracts, opt-in): declarations checked
+    at call sites and catalog sinks, reading resolved callees' own contracts from the
+    analyzed files, or from the project's files under the root for the others."""
+    parsed = [p for p in pendings if not p.failed and p.source is not None]
     files: list[ContractFile] = []
+    sources: dict[str, tuple[str, SourceText]] = {}
     for pending in parsed:
+        assert pending.source is not None, "a parsed file has its source"
+        sources[pending.path] = (pending.language, pending.source)
         applies = frozenset(r.rule_id for r in CONTRACT_RULES if r.rule_id in pending.rules_applied)
         if len(applies) > 0:
-            assert pending.source is not None, "a parsed file has its source"
-            files.append(ContractFile(pending.path, pending.source, applies))
+            files.append(ContractFile(pending.path, pending.language, pending.source, applies))
     if len(files) == 0:
         return {}
     settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
-    # Each of these files parsed in the per-file phase; the same text parses again.
-    trees = {
-        p.path: ast.parse(p.source.text, filename=p.path) for p in parsed if p.source is not None
-    }
-    index = ProjectIndex(config.root, trees, python_runtime_modules(settings))
-    return run_property_contracts(files, index, settings)
+    return property_contract_findings(files, sources, config.root, settings)
 
 
 # The cross-file rules that need the call graph or the module graph (built here when

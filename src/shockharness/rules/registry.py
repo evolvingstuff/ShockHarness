@@ -2386,7 +2386,7 @@ PROP001 = RuleSpec(
     config_section=PROPERTY_CONTRACTS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=ALL_LANGUAGES,
     summary=(
         'A value reaches a parameter whose function requires a property (requires(x, "p") at '
         "the top of its body), or a catalog sink that requires one, without that property."
@@ -2433,7 +2433,7 @@ PROP003 = RuleSpec(
     config_section=PROPERTY_CONTRACTS_SECTION,
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=(PYTHON,),
+    languages=ALL_LANGUAGES,
     summary="A declaration names a property that rules.property_contracts.properties does not.",
     rationale=(
         "A misspelled property is a requirement nothing ever satisfies or checks: the silent "
@@ -2461,7 +2461,7 @@ PROP005 = RuleSpec(
     config_section=PROPERTY_CONTRACTS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=ALL_LANGUAGES,
     summary=(
         "A test bootstrap's enable(mode, [...]) lists static properties that are not the "
         'catalog\'s runtime = "static" set.'
@@ -2502,7 +2502,7 @@ PROP006 = RuleSpec(
     config_section=PROPERTY_CONTRACTS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=ALL_LANGUAGES,
     summary=(
         "A declaration the analysis cannot read: a property that is not a string literal, the "
         "wrong number of arguments, a keyword or starred argument."
@@ -2534,7 +2534,7 @@ PROP007 = RuleSpec(
     config_section=PROPERTY_CONTRACTS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=ALL_LANGUAGES,
     summary=(
         "A requires on a parameter that is not a statement at the top of the body, before any "
         "other use of the parameter, outside branches and loops."

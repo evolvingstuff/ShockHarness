@@ -1,0 +1,36 @@
+from app.markup import escape, sanitize
+from app.page import send_html
+
+
+def empty():
+    return send_html("")
+
+
+def escaped(tag):
+    return send_html(f"<b>{escape(tag)}</b>")
+
+
+def sanitized(raw):
+    return send_html(sanitize(raw))
+
+
+def interpolated(tag):
+    return send_html(f"<b>{tag}</b>")
+
+
+def mixed(tag, raw):
+    return send_html(f"<b>{tag}</b>" + sanitize(raw))
+
+
+def joined(items):
+    return send_html("".join(f"<li>{escape(i)}</li>" for i in items))
+
+
+def formatted(tag, raw):
+    send_html("<b>{}</b>".format(escape(tag)))
+    send_html("<b>%s</b>" % raw)
+
+
+def respond(response, tag):
+    response.body = f"<p>{escape(tag)}</p>"
+    response.body = f"<p>{tag}</p>"

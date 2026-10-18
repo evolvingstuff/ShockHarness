@@ -252,6 +252,20 @@ def _first_error(root: Node) -> Node | None:
     return None
 
 
+TYPESCRIPT_SUFFIXES = (".ts", ".mts", ".cts")
+
+
+def parse_tree(text: str, filename: str) -> Node:
+    """The syntax tree of a JavaScript, TypeScript or TSX file, by its suffix (property
+    contracts read the trees of the analyzed and the referenced project files)."""
+    parser = _PARSER
+    if filename.endswith(TSX_SUFFIX):
+        parser = _TSX_PARSER
+    elif filename.endswith(TYPESCRIPT_SUFFIXES):
+        parser = _TYPESCRIPT_PARSER
+    return parser.parse(text.encode("utf-8")).root_node
+
+
 def extract_javascript_facts(source: SourceText, filename: str) -> ModuleFacts:
     return _extract_facts(source, filename, _PARSER, PARSER_NAME, JAVASCRIPT_LANGUAGE)
 
