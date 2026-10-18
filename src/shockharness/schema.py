@@ -509,13 +509,24 @@ CONFIG_SCHEMA = TableField(
                         "fail_on_unknown": BoolField(),
                         "runtime_module": ListField(StrField(allow_empty=False)),
                         "allow_undeclared": BoolField(),
+                        "max_depth": IntField(minimum=1),
+                        "runtime_mode_required": EnumField(("off", "check", "verify")),
+                        "registration_module": StrField(allow_empty=True),
                         "properties": ListField(CONTRACT_PROPERTY_SCHEMA),
                         "sinks": ListField(CONTRACT_SINK_SCHEMA),
                         "compositions": ListField(CONTRACT_COMPOSITION_SCHEMA),
                         "severities": TableField(
                             fields={
                                 rule: EnumField(VERIFICATION_SEVERITIES)
-                                for rule in ("PROP001", "PROP003", "PROP005", "PROP006", "PROP007")
+                                for rule in (
+                                    "PROP001",
+                                    "PROP002",
+                                    "PROP003",
+                                    "PROP004",
+                                    "PROP005",
+                                    "PROP006",
+                                    "PROP007",
+                                )
                             },
                             required=(),
                         ),

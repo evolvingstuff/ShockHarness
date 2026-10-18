@@ -13,10 +13,17 @@ export declare function preserves<T>(result: T, source: unknown): T;
 export declare function preserves_except<T>(result: T, source: unknown, ...properties: string[]): T;
 
 /** Turn checking on, once, from test code, before any declaration has run. */
-export declare function enable(mode: "check", staticProperties: string[]): void;
+export declare function enable(mode: "check" | "verify", staticProperties: string[]): void;
+
+/** The predicate verify mode runs for a property; registered once, at startup. */
+export declare function register(
+  name: string,
+  predicate: (value: unknown) => boolean,
+  description: string,
+): void;
 
 export interface ContractsReport {
-  mode: "off" | "check";
+  mode: "off" | "check" | "verify";
   declarations: number;
   static_skips: Record<string, number>;
 }

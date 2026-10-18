@@ -6,6 +6,21 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Property contracts, milestone P2 (spec v0.8):
+  - **Transitive results.** A callee's result is followed through its own calls, up to
+    `max_depth` (3); deeper calls and recursion are unknown. A function returning
+    another's result carries the property through.
+  - **Await and generators (§5.2c).** `await` of a project async function gives its
+    result. A `for`/`for await` over a project generator binds its item set; `yield
+    from`/`yield*` delegate. A coroutine used without `await` carries nothing.
+  - **New rules:** `PROP002` (a produces outside the declared producers) and `PROP004`
+    (returns with different properties).
+  - **PROP005's predicate half:** with `runtime_mode_required = "verify"`, each
+    non-static property the `registration_module` never registers.
+  - **`verify` mode and `register(name, predicate, description)`** in both runtime files.
+  - A TypeScript fixture, the §13.2 metamorphic tests, and `docs/property-contracts.md`.
+  - VERIFY003 reports `max_depth` raised and `runtime_mode_required` lowered.
+  - The `"<name>[]"` target matches by the receiver's final identifier (decision 43).
 - Property contracts, milestone P1b (JavaScript; spec v0.7):
   - **JavaScript and TypeScript files.** `requires` / `produces` / `preserves` /
     `preserves_except` are checked at call sites. Contracts are read one hop through

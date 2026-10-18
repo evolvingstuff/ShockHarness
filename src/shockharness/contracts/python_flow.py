@@ -13,8 +13,8 @@ contract, a sink, a library) is the caller's :class:`Hooks`.
 """
 
 import ast
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from shockharness.contracts.catalog import PRESERVES, PRESERVES_EXCEPT, PRODUCES, REQUIRES
@@ -24,28 +24,61 @@ from shockharness.contracts.catalog import PRESERVES, PRESERVES_EXCEPT, PRODUCES
 class PropSet:
     known: frozenset[str]
     exact: bool
-    why: str  # what made an inexact set inexact; "" when exact
+    why: str  # what made an inexact set inexact (or a note on an exact one); "" otherwise
     # The value may be a generator (a generator expression, a generator function's
-    # result): a library call that consumes it (list, next, sorted) is unknown too.
+    # result): a library call or a comprehension that consumes it is unknown (§5.2c).
     lazy: bool
+    # A resolved generator function's result: the set its items carry, which a for or an
+    # async for binds (the intersection over its yields).
+    items: "PropSet | None"
+    # A resolved async function's result (a coroutine or a Promise): what awaiting gives.
+    awaited: "PropSet | None"
 
     def render(self) -> str:
         return "{" + ", ".join(sorted(self.known)) + "}"
 
 
-EMPTY = PropSet(frozenset(), exact=True, why="", lazy=False)
+def known_set(known: frozenset[str]) -> PropSet:
+    """Exactly these properties."""
+    return PropSet(known, exact=True, why="", lazy=False, items=None, awaited=None)
+
+
+EMPTY = known_set(frozenset())
 # A local name before its first binding on a path: where paths meet, it gives way to the
 # set of the paths that bound it (reading it on the others raises).
-UNBOUND = PropSet(frozenset(), exact=False, why="a name read before it is bound", lazy=False)
+UNBOUND = PropSet(
+    frozenset(),
+    exact=False,
+    why="a name read before it is bound",
+    lazy=False,
+    items=None,
+    awaited=None,
+)
 
 
 def unknown(why: str) -> PropSet:
-    return PropSet(frozenset(), exact=False, why=why, lazy=False)
+    return PropSet(frozenset(), exact=False, why=why, lazy=False, items=None, awaited=None)
 
 
 def lazy_unknown(why: str) -> PropSet:
-    """A generator: its items, and anything a library call builds from it, are unknown."""
-    return PropSet(frozenset(), exact=False, why=why, lazy=True)
+    """A generator whose items are unknown."""
+    return PropSet(frozenset(), exact=False, why=why, lazy=True, items=None, awaited=None)
+
+
+def generator(items: PropSet) -> PropSet:
+    """What calling a resolved generator function gives: nothing of its own, and items."""
+    return PropSet(frozenset(), exact=True, why="", lazy=True, items=items, awaited=None)
+
+
+def coroutine(result: PropSet) -> PropSet:
+    """What calling a resolved async function gives: nothing until it is awaited."""
+    return PropSet(frozenset(), exact=True, why="", lazy=False, items=None, awaited=result)
+
+
+def _meet_parts(first: PropSet | None, second: PropSet | None) -> PropSet | None:
+    if first is None or second is None:
+        return None
+    return meet(first, second)
 
 
 def meet(first: PropSet, second: PropSet) -> PropSet:
@@ -58,15 +91,43 @@ def meet(first: PropSet, second: PropSet) -> PropSet:
         exact=first.exact and second.exact,
         why=why,
         lazy=first.lazy or second.lazy,
+        items=_meet_parts(first.items, second.items),
+        awaited=_meet_parts(first.awaited, second.awaited),
     )
 
 
 def element_of(container: PropSet, what: str) -> PropSet:
-    """An element taken out of a value (a loop variable, an unpacked name): nothing when
-    the container is known, unknown when it is not (it may be a generator)."""
+    """An element taken out of a value (an unpacked name, a comprehension variable):
+    nothing when the container is known, unknown when it is not or is a generator."""
+    if container.lazy:
+        return unknown(f"{what} of a generator consumed here (only a for loop binds its items)")
     if container.exact:
         return EMPTY
     return unknown(f"{what} of a value the analysis cannot follow ({container.why})")
+
+
+def loop_element(container: PropSet, what: str) -> PropSet:
+    """A for or async for variable: a resolved generator's item set, else an element."""
+    if container.items is not None:
+        return container.items
+    return element_of(container, what)
+
+
+def awaited(value: PropSet) -> PropSet:
+    """``await x``: a resolved coroutine gives its result; otherwise await is transparent."""
+    if value.awaited is not None:
+        return value.awaited
+    return value
+
+
+def intersection(results: Sequence[PropSet]) -> PropSet:
+    """The intersection of a unit's returns or of its yields (none: nothing)."""
+    if len(results) == 0:
+        return EMPTY
+    found = results[0]
+    for value in results[1:]:
+        found = meet(found, value)
+    return found
 
 
 Env = dict[str, PropSet]
@@ -184,7 +245,9 @@ class Flow:
         self.hooks = hooks
         self.reporting = True
         self.loops: list[LoopFrame] = []
-        self.returns: list[PropSet] = []
+        # The set at each return and yield, from the last walk past it (a loop's final pass).
+        self.returns: dict[ast.AST, PropSet] = {}
+        self.yields: dict[ast.AST, PropSet] = {}
 
     # -- statements -------------------------------------------------------------------
 
@@ -261,7 +324,7 @@ class Flow:
         value = EMPTY
         if node.value is not None:
             value = self.expression(node.value, env)
-        self.returns.append(value)
+        self.returns[node] = value
         return None
 
     def raise_(self, node: ast.Raise, env: Env) -> None:
@@ -294,7 +357,9 @@ class Flow:
             if item.optional_vars is not None:
                 bound = element_of(value, "the value a with statement binds")
                 if isinstance(node, ast.AsyncWith):
-                    bound = unknown("an async with binding (async semantics are P2)")
+                    bound = unknown(
+                        "an async with binding (what __aenter__ returns is not followed)"
+                    )
                 for name in _bound_names(item.optional_vars):
                     env[name] = bound
         return self.block(node.body, env)
@@ -347,9 +412,9 @@ class Flow:
 
     def for_(self, node: ast.For | ast.AsyncFor, env: Env) -> Env | None:
         iterated = self.expression(node.iter, env)
-        element = element_of(iterated, "an item")
-        if isinstance(node, ast.AsyncFor):
-            element = unknown("an async for item (async semantics are P2)")
+        element = loop_element(iterated, "an item")
+        if isinstance(node, ast.AsyncFor) and iterated.items is None:
+            element = unknown("an async for item of a value that is not a resolved async generator")
         return self._loop(node, env, element, exits=True)
 
     def while_(self, node: ast.While, env: Env) -> Env | None:
@@ -435,10 +500,23 @@ class Flow:
     def lambda_(self, node: ast.Lambda, env: Env) -> PropSet:
         return EMPTY
 
-    def asynchronous(self, node: ast.Await | ast.Yield | ast.YieldFrom, env: Env) -> PropSet:
+    def await_(self, node: ast.Await, env: Env) -> PropSet:
+        return awaited(self.expression(node.value, env))
+
+    def yield_(self, node: ast.Yield, env: Env) -> PropSet:
+        value = EMPTY  # a bare yield yields None
         if node.value is not None:
-            self.expression(node.value, env)
-        return unknown(f"{ASYNCHRONOUS[type(node)]} (await and generator semantics are P2)")
+            value = self.expression(node.value, env)
+        self.yields[node] = value
+        return unknown("the value sent into a generator")
+
+    def yield_from(self, node: ast.YieldFrom, env: Env) -> PropSet:
+        delegated = self.expression(node.value, env)
+        items = unknown("yield from a generator the analysis cannot follow")
+        if delegated.items is not None:
+            items = delegated.items
+        self.yields[node] = items
+        return unknown("the value a delegated generator returns")
 
     def named(self, node: ast.NamedExpr, env: Env) -> PropSet:
         value = self.expression(node.value, env)
@@ -478,9 +556,9 @@ class Flow:
         for element in elements:
             self.expression(element, inner)
         if isinstance(node, ast.GeneratorExp):
-            return lazy_unknown("a generator expression (generator semantics are P2)")
+            return lazy_unknown("a generator expression (its items are not followed)")
         if asynchronous:
-            return unknown("an async comprehension (async semantics are P2)")
+            return unknown("an async comprehension (its items are not followed)")
         return EMPTY
 
     def call(self, node: ast.Call, env: Env) -> PropSet:
@@ -518,22 +596,12 @@ class Flow:
     ) -> PropSet:
         if declaration.kind == PRODUCES:
             value = sets[0]
-            return PropSet(
-                value.known | declaration.properties,
-                exact=value.exact,
-                why=value.why,
-                lazy=value.lazy,
-            )
+            return replace(value, known=value.known | declaration.properties)
         source = sets[1]
         if not isinstance(arguments[1], ast.Name):
             return unknown("preserves names a source that is not a local value")
         if declaration.kind == PRESERVES_EXCEPT:
-            return PropSet(
-                source.known - declaration.properties,
-                exact=source.exact,
-                why=source.why,
-                lazy=source.lazy,
-            )
+            return replace(source, known=source.known - declaration.properties)
         assert declaration.kind == PRESERVES, f"unexpected declaration {declaration.kind}"
         return source
 
@@ -564,8 +632,6 @@ FSTRING = "fstring"
 CONCAT = "concat"
 FORMAT = "format"
 
-ASYNCHRONOUS = {ast.Await: "an await", ast.Yield: "a yield", ast.YieldFrom: "a yield from"}
-
 STATEMENTS = {
     ast.Assign: Flow.assign,
     ast.AnnAssign: Flow.annotated,
@@ -592,9 +658,9 @@ EXPRESSIONS = {
     ast.Name: Flow.name,
     ast.Constant: Flow.constant,
     ast.Lambda: Flow.lambda_,
-    ast.Await: Flow.asynchronous,
-    ast.Yield: Flow.asynchronous,
-    ast.YieldFrom: Flow.asynchronous,
+    ast.Await: Flow.await_,
+    ast.Yield: Flow.yield_,
+    ast.YieldFrom: Flow.yield_from,
     ast.NamedExpr: Flow.named,
     ast.BoolOp: Flow.either,
     ast.IfExp: Flow.conditional,
@@ -608,15 +674,22 @@ EXPRESSIONS = {
 }
 
 
-def run_unit(hooks: Hooks, body: Sequence[ast.stmt], entry: Env) -> PropSet:
-    """Walk one unit; its result set (the intersection over its returns, and falling off
-    the end, which returns None)."""
+@dataclass(frozen=True)
+class Summary:
+    """One unit walked: its result set (the intersection over its returns, and falling
+    off the end, which returns None), its item set (over its yields) and each return."""
+
+    result: PropSet
+    items: PropSet
+    returns: Mapping[ast.AST, PropSet]
+
+
+def run_unit(hooks: Hooks, body: Sequence[ast.stmt], entry: Env) -> Summary:
     flow = Flow(hooks)
     out = flow.block(body, entry)
-    results = list(flow.returns)
+    results = list(flow.returns.values())
     if out is not None or len(results) == 0:
         results.append(EMPTY)
-    result = results[0]
-    for value in results[1:]:
-        result = meet(result, value)
-    return result
+    return Summary(
+        intersection(results), intersection(list(flow.yields.values())), dict(flow.returns)
+    )

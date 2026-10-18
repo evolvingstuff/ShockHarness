@@ -11,10 +11,10 @@ result unknown.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from shockharness.contracts.catalog import JAVASCRIPT, PYTHON, TYPESCRIPT, Catalog, Composition
-from shockharness.contracts.python_flow import EMPTY, Part, PropSet
+from shockharness.contracts.python_flow import EMPTY, Part, PropSet, known_set
 
 # A TypeScript file is composed by the JavaScript rules as well as its own.
 SAME_RULES = {
@@ -75,7 +75,7 @@ class Compositions:
 
     def literal_set(self) -> PropSet:
         """What a string literal with no interpolation carries."""
-        return PropSet(self.literal, exact=True, why="", lazy=False)
+        return known_set(self.literal)
 
     def compose(self, operation: str, parts: Sequence[Part]) -> PropSet:
         if operation not in self.rules:
@@ -90,4 +90,4 @@ class Compositions:
                 continue
             exact = exact and outcome.exact
             notes.append(f"not {produces!r}: {outcome.why}")
-        return PropSet(frozenset(carried), exact=exact, why="; ".join(notes), lazy=False)
+        return replace(known_set(frozenset(carried)), exact=exact, why="; ".join(notes))

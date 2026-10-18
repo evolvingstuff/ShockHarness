@@ -14,3 +14,7 @@ callee sink, `app.page.send_html:0`, and an assignment target, `body`.
   PROP001.
 - `respond`: the target `response.body`, satisfied for the escaped f-string and PROP001
   for the raw one.
+- `headers_out`: the target `headers[]` matches `response.headers[name]` by the
+  receiver's final identifier (decision 43). `header_value(raw)` passes. `= raw` and
+  `+= raw` are PROP001.
+

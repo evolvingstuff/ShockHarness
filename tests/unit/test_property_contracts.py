@@ -99,6 +99,8 @@ def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None
         "python/fstring",
         "python/generators",
         "python/stats",
+        "python/transitive",
+        "typescript/stats",
     ]
     for case in CASE_NAMES:
         for name in (".shockharness.toml", "expected.json", "rationale.md"):
@@ -487,3 +489,43 @@ def test_each_loosening_of_the_p1b_keys_is_reported(
     after = contracts_config(empty_root, COMPOSED.replace(old, new, 1))
     found = loosenings(before.values, before.deviations, after.values, after.deviations)
     assert any(needle in item.message for item in found), [i.message for i in found]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "needle"),
+    [
+        ("enabled = true\n", "enabled = true\nmax_depth = 5\n", "max_depth raised from 3 to 5"),
+        (
+            "enabled = true\n",
+            'enabled = true\nruntime_mode_required = "off"\n',
+            "runtime_mode_required changed from 'check' to 'off'",
+        ),
+    ],
+)
+def test_p2_keys_loosen(empty_root: Path, old: str, new: str, needle: str) -> None:
+    before = contracts_config(empty_root, ENABLED)
+    after = contracts_config(empty_root, ENABLED.replace(old, new, 1))
+    found = loosenings(before.values, before.deviations, after.values, after.deviations)
+    assert any(needle in item.message for item in found), [i.message for i in found]
+
+
+def test_prop005_reports_properties_verify_mode_has_no_predicate_for(empty_root: Path) -> None:
+    registrations = (
+        "from app.contracts import register\n\n"
+        'register("redacted", lambda text: "@" not in text, "no addresses")\n'
+    )
+    files = {"app/__init__.py": "", "app/text.py": TEXT, "app/predicates.py": registrations}
+    extra = (
+        'runtime_mode_required = "verify"\nregistration_module = "app.predicates"\n'
+        + "\n"
+        + PROPERTY.format(name="other").replace('"static"', '"check"')
+        + PROPERTY.format(name="third").replace('"static"', '"verify"')
+        + '\n[tool.shockharness.rules.property_contracts.severities]\nPROP005 = "review"\n'
+    )
+    report = run(empty_root, files, extra)
+    found = [f for f in report.findings if f.rule_id == "PROP005"]
+    assert [f.path for f in found] == [".shockharness.toml", ".shockharness.toml"]
+    assert ["'other'" in found[0].message, "'third'" in found[1].message] == [True, True]
+    assert found[0].span.line == 8  # the registration_module line
+    with pytest.raises(ConfigError, match="needs the module that registers"):
+        contracts_config(empty_root, 'runtime_mode_required = "verify"\n')

@@ -24,9 +24,10 @@ from shockharness.schema import ConfigIssue
 SECTION_PATH = "rules.property_contracts"
 PROPERTY_NAME = re.compile(r"[a-z][a-z0-9_]*")
 PYTHON_REFERENCE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+")
-# An assignment target: an attribute on any receiver ("innerHTML"), or a subscript of a
-# named receiver ("headers[]", "os.environ[]").
-TARGET = re.compile(r"(?P<attribute>[A-Za-z_$][\w$]*)|(?P<receiver>[A-Za-z_$][\w$.]*)\[\]")
+# An assignment target (decision 43): an attribute on any receiver ("innerHTML" matches
+# x.innerHTML = v), or a subscript of a receiver by its final identifier ("headers[]"
+# matches headers[k] = v and req.headers[k] = v).
+TARGET = re.compile(r"(?P<attribute>[A-Za-z_$][\w$]*)|(?P<receiver>[A-Za-z_$][\w$]*)\[\]")
 POSITION_SEPARATOR = ":"
 PYTHON = "python"
 JAVASCRIPT = "javascript"
@@ -269,6 +270,14 @@ def catalog_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
         *_sink_issues(settings["sinks"], names),
         *_composition_issues(settings["compositions"], names),
     ]
+    if settings["runtime_mode_required"] == "verify" and settings["registration_module"] == "":
+        issues.append(
+            ConfigIssue(
+                f"{SECTION_PATH}.registration_module",
+                'runtime_mode_required = "verify" needs the module that registers the '
+                "predicates (PROP005 compares it with the catalog)",
+            )
+        )
     if settings["enabled"] is True and len(settings["runtime_module"]) == 0:
         issues.append(
             ConfigIssue(
@@ -445,13 +454,30 @@ def _python_references(settings: Mapping[str, Any]) -> list[tuple[str, str, bool
     return found
 
 
+def _registration_issue(root: Path, settings: Mapping[str, Any]) -> ConfigIssue | None:
+    """``registration_module`` names a project file: a dotted Python module or a path."""
+    module = str(settings["registration_module"])
+    if module == "":
+        return None
+    if is_javascript_path(module):
+        exists = (root / module).is_file()
+    else:
+        exists = module_file(root, module.split(".")) is not None
+    if exists:
+        return None
+    return ConfigIssue(f"{SECTION_PATH}.registration_module", f"{module!r} is not a project file")
+
+
 def python_reference_issues(root: Path, values: Mapping[str, Any]) -> list[ConfigIssue]:
     """Unresolved Python references of an enabled section; nothing when it is off."""
     settings = values["rules"]["property_contracts"]
     if settings["enabled"] is not True:
         return []
     issues = [
-        _reference_issue(root, where, reference, must_be_project)
-        for where, reference, must_be_project in _python_references(settings)
+        _registration_issue(root, settings),
+        *(
+            _reference_issue(root, where, reference, must_be_project)
+            for where, reference, must_be_project in _python_references(settings)
+        ),
     ]
     return [issue for issue in issues if issue is not None]

@@ -4801,3 +4801,122 @@ shockharness 0.9.0 diff: base 22e7ac7 (22e7ac74cda5) -> head HEAD (5145e83abd60)
   complexity regressions against base: 0 (gates.complexity_regressions = "warn")
 gate: PASS (exit 0)
 ```
+
+## Property contracts, milestone P2 — DONE (2026-10-17)
+
+On Tom's request, from the §14 P2 row of the spec (v0.8, which also records P1b's three
+choices as decisions 41–43).
+
+**Built:**
+* **Transitive results** (§5.3), both languages.
+  * A resolved callee's result is computed by walking it with its own calls followed.
+    The direct callee is one crossing, and up to `max_depth` crossings are followed
+    (new key, default 3). Deeper calls are unknown ("more than max_depth = N calls
+    away"); recursion is unknown ("calls itself").
+  * Contracts (header `requires`) and results are memoized separately.
+  * The P1a shortcut ("no `produces`/`preserves`: the result carries nothing") is gone, so
+    a function returning another's result carries it through.
+* **Await and generators** (§5.2c), both languages. A property set now carries an item
+  set (a resolved generator) and an awaited set (a resolved async function).
+  * `await` of a coroutine or Promise gives its result; `await` is otherwise transparent.
+  * `for`/`async for`/`for...of`/`for await` over a resolved generator binds its item set
+    (the intersection over its yields). `yield from`/`yield*` delegate.
+  * Other consumption (`list(gen())`, comprehensions) is unknown.
+  * A coroutine used without `await` carries nothing.
+* **PROP002** (review): a `produces` outside the property's non-empty producers list.
+  Python units are named `module.function` and `module.Class.method`; JavaScript units
+  `path:export`, with re-exports resolved.
+* **PROP004** (review): at each explicit return whose exact set lacks a property another
+  return of the function carries.
+* **verify mode and `register`**, both runtime files.
+  * `enable("verify", static)` is accepted.
+  * `register(name, predicate, description)`: a second registration raises.
+  * `produces` runs the predicate before recording; `requires` runs it after the
+    presence check.
+  * A scalar (Python) or primitive (JavaScript) is checked by its predicate alone.
+  * A non-static property with no predicate raises.
+  * The three runtime files still pass `check` under `strict` with 0 findings.
+* **PROP005, the predicate half** (`rules/property_registrations.py`).
+  * With `runtime_mode_required = "verify"` (new key, default `"check"`), each
+    non-static property that `registration_module` (new key; a Python module or a JS
+    path) never passes as a literal to the runtime's `register` is reported on the
+    configuration file, at the `registration_module` line.
+  * `verify` without a registration module is a configuration error, and a registration
+    module that is not a project file is a reference error.
+* **VERIFY003**: `max_depth` raised and `runtime_mode_required` lowered.
+* **v0.8 alignment.** `"<name>[]"` matches by the receiver's final identifier
+  (`req.headers[k]`). The innerHTML fixture adds `sanitize(a) + sanitize(b)` (PROP001);
+  the f-string fixture adds `headers[k] = v` and `+=`.
+* **Fixtures:**
+  * `python/transitive`: depth, recursion, PROP002, PROP004;
+  * `typescript/stats`: §11.4, with types, `as`, `!` and `satisfies`;
+  * `python/generators`, extended: the async-generator redaction sink, `yield from`, an
+    un-awaited coroutine;
+  * `javascript/calls/static/js/stream.js`: await, `function*`, `yield*`, `for await`,
+    PROP002.
+* **Tests:** `tests/unit/test_property_contracts_metamorphic.py` (§13.2), verify-mode
+  tests for both runtimes, PROP005 predicates, P2 loosenings.
+* **Docs:** `docs/property-contracts.md`, the adopter's guide with the §5.3 unknown
+  expectations and the §6.3 runtime rules; rules, configuration, README, CHANGELOG,
+  ideas.
+
+**The milestone's "done when" (§14):**
+
+| Criterion | Evidence |
+|---|---|
+| §11.2 yields its `unknown` | `python/stats` `through_registry` (unknown: the callee is computed); `javascript/calls` `throughRegistry` |
+| A unit that returns another unit's result without redeclaring carries the property through | `python/transitive` `one` (`wrapped` returns `redact(...)`); `test_extracting_a_helper_that_produces_keeps_the_property` (two levels) |
+| An async-generator fixture with a redaction sink yields the item-set result | `python/generators` `forward`: `async for` over `redacted_stream` into `app.provider.send:0` passes, and over `raw_stream` it is PROP001; the JS `for await` case in `stream.js` |
+| The metamorphic extraction tests pass | `tests/unit/test_property_contracts_metamorphic.py`: rename, extract a producing helper, extract a destroying helper, an unrelated `preserves_except` (and the P1a reorder test) |
+
+**Choices where the spec was ambiguous** (for Tom and Fable):
+1. **Recursion is unknown**, not iterated: §5.3 says "result summaries computed to a
+   fixed point". Following recursion to a fixed point is sound only from a pessimistic
+   start, which gives the same unknown for the cases met so far.
+2. **Counting crossings.** The checked unit's direct callee is crossing 1; with
+   `max_depth = 3`, the callee's callee's callee is the last one followed.
+3. **Properties do not flow through parameters.** `def ident(x): return x` gives
+   nothing, whatever the argument carries (a parameter without `requires` starts empty,
+   §5.2). Passing a property through takes `preserves` or a `requires`.
+4. **PROP002 producers are matched by name.** Module-level code, nested functions and
+   JavaScript methods are never producers.
+5. **PROP004 covers explicit returns with exact sets.** Falling off the end, unknown
+   returns and inconsistent yields are not reported.
+6. **PROP005's predicate half** is reported on the configuration file (the catalog is
+   what disagrees). "Needs a predicate" means every non-static property, because the
+   runtime raises in verify mode for any such property without one.
+7. **A check-level property on a scalar in verify mode** runs its predicate instead of
+   raising the catalog-mistake error, since a predicate exists to check it.
+8. **`max_depth` raised is a loosening**, as §8 lists it: fewer unknown findings can
+   gate.
+
+**Limitations:**
+* Methods, constructors and `this`/`self` attributes are unknown.
+* Catalog preserving operations are not implemented.
+* The browser-harness tests are still the by-hand check recorded under P1b (CI would
+  need Playwright or Puppeteer).
+* `complete`, `complete_paths`, PROP008, the skills and the behavior-suite cases are P3.
+
+**Evidence** (2026-10-17, macOS arm64, CPython 3.14.7, Node 24.7.0):
+
+```text
+$ ruff check src tests scripts evals
+All checks passed!
+$ ruff format --check src tests scripts evals
+204 files already formatted
+$ pytest -q
+1296 passed in 66.24s (0:01:06)
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 198 file(s), 198 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+$ shockharness config validate          # exit 0
+
+# on a scratch clone with this tree committed as HEAD:
+$ shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD
+shockharness 0.9.0 diff: base refs/tags/shockharness-policy-accepted (cb177429c668) -> head HEAD (a1a55c1260b0); 11 new, 13 fixed, 192 unchanged finding(s)
+gate: PASS (exit 0)
+$ shockharness diff --base 60cb220 --head HEAD
+shockharness 0.9.0 diff: base 60cb2207e9a3200218c14db29dfc5b8efb49af93 (60cb2207e9a3) -> head HEAD (a1a55c1260b0); 0 new, 0 fixed, 200 unchanged finding(s)
+  complexity regressions against base: 0 (gates.complexity_regressions = "warn")
+gate: PASS (exit 0)
+```

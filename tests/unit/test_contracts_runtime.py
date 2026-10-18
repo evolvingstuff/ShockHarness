@@ -59,16 +59,35 @@ def test_identity_only_before_enable(contracts: ModuleType) -> None:
     assert contracts.report() == {"mode": "off", "declarations": 4, "static_skips": {}}
 
 
-def test_enable_refuses_a_bad_mode_verify_a_second_call_and_a_late_call(
-    contracts: ModuleType,
-) -> None:
-    with pytest.raises(contracts.ContractError, match="takes 'check'"):
+def test_enable_refuses_a_bad_mode_and_a_second_call(contracts: ModuleType) -> None:
+    with pytest.raises(contracts.ContractError, match="takes 'check' or 'verify', not 'off'"):
         contracts.enable("off", [])
-    with pytest.raises(contracts.ContractError, match="verify mode"):
-        contracts.enable("verify", [])
     contracts.enable("check", [])
     with pytest.raises(contracts.ContractError, match="already called"):
-        contracts.enable("check", [])
+        contracts.enable("verify", [])
+
+
+def test_verify_mode_runs_predicates(contracts: ModuleType) -> None:
+    contracts.register("positive", lambda value: min(value) > 0, "every element is positive")
+    contracts.register("short", lambda value: len(value) < len("abcdef"), "under six characters")
+    with pytest.raises(contracts.ContractError, match="already registered"):
+        contracts.register("short", len, "again")
+    contracts.enable("verify", [])
+    good = contracts.produces([1, 2], "positive")
+    contracts.requires(good, "positive")
+    with pytest.raises(contracts.ContractError, match="does not hold for this value"):
+        contracts.produces([0, 1], "positive")  # a producer may not claim what is false
+    changed = good
+    changed.append(-1)  # the same object, now false: requires runs the predicate again
+    with pytest.raises(contracts.ContractError, match="every element is positive"):
+        contracts.requires(changed, "positive")
+    text = contracts.produces("abc", "short")  # a string: checked by its predicate alone
+    contracts.requires(text, "short")
+    with pytest.raises(contracts.ContractError, match="under six characters"):
+        contracts.requires("abcdefgh", "short")
+    with pytest.raises(contracts.ContractError, match="no predicate registered for 'other'"):
+        contracts.produces(Record(), "other")
+    assert contracts.report()["mode"] == "verify"
 
 
 def test_enable_after_a_declaration_ran_raises(contracts: ModuleType) -> None:

@@ -27,8 +27,14 @@
 // property) is never recorded or checked; each skip is counted and report() returns the
 // counts. A property not listed there that reaches a primitive (a string, number,
 // boolean, bigint, symbol, null or undefined) throws, because that is a catalog mistake
-// rather than a program state. Objects are tracked in a WeakMap, so a collected value is
-// forgotten. Verify mode (predicates) is a later milestone.
+// rather than a program state (in check mode). Objects are tracked in a WeakMap, so a
+// collected value is forgotten.
+//
+// Verify mode (enable("verify", staticProperties)) does what check mode does and also runs
+// each property's predicate, registered once at startup with register(name, predicate,
+// description): produces runs it before recording, requires after the presence check. A
+// primitive is checked by its predicate alone. A non-static property with no registered
+// predicate throws in verify mode.
 
 const MODE_OFF = "off";
 const MODE_CHECK = "check";
@@ -62,6 +68,7 @@ class Registry {
     this.statics = new Set();
     this.skips = new Map();
     this.records = new WeakMap();
+    this.predicates = new Map();
   }
 
   recorded(value) {
@@ -73,6 +80,9 @@ class Registry {
   }
 
   record(value, properties) {
+    if (isPrimitive(value) || properties.length === 0) {
+      return; // verify mode: a primitive is checked by its predicates, never recorded
+    }
     this.records.set(value, new Set(properties));
   }
 
@@ -86,7 +96,7 @@ class Registry {
         this.skips.set(name, this.skips.get(name) + 1);
         continue;
       }
-      if (isPrimitive(value)) {
+      if (isPrimitive(value) && this.mode === MODE_CHECK) {
         throw new ContractError(
           `'${name}' is a check-level property but ${typeName(value)} values cannot carry ` +
             'runtime properties; mark it runtime = "static" or "verify"',
@@ -96,6 +106,24 @@ class Registry {
       checked.push(name);
     }
     return checked;
+  }
+
+  verified(properties, value) {
+    if (this.mode !== MODE_VERIFY) {
+      return;
+    }
+    for (const name of [...properties].sort()) {
+      if (!this.predicates.has(name)) {
+        throw new ContractError(`no predicate registered for '${name}'`, name);
+      }
+      const entry = this.predicates.get(name);
+      if (!entry.predicate(value)) {
+        throw new ContractError(
+          `'${name}' does not hold for this value: ${entry.description}`,
+          name,
+        );
+      }
+    }
   }
 }
 
@@ -112,11 +140,11 @@ export function enable(mode, staticProperties) {
       null,
     );
   }
-  if (mode === MODE_VERIFY) {
-    throw new ContractError("verify mode (predicates) is not available in this version", null);
-  }
-  if (mode !== MODE_CHECK) {
-    throw new ContractError(`enable takes '${MODE_CHECK}', not '${String(mode)}'`, null);
+  if (mode !== MODE_CHECK && mode !== MODE_VERIFY) {
+    throw new ContractError(
+      `enable takes '${MODE_CHECK}' or '${MODE_VERIFY}', not '${String(mode)}'`,
+      null,
+    );
   }
   if (REGISTRY.mode !== MODE_OFF) {
     throw new ContractError("enable was already called; it is called once per page", null);
@@ -129,7 +157,22 @@ export function enable(mode, staticProperties) {
     );
   }
   REGISTRY.statics = new Set(staticProperties);
-  REGISTRY.mode = MODE_CHECK;
+  REGISTRY.mode = mode;
+}
+
+// The predicate verify mode runs for a property; registered once, at startup. The
+// predicate must be pure and must not change the value.
+export function register(name, predicate, description) {
+  if (typeof name !== "string" || typeof description !== "string") {
+    throw new ContractError("register takes a name, a predicate and a description", null);
+  }
+  if (typeof predicate !== "function") {
+    throw new ContractError("register takes a name, a predicate and a description", null);
+  }
+  if (REGISTRY.predicates.has(name)) {
+    throw new ContractError(`a predicate for '${name}' is already registered`, name);
+  }
+  REGISTRY.predicates.set(name, { predicate, description });
 }
 
 export function report() {
@@ -142,7 +185,7 @@ export function report() {
 
 function checking() {
   REGISTRY.declarations += 1;
-  return REGISTRY.mode === MODE_CHECK;
+  return REGISTRY.mode !== MODE_OFF;
 }
 
 export function requires(value, ...properties) {
@@ -150,11 +193,13 @@ export function requires(value, ...properties) {
     return value;
   }
   const recorded = REGISTRY.recorded(value);
-  const missing = REGISTRY.tracked(properties, value).filter((name) => !recorded.has(name));
+  const required = REGISTRY.tracked(properties, value);
+  const missing = isPrimitive(value) ? [] : required.filter((name) => !recorded.has(name));
   if (missing.length > 0) {
     const names = missing.sort().map((name) => `'${name}'`).join(", ");
     throw new ContractError(`the value does not carry ${names}`, missing[0]);
   }
+  REGISTRY.verified(required, value);
   return value;
 }
 
@@ -163,9 +208,8 @@ export function produces(value, ...properties) {
     return value;
   }
   const added = REGISTRY.tracked(properties, value);
-  if (added.length > 0) {
-    REGISTRY.record(value, [...REGISTRY.recorded(value), ...added]);
-  }
+  REGISTRY.verified(added, value);
+  REGISTRY.record(value, [...REGISTRY.recorded(value), ...added]);
   return value;
 }
 

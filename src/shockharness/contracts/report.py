@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from shockharness.contracts.python_flow import PropSet
+from shockharness.contracts.python_flow import PropSet, known_set
 from shockharness.findings import STATUS_UNKNOWN, STATUS_VIOLATION, Finding
 from shockharness.ir.model import CONFIDENCE_EXACT, Span
 from shockharness.rules.registry import PROP001, PROP003, RuleSpec
@@ -131,3 +131,27 @@ class Reporter:
             f"{value.why}"
         )
         self.add(PROP001, node, message, STATUS_UNKNOWN)
+
+
+CONSISTENT_RETURNS = 2  # PROP004 compares two or more returns
+
+
+def inconsistent_returns(name: str, returns: Mapping[Any, PropSet]) -> list[tuple[Any, str]]:
+    """PROP004: each return lacking a property another return of the function carries
+    (exact sets only; the function's result is their intersection)."""
+    exact = {node: value for node, value in returns.items() if value.exact}
+    if len(exact) < CONSISTENT_RETURNS:
+        return []
+    union = frozenset(p for value in exact.values() for p in value.known)
+    common = frozenset.intersection(*(value.known for value in exact.values()))
+    found: list[tuple[Any, str]] = []
+    for node, value in exact.items():
+        missing = union - value.known
+        if len(missing) > 0:
+            shared = known_set(common).render()
+            message = (
+                f"this return of {name} carries {value.render()}, without {quoted(missing)} "
+                f"that another return carries; the result carries only {shared}"
+            )
+            found.append((node, message))
+    return found

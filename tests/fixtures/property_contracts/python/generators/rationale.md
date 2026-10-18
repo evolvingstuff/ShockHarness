@@ -1,15 +1,22 @@
-# Await, generators and .join are unknown in P1a (spec §5.2c, §5.2a)
+# Await, generators and async generators (spec §5.2c, P2)
 
-P1 does not define these semantics, so every such construct yields `unknown`, which is
-reported, never silent:
+The runtime module is named by a package name (`contracts_runtime`), not a path.
 
-- `awaited`: an `await`.
-- `generated`: items of a call to a generator function.
-- `consumed`: `list(...)` of a generator.
-- `expression`: `sorted(...)` of a generator expression.
-- `asynchronous_for`: an `async for` item.
-- `joined`: a `.join` build is not a composition in this release.
-
-`destroyed` is the control: `html.escape` is a library call, which carries nothing, so it
-is a violation, not unknown. The runtime module is named by a package name
-(`contracts_runtime`), not a path.
+- `awaited`: `await fetch_redacted(raw)`, where `fetch_redacted` is a project async
+  function. The await gives that function's result, so this is satisfied.
+- `generated`: `for chunk in chunks([raw])`. The loop variable takes the generator's
+  item set, the intersection over its yields, so this is satisfied.
+- `consumed`, `list(...)` of a generator, is unknown: only a for loop binds a
+  generator's items in this release.
+- `expression`, `sorted(...)` of a generator expression, is unknown.
+- `asynchronous_for`: an `async for` over a parameter, not a resolved async generator,
+  is unknown.
+- `joined`: a `.join` build is unknown.
+- `destroyed`: `html.escape` is a library call and carries nothing, so this is PROP001.
+- `forward`, the redaction sink (the P2 "done when"): `async for` over
+  `redacted_stream` passes, and over `raw_stream`, whose items are not redacted, is
+  PROP001.
+- `forward_delegated`: `yield from chunks(...)` gives the delegating generator the
+  delegated item set, so this is satisfied.
+- `forward_without_await`: a coroutine passed without `await` carries nothing of its
+  own, so this is PROP001.

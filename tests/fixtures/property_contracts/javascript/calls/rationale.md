@@ -17,3 +17,11 @@ The same pipeline as the Python `stats` fixture, with `path:export` references.
 - `tests/setup.js` is a test bootstrap. `enable("check", ["numeric"])` matches the
   catalog's static set. `[]` is PROP005 (missing `numeric`). A list that is not a literal
   array is PROP006.
+- `stream.js` (P2, spec §5.2c):
+  - `awaitedCall` (`await` of a project async function) is satisfied.
+  - `generated` (`for...of` over a generator, and over one that `yield*`s it) is satisfied.
+  - `streamedItems` (`for await` over an async generator) is satisfied; over a parameter,
+    it is unknown.
+  - `notAwaited` passes a Promise without awaiting it, so it is PROP001.
+  - `shortcut` is PROP002: it produces `normalized` outside its producer, `normalize`.
+

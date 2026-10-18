@@ -18,3 +18,6 @@ is a vendored path excluded from analysis.
 
 Without that rule it would be PROP001: the typical one-rule catalog of §5.2a accepts
 only escaped parts.
+- `noLiteral`: `sanitize(a) + sanitize(b)` has no string literal, so it is not a
+  composition (decision 42) and is PROP001.
+

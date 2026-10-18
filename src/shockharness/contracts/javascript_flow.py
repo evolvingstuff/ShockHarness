@@ -17,8 +17,8 @@ rules:
 What a call or an assignment to a property does is the caller's :class:`JsHooks`.
 """
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from tree_sitter import Node
@@ -29,7 +29,10 @@ from shockharness.contracts.python_flow import (
     Env,
     Part,
     PropSet,
+    awaited,
     element_of,
+    intersection,
+    loop_element,
     meet,
     merge,
     unknown,
@@ -46,6 +49,7 @@ LOGICAL_ASSIGNMENTS = frozenset({"||=", "??=", "&&="})
 PLUS = "+"
 OF = "of"
 AWAIT = "await"
+DELEGATE = "*"
 STRINGS = frozenset({Kind.STRING, Kind.TEMPLATE_STRING})
 CONSTANTS = frozenset(
     {
@@ -168,7 +172,10 @@ class JsFlow:
         self.hooks = hooks
         self.reporting = True
         self.frames: list[Frame] = []
-        self.returns: list[PropSet] = []
+        # The set at each return and yield (by node id), from the last walk past it.
+        self.returns: dict[int, PropSet] = {}
+        self.return_nodes: dict[int, Node] = {}
+        self.yields: dict[int, PropSet] = {}
 
     # -- statements -------------------------------------------------------------------
 
@@ -238,8 +245,11 @@ class JsFlow:
         return merge([taken, other])
 
     def return_(self, node: Node, env: Env) -> None:
-        values = children(node)
-        self.returns.append(EMPTY if len(values) == 0 else self.expression(values[0], env))
+        value = EMPTY  # return; returns undefined
+        for returned in children(node)[:1]:
+            value = self.expression(returned, env)
+        self.returns[node.id] = value
+        self.return_nodes[node.id] = node
         return None
 
     def throw(self, node: Node, env: Env) -> None:
@@ -331,9 +341,9 @@ class JsFlow:
         iterated = self.expression(right, env)
         element = EMPTY  # for...in: property names
         if has_token(node, OF):
-            element = element_of(iterated, "an item")
-        if has_token(node, AWAIT):
-            element = unknown("a for await item (async semantics are P2)")
+            element = loop_element(iterated, "an item")
+        if has_token(node, AWAIT) and iterated.items is None:
+            element = unknown("a for await item of a value that is not a resolved generator")
 
         def one(head: Env) -> Env | None:
             if left is not None:
@@ -496,10 +506,24 @@ class JsFlow:
         env[name] = result
         return result
 
-    def asynchronous(self, node: Node, env: Env) -> PropSet:
+    def await_(self, node: Node, env: Env) -> PropSet:
+        value = EMPTY
         for child in children(node):
-            self.expression(child, env)
-        return unknown(f"{ASYNCHRONOUS[node.type]} (await and generator semantics are P2)")
+            value = self.expression(child, env)
+        return awaited(value)
+
+    def yield_(self, node: Node, env: Env) -> PropSet:
+        """``yield x`` adds to the item set; ``yield* g`` adds a resolved generator's items."""
+        value = EMPTY  # a bare yield yields undefined
+        for child in children(node):
+            value = self.expression(child, env)
+        if has_token(node, DELEGATE):
+            delegated = value.items
+            value = unknown("yield* of a generator the analysis cannot follow")
+            if delegated is not None:
+                value = delegated
+        self.yields[node.id] = value
+        return unknown("the value sent into a generator")
 
     def constructed(self, node: Node, env: Env) -> PropSet:
         for child in children(node):
@@ -518,7 +542,7 @@ class JsFlow:
         function = field(node, Field.FUNCTION)
         arguments = field(node, Field.ARGUMENTS)
         if function is not None and function.type == Kind.IMPORT:
-            return unknown("a dynamic import (await semantics are P2)")
+            return unknown("a dynamic import (the module it loads is not followed)")
         if function is not None:
             self.expression(function, env)
         passed = inner(node, Field.ARGUMENTS)
@@ -546,19 +570,12 @@ class JsFlow:
 def _declared_result(declaration: JsDeclaration, sets: Sequence[PropSet]) -> PropSet:
     if declaration.kind == PRODUCES:
         value = sets[0]
-        return PropSet(
-            value.known | declaration.properties, exact=value.exact, why=value.why, lazy=value.lazy
-        )
+        return replace(value, known=value.known | declaration.properties)
     if declaration.arguments[1].type != Kind.IDENTIFIER:
         return unknown("preserves names a source that is not a local value")
     source = sets[1]
     if declaration.kind == PRESERVES_EXCEPT:
-        return PropSet(
-            source.known - declaration.properties,
-            exact=source.exact,
-            why=source.why,
-            lazy=source.lazy,
-        )
+        return replace(source, known=source.known - declaration.properties)
     assert declaration.kind == PRESERVES, f"unexpected declaration {declaration.kind}"
     return source
 
@@ -577,7 +594,6 @@ def _loop_names(left: Node) -> list[str]:
     return _bound(left)
 
 
-ASYNCHRONOUS = {Kind.AWAIT_EXPRESSION: "an await", Kind.YIELD_EXPRESSION: "a yield"}
 SKIPPED = frozenset(
     {
         Kind.IMPORT_STATEMENT,
@@ -616,8 +632,8 @@ EXPRESSIONS: dict[str, Callable[[JsFlow, Node, Env], PropSet]] = {
     Kind.TERNARY_EXPRESSION: JsFlow.ternary,
     Kind.ASSIGNMENT_EXPRESSION: JsFlow.assignment,
     Kind.AUGMENTED_ASSIGNMENT_EXPRESSION: JsFlow.augmented,
-    Kind.AWAIT_EXPRESSION: JsFlow.asynchronous,
-    Kind.YIELD_EXPRESSION: JsFlow.asynchronous,
+    Kind.AWAIT_EXPRESSION: JsFlow.await_,
+    Kind.YIELD_EXPRESSION: JsFlow.yield_,
     Kind.NEW_EXPRESSION: JsFlow.constructed,
     Kind.SEQUENCE_EXPRESSION: JsFlow.sequence,
     Kind.CALL_EXPRESSION: JsFlow.call,
@@ -625,15 +641,24 @@ EXPRESSIONS: dict[str, Callable[[JsFlow, Node, Env], PropSet]] = {
 }
 
 
-def run_js_unit(hooks: JsHooks, body: Sequence[Node], entry: Env) -> PropSet:
-    """Walk one unit; its result set (the intersection over its returns, and falling off
-    the end, which returns undefined)."""
-    flow = JsFlow(hooks)
-    out = flow.block(body, entry)
-    results = list(flow.returns)
+@dataclass(frozen=True)
+class JsSummary:
+    """One unit walked: its result set, its item set (over its yields), each return."""
+
+    result: PropSet
+    items: PropSet
+    returns: Mapping[int, PropSet]
+    return_nodes: Mapping[int, Node]
+
+
+def summarize(flow: JsFlow, out: Env | None) -> JsSummary:
+    results = list(flow.returns.values())
     if out is not None or len(results) == 0:
-        results.append(EMPTY)
-    result = results[0]
-    for value in results[1:]:
-        result = meet(result, value)
-    return result
+        results.append(EMPTY)  # falling off the end returns undefined
+    items = intersection(list(flow.yields.values()))
+    return JsSummary(intersection(results), items, dict(flow.returns), dict(flow.return_nodes))
+
+
+def run_js_unit(hooks: JsHooks, body: Sequence[Node], entry: Env) -> JsSummary:
+    flow = JsFlow(hooks)
+    return summarize(flow, flow.block(body, entry))

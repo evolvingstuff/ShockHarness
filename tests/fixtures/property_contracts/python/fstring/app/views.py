@@ -1,4 +1,4 @@
-from app.markup import escape, sanitize
+from app.markup import escape, header_value, sanitize
 from app.page import send_html
 
 
@@ -34,3 +34,9 @@ def formatted(tag, raw):
 def respond(response, tag):
     response.body = f"<p>{escape(tag)}</p>"
     response.body = f"<p>{tag}</p>"
+
+
+def headers_out(response, name, raw):
+    response.headers[name] = header_value(raw)
+    response.headers[name] = raw
+    response.headers[name] += raw

@@ -2425,6 +2425,77 @@ PROP001 = RuleSpec(
     compliant_example="def pipeline(raw):\n    return fit(normalize(raw))",
 )
 
+PROP002 = RuleSpec(
+    rule_id="PROP002",
+    version="1",
+    name="property produced outside its declared producers",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        'A produces(x, "p") in a function that is not one of the catalog\'s producers for p, '
+        "when the catalog restricts p to named producers."
+    ),
+    rationale=(
+        "A property the catalog restricts to one producer (the sanitizer, the privacy "
+        "evaluator) is a claim only that function may make; a produces anywhere else is a "
+        "second, unreviewed way to establish it."
+    ),
+    guarantees=(
+        "Every valid produces of a property whose producers list is not empty, in a unit that "
+        "is not one of them: a Python function named module.function or module.Class.method, "
+        "a JavaScript function named path:export. A produces at module level or in a nested "
+        "function is never a producer."
+    ),
+    limitations="An empty producers list means any unit may produce the property.",
+    remediation=(
+        "Route the value through the declared producer, or add this function to the "
+        "property's producers in the catalog with the reviewer's agreement."
+        + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example=(
+        'def shortcut(x):\n    return produces(x, "normalized")  # producers: normalize'
+    ),
+    compliant_example="def shortcut(x):\n    return normalize(x)",
+)
+
+PROP004 = RuleSpec(
+    rule_id="PROP004",
+    version="1",
+    name="returns with inconsistent property sets",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A function with two or more returns, one of which carries a property another does not: "
+        "the function's result carries only the intersection."
+    ),
+    rationale=(
+        "A caller sees one result set. A return that lacks what the others establish silently "
+        "removes the property from every call, which is rarely what the author meant."
+    ),
+    guarantees=(
+        "Each explicit return whose set is known and lacks a property another known return of "
+        "the same function carries, reported at that return."
+    ),
+    limitations="Falling off the end (an implicit None or undefined) is not reported.",
+    remediation=(
+        "Establish the property on every return (produces or preserves), or return through one "
+        "path, or accept that the result does not carry it." + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example=(
+        'def load(x, ok):\n    if ok:\n        return produces(x, "validated")\n    return x'
+    ),
+    compliant_example=(
+        "def load(x, ok):\n    if not ok:\n        raise ValueError(x)\n"
+        '    return produces(x, "validated")'
+    ),
+)
+
 PROP003 = RuleSpec(
     rule_id="PROP003",
     version="1",
@@ -2558,7 +2629,15 @@ PROP007 = RuleSpec(
 )
 
 
-CONTRACT_RULES: tuple[RuleSpec, ...] = (PROP001, PROP003, PROP005, PROP006, PROP007)
+CONTRACT_RULES: tuple[RuleSpec, ...] = (
+    PROP001,
+    PROP002,
+    PROP003,
+    PROP004,
+    PROP005,
+    PROP006,
+    PROP007,
+)
 
 
 # --- STATE002 (MetaList, 2026-10-17) ----------------------------------------------------
@@ -2873,7 +2952,9 @@ RULES: tuple[RuleSpec, ...] = (
     EXC005,
     STATE002,
     PROP001,
+    PROP002,
     PROP003,
+    PROP004,
     PROP005,
     PROP006,
     PROP007,

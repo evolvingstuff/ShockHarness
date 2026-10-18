@@ -52,3 +52,15 @@ language = "python"
 target = "body"
 requires = ["sanitized_html"]
 reason = "a response body is rendered as markup"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "header_safe"
+description = "a value with no CR or LF, safe in a response header"
+producers = ["app.markup.header_value"]
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+target = "headers[]"
+requires = ["header_safe"]
+reason = "a header value built from data is a response-splitting path"

@@ -199,6 +199,7 @@ CONTRACTS = "rules.property_contracts"
 # Strictest first, as in ORDERED_SETTINGS.
 CONTRACT_RUNTIME_LEVELS = ("verify", "check", "static")
 CONTRACT_SEVERITIES = ("error", "warning", "review")
+CONTRACT_RUNTIME_MODES = ("verify", "check", "off")
 LITERAL_SATISFIES = "literal_satisfies"
 SINK_CALLEE = "callee"
 # (key, its strict value, what turning it away from that value means)
@@ -313,6 +314,21 @@ def _contract_compositions(before: Mapping[str, Any], after: Mapping[str, Any]) 
     return found
 
 
+def _contract_levels(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
+    """``max_depth`` raised (fewer unknown findings that may gate, §8) and
+    ``runtime_mode_required`` lowered (verify -> check -> off)."""
+    found: list[Loosening] = []
+    if int(after["max_depth"]) > int(before["max_depth"]):
+        key = f"{CONTRACTS}.max_depth"
+        message = f"{key} raised from {before['max_depth']} to {after['max_depth']}"
+        found.append(Loosening(key, message))
+    old, new = str(before["runtime_mode_required"]), str(after["runtime_mode_required"])
+    if CONTRACT_RUNTIME_MODES.index(new) > CONTRACT_RUNTIME_MODES.index(old):
+        key = f"{CONTRACTS}.runtime_mode_required"
+        found.append(Loosening(key, f"{key} changed from {old!r} to {new!r} (looser)"))
+    return found
+
+
 def _contract_lists(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
     """Roles and runtime modules removed; severities lowered."""
     found: list[Loosening] = []
@@ -345,6 +361,7 @@ def _property_contracts(
         *_contract_sinks(before, after),
         *_contract_properties(before, after),
         *_contract_compositions(before, after),
+        *_contract_levels(before, after),
         *_contract_lists(before, after),
     ]
 

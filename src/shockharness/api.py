@@ -50,6 +50,7 @@ from shockharness.rules import registry
 from shockharness.rules.accepted_policy import accepted_policy
 from shockharness.rules.boundary_usage import unused_boundary_findings
 from shockharness.rules.policy_integrity import fingerprinted, policy_attempt_findings
+from shockharness.rules.property_registrations import predicate_findings
 from shockharness.rules.registry import VERIFICATION_SECTION
 
 SOURCE_PSEUDO_PATH = "<source>"
@@ -98,6 +99,8 @@ def analyze_paths(
         *fingerprinted(policy_attempt_findings(config, root, config.section(VERIFICATION_SECTION))),
         # EXC005: a declared boundary that no catch in its files uses.
         *unused_boundary_findings(outcome.catches, root, config),
+        # PROP005: a verify-level catalog whose registration module misses predicates.
+        *predicate_findings(root, config),
     )
     classifier = role_classifier(config.values[FILE_ROLES_KEY])
     attempt_roles = {f.path: classifier.classify(f.path).role for f in attempts}

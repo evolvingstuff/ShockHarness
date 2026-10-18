@@ -28,3 +28,7 @@ export function joined(el, items) {
 export function concatenated(el, raw) {
   el.innerHTML = "<p>" + sanitize(raw) + "</p>";
 }
+
+export function noLiteral(el, a, b) {
+  el.innerHTML = sanitize(a) + sanitize(b);
+}

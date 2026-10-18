@@ -1234,10 +1234,12 @@ from one (never `currentTarget`, the element the listener is on); `C` is in
 `HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
 TypeScript; exact.
 
-### PROP001, PROP003, PROP005, PROP006, PROP007: property contracts (opt-in; Python and JavaScript, milestones P1a and P1b)
+### PROP001-PROP007: property contracts (opt-in; Python, JavaScript, TypeScript; milestones P1a, P1b, P2)
 
-The family of `docs/shockharness_property_contracts_spec.md`, milestones P1a (Python)
-and P1b (JavaScript, TypeScript read as JavaScript). It is off
+The family of `docs/shockharness_property_contracts_spec.md`, milestones P1a (Python),
+P1b (JavaScript; TypeScript is read as JavaScript) and P2 (transitive results, await and
+generators, verify mode). How to adopt it, and what to expect, is in
+`docs/property-contracts.md`. It is off
 by default and no profile turns it on. Off is not a deviation, does not list the rules
 as disabled, and adds nothing to `coverage.rules_disabled_globally`. Enable it with
 `rules.property_contracts.enabled = true`, a catalog of properties, and the
@@ -1279,17 +1281,22 @@ There is no separate declaration.
   point. An except handler starts from the set at the start of its try. A parameter
   starts with what the function requires of it; a parameter with no `requires` starts
   with nothing (the `declared` level).
-* **Calls (one hop).** A call that resolves to a project function is checked against
-  that function's contract. Its result carries the function's own declared result set,
-  computed with every further project call inside it unknown. A function with no
-  `produces` or `preserves` declares no result, so its result carries nothing. The
+* **Calls.** A call that resolves to a project function is checked against that
+  function's contract (its header `requires`). Its result is the function's own result
+  set, with the function's further calls followed transitively up to `max_depth`
+  crossings (3 by default; deeper is unknown, and so is recursion). A function that
+  returns another's result carries the property through without redeclaring it. The
   function's file is read from the analyzed files, or else from the project under the
   root, so a check of one file still sees its imports' contracts.
+* **Await and generators (§5.2c).** `await` of a project async function gives its
+  result, and `await` is otherwise transparent; a coroutine or Promise used without
+  `await` carries nothing. A `for`/`async for`/`for await` over a call of a project
+  generator binds the loop variable to the generator's item set (the intersection over
+  its `yield`s; `yield from`/`yield*` delegate).
 * **Unknown sets.** Some calls cannot be resolved: a method on a value, a callable in a
-  variable or a container, a class or `new`. Every `await`, `yield`, generator
-  expression, generator function result, `async for`, `for await`, `async with`, and a
-  library call that consumes a generator, makes the set unknown. So does a `.join`
-  build. These are P2 semantics.
+  variable or a container, a class or `new`, a dynamic import. A generator consumed by a
+  library call (`list(gen())`) or a comprehension, a generator expression, `async with`,
+  a loop over an unresolved iterable, and a `.join` build are unknown too.
 * **JavaScript calls.** Functions resolve through `import`/`require`, re-exports and
   `export default` to `path:export` (`static/js/html.js:escapeHtml`). Package callees are
   `package:name`, with `Pkg.f()` on a default import as `package:f`. Globals are
@@ -1298,8 +1305,10 @@ There is no separate declaration.
 | Rule | Reports | Default |
 |---|---|---|
 | `PROP001` | a value reaching a parameter whose function `requires` a property, a catalog sink (`callee:N`), or a mid-body `requires` on a local, without that property. When the value's set is unknown, the finding is `unknown` and gates only with `fail_on_unknown = true` | review |
+| `PROP002` | a `produces` of a property whose catalog `producers` list is not empty, in a function that is not one of them (Python `module.function` or `module.Class.method`, JavaScript `path:export`); module level and nested functions are never producers | review |
 | `PROP003` | a property name the catalog does not list. The name is not counted, so a misspelled requirement is never silently checked. With `allow_undeclared = true` it is `review` and counted | **error** |
-| `PROP005` | a test bootstrap's `enable(mode, [...])` (in a test-role or config-role file such as `conftest.py`, whatever `roles` says) whose literal list is not the catalog's `runtime = "static"` set. The finding names what is missing and what the catalog does not mark static. `shockharness contracts static-properties` prints the list to paste. The predicate half (`verify`) is P2 | review |
+| `PROP004` | a return whose known set lacks a property another return of the same function carries: the result carries only the intersection (falling off the end is not reported) | review |
+| `PROP005` | a test bootstrap's `enable(mode, [...])` (in a test-role or config-role file such as `conftest.py`, whatever `roles` says) whose literal list is not the catalog's `runtime = "static"` set. The finding names what is missing and what the catalog does not mark static. `shockharness contracts static-properties` prints the list to paste. With `runtime_mode_required = "verify"`, also each non-static property the `registration_module` never passes to `register(...)`, reported on the configuration file at the `registration_module` line | review |
 | `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing. In a test bootstrap, an `enable(...)` whose second argument is not a literal list of string literals | review |
 | `PROP007` | a `requires` on a parameter that is not at the top of the body (after a use of the parameter, or inside a branch, loop, try or with). It is not part of the contract. A parameter the body rebinds is a local after that, and a `requires` on it is a mid-body check | review |
 
@@ -1326,6 +1335,7 @@ is a VERIFY003 loosening. So are these:
   * a composition rule that accepts parts no earlier rule with the same language,
     operation and `produces` accepted: an added rule, a property removed from
     `inputs_require`, a changed `produces`;
+  * raising `max_depth`, lowering `runtime_mode_required`;
   * removing a role or a runtime module.
 
 `RESULT001` never reports the four Python declarations as discarded results when they
@@ -1333,13 +1343,10 @@ resolve to the runtime module.
 
 **Not in P1a and P1b** (spec §14):
 
-* TypeScript-specific behaviour: annotations are ignored, and there is no TypeScript
-  fixture yet (P2);
+* TypeScript-specific behaviour: type annotations are ignored;
 * catalog preserving operations (slicing);
-* transitive summaries;
-* the `await`/generator semantics;
-* `PROP002`, `PROP004`, `PROP008`, and PROP005's predicate half;
-* `complete`, `verify` mode, and the skills.
+* `PROP008`, `complete` and `complete_paths` (P3), and the skills;
+* annotation forms of the declarations and Hypothesis integration (P4).
 
 Methods are not resolved through their receivers, and a class call (a constructor) is
 unknown. A JavaScript method sink (`insertAdjacentHTML`) can therefore not match, and

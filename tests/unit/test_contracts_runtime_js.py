@@ -70,7 +70,7 @@ def test_enable_validation(tmp_path: Path) -> None:
         'import * as c from "./contracts.mjs";\n' + THROWS + "const results = {\n"
         "  notList: throws(() => c.enable('check', 'p')),\n"
         "  notStrings: throws(() => c.enable('check', [1])),\n"
-        "  verify: throws(() => c.enable('verify', [])),\n"
+        "  verbose: throws(() => c.enable('verbose', [])),\n"
         "  off: throws(() => c.enable('off', [])),\n"
         "  first: throws(() => c.enable('check', [])),\n"
         "  second: throws(() => c.enable('check', [])),\n"
@@ -79,8 +79,8 @@ def test_enable_validation(tmp_path: Path) -> None:
     )
     assert "array of strings" in str(out["notList"])
     assert "array of strings" in str(out["notStrings"])
-    assert "verify mode" in str(out["verify"])
-    assert "takes 'check'" in str(out["off"])
+    assert "takes 'check' or 'verify', not 'verbose'" in str(out["verbose"])
+    assert "takes 'check' or 'verify', not 'off'" in str(out["off"])
     assert out["first"] is None
     assert "already called" in str(out["second"])
 
@@ -167,7 +167,7 @@ def test_a_bad_preload_object_throws_at_load_and_none_is_identity(tmp_path: Path
             ),
         },
     )
-    assert "takes 'check', not 'verbose'" in str(out["failure"])
+    assert "not 'verbose'" in str(out["failure"])
     assert out["mode"] == "off"
 
 
@@ -210,3 +210,34 @@ def test_both_runtime_files_pass_strict_as_production_code(
         assert result.status == "analyzed"
         assert [(f.rule_id, f.span.line, f.message) for f in result.findings] == []
         assert "shockharness: ignore" not in text
+
+
+def test_verify_mode_runs_predicates(tmp_path: Path) -> None:
+    out = node(
+        tmp_path,
+        'import * as c from "./contracts.mjs";\n'
+        + THROWS
+        + "c.register('positive', (v) => Math.min(...v) > 0, 'every element is positive');\n"
+        "c.register('short', (v) => v.length < 6, 'under six characters');\n"
+        "const again = throws(() => c.register('short', (v) => true, 'again'));\n"
+        "c.enable('verify', []);\n"
+        "const good = c.produces([1, 2], 'positive');\n"
+        "const results = {\n"
+        "  again,\n"
+        "  satisfied: throws(() => c.requires(good, 'positive')),\n"
+        "  falseClaim: throws(() => c.produces([0, 1], 'positive')),\n"
+        "  changed: (good.push(-1), throws(() => c.requires(good, 'positive'))),\n"
+        "  text: throws(() => c.requires(c.produces('abc', 'short'), 'short')),\n"
+        "  longText: throws(() => c.requires('abcdefgh', 'short')),\n"
+        "  unregistered: throws(() => c.produces({}, 'other')),\n"
+        "  mode: c.report().mode,\n"
+        "};\nconsole.log(JSON.stringify(results));\n",
+        {},
+    )
+    assert "already registered" in str(out["again"])
+    assert out["satisfied"] is None and out["text"] is None
+    assert "does not hold for this value" in str(out["falseClaim"])
+    assert "every element is positive" in str(out["changed"])
+    assert "under six characters" in str(out["longText"])
+    assert "no predicate registered for 'other'" in str(out["unregistered"])
+    assert out["mode"] == "verify"

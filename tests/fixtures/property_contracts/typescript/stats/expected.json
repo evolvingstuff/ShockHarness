@@ -1,0 +1,4 @@
+[
+  {"path": "src/stats.ts", "rule": "PROP001", "line": 22, "column": 14, "status": "violation", "severity": "review", "message": "src/stats.ts:fit requires 'normalized' on x; the value passed here has {numeric}"},
+  {"path": "src/use.ts", "rule": "PROP001", "line": 7, "column": 14, "status": "violation", "severity": "review", "message": "src/stats.ts:fit requires 'normalized', 'numeric' on x; the value passed here has {}"}
+]

@@ -13,9 +13,10 @@ Declarations, each returning its first argument unchanged::
     preserves_except(result, source, property, ...)
 
 The static analysis reads them from the source. At run time the module is identity-only
-until test code calls ``enable("check", static_properties)`` once, before any declaration
-has run (a ``conftest.py``, or a test-only entry script that then starts the server
-exactly as the production entry does). Production never calls ``enable``.
+until test code calls ``enable("check", static_properties)`` (or ``"verify"``) once,
+before any declaration has run (a ``conftest.py``, or a test-only entry script that then
+starts the server exactly as the production entry does). Production never calls
+``enable``.
 
 In ``check`` mode ``produces`` records the properties on the value, ``preserves`` copies
 the source's recorded properties to the result, and ``requires`` raises
@@ -23,8 +24,15 @@ the source's recorded properties to the result, and ``requires`` raises
 ``static_properties`` (the catalog's ``runtime = "static"``: strings, numbers, anything
 that cannot carry a runtime property) is never recorded or checked; each skip is counted
 and :func:`report` returns the counts. A property not listed there that reaches a
-str, bytes, number, bool or None raises, because that is a catalog mistake rather than a
-program state. ``verify`` mode (predicates) is a later milestone.
+str, bytes, number, bool or None raises in ``check`` mode, because that is a catalog
+mistake rather than a program state.
+
+``verify`` mode does what ``check`` does and also runs each property's predicate, which
+the project registers once at startup with ``register(name, predicate, description)``:
+``produces`` runs it before recording (a producer may not claim what is false),
+``requires`` after the presence check. A value that cannot carry runtime properties (a
+string) is checked by its predicate alone. A non-static property with no registered
+predicate raises in ``verify`` mode.
 
 The registry is keyed by object identity. A value that can be weakly referenced is
 forgotten when it is collected; one that cannot (a list, a dict, a tuple) is held for
@@ -33,7 +41,7 @@ tests, never production.
 """
 
 import weakref
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import TypeVar
 
 T = TypeVar("T")
@@ -93,6 +101,7 @@ class _Registry:
         self.static: frozenset[str] = frozenset()
         self.skips: dict[str, int] = {}
         self.entries: dict[int, _Entry] = {}
+        self.predicates: dict[str, tuple[Callable[[object], bool], str]] = {}
 
     def recorded(self, value: object) -> frozenset[str]:
         key = id(value)
@@ -102,6 +111,8 @@ class _Registry:
         return found
 
     def record(self, value: object, properties: frozenset[str]) -> None:
+        if isinstance(value, SCALARS) or len(properties) == 0:
+            return  # verify mode: a scalar is checked by its predicates, never recorded
         key = id(value)
         if type(value).__weakrefoffset__ == 0:
             self.entries[key] = _Entry(value, properties, weak=False)
@@ -118,7 +129,7 @@ class _Registry:
                     self.skips[name] = 0
                 self.skips[name] += 1
                 continue
-            if isinstance(value, SCALARS):
+            if isinstance(value, SCALARS) and self.mode == MODE_CHECK:
                 raise ContractError(
                     f"{name!r} is a check-level property but {type(value).__name__} values "
                     'cannot carry runtime properties; mark it runtime = "static" or "verify"',
@@ -126,6 +137,17 @@ class _Registry:
                 )
             checked.add(name)
         return frozenset(checked)
+
+    def verified(self, properties: Iterable[str], value: object) -> None:
+        """In verify mode, each property's predicate must hold for the value."""
+        if self.mode != MODE_VERIFY:
+            return
+        for name in sorted(properties):
+            if name not in self.predicates:
+                raise ContractError(f"no predicate registered for {name!r}", name)
+            predicate, description = self.predicates[name]
+            if not predicate(value):
+                raise ContractError(f"{name!r} does not hold for this value: {description}", name)
 
 
 _REGISTRY = _Registry()
@@ -147,10 +169,8 @@ def enable(mode: str, static_properties: list[str]) -> None:
             f"{type(static_properties).__name__}",
             None,
         )
-    if mode == MODE_VERIFY:
-        raise ContractError("verify mode (predicates) is not available in this version", None)
-    if mode != MODE_CHECK:
-        raise ContractError(f"enable takes {MODE_CHECK!r}, not {mode!r}", None)
+    if mode not in (MODE_CHECK, MODE_VERIFY):
+        raise ContractError(f"enable takes {MODE_CHECK!r} or {MODE_VERIFY!r}, not {mode!r}", None)
     if _REGISTRY.mode != MODE_OFF:
         raise ContractError("enable was already called; it is called once per process", None)
     if _REGISTRY.declarations > 0:
@@ -160,7 +180,17 @@ def enable(mode: str, static_properties: list[str]) -> None:
             None,
         )
     _REGISTRY.static = frozenset(static_properties)
-    _REGISTRY.mode = MODE_CHECK
+    _REGISTRY.mode = mode
+
+
+def register(name: str, predicate: Callable[[object], bool], description: str) -> None:
+    """The predicate ``verify`` mode runs for a property; registered once, at startup. The
+    predicate must be pure and must not change the value."""
+    if not isinstance(name, str) or not isinstance(description, str) or not callable(predicate):
+        raise ContractError("register takes a name, a predicate and a description", None)
+    if name in _REGISTRY.predicates:
+        raise ContractError(f"a predicate for {name!r} is already registered", name)
+    _REGISTRY.predicates[name] = (predicate, description)
 
 
 def report() -> dict[str, object]:
@@ -174,20 +204,24 @@ def report() -> dict[str, object]:
 
 def _checking() -> bool:
     _REGISTRY.declarations += 1
-    return _REGISTRY.mode == MODE_CHECK
+    return _REGISTRY.mode != MODE_OFF
 
 
 def requires(value: T, *properties: str) -> T:
     """``value`` must carry every property; returns ``value``."""
     if not _checking():
         return value
-    missing = sorted(_REGISTRY.tracked(properties, value) - _REGISTRY.recorded(value))
+    required = _REGISTRY.tracked(properties, value)
+    missing: list[str] = []
+    if not isinstance(value, SCALARS):
+        missing = sorted(required - _REGISTRY.recorded(value))
     if len(missing) > 0:
         raise ContractError(
             f"the value does not carry {', '.join(map(repr, missing))} "
             f"(a {type(value).__name__} with {sorted(_REGISTRY.recorded(value))})",
             missing[0],
         )
+    _REGISTRY.verified(required, value)
     return value
 
 
@@ -196,8 +230,8 @@ def produces(value: T, *properties: str) -> T:
     if not _checking():
         return value
     added = _REGISTRY.tracked(properties, value)
-    if len(added) > 0:
-        _REGISTRY.record(value, _REGISTRY.recorded(value) | added)
+    _REGISTRY.verified(added, value)
+    _REGISTRY.record(value, _REGISTRY.recorded(value) | added)
     return value
 
 

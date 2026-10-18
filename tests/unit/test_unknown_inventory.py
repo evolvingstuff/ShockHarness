@@ -200,6 +200,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "property; unknown when the set is not exact (an unresolved callee, a method on a "
         "value, an await, a generator, a .join build, *args/**kwargs, a library keyword)",
     ),
+    # PROP005's predicate half (P2): findings on the configuration file.
+    ("rules/property_registrations.py", "predicate_findings"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "PROP005: violation, a non-static property the registration module never registers",
+    ),
     # VERIFY003 (H2 part 2).
     ("rules/policy_integrity.py", "policy_finding"): (
         frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN", "CONFIDENCE_UNRESOLVED"}),

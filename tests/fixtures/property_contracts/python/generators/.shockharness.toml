@@ -12,3 +12,9 @@ name = "redacted"
 description = "text with addresses masked"
 producers = []
 runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.sinks]]
+language = "python"
+callee = "app.provider.send:0"
+requires = ["redacted"]
+reason = "nothing reaches the model provider unredacted"

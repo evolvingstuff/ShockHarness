@@ -38,6 +38,7 @@ from shockharness.contracts.compose import Compositions
 from shockharness.contracts.javascript_flow import (
     JsDeclaration,
     JsFlow,
+    JsSummary,
     children,
     field,
     field_nodes,
@@ -57,7 +58,10 @@ from shockharness.contracts.python_flow import (
     Env,
     Part,
     PropSet,
-    lazy_unknown,
+    coroutine,
+    generator,
+    intersection,
+    known_set,
     unknown,
 )
 from shockharness.contracts.python_index import LIBRARY, RUNTIME, UNIT, UNKNOWN
@@ -69,18 +73,26 @@ from shockharness.contracts.report import (
     Located,
     Reporter,
     Requirement,
+    inconsistent_returns,
     quoted,
 )
 from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.javascript_catches import node_span, node_text, parameter_parts
 from shockharness.ir.javascript_functions import (
     UNIT_TYPES,
-    dotted_name,
     pattern_names,
     string_value,
 )
 from shockharness.ir.javascript_nodes import Field, Kind
-from shockharness.rules.registry import PROP001, PROP003, PROP005, PROP006, PROP007
+from shockharness.rules.registry import (
+    PROP001,
+    PROP002,
+    PROP003,
+    PROP004,
+    PROP005,
+    PROP006,
+    PROP007,
+)
 from shockharness.source import SourceText
 
 # requires(value, ...) / produces(value, ...); preserves(result, source[, ...]).
@@ -195,7 +207,6 @@ class JsUnit:
 class JsContract:
     positional: tuple[str | None, ...]
     requirements: Mapping[str, frozenset[str]]
-    result: PropSet
 
 
 # -- declarations (PROP003, PROP006) ------------------------------------------------------
@@ -357,6 +368,17 @@ class JsAnalysis:
         # Keyed by (path, node id): a node id is unique within one file's tree.
         self.units: dict[tuple[str, int], JsUnit] = {}
         self.contracts: dict[tuple[str, int], JsContract] = {}
+        self.results: dict[tuple[str, int, int], PropSet] = {}
+        self.computing: set[tuple[str, int]] = set()
+        self.max_depth = int(settings["max_depth"])
+        # Producers by canonical reference (re-exports resolved), and as written.
+        self.producer_texts = {
+            name: frozenset(entry.producers) for name, entry in catalog.properties.items()
+        }
+        self.producers = {
+            name: frozenset(self.index.resolve(p).reference for p in entry.producers)
+            for name, entry in catalog.properties.items()
+        }
 
     def _sinks(self, sinks: Sequence[CalleeSink]) -> dict[str, list[CalleeSink]]:
         found: dict[str, list[CalleeSink]] = {}
@@ -434,29 +456,77 @@ class JsAnalysis:
         return declarations, issues
 
     def contract(self, target: JsTarget) -> JsContract:
+        """A resolved callee's parameters and the requirements at the top of its body."""
         assert target.module is not None and target.function is not None, "a unit target"
-        function = target.function
-        key = (target.module.path, function.id)
+        key = (target.module.path, target.function.id)
         if key not in self.contracts:
-            unit = self.unit(target.module, function)
-            self.contracts[key] = JsContract(
-                positional=unit.parameters,
-                requirements=unit.header.requirements,
-                result=self._result(unit, target.reference),
-            )
+            unit = self.unit(target.module, target.function)
+            self.contracts[key] = JsContract(unit.parameters, unit.header.requirements)
         return self.contracts[key]
 
-    def _result(self, unit: JsUnit, reference: str) -> PropSet:
-        function = unit.function
-        assert function is not None, "a function unit"
-        if function.type in GENERATORS:
-            return lazy_unknown(f"{reference} is a generator (generator semantics are P2)")
-        if has_token(function, ASYNC):
-            return unknown(f"{reference} is async (await semantics are P2)")
-        declared = [d for d in unit.declarations.values() if d.kind in RESULT_DECLARATIONS]
-        if not any(d.valid for d in declared):
-            return EMPTY  # no produces or preserves: the function declares no result
-        return run(JsUnitHooks(self, unit, None), unit)
+    def result(self, target: JsTarget, crossings: int) -> PropSet:
+        """What a call of ``target`` gives, ``crossings`` calls away from the checked unit,
+        its further calls followed up to ``max_depth`` (§5.3)."""
+        assert target.module is not None and target.function is not None, "a unit target"
+        if crossings > self.max_depth:
+            return unknown(
+                f"{target.reference} is more than max_depth = {self.max_depth} calls away"
+            )
+        node = (target.module.path, target.function.id)
+        key = (*node, crossings)
+        if key not in self.results:
+            if node in self.computing:
+                return unknown(f"{target.reference} calls itself (recursion is not followed)")
+            self.computing.add(node)
+            unit = self.unit(target.module, target.function)
+            summary = run(JsUnitHooks(self, unit, None, crossings), unit)
+            self.computing.discard(node)
+            self.results[key] = _shaped(unit, summary)
+        return self.results[key]
+
+    def producer_issues(self, unit: JsUnit) -> list[Issue]:
+        """PROP002: a produces of a property whose catalog producers do not include the
+        enclosing function (only properties with a non-empty producers list)."""
+        name = self._name(unit)
+        issues: list[Issue] = []
+        for declaration in unit.declarations.values():
+            if declaration.kind != PRODUCES or not declaration.valid:
+                continue
+            for prop in sorted(declaration.properties & frozenset(self.producers)):
+                allowed = self.producers[prop]
+                if len(allowed) > 0 and name not in allowed:
+                    listed = ", ".join(sorted(self.producer_texts[prop]))
+                    message = f"produces(..., {prop!r}) outside its declared producers ({listed})"
+                    issues.append(Issue(PROP002, declaration.call, message, PROP002))
+        return issues
+
+    def _name(self, unit: JsUnit) -> str:
+        """``path:local`` of a module-level function; "" for anything else."""
+        found = ""
+        if unit.function is not None:
+            for local, node in unit.module.definitions.items():
+                if node.id == unit.function.id:
+                    found = f"{unit.module.path}:{local}"
+        return found
+
+    def display_name(self, unit: JsUnit) -> str:
+        name = self._name(unit)
+        if name != "":
+            return name
+        assert unit.function is not None, "a function unit"
+        return f"the function at line {unit.function.start_point.row + 1}"
+
+
+def _shaped(unit: JsUnit, summary: JsSummary) -> PropSet:
+    """A generator function gives a generator of its items, an async function a Promise
+    of its result (§5.2c), any other function its result."""
+    function = unit.function
+    assert function is not None, "a function unit"
+    if function.type in GENERATORS:
+        return generator(summary.items)
+    if has_token(function, ASYNC):
+        return coroutine(summary.result)
+    return summary.result
 
 
 def entry_state(unit: JsUnit) -> Env:
@@ -471,15 +541,16 @@ def entry_state(unit: JsUnit) -> Env:
         for name in _parameter_bindings(unit.function):
             env[name] = EMPTY
     for name, required in unit.header.requirements.items():
-        env[name] = PropSet(required, exact=True, why="", lazy=False)
+        env[name] = known_set(required)
     return env
 
 
-def run(hooks: "JsUnitHooks", unit: JsUnit) -> PropSet:
+def run(hooks: "JsUnitHooks", unit: JsUnit) -> JsSummary:
     if len(unit.expression) == 0:
         return run_js_unit(hooks, unit.body, entry_state(unit))
     flow = JsFlow(hooks)
-    return flow.expression(unit.expression[0], entry_state(unit))
+    value = flow.expression(unit.expression[0], entry_state(unit))
+    return JsSummary(value, intersection(list(flow.yields.values())), {}, {})
 
 
 # -- checks (PROP001) ---------------------------------------------------------------------
@@ -507,18 +578,24 @@ def _reason(sink: CalleeSink | TargetSink) -> str:
     return sink.reason
 
 
+def _final_name(node: Node) -> str | None:
+    """The receiver's final identifier: ``headers`` of ``req.headers`` and of ``headers``."""
+    if node.type == Kind.MEMBER_EXPRESSION:
+        names = [node_text(prop) for prop in field_nodes(node, Field.PROPERTY)]
+        return names[0] if len(names) == 1 else None
+    if node.type == Kind.IDENTIFIER:
+        return node_text(node)
+    return None
+
+
 def _matches(sink: TargetSink, target: Node) -> bool:
-    """``<any>.attribute = v`` or ``receiver[...] = v``."""
+    """``<any>.attribute = v`` or ``<...>receiver[k] = v`` (decision 43)."""
     if target.type == Kind.MEMBER_EXPRESSION:
         prop = field(target, Field.PROPERTY)
         return prop is not None and sink.attribute == node_text(prop)
     if target.type == Kind.SUBSCRIPT_EXPRESSION:
-        receiver = field(target, Field.OBJECT)
-        return (
-            sink.receiver is not None
-            and receiver is not None
-            and sink.receiver == dotted_name(receiver)
-        )
+        receivers = [_final_name(found) for found in field_nodes(target, Field.OBJECT)]
+        return sink.receiver is not None and receivers == [sink.receiver]
     return False
 
 
@@ -533,15 +610,9 @@ def _unresolved(call: Node, target: JsTarget) -> PropSet:
     return unknown(target.why)
 
 
-def _call_result(
-    target: JsTarget, contract: JsContract | None, passed: Sequence[PropSet]
-) -> PropSet:
-    if contract is not None:
-        return contract.result
-    if target.kind == UNIT:
-        return unknown(f"{target.reference} is a further call inside a callee (one hop)")
+def _library_result(target: JsTarget, passed: Sequence[PropSet]) -> PropSet:
     if any(value.lazy for value in passed):
-        return unknown(f"{target.reference} consumes a generator (generator semantics are P2)")
+        return unknown(f"{target.reference} consumes a generator (only a for loop binds its items)")
     return EMPTY  # a library callee or a global carries nothing
 
 
@@ -549,10 +620,13 @@ class JsUnitHooks:
     """What calls do inside one unit. ``reporter`` None: computing a callee's own result
     set, where a further project call is unknown (one hop) and nothing is reported."""
 
-    def __init__(self, analysis: JsAnalysis, unit: JsUnit, reporter: Reporter | None) -> None:
+    def __init__(
+        self, analysis: JsAnalysis, unit: JsUnit, reporter: Reporter | None, crossings: int
+    ) -> None:
         self.analysis = analysis
         self.unit = unit
         self.reporter = reporter
+        self.crossings = crossings
 
     def literal(self) -> PropSet:
         return self.analysis.compositions.literal_set()
@@ -598,7 +672,9 @@ class JsUnitHooks:
             self._sinks(call, target, arguments)
             if contract is not None:
                 self._requirements(call, target, contract, arguments)
-        return _call_result(target, contract, arguments)
+        if target.kind == UNIT:
+            return self.analysis.result(target, self.crossings + 1)
+        return _library_result(target, arguments)
 
     def _sinks(self, call: Node, target: JsTarget, arguments: Sequence[PropSet]) -> None:
         assert self.reporter is not None, "reporting"
@@ -651,18 +727,32 @@ def _functions(root: Node) -> list[Node]:
     return found
 
 
+def _declaration_findings(analysis: JsAnalysis, unit: JsUnit, reporter: Reporter) -> None:
+    """PROP002, PROP003, PROP005-PROP007: what the unit's declarations say by themselves."""
+    for issue in [*unit.issues, *analysis.producer_issues(unit)]:
+        reporter.add_issue(issue)
+    for declaration in unit.header.misplaced:
+        reporter.add(PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION)
+
+
+def _flow_findings(analysis: JsAnalysis, unit: JsUnit, reporter: Reporter) -> None:
+    """PROP001 and PROP004: one walk of the unit, reporting."""
+    summary = run(JsUnitHooks(analysis, unit, reporter, 0), unit)
+    if unit.function is None:
+        return
+    returns = {summary.return_nodes[key]: value for key, value in summary.returns.items()}
+    for node, message in inconsistent_returns(analysis.display_name(unit), returns):
+        reporter.add(PROP004, node, message, STATUS_VIOLATION)
+
+
 def _file_findings(analysis: JsAnalysis, module: JsModule, reporter: Reporter) -> None:
     units = [analysis.unit(module, None)]
     units.extend(analysis.unit(module, function) for function in _functions(module.root))
+    walked = {PROP001.rule_id, PROP004.rule_id} & reporter.file.applies
     for unit in units:
-        for issue in unit.issues:
-            reporter.add_issue(issue)
-        for declaration in unit.header.misplaced:
-            reporter.add(
-                PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION
-            )
-        if PROP001.rule_id in reporter.file.applies:
-            run(JsUnitHooks(analysis, unit, reporter), unit)
+        _declaration_findings(analysis, unit, reporter)
+        if len(walked) > 0:
+            _flow_findings(analysis, unit, reporter)
 
 
 def _locator(source: SourceText) -> Callable[[object], Located]:

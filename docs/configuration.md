@@ -901,8 +901,8 @@ Removing a class or a role is a policy deviation; adding a narrower class
 
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
-Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a and P1b, Python
-and JavaScript). Off is
+Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a, P1b and P2,
+Python and JavaScript; the adopter's guide is `docs/property-contracts.md`). Off is
 the default in every profile and is not a deviation. The rules are described in
 `docs/rules.md`.
 
@@ -915,10 +915,16 @@ runtime_module = []                # where `shockharness contracts install` put 
                                    # "app/contracts.py" (a project path, flat or src layout;
                                    # it may be excluded from analysis) or a package name
 allow_undeclared = false           # PROP003 is error; true: review, and the name counts
+max_depth = 3                      # calls a result is followed through; deeper is unknown
+runtime_mode_required = "check"    # "off" | "check" | "verify": with "verify", PROP005
+                                   # checks registration_module registers every predicate
+registration_module = ""           # app.predicates or static/js/predicates.js; "" none
 
 [tool.shockharness.rules.property_contracts.severities]
 PROP001 = "review"
+PROP002 = "review"
 PROP003 = "error"
+PROP004 = "review"
 PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"
@@ -965,7 +971,8 @@ loaded:
 * a sink or composition naming a property the catalog does not list;
 * a composition operation the language does not have;
 * a duplicate or badly spelled property name;
-* an enabled family with no `runtime_module`. When the family is enabled, `config validate` and every
+* an enabled family with no `runtime_module`;
+* `runtime_mode_required = "verify"` with no `registration_module`. When the family is enabled, `config validate` and every
 analysis also resolve each Python reference against the project's files:
 
 * every producer must be a function of the project: a dotted Python reference, or a
@@ -995,7 +1002,8 @@ registry, and the project depends on its own copy, not on `shockharness`. Test c
 argument is a list of the properties marked `runtime = "static"`: it is required, and is
 `[]` when there are none. `shockharness contracts static-properties [--root DIR]` prints
 it in the form to paste. PROP005 reports a bootstrap whose literal list disagrees with
-the catalog. Until then, and in production, every declaration
+the catalog. `enable("verify", [...])` also runs the predicates the project
+registers with `register(name, predicate, description)`. Until then, and in production, every declaration
 is the identity.
 
 Every key is covered by VERIFY003 (see `docs/rules.md`).

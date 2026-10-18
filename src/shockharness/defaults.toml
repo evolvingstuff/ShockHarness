@@ -723,6 +723,13 @@ fail_on_unknown = false
 runtime_module = []
 # PROP003 is an error while false; true makes it review (an undeclared name is accepted).
 allow_undeclared = false
+# Call-graph crossings a result is followed through (spec §5.3); deeper calls are unknown.
+max_depth = 3
+# The runtime mode the test suite runs in ("off" | "check" | "verify"); with "verify", every
+# property that is not static needs a predicate registered in registration_module (PROP005).
+runtime_mode_required = "check"
+# The module that calls register(...): a Python dotted module or a JavaScript path; "" none.
+registration_module = ""
 # [[tool.shockharness.rules.property_contracts.properties]]: name, description, producers
 # (Python dotted references or JavaScript "path:export"; empty: any unit may produce it),
 # runtime ("static" | "check" | "verify"), literal_satisfies (optional: a plain string
@@ -730,7 +737,8 @@ allow_undeclared = false
 properties = []
 # [[tool.shockharness.rules.property_contracts.sinks]]: language, either callee ("ref:N",
 # the argument by position) or target (an assignment: "innerHTML" on any receiver,
-# "headers[]" a subscript of a named receiver), requires, reason, producer (optional).
+# "headers[]" a subscript of a receiver whose final identifier is headers), requires,
+# reason, producer (optional).
 sinks = []
 # [[tool.shockharness.rules.property_contracts.compositions]]: language, operation
 # ("template_literal" | "concat" | "fstring" | "format"), inputs_require, produces, reason.
@@ -740,7 +748,9 @@ compositions = []
 
 [tool.shockharness.rules.property_contracts.severities]
 PROP001 = "review"
+PROP002 = "review"
 PROP003 = "error"
+PROP004 = "review"
 PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"

@@ -1,5 +1,6 @@
 import html
 
+from app.provider import send
 from contracts_runtime import produces, requires
 
 
@@ -50,3 +51,33 @@ def joined(parts):
 
 def destroyed(raw):
     return deliver(html.escape(raw))
+
+
+async def redacted_stream(texts):
+    for text in texts:
+        yield redact(text)
+
+
+async def raw_stream(texts):
+    for text in texts:
+        yield text
+
+
+async def forward(raw):
+    async for chunk in redacted_stream([raw]):
+        send(chunk)
+    async for chunk in raw_stream([raw]):
+        send(chunk)
+
+
+def delegating(texts):
+    yield from chunks(texts)
+
+
+def forward_delegated(raw):
+    for chunk in delegating([raw]):
+        send(chunk)
+
+
+def forward_without_await(raw):
+    return send(fetch_redacted(raw))

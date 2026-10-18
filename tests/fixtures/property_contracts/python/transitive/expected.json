@@ -1,0 +1,7 @@
+[
+  {"path": "app/text.py", "rule": "PROP002", "line": 11, "column": 12, "status": "violation", "severity": "review", "message": "produces(..., 'redacted') outside its declared producers (app.text.redact)"},
+  {"path": "app/text.py", "rule": "PROP004", "line": 17, "column": 5, "status": "violation", "severity": "review", "message": "this return of maybe carries {}, without 'redacted' that another return carries; the result carries only {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 15, "column": 20, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: app.text.redact is more than max_depth = 2 calls away"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 19, "column": 20, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: app.wrappers.wrapped is more than max_depth = 2 calls away"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 23, "column": 20, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: app.wrappers.looping calls itself (recursion is not followed)"}
+]

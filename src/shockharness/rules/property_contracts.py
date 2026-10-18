@@ -45,7 +45,10 @@ from shockharness.contracts.python_flow import (
     Env,
     Part,
     PropSet,
-    lazy_unknown,
+    Summary,
+    coroutine,
+    generator,
+    known_set,
     run_unit,
     unknown,
 )
@@ -66,12 +69,22 @@ from shockharness.contracts.report import (
     Located,
     Reporter,
     Requirement,
+    inconsistent_returns,
     quoted,
 )
 from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.python_catches import node_span
+from shockharness.rules.defaults import module_names
 from shockharness.rules.property_contracts_javascript import run_javascript_contracts
-from shockharness.rules.registry import PROP001, PROP003, PROP005, PROP006, PROP007
+from shockharness.rules.registry import (
+    PROP001,
+    PROP002,
+    PROP003,
+    PROP004,
+    PROP005,
+    PROP006,
+    PROP007,
+)
 from shockharness.source import SourceText
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -114,7 +127,6 @@ class Contract:
     positional: tuple[str, ...]
     keywords: frozenset[str]
     requirements: Mapping[str, frozenset[str]]
-    result: PropSet
 
 
 def own_nodes(statements: Sequence[ast.stmt]) -> Iterator[ast.AST]:
@@ -342,8 +354,14 @@ class Analysis:
         self.sinks = self._sinks(catalog.sinks)
         self.targets = tuple(target for target in catalog.targets if target.language == PYTHON)
         self.compositions = Compositions(catalog, PYTHON)
+        self.max_depth = int(settings["max_depth"])
+        self.producers = {
+            name: frozenset(entry.producers) for name, entry in catalog.properties.items()
+        }
         self.units: dict[ast.AST, Unit] = {}
         self.contracts: dict[ast.AST, Contract] = {}
+        self.results: dict[tuple[ast.AST, int], PropSet] = {}
+        self.computing: set[ast.AST] = set()
 
     def _sinks(self, sinks: Sequence[CalleeSink]) -> dict[str, list[CalleeSink]]:
         found: dict[str, list[CalleeSink]] = {}
@@ -422,6 +440,7 @@ class Analysis:
         return declarations, issues
 
     def contract(self, target: Target) -> Contract:
+        """A resolved callee's parameters and the requirements at the top of its body."""
         assert target.module is not None and target.function is not None, "a unit target"
         function = target.function
         if function not in self.contracts:
@@ -431,22 +450,74 @@ class Analysis:
                 positional=tuple(a.arg for a in [*arguments.posonlyargs, *arguments.args]),
                 keywords=frozenset(a.arg for a in [*arguments.args, *arguments.kwonlyargs]),
                 requirements=unit.header.requirements,
-                result=self._result(unit, target.reference),
             )
         return self.contracts[function]
 
-    def _result(self, unit: Unit, reference: str) -> PropSet:
-        function = unit.function
-        assert function is not None, "a function unit"
-        if _is_generator(unit.body):
-            return lazy_unknown(f"{reference} is a generator (generator semantics are P2)")
-        if isinstance(function, ast.AsyncFunctionDef):
-            return unknown(f"{reference} is async (await semantics are P2)")
-        declared = [d for d in unit.declarations.values() if d.kind in RESULT_DECLARATIONS]
-        if not any(d.valid for d in declared):
-            return EMPTY  # no produces or preserves: the function declares no result
-        hooks = UnitHooks(self, unit, None)
-        return run_unit(hooks, unit.body, entry_state(unit))
+    def result(self, target: Target, crossings: int) -> PropSet:
+        """What a call of ``target`` gives, ``crossings`` calls away from the checked unit:
+        its own returns, with its further calls followed up to ``max_depth`` (§5.3)."""
+        assert target.module is not None and target.function is not None, "a unit target"
+        function = target.function
+        if crossings > self.max_depth:
+            return unknown(
+                f"{target.reference} is more than max_depth = {self.max_depth} calls away"
+            )
+        key = (function, crossings)
+        if key not in self.results:
+            if function in self.computing:
+                return unknown(f"{target.reference} calls itself (recursion is not followed)")
+            self.computing.add(function)
+            unit = self.function_unit(target.module, function)
+            summary = run_unit(UnitHooks(self, unit, None, crossings), unit.body, entry_state(unit))
+            self.computing.discard(function)
+            self.results[key] = _shaped(unit, summary)
+        return self.results[key]
+
+    def producer_issues(self, unit: Unit) -> list[Issue]:
+        """PROP002: a produces of a property whose catalog producers do not include the
+        enclosing function (only properties with a non-empty producers list)."""
+        names = self._names(unit)
+        issues: list[Issue] = []
+        for declaration in unit.declarations.values():
+            if declaration.kind != PRODUCES or not declaration.valid:
+                continue
+            for name in sorted(declaration.properties & frozenset(self.producers)):
+                allowed = self.producers[name]  # an undeclared name has no producers to break
+                if len(allowed) > 0 and len(allowed & names) == 0:
+                    message = (
+                        f"produces(..., {name!r}) outside its declared producers "
+                        f"({', '.join(sorted(allowed))})"
+                    )
+                    issues.append(Issue(PROP002, declaration.call, message, PROP002))
+        return issues
+
+    def _names(self, unit: Unit) -> frozenset[str]:
+        """The dotted references that name a unit: module.function, module.Class.method."""
+        if unit.function is None:
+            return frozenset()
+        qualname = _qualname(unit.module.tree, unit.function)
+        if qualname is None:
+            return frozenset()
+        return frozenset(f"{name}.{qualname}" for name in module_names(unit.module.path))
+
+
+def _qualname(tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    for node in tree.body:
+        if node is function:
+            return function.name
+        if isinstance(node, ast.ClassDef) and function in node.body:
+            return f"{node.name}.{function.name}"
+    return None
+
+
+def _shaped(unit: Unit, summary: Summary) -> PropSet:
+    """A generator function gives a generator of its items, an async function a
+    coroutine of its result (§5.2c), any other function its result."""
+    if _is_generator(unit.body):
+        return generator(summary.items)
+    if isinstance(unit.function, ast.AsyncFunctionDef):
+        return coroutine(summary.result)
+    return summary.result
 
 
 def _is_generator(body: Sequence[ast.stmt]) -> bool:
@@ -467,7 +538,7 @@ def entry_state(unit: Unit) -> Env:
     for name in unit.parameters:
         env[name] = EMPTY
     for name, required in unit.header.requirements.items():
-        env[name] = PropSet(required, exact=True, why="", lazy=False)
+        env[name] = known_set(required)
     return env
 
 
@@ -521,15 +592,10 @@ def _unresolved(call: ast.Call, target: Target) -> PropSet:
     return unknown(target.why)
 
 
-def _call_result(target: Target, contract: Contract | None, passed: Sequence[PropSet]) -> PropSet:
-    """A resolved call's result set: the callee's own declared result (one hop), unknown
-    for a further project call inside a callee, nothing for a library callee."""
-    if contract is not None:
-        return contract.result
-    if target.kind == UNIT:
-        return unknown(f"{target.reference} is a further call inside a callee (one hop)")
+def _library_result(target: Target, passed: Sequence[PropSet]) -> PropSet:
+    """A library or builtin call carries nothing, unless it consumes a generator."""
     if any(value.lazy for value in passed):
-        return unknown(f"{target.reference} consumes a generator (generator semantics are P2)")
+        return unknown(f"{target.reference} consumes a generator (only a for loop binds its items)")
     return EMPTY  # a library or builtin callee carries nothing
 
 
@@ -539,14 +605,13 @@ def _reason(sink: CalleeSink | TargetSink) -> str:
     return sink.reason
 
 
-def _dotted(node: ast.expr) -> str | None:
-    parts: list[str] = []
-    while isinstance(node, ast.Attribute):
-        parts.insert(0, node.attr)
-        node = node.value
-    if not isinstance(node, ast.Name):
-        return None
-    return ".".join([node.id, *parts])
+def _final_name(node: ast.expr) -> str | None:
+    """The receiver's final identifier: ``headers`` of ``req.headers`` and of ``headers``."""
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
 
 
 def _matches(sink: TargetSink, target: ast.expr) -> bool:
@@ -554,18 +619,21 @@ def _matches(sink: TargetSink, target: ast.expr) -> bool:
     if isinstance(target, ast.Attribute):
         return sink.attribute == target.attr
     if isinstance(target, ast.Subscript):
-        return sink.receiver is not None and sink.receiver == _dotted(target.value)
+        return sink.receiver is not None and sink.receiver == _final_name(target.value)
     return False
 
 
 class UnitHooks:
-    """What calls do inside one unit. ``reporter`` None: computing a callee's own result
-    set, where a further project call is unknown (one hop) and nothing is reported."""
+    """What calls do inside one unit, ``crossings`` calls away from the checked unit (0 for
+    the unit itself). ``reporter`` None: computing a callee's result; nothing is reported."""
 
-    def __init__(self, analysis: Analysis, unit: Unit, reporter: Reporter | None) -> None:
+    def __init__(
+        self, analysis: Analysis, unit: Unit, reporter: Reporter | None, crossings: int
+    ) -> None:
         self.analysis = analysis
         self.unit = unit
         self.reporter = reporter
+        self.crossings = crossings
 
     def literal(self) -> PropSet:
         return self.analysis.compositions.literal_set()
@@ -617,7 +685,9 @@ class UnitHooks:
             self._sinks(call, target, contract, arguments, keywords)
             if contract is not None:
                 self._requirements(call, target, contract, arguments, keywords)
-        return _call_result(target, contract, [*arguments, *(v for _name, v in keywords)])
+        if target.kind == UNIT:
+            return self.analysis.result(target, self.crossings + 1)
+        return _library_result(target, [*arguments, *(v for _name, v in keywords)])
 
     def _sinks(
         self,
@@ -674,18 +744,31 @@ def _misplaced_message(declaration: Declaration) -> str:
     )
 
 
+def _declaration_findings(analysis: Analysis, unit: Unit, reporter: Reporter) -> None:
+    """PROP002, PROP003, PROP005-PROP007: what the unit's declarations say by themselves."""
+    for issue in [*unit.issues, *analysis.producer_issues(unit)]:
+        reporter.add_issue(issue)
+    for declaration in unit.header.misplaced:
+        reporter.add(PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION)
+
+
+def _flow_findings(analysis: Analysis, unit: Unit, reporter: Reporter) -> None:
+    """PROP001 and PROP004: one walk of the unit, reporting."""
+    summary = run_unit(UnitHooks(analysis, unit, reporter, 0), unit.body, entry_state(unit))
+    if unit.function is None:
+        return
+    for node, message in inconsistent_returns(unit.function.name, summary.returns):
+        reporter.add(PROP004, node, message, STATUS_VIOLATION)
+
+
 def _file_findings(analysis: Analysis, module: Module, reporter: Reporter) -> None:
     units = [analysis.module_unit(module)]
     units.extend(analysis.function_unit(module, function) for function in _functions(module.tree))
+    walked = {PROP001.rule_id, PROP004.rule_id} & reporter.file.applies
     for unit in units:
-        for issue in unit.issues:
-            reporter.add_issue(issue)
-        for declaration in unit.header.misplaced:
-            reporter.add(
-                PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION
-            )
-        if PROP001.rule_id in reporter.file.applies:
-            run_unit(UnitHooks(analysis, unit, reporter), unit.body, entry_state(unit))
+        _declaration_findings(analysis, unit, reporter)
+        if len(walked) > 0:
+            _flow_findings(analysis, unit, reporter)
 
 
 def _locator(source: SourceText) -> Callable[[object], Located]:
