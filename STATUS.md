@@ -5271,3 +5271,25 @@ tree. The four new MetaList warnings are `AgentLoopMixin._run_agent_loop` (24
 targets) and three tests (21 to 23 targets): calls through singletons and `self` that
 were external or unresolved now count. The changelog says the change can make a passing
 gate fail (CPLX005 fan-out is a warning), which on these trees means four warnings.
+
+## Property contracts: object-literal methods crashed the JavaScript flow — FIXED (2026-10-18)
+
+MetaList reported it on 0.10.0. With `rules.property_contracts.enabled = true`, `check`
+exited 3 with `KeyError: 'document'` (and `'controller'` for
+`new ReadableStream({start(controller) {...}})`), before any file declared anything.
+MetaList's workaround was an override that turned PROP001 and PROP004 off for its
+JavaScript.
+
+* **Cause.** A unit's names are collected by `own_nodes`, which does not enter any
+  `UNIT_TYPES` node, `method_definition` included. The flow's `NESTED_UNITS` listed only
+  arrows, function expressions, generators and classes. So evaluating an object literal
+  walked into its methods' bodies and looked up names the entry state never listed.
+* **Fix.** The flow's `NESTED_UNITS` is `UNIT_TYPES`, the same set, so the two cannot
+  drift. The lookup stays strict, because a missing name is a bug, not an unknown value.
+* **Methods are still analyzed**, each as its own unit. The new fixture
+  `javascript/object-methods` reports PROP001 on `deliver(raw)` inside `Tracker.show`.
+  Without the fix it fails with `KeyError: 'document'`.
+* **Wider check.** I enabled the family over copies of MetaList's `app/static/js` (234
+  files) and npm's `lib` (110 files, less one file the parser rejects), with no
+  declarations. The analysis completes on all 344 files.
+* MetaList can drop its override once it upgrades to a release with this fix.

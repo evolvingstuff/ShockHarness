@@ -95,6 +95,7 @@ def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None
         "javascript/complete",
         "javascript/complete-fixed",
         "javascript/innerhtml",
+        "javascript/object-methods",
         "javascript/parametric",
         "python/callee_sink",
         "python/complete",

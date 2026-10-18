@@ -38,7 +38,7 @@ from shockharness.contracts.python_flow import (
     unknown,
 )
 from shockharness.ir.javascript_catches import TYPE_WRAPPERS, node_text
-from shockharness.ir.javascript_functions import pattern_names
+from shockharness.ir.javascript_functions import UNIT_TYPES, pattern_names
 from shockharness.ir.javascript_nodes import Field, Kind
 
 TEMPLATE_LITERAL = "template_literal"
@@ -63,9 +63,10 @@ CONSTANTS = frozenset(
         Kind.SUPER,
     }
 )
-NESTED_UNITS = frozenset(
-    {Kind.ARROW_FUNCTION, Kind.FUNCTION_EXPRESSION, Kind.GENERATOR_FUNCTION, Kind.CLASS}
-)
+# A nested function, method or class is its own unit, exactly as the unit's names are
+# collected (``own_nodes``): an object literal's method included, so the flow never reads
+# a name the entry state does not list.
+NESTED_UNITS = UNIT_TYPES
 TRANSPARENT = frozenset({Kind.PARENTHESIZED_EXPRESSION}) | TYPE_WRAPPERS
 DECLARED_NAMES = frozenset(
     {Kind.FUNCTION_DECLARATION, Kind.GENERATOR_FUNCTION_DECLARATION, Kind.CLASS_DECLARATION}

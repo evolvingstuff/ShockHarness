@@ -1,0 +1,3 @@
+[
+  {"path": "src/use.js", "rule": "PROP001", "line": 15, "column": 20, "status": "violation", "severity": "review", "message": "src/use.js:deliver requires 'redacted' on text; the value passed here has {}"}
+]

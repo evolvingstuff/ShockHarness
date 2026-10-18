@@ -19,6 +19,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   a method. Calls that were `unknown` can become passes or PROP001 violations. The family
   is opt-in, so no gate that has it off changes.
 
+### Fixed
+- **Property contracts no longer crash on an object literal's methods (JavaScript).**
+  With the family enabled, `shockharness check` exited 3 with `KeyError: 'document'` on any
+  method of an object literal that reads a name its enclosing unit does not bind
+  (`export const Tracker = { start() { document.addEventListener(...) } }`, a stream
+  source's `start(controller)`). The flow walked into those methods' bodies, while the
+  unit's names were collected without entering them. Every nested function, method and
+  class is now its own unit for both. From MetaList on 0.10.0.
+
 ### Changed
 - **The call graph resolves Python methods through exact receivers**
   (`docs/proposal-receivers.md`, R1; cache schema "21").
