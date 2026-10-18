@@ -724,6 +724,8 @@ runtime_module = []
 # PROP003 is an error while false; true makes it review (an undeclared name is accepted).
 allow_undeclared = false
 # Call-graph crossings a result is followed through (spec §5.3); deeper calls are unknown.
+# Lowering it while fail_on_unknown is false is a VERIFY003 loosening; raising it never is
+# (decision 47).
 max_depth = 3
 # The runtime mode the test suite runs in ("off" | "check" | "verify"); with "verify", every
 # property that is not static needs a predicate registered in registration_module (PROP005).

@@ -916,6 +916,7 @@ runtime_module = []                # where `shockharness contracts install` put 
                                    # it may be excluded from analysis) or a package name
 allow_undeclared = false           # PROP003 is error; true: review, and the name counts
 max_depth = 3                      # calls a result is followed through; deeper is unknown
+                                   # (raising it is never a loosening, decision 47)
 runtime_mode_required = "check"    # "off" | "check" | "verify": with "verify", PROP005
                                    # checks registration_module registers every predicate
 registration_module = ""           # app.predicates or static/js/predicates.js; "" none

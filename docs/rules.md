@@ -1335,8 +1335,15 @@ is a VERIFY003 loosening. So are these:
   * a composition rule that accepts parts no earlier rule with the same language,
     operation and `produces` accepted: an added rule, a property removed from
     `inputs_require`, a changed `produces`;
-  * raising `max_depth`, lowering `runtime_mode_required`;
+  * lowering `max_depth` while `fail_on_unknown` is false (paths that resolved to
+    violations become unknown findings that do not gate), lowering
+    `runtime_mode_required`;
   * removing a role or a runtime module.
+
+Raising `max_depth` is never a loosening: following calls deeper turns unknown paths
+into verdicts, some of them violations (decision 47). While `fail_on_unknown` is true, a
+change of `max_depth` in either direction is reported in a revision diff as an
+analysis-scope change at review, because it trades gating unknown findings for verdicts.
 
 `RESULT001` never reports the four Python declarations as discarded results when they
 resolve to the runtime module.

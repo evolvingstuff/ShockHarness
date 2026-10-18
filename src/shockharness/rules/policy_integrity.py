@@ -51,7 +51,7 @@ from shockharness.findings import (
 )
 from shockharness.gating.baseline import FINGERPRINTS_FIELD, assign_fingerprints
 from shockharness.ir.model import Span
-from shockharness.loosening import is_remedy, loosenings
+from shockharness.loosening import is_remedy, loosenings, scope_changes
 from shockharness.roles import FILE_ROLES_KEY, ROLE_PRODUCTION, ROLE_TEST, role_classifier
 from shockharness.rules.registry import VERIFY003
 from shockharness.rules.tool_configs import TOOL_CONFIG_FILES, read_tool_settings, tool_loosenings
@@ -72,6 +72,7 @@ TABLE_HEADER = re.compile(r"\[\[?\s*(?P<name>[^\]]+?)\s*\]\]?")
 KEY_ASSIGNMENT = re.compile(r"(?P<key>[A-Za-z0-9_\-\"']+)\s*=")
 VERIFICATION_SEVERITY_ORDER = ("error", "warning", "review")
 FIRST_LINE = 1
+REVIEW = "review"  # analysis-scope changes are reported, never gating
 
 
 @dataclass(frozen=True)
@@ -473,7 +474,26 @@ def _config_findings(
                 severity if is_remedy(item, head.config.values) else rule_switching,
             )
         )
+    findings.extend(_scope_findings(base, head, anchor, head_text, short))
     findings.extend(_dropped_files(head, anchor, head_text, severity))
+    return findings
+
+
+def _scope_findings(
+    base: PolicySnapshot, head: PolicySnapshot, anchor: str, head_text: str | None, short: str
+) -> list[Finding]:
+    """Analysis-scope changes since base, at review: not loosenings, but a reviewer should
+    see that the analysis now decides differently (decision 47)."""
+    assert base.config is not None and head.config is not None, "both configurations loaded"
+    findings: list[Finding] = []
+    for item in scope_changes(base.config.values, head.config.values):
+        line = FIRST_LINE
+        if head_text is not None:
+            line = toml_key_line(head_text, item.key)
+        message = f"analysis scope changed since base {short}: {item.message}"
+        findings.append(
+            policy_finding(anchor, line, message, item.message, "configuration", None, REVIEW)
+        )
     return findings
 
 

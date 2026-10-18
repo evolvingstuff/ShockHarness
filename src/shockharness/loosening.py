@@ -315,12 +315,22 @@ def _contract_compositions(before: Mapping[str, Any], after: Mapping[str, Any]) 
 
 
 def _contract_levels(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
-    """``max_depth`` raised (fewer unknown findings that may gate, §8) and
-    ``runtime_mode_required`` lowered (verify -> check -> off)."""
+    """``max_depth`` lowered while unknown findings do not gate, and
+    ``runtime_mode_required`` lowered (verify -> check -> off).
+
+    Decision 47 (it replaces §8's "raising max_depth"): following calls deeper turns
+    unknown paths into verdicts, some of them violations, so raising it is never a
+    loosening. Lowering it while ``fail_on_unknown`` is false turns paths that would
+    have been violations into unknown findings that do not gate. While it is true, a
+    change either way trades gating unknowns for verdicts: :func:`scope_changes`."""
     found: list[Loosening] = []
-    if int(after["max_depth"]) > int(before["max_depth"]):
+    old_depth, new_depth = int(before["max_depth"]), int(after["max_depth"])
+    if new_depth < old_depth and after["fail_on_unknown"] is not True:
         key = f"{CONTRACTS}.max_depth"
-        message = f"{key} raised from {before['max_depth']} to {after['max_depth']}"
+        message = (
+            f"{key} lowered from {old_depth} to {new_depth} while fail_on_unknown is false: "
+            "calls that resolved to violations become unknown findings that do not gate"
+        )
         found.append(Loosening(key, message))
     old, new = str(before["runtime_mode_required"]), str(after["runtime_mode_required"])
     if CONTRACT_RUNTIME_MODES.index(new) > CONTRACT_RUNTIME_MODES.index(old):
@@ -364,6 +374,28 @@ def _property_contracts(
         *_contract_levels(before, after),
         *_contract_lists(before, after),
     ]
+
+
+def scope_changes(
+    before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """Changes that are not loosenings but change what the analysis decides, reported in
+    a revision diff at review (decision 47): ``max_depth`` changed in either direction
+    while ``fail_on_unknown`` is true trades gating unknown findings for verdicts."""
+    if not has_key(before_values, CONTRACTS) or not has_key(after_values, CONTRACTS):
+        return []
+    before, after = value_at(before_values, CONTRACTS), value_at(after_values, CONTRACTS)
+    if before["enabled"] is not True or after["enabled"] is not True:
+        return []
+    old_depth, new_depth = int(before["max_depth"]), int(after["max_depth"])
+    if old_depth == new_depth or after["fail_on_unknown"] is not True:
+        return []
+    key = f"{CONTRACTS}.max_depth"
+    message = (
+        f"{key} changed from {old_depth} to {new_depth} while fail_on_unknown is true: an "
+        "analysis-scope change, trading gating unknown findings for verdicts"
+    )
+    return [Loosening(key, message)]
 
 
 def loosenings(

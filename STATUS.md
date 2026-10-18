@@ -4888,7 +4888,7 @@ choices as decisions 41–43).
 7. **A check-level property on a scalar in verify mode** runs its predicate instead of
    raising the catalog-mistake error, since a predicate exists to check it.
 8. **`max_depth` raised is a loosening**, as §8 lists it: fewer unknown findings can
-   gate.
+   gate. *Flipped by decision 47 (spec v0.9); see "Decision 47" below.*
 
 **Limitations:**
 * Methods, constructors and `this`/`self` attributes are unknown.
@@ -4919,4 +4919,38 @@ $ shockharness diff --base 60cb220 --head HEAD
 shockharness 0.9.0 diff: base 60cb2207e9a3200218c14db29dfc5b8efb49af93 (60cb2207e9a3) -> head HEAD (a1a55c1260b0); 0 new, 0 fixed, 200 unchanged finding(s)
   complexity regressions against base: 0 (gates.complexity_regressions = "warn")
 gate: PASS (exit 0)
+```
+
+## Decision 47: raising max_depth is not a loosening (2026-10-17)
+
+Tom corrected §8 (spec v0.9, decision 47). Following calls deeper turns unknown paths
+into verdicts, some of them violations; v0.8 had confused "fewer unknown findings" with
+"fewer gating findings". P2 implemented the v0.8 wording. Now:
+* raising `max_depth` is never a loosening;
+* lowering it while `fail_on_unknown` is false is a loosening (paths that resolved to
+  violations become unknown findings that do not gate);
+* while `fail_on_unknown` is true, a change either way is an **analysis-scope change**.
+  `loosening.scope_changes` is new, and `policy_integrity` reports it in a revision diff
+  as VERIFY003 at `review`. It is not a loosening, so the `--policy` tier does not revert
+  it and the accepted-policy check does not report it.
+
+Tests: `test_max_depth_follows_decision_47` (the four cases), and two gate runs on real
+git history. Raising with `fail_on_unknown = true` gives a review finding and exit 0;
+lowering with `fail_on_unknown = false` gives an error finding and exit 1; raising with
+it false reports nothing. Docs: rules.md, configuration.md, defaults.toml, CHANGELOG.
+
+Spec v0.9 (in this commit) also records decisions 44–46 from P2. Decision 45 names
+`return preserves(x, x)` as the way a pass-through helper "carries whatever the caller
+passed". P2 computes a callee's result once, with its undeclared parameters empty, so
+that form carries nothing today. `requires(x, "p"); return x` works as described.
+Carrying the caller's set into `preserves` of a parameter is a follow-up.
+
+```text
+$ pytest -q
+1298 passed in 65.73s (0:01:05)
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 198 file(s), 198 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+# scratch clone: gate against shockharness-policy-accepted, PASS; diff --base 15b3101:
+# 0 new, 0 fixed, 200 unchanged; 0 complexity regressions
 ```

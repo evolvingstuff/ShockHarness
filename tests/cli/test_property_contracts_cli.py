@@ -71,3 +71,45 @@ def test_removing_a_sink_is_a_verify003_loosening(
     assert len(found) == 1, [(f["rule_id"], f["message"]) for f in data["findings"]]
     assert (found[0]["severity"], found[0]["status"]) == ("error", "new")
     assert code == 1
+
+
+def depth_gate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], fail_on_unknown: str, depth: int
+) -> tuple[int, list[dict[str, str]]]:
+    """Commit the callee-sink fixture, change max_depth in a second commit, run the gate."""
+    root = tmp_path / "project"
+    shutil.copytree(CASE, root)
+    config = root / ".shockharness.toml"
+    severity = '[tool.shockharness.rules.verification]\nrule_switching_severity = "error"\n\n'
+    text = severity + config.read_text(encoding="utf-8")
+    switch = f"enabled = true\nfail_on_unknown = {fail_on_unknown}\n"
+    config.write_text(text.replace("enabled = true\n", switch, 1), encoding="utf-8")
+    init_repo(root)
+    base = commit_all(root, "base", BASE_DATE, "one@example.invalid")
+    changed = config.read_text(encoding="utf-8").replace(switch, f"{switch}max_depth = {depth}\n")
+    config.write_text(changed, encoding="utf-8")
+    commit_all(root, "change max_depth", HEAD_DATE, "two@example.invalid")
+    revision = ["--base", base, "--head", "HEAD", "--root", str(root), "--format", "json"]
+    code, out, _err = run(["gate", *revision], capsys)
+    found = [f for f in json.loads(out)["findings"] if "max_depth" in f["message"]]
+    return code, found
+
+
+def test_raising_max_depth_is_reported_as_scope_at_review_and_does_not_fail(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, found = depth_gate(tmp_path, capsys, "true", 5)
+    assert [(f["rule_id"], f["severity"]) for f in found] == [("VERIFY003", "review")]
+    assert "analysis scope changed" in found[0]["message"]
+    assert code == 0
+
+
+def test_lowering_max_depth_without_fail_on_unknown_is_a_loosening(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, found = depth_gate(tmp_path, capsys, "false", 2)
+    assert [(f["rule_id"], f["severity"]) for f in found] == [("VERIFY003", "error")]
+    assert "lowered from 3 to 2 while fail_on_unknown is false" in found[0]["message"]
+    assert code == 1
+    raised_code, raised = depth_gate(tmp_path / "raised", capsys, "false", 5)
+    assert raised == [] and raised_code == 0

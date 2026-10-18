@@ -19,7 +19,10 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     non-static property the `registration_module` never registers.
   - **`verify` mode and `register(name, predicate, description)`** in both runtime files.
   - A TypeScript fixture, the §13.2 metamorphic tests, and `docs/property-contracts.md`.
-  - VERIFY003 reports `max_depth` raised and `runtime_mode_required` lowered.
+  - VERIFY003 reports `runtime_mode_required` lowered, and `max_depth` lowered while
+    `fail_on_unknown` is false. Raising `max_depth` is never a loosening. While
+    `fail_on_unknown` is true, a `max_depth` change either way is a review-level
+    analysis-scope change in a revision diff (decision 47, which corrects §8).
   - The `"<name>[]"` target matches by the receiver's final identifier (decision 43).
 - Property contracts, milestone P1b (JavaScript; spec v0.7):
   - **JavaScript and TypeScript files.** `requires` / `produces` / `preserves` /

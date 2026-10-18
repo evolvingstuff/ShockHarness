@@ -14,7 +14,7 @@ from shockharness.analysis import CACHE_BYPASSED, AnalysisOptions, analyze_text
 from shockharness.api import analyze_paths
 from shockharness.config import EffectiveConfig, load_config
 from shockharness.errors import ConfigError
-from shockharness.loosening import loosenings
+from shockharness.loosening import loosenings, scope_changes
 from tests.conftest import FIXTURES
 
 OPTIONS = AnalysisOptions(inline_suppressions=True, cache=CACHE_BYPASSED)
@@ -494,7 +494,6 @@ def test_each_loosening_of_the_p1b_keys_is_reported(
 @pytest.mark.parametrize(
     ("old", "new", "needle"),
     [
-        ("enabled = true\n", "enabled = true\nmax_depth = 5\n", "max_depth raised from 3 to 5"),
         (
             "enabled = true\n",
             'enabled = true\nruntime_mode_required = "off"\n',
@@ -529,3 +528,36 @@ def test_prop005_reports_properties_verify_mode_has_no_predicate_for(empty_root:
     assert found[0].span.line == 8  # the registration_module line
     with pytest.raises(ConfigError, match="needs the module that registers"):
         contracts_config(empty_root, 'runtime_mode_required = "verify"\n')
+
+
+def depth_change(root: Path, base: str, depth: int) -> tuple[list[str], list[str]]:
+    """(loosenings, scope changes) of changing max_depth from the default 3 to ``depth``."""
+    before = contracts_config(root, base)
+    after = contracts_config(
+        root, base.replace("enabled = true\n", f"enabled = true\nmax_depth = {depth}\n", 1)
+    )
+    found = loosenings(before.values, before.deviations, after.values, after.deviations)
+    scope = scope_changes(before.values, after.values)
+    depth_key = "rules.property_contracts.max_depth"
+    return [i.message for i in found if i.key == depth_key], [i.message for i in scope]
+
+
+def test_max_depth_follows_decision_47(empty_root: Path) -> None:
+    """Raising max_depth is never a loosening; lowering it while unknown findings do not
+    gate is one; while they gate, either change is an analysis-scope change at review."""
+    advisory = ENABLED.replace("fail_on_unknown = true", "fail_on_unknown = false")
+    assert depth_change(empty_root, advisory, 5) == ([], [])
+    lowered, scope = depth_change(empty_root, advisory, 2)
+    assert scope == []
+    assert lowered == [
+        "rules.property_contracts.max_depth lowered from 3 to 2 while fail_on_unknown is "
+        "false: calls that resolved to violations become unknown findings that do not gate"
+    ]
+    for depth in (2, 5):
+        found, scope = depth_change(empty_root, ENABLED, depth)  # fail_on_unknown = true
+        assert found == []
+        assert scope == [
+            f"rules.property_contracts.max_depth changed from 3 to {depth} while "
+            "fail_on_unknown is true: an analysis-scope change, trading gating unknown "
+            "findings for verdicts"
+        ]
