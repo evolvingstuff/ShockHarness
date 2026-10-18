@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **Property contracts resolve Python methods through their receivers**
+  (`docs/proposal-receivers.md`, R1). A method call is checked against the method's
+  contract, and its result composes, when the receiver's class is exact:
+  - `self.m()` / `cls.m()` in a class no analyzed subclass overrides `m` in;
+  - a module-level singleton bound once to a constructor call (`store = Store()`), in its
+    module or imported;
+  - a local the function constructs once;
+  - `Class.m()` and `Class(...).m()`.
+
+  The arguments start after the `self` or `cls` the receiver supplies. A property is not
+  a method. Calls that were `unknown` can become passes or PROP001 violations. The family
+  is opt-in, so no gate that has it off changes.
+
 ## [0.10.0] - 2026-10-18
 
 Property contracts (opt-in, milestones P1a to P3), STATE002, and MetaList's feedback on

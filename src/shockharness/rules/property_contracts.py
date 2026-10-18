@@ -54,12 +54,15 @@ from shockharness.contracts.python_flow import (
 )
 from shockharness.contracts.python_index import (
     LIBRARY,
+    NO_RECEIVERS,
     RUNTIME,
     UNIT,
     UNKNOWN,
     Module,
     ProjectIndex,
+    Receivers,
     Target,
+    receivers_of,
 )
 from shockharness.contracts.report import (
     ASSIGNED,
@@ -121,6 +124,7 @@ class Unit:
     function: ast.FunctionDef | ast.AsyncFunctionDef | None  # None: the module body
     body: Sequence[ast.stmt]
     local: frozenset[str]  # names bound in a function: a call through one is unknown
+    receivers: Receivers  # the method's self / cls and the locals it constructs
     bound: frozenset[str]  # names the unit binds: unbound until a path binds them
     read: frozenset[str]  # names the unit reads
     parameters: tuple[str, ...]
@@ -370,7 +374,7 @@ class Analysis:
             name: frozenset(entry.producers) for name, entry in catalog.properties.items()
         }
         self.units: dict[ast.AST, Unit] = {}
-        self.contracts: dict[ast.AST, Contract] = {}
+        self.contracts: dict[tuple[ast.AST, int], Contract] = {}
         self.results: dict[tuple[ast.AST, int, tuple[tuple[str, PropSet], ...]], PropSet] = {}
         self.computing: set[ast.AST] = set()
 
@@ -407,12 +411,14 @@ class Analysis:
     ) -> Unit:
         parameters: tuple[str, ...] = ()
         local: frozenset[str] = frozenset()  # module level: the module's own tables
+        receivers = NO_RECEIVERS
         bound = _stored(body)
         if function is not None:
             parameters = tuple(_parameters(function.args))
             bound = bound - _declared_global(body)
             local = frozenset(bound | set(parameters))
-        declarations, issues = self._declarations(module, body, local)
+            receivers = receivers_of(_owner(module.tree, function), function)
+        declarations, issues = self._declarations(module, body, local, receivers)
         header = Header({}, frozenset(), ())
         if function is not None:
             header = _header(function, declarations)
@@ -422,6 +428,7 @@ class Analysis:
             function=function,
             body=body,
             local=local,
+            receivers=receivers,
             bound=frozenset(bound),
             read=read,
             parameters=parameters,
@@ -432,14 +439,18 @@ class Analysis:
         )
 
     def _declarations(
-        self, module: Module, body: Sequence[ast.stmt], local: frozenset[str]
+        self,
+        module: Module,
+        body: Sequence[ast.stmt],
+        local: frozenset[str],
+        receivers: Receivers,
     ) -> tuple[dict[ast.Call, Declaration], list[Issue]]:
         declarations: dict[ast.Call, Declaration] = {}
         issues: list[Issue] = []
         for node in own_nodes(body):
             if not isinstance(node, ast.Call):
                 continue
-            target = self.index.callee(module, node.func, local)
+            target = self.index.callee(module, node.func, local, receivers)
             owner, _dot, kind = target.reference.rpartition(".")
             if owner in self.index.runtime and kind == ENABLE:
                 issues.extend(enable_issues(node, self.static))
@@ -452,19 +463,25 @@ class Analysis:
         return declarations, issues
 
     def contract(self, target: Target) -> Contract:
-        """A resolved callee's parameters and the requirements at the top of its body."""
+        """A resolved callee's parameters and the requirements at the top of its body. A
+        method called through an instance supplies its ``self`` (``target.implicit``):
+        the call's arguments start at the next parameter."""
         assert target.module is not None and target.function is not None, "a unit target"
         function = target.function
-        if function not in self.contracts:
+        key = (function, target.implicit)
+        if key not in self.contracts:
             unit = self.function_unit(target.module, function)
             arguments = function.args
-            self.contracts[function] = Contract(
-                positional=tuple(a.arg for a in [*arguments.posonlyargs, *arguments.args]),
-                keywords=frozenset(a.arg for a in [*arguments.args, *arguments.kwonlyargs]),
+            positional = [a.arg for a in [*arguments.posonlyargs, *arguments.args]]
+            supplied = frozenset(positional[: target.implicit])
+            self.contracts[key] = Contract(
+                positional=tuple(positional[target.implicit :]),
+                keywords=frozenset(a.arg for a in [*arguments.args, *arguments.kwonlyargs])
+                - supplied,
                 requirements=unit.header.requirements,
-                parametric=unit.parametric,
+                parametric=unit.parametric - supplied,
             )
-        return self.contracts[function]
+        return self.contracts[key]
 
     def result(self, target: Target, crossings: int, passed: Mapping[str, PropSet]) -> PropSet:
         """What a call of ``target`` gives, ``crossings`` calls away from the checked unit:
@@ -513,6 +530,16 @@ class Analysis:
         if qualname is None:
             return frozenset()
         return frozenset(f"{name}.{qualname}" for name in module_names(unit.module.path))
+
+
+def _owner(
+    tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef
+) -> ast.ClassDef | None:
+    """The module-level class whose body defines ``function``."""
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and function in node.body:
+            return node
+    return None
 
 
 def _qualname(tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
@@ -748,7 +775,8 @@ class UnitHooks:
         keywords: Sequence[tuple[str | None, PropSet]],
         reporting: bool,
     ) -> PropSet:
-        target = self.analysis.index.callee(self.unit.module, call.func, self.unit.local)
+        unit = self.unit
+        target = self.analysis.index.callee(unit.module, call.func, unit.local, unit.receivers)
         if target.kind == UNKNOWN:
             return _unresolved(call, target)
         contract = None

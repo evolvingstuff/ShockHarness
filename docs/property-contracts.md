@@ -90,9 +90,15 @@ what its own argument carried (decision 48). A wrapper that relies on a property
 On a real application **many findings will be unknown**. They are reported, never
 silent, and each says why. The usual causes:
 
-* **A method on a value**: `store.get(x)`, `self.cipher.redact(x)`, `ops["f"](x)`. The
-  analysis does not know the receiver's class. A module-level singleton whose methods are
-  called everywhere is the most common case.
+* **A method on a value whose class is not exact**: a parameter (`store.get(x)` on an
+  argument), an attribute (`self.cipher.redact(x)`), a callable in a container
+  (`ops["f"](x)`), `self.m()` where an analyzed subclass overrides `m`. In Python a
+  method does resolve when its receiver's class is exact: `self.m()` and `cls.m()` in a
+  class no analyzed subclass overrides `m` in, a module-level singleton bound once
+  (`store = Store()`, used in its module or imported), a local the function constructs
+  (`s = Store()`), `Store.m()` and `Store().m()`. The call's arguments start after the
+  `self` or `cls` the receiver supplies. JavaScript methods are R2 of
+  `docs/proposal-receivers.md`.
 * **Framework injection** (FastAPI `Depends`, a callback registered by name) and
   **dynamic imports** (`await import(...)`): the callee is not visible.
 * **A call deeper than `max_depth`**, or recursion.
@@ -207,5 +213,6 @@ loosening.
 
 * Annotation forms of the declarations (`Annotated[T, Prop("p")]`, branded types) and
   Hypothesis integration are P4, with the two MetaList measurements.
-* Methods are not resolved through their receivers. Catalog preserving operations
-  (slicing) are not implemented.
+* JavaScript methods are not resolved through their receivers (R2), and Python
+  annotations do not type a receiver. Catalog preserving operations (slicing) are not
+  implemented.

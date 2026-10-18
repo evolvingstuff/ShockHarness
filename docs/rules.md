@@ -1295,8 +1295,16 @@ There is no separate declaration.
   `await` carries nothing. A `for`/`async for`/`for await` over a call of a project
   generator binds the loop variable to the generator's item set (the intersection over
   its `yield`s; `yield from`/`yield*` delegate).
-* **Unknown sets.** Some calls cannot be resolved: a method on a value, a callable in a
-  variable or a container, a class or `new`, a dynamic import. A generator consumed by a
+* **Methods (Python).** A method resolves when its receiver's class is exact: `self.m()`
+  / `cls.m()` in a class no analyzed subclass overrides `m` in (a closed world over the
+  analyzed files), a module-level singleton bound once to a constructor call, a local the
+  function constructs once, `Class.m()` and `Class(...).m()`. The method is looked up in
+  the class and then in its project bases, left to right; a base that is not a project
+  class makes the call unknown. The call's arguments start after the parameter the
+  receiver supplies (`self` through an instance, `cls` always, none for a static method).
+  A property is not a method (`docs/proposal-receivers.md`, R1).
+* **Unknown sets.** Some calls cannot be resolved: a method on a value whose class is not
+  exact, a callable in a variable or a container, a class or `new`, a dynamic import. A generator consumed by a
   library call (`list(gen())`) or a comprehension, a generator expression, `async with`,
   a loop over an unresolved iterable, and a `.join` build are unknown too.
 * **JavaScript calls.** Functions resolve through `import`/`require`, re-exports and
@@ -1359,8 +1367,8 @@ resolve to the runtime module.
 * catalog preserving operations (slicing);
 * annotation forms of the declarations and Hypothesis integration (P4).
 
-Methods are not resolved through their receivers, and a class call (a constructor) is
-unknown. A JavaScript method sink (`insertAdjacentHTML`) can therefore not match, and
+JavaScript methods are not resolved through their receivers, and a class call (a
+constructor) is unknown. A JavaScript method sink (`insertAdjacentHTML`) can therefore not match, and
 the subscript form of a target matches only a named receiver.
 
 ## Registered, not implemented

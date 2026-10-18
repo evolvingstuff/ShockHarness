@@ -22,7 +22,7 @@ from shockharness.contracts.catalog import (
 )
 from shockharness.contracts.javascript_flow import field_nodes, inner
 from shockharness.contracts.javascript_index import RUNTIME_MARKER, JsProjectIndex
-from shockharness.contracts.python_index import ProjectIndex
+from shockharness.contracts.python_index import NO_RECEIVERS, ProjectIndex
 from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding
 from shockharness.ir.javascript_functions import string_value
 from shockharness.ir.javascript_nodes import Field, Kind
@@ -50,7 +50,7 @@ def _python_registrations(root: Path, module: str, runtime: frozenset[str]) -> f
         if not isinstance(node, ast.Call) or len(node.args) == 0:
             continue
         first = node.args[0]
-        callee = index.callee(project, node.func, frozenset())
+        callee = index.callee(project, node.func, frozenset(), NO_RECEIVERS)
         if (
             callee.reference in targets
             and isinstance(first, ast.Constant)
@@ -73,7 +73,7 @@ def _javascript_registrations(root: Path, path: str, runtime: frozenset[str]) ->
         if node.type != Kind.CALL_EXPRESSION:
             continue
         for function in field_nodes(node, Field.FUNCTION):
-            callee = index.callee(module, function, frozenset())
+            callee = index.callee(module, function, frozenset(), NO_RECEIVERS)
             arguments = inner(node, Field.ARGUMENTS)
             if callee.reference == f"{RUNTIME_MARKER}:{REGISTER}" and len(arguments) > 0:
                 name = string_value(arguments[0])

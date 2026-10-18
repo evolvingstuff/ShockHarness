@@ -1,0 +1,13 @@
+[
+  {"path": "app/store.py", "rule": "PROP001", "line": 33, "column": 23, "status": "violation", "severity": "review", "message": "app.store.Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 11, "column": 16, "status": "violation", "severity": "review", "message": "app.store.Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 17, "column": 16, "status": "violation", "severity": "review", "message": "app.store.Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 22, "column": 17, "status": "violation", "severity": "review", "message": "app.store.Store.check requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 23, "column": 17, "status": "violation", "severity": "review", "message": "app.store.Store.build requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 24, "column": 30, "status": "violation", "severity": "review", "message": "app.store.Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 28, "column": 25, "status": "violation", "severity": "review", "message": "app.store.Store.save requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 32, "column": 13, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: app.store.Store.size is a property, not a method"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 33, "column": 20, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: clean(...) is called on app.store.cache, a module-level value that is not one constructor call bound once"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 47, "column": 24, "status": "violation", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 55, "column": 24, "status": "unknown", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the analysis cannot tell whether the value passed here carries it: app.use.Base.clean is overridden in app.use.Loud; the receiver may be an instance of it"}
+]

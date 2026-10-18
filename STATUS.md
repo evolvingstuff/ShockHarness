@@ -5183,3 +5183,37 @@ Under this rule, the ten redaction-ask runs of the two rounds would have scored
 `acceptable_alternative`: each reported the contradiction, and each final message shows
 `send_to_model(client, redact(note))`. The hidden test did not exist yet, so this is read
 from the messages, not measured.
+
+## Receivers R1, part one: property contracts resolve Python methods — DONE (2026-10-18)
+
+On Tom's go-ahead (`docs/proposal-receivers.md`, with his position on its four questions).
+
+* **One syntax-only module**, `src/shockharness/ir/python_receivers.py`, says what a
+  receiver is. The property contracts index uses it now, and the call graph's facts will
+  use it in part two.
+  * A singleton is a module-level name bound exactly once, to a call of a plain or dotted
+    name, that no function rebinds through `global`.
+  * A constructed local is the same, inside a function, and not a parameter.
+  * A method's kind is instance, static or class; a property is no method.
+* **The index** (`contracts/python_index.py`) resolves:
+  * `self.m()` / `cls.m()`, unless an analyzed class deriving from the enclosing one
+    defines `m` (the closed world Tom accepted). The reason names the overriding class.
+  * Singletons, in their module or imported.
+  * Constructed locals, `Class.m()` and `Class(...).m()`.
+
+  The method is looked up in the class, then its project bases left to right. A base that
+  is not a project class (other than `object`) makes the call unknown, since it may
+  define the method.
+* **Arguments:** `Target.implicit` counts the parameters the receiver supplies, and
+  `Analysis.contract` drops them from the positional and keyword lists. Contracts are
+  cached per (function, implicit). `Store.save(store, raw)` passes `self` itself, so
+  `raw` is `text`.
+* **Tests:**
+  * a fixture, `python/receivers`, with 11 findings: 8 violations and 3 unknown (a
+    property, a value bound twice, an overridden method);
+  * `tests/unit/test_python_receivers.py`.
+* **Measured: nothing outside the fixtures changes.** The family is opt-in and neither
+  MetaList nor the corpus enables it. The finding diff that matters is part two's, in the
+  call graph.
+* Self-diff: `ProjectIndex._named` crossed NPath 200 and was split into
+  `_local_receiver` and a module-name half. The self-gate has 200 findings, as before.

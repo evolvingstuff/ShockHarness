@@ -103,6 +103,7 @@ def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None
         "python/fstring",
         "python/generators",
         "python/parametric",
+        "python/receivers",
         "python/stats",
         "python/transitive",
         "typescript/stats",
