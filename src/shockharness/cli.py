@@ -45,6 +45,7 @@ from shockharness.contracts.catalog import SECTION_PATH as PROPERTY_CONTRACTS_SE
 from shockharness.contracts.catalog import static_properties
 from shockharness.contracts.install import CONTRACTS_MANIFEST, check_runtime, install_runtime
 from shockharness.contracts.install import LANGUAGES as CONTRACT_LANGUAGES
+from shockharness.contracts.sorry import sorry_count
 from shockharness.errors import ShockHarnessError, UsageError
 from shockharness.gate import GATE_ERROR, as_advisory, process_exit_code
 from shockharness.gating.baseline import Baseline, build_baseline, load_baseline, render_baseline
@@ -557,7 +558,9 @@ def _run_exceptions(args: argparse.Namespace) -> int:
     baseline: tuple[Baseline, str] | None = None
     if args.baseline is not None:
         baseline = (load_baseline(args.baseline), str(args.baseline))
-    inventory = build_inventory(report, config, args.root, _configuration_texts(config), baseline)
+    considered = sorry_count(report.files, config, args.root)
+    texts = _configuration_texts(config)
+    inventory = build_inventory(report, config, args.root, texts, baseline, considered)
     if args.format == FORMAT_JSON:
         text = json.dumps(inventory.to_json_dict(), indent=JSON_INDENT, sort_keys=True) + "\n"
     else:

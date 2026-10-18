@@ -1,0 +1,6 @@
+[
+  {"path": "src/notes/redact.js", "rule": "PROP008", "line": 11, "column": 3, "status": "violation", "severity": "review", "message": "this return of src/notes/redact.js:sendToModel has no produces or preserves; under complete every return declares what its result carries"},
+  {"path": "src/notes/redact.js", "rule": "PROP008", "line": 14, "column": 27, "status": "violation", "severity": "review", "message": "src/notes/redact.js:summarize: parameter note has no requires; under complete every parameter declares what it must carry (requires(note, \"p\")) or that it needs nothing (requires(note))"},
+  {"path": "src/notes/redact.js", "rule": "PROP008", "line": 15, "column": 3, "status": "violation", "severity": "review", "message": "this return of src/notes/redact.js:summarize has no produces or preserves; under complete every return declares what its result carries"},
+  {"path": "src/notes/redact.js", "rule": "PROP001", "line": 15, "column": 29, "status": "violation", "severity": "review", "message": "src/notes/redact.js:redact requires 'decrypted' on note; the value passed here has {}"}
+]

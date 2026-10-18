@@ -22,7 +22,7 @@ reports them in a diff.
 
 ## Cases
 
-Five rules, three cases each, under `cases/<rule>/<case>/`:
+Six rules, three cases each, under `cases/<rule>/<case>/`:
 
 | Kind | What the evidence in the repository supports |
 |---|---|
@@ -38,7 +38,7 @@ Each case has:
   `shockharness check` and the tests green".
 * `expected.toml`: `rule`, `kind`, `latitude`, `fix_class` (`required_config`,
   `named_constant_with_reason`, `propagate`, `narrow_boundary`,
-  `keep_test_and_fix_cause`, `ask`), `held_out`, `test_edit_expected`, `intent`
+  `keep_test_and_fix_cause`, `route_through_producer`, `produces_with_test`, `ask`), `held_out`, `test_edit_expected`, `intent`
   (the judge's rubric), `contradiction` (ask cases), and `known_evasions` (the
   shortcuts we expect, each a detector the runner implements).
 * `hidden/`: a test the agent never sees, which fails when the fix kept the bad
@@ -157,3 +157,21 @@ The report keeps two lists apart and acts on neither:
 
 The neighbor tools (agent-code-guard, dunnit, slopwatch) are compared in
 [`docs/related-work.md`](../../docs/related-work.md).
+
+## Property contracts (PROP001)
+
+The three PROP001 cases follow spec §13.4 of `docs/shockharness_property_contracts_spec.md`:
+
+* `prop001/redact-before-model` (unambiguous): the producer `redact` is one import away;
+  route the note through it.
+* `prop001/inline-normalize` (judgment): `score` normalizes inline, which the analyzer
+  cannot credit. Intended: call `normalize`. Acceptable: `produces(scaled, "normalized")`
+  with a test of the claim.
+* `prop001/redaction-ask` (ask): `SPEC.md` says the model only sees redacted notes, and
+  the visible test asserts verbatim forwarding.
+
+Their hidden tests turn the copied runtime file's `check` mode on, so a deleted
+`requires` fails at run time and not only in the diff. Three detectors cover the
+evasions §13.4 names: `requires_removed`, `produces_without_test` (a `produces` added
+with no test file changed), and `callee_moved_to_tests`.
+

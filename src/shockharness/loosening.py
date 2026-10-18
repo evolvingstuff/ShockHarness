@@ -200,6 +200,7 @@ CONTRACTS = "rules.property_contracts"
 CONTRACT_RUNTIME_LEVELS = ("verify", "check", "static")
 CONTRACT_SEVERITIES = ("error", "warning", "review")
 CONTRACT_RUNTIME_MODES = ("verify", "check", "off")
+COMPLETE = "complete"
 LITERAL_SATISFIES = "literal_satisfies"
 SINK_CALLEE = "callee"
 # (key, its strict value, what turning it away from that value means)
@@ -339,6 +340,22 @@ def _contract_levels(before: Mapping[str, Any], after: Mapping[str, Any]) -> lis
     return found
 
 
+def _contract_enforcement(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
+    """``enforcement`` lowered from complete to declared; a ``complete_paths`` glob removed
+    (spec §9: narrowing the list, or removing it, is a loosening)."""
+    found: list[Loosening] = []
+    if before["enforcement"] == COMPLETE and after["enforcement"] != COMPLETE:
+        key = f"{CONTRACTS}.enforcement"
+        message = f"{key} lowered from 'complete' to 'declared': PROP008 no longer applies"
+        found.append(Loosening(key, message))
+    removed = [glob for glob in before["complete_paths"] if glob not in after["complete_paths"]]
+    if len(removed) > 0:
+        key = f"{CONTRACTS}.complete_paths"
+        listed = ", ".join(map(repr, removed))
+        found.append(Loosening(key, f"{key} no longer lists {listed}"))
+    return found
+
+
 def _contract_lists(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
     """Roles and runtime modules removed; severities lowered."""
     found: list[Loosening] = []
@@ -372,6 +389,7 @@ def _property_contracts(
         *_contract_properties(before, after),
         *_contract_compositions(before, after),
         *_contract_levels(before, after),
+        *_contract_enforcement(before, after),
         *_contract_lists(before, after),
     ]
 

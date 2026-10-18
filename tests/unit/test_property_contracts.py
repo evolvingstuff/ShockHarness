@@ -92,12 +92,17 @@ def test_fixture_yields_exactly_its_expected_findings(case: str, tmp_path: Path)
 def test_every_fixture_case_has_a_catalog_expectations_and_a_rationale() -> None:
     assert CASE_NAMES == [
         "javascript/calls",
+        "javascript/complete",
+        "javascript/complete-fixed",
         "javascript/innerhtml",
+        "javascript/parametric",
         "python/callee_sink",
+        "python/complete",
         "python/declarations",
         "python/flow",
         "python/fstring",
         "python/generators",
+        "python/parametric",
         "python/stats",
         "python/transitive",
         "typescript/stats",
@@ -561,3 +566,31 @@ def test_max_depth_follows_decision_47(empty_root: Path) -> None:
             "fail_on_unknown is true: an analysis-scope change, trading gating unknown "
             "findings for verdicts"
         ]
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "needle"),
+    [
+        (
+            'enforcement = "complete"\n',
+            'enforcement = "declared"\n',
+            "enforcement lowered from 'complete' to 'declared'",
+        ),
+        (
+            'complete_paths = ["app/secure/**", "app/storage/**"]\n',
+            'complete_paths = ["app/secure/**"]\n',
+            "complete_paths no longer lists 'app/storage/**'",
+        ),
+    ],
+)
+def test_p3_keys_loosen(empty_root: Path, before: str, after: str, needle: str) -> None:
+    old = contracts_config(
+        empty_root, ENABLED.replace("enabled = true\n", "enabled = true\n" + before, 1)
+    )
+    new = contracts_config(
+        empty_root, ENABLED.replace("enabled = true\n", "enabled = true\n" + after, 1)
+    )
+    found = loosenings(old.values, old.deviations, new.values, new.deviations)
+    assert any(needle in item.message for item in found), [i.message for i in found]
+    tightened = loosenings(new.values, new.deviations, old.values, old.deviations)
+    assert not any("enforcement" in i.key or "complete_paths" in i.key for i in tightened)

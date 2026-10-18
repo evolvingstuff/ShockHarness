@@ -2629,6 +2629,52 @@ PROP007 = RuleSpec(
 )
 
 
+PROP008 = RuleSpec(
+    rule_id="PROP008",
+    version="1",
+    name="function without a declared contract (complete)",
+    family=PROPERTY_CONTRACTS_FAMILY,
+    config_section=PROPERTY_CONTRACTS_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        'Under enforcement = "complete" (or in complete_paths): a parameter with no requires, '
+        "or a return with no produces or preserves."
+    ),
+    rationale=(
+        "At the complete level the absence of a contract is visible: an agent cannot leave a "
+        "function's assumptions unstated. requires(x) with no property records that a "
+        "parameter was considered and needs nothing."
+    ),
+    guarantees=(
+        "Python: module-level functions and methods of module-level classes (self or cls of a "
+        "method excepted). JavaScript and TypeScript: module-level function declarations, "
+        "module-level const functions and arrows, and class methods. Each parameter bound to a "
+        "name without a header requires; each return of a value (not a bare return or None / "
+        "undefined) that is not a produces, preserves or preserves_except call; an arrow's "
+        "expression body counts as its return."
+    ),
+    limitations=(
+        "Nested functions, lambdas and inline callbacks are not contract units. A destructured "
+        "parameter cannot carry a requires and is not reported. A function with no return has "
+        "no result contract."
+    ),
+    remediation=(
+        'Declare what the parameter must satisfy (requires(path, "validated_path")) and what '
+        "the result carries (return produces(...) or preserves(...)), or declare explicitly that "
+        "there is nothing to require with requires(path) and no properties, which records the "
+        "decision. If you cannot determine the contract from the code and the spec, stop and "
+        "report it rather than guessing." + PROPERTY_CONTRACTS_REMEDIATION_COMMON
+    ),
+    noncompliant_example="def load_notes(path):\n    return read(path)",
+    compliant_example=(
+        'def load_notes(path):\n    requires(path, "validated_path")\n'
+        "    return preserves(read(path), path)"
+    ),
+)
+
+
 CONTRACT_RULES: tuple[RuleSpec, ...] = (
     PROP001,
     PROP002,
@@ -2637,6 +2683,7 @@ CONTRACT_RULES: tuple[RuleSpec, ...] = (
     PROP005,
     PROP006,
     PROP007,
+    PROP008,
 )
 
 
@@ -2958,6 +3005,7 @@ RULES: tuple[RuleSpec, ...] = (
     PROP005,
     PROP006,
     PROP007,
+    PROP008,
     DOM001,
     DOM002,
 )

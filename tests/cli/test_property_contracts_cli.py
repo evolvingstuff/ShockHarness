@@ -113,3 +113,22 @@ def test_lowering_max_depth_without_fail_on_unknown_is_a_loosening(
     assert code == 1
     raised_code, raised = depth_gate(tmp_path / "raised", capsys, "false", 5)
     assert raised == [] and raised_code == 0
+
+
+def test_exceptions_lists_the_sorry_count_under_complete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "project"
+    shutil.copytree(FIXTURES / "property_contracts" / "python" / "complete", root)
+    code, out, _err = run(
+        ["exceptions", str(root), "--root", str(root), "--format", "json"], capsys
+    )
+    data = json.loads(out)
+    listed = [
+        (entry["path"], entry["line"], entry["text"]) for entry in data["no_property_requires"]
+    ]
+    assert code == 0
+    assert data["summary"]["no_property_requires"] == len(listed) == 6
+    assert listed[0] == ("app/secure/files.py", 9, "requires(path)")
+    code, text, _err = run(["exceptions", str(root), "--root", str(root)], capsys)
+    assert "no-property requires under complete (the sorry count):" in text

@@ -90,6 +90,8 @@ Ask what the code promises when the value is absent or the operation fails.
 | `GUARD001` | What do the other callers know that this one does not? | Make the same check, or handle the failure the call raises; if this site cannot reach the failing case, say why. |
 | `INPUT002` | Is the variable required? | Require it where configuration loads (`os.environ["X"]`, or check and raise naming the variable); if it is optional, say so with an explicit check of the unset case. |
 | `ASYNC001`-`ASYNC003` | Who waits for this work and sees it fail? | `await` or return it; start tasks in a `TaskGroup`; check every settled result for failure. See the `async-lifecycle` skill. |
+| `PROP001` | Which declared producer establishes the property, and does this value pass through it? | Find the producer (the catalog's `producers`, or the function that `produces` it) and route the value through it. If the property really is established by something the analyzer cannot see, add `produces(x, "p")` at that point and a test that exercises it. Never satisfy `PROP001` by removing a `requires`, and never add a `produces` you cannot justify; if the contract cannot be determined from the code and the spec, stop and report. See the `property-contracts` skill. |
+| `PROP008` | What must this parameter carry, and what does the result carry? | State it: `requires(x, "p")` first in the body, `return produces(...)` or `preserves(...)`; `requires(x)` with no property records that the parameter needs nothing. If you cannot tell, stop and ask rather than guess. |
 
 An **unknown** finding means the rule could not establish the property, not
 that the code is fine or that it is wrong. Treat it as a request for the

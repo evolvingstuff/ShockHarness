@@ -1,0 +1,21 @@
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py", "tests/**/*.py"]
+
+[[tool.shockharness.overrides]]
+roles = ["test"]
+disable = ["MAGIC001", "DEF001"]
+reason = "Tests encode literal expected values"
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+runtime_module = ["src/app/contracts.py"]
+
+[tool.shockharness.rules.property_contracts.severities]
+PROP001 = "error"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "redacted"
+description = "a note with e-mail addresses masked; the only form the model may see"
+producers = ["app.privacy.redact"]
+runtime = "static"

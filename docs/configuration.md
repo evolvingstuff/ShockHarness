@@ -915,6 +915,8 @@ runtime_module = []                # where `shockharness contracts install` put 
                                    # "app/contracts.py" (a project path, flat or src layout;
                                    # it may be excluded from analysis) or a package name
 allow_undeclared = false           # PROP003 is error; true: review, and the name counts
+enforcement = "declared"           # "declared" | "complete": PROP008, every parameter and return declared
+complete_paths = []                # globs where "complete" applies while the rest stays "declared"
 max_depth = 3                      # calls a result is followed through; deeper is unknown
                                    # (raising it is never a loosening, decision 47)
 runtime_mode_required = "check"    # "off" | "check" | "verify": with "verify", PROP005
@@ -929,6 +931,7 @@ PROP004 = "review"
 PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"
+PROP008 = "review"
 
 [[tool.shockharness.rules.property_contracts.properties]]
 name = "cloud_disclosable"         # lower_snake_case, listed once

@@ -64,6 +64,7 @@ from shockharness.contracts.python_index import (
 from shockharness.contracts.report import (
     ASSIGNED,
     PASSED,
+    Considered,
     ContractFile,
     Issue,
     Located,
@@ -73,9 +74,13 @@ from shockharness.contracts.report import (
     quoted,
 )
 from shockharness.findings import STATUS_VIOLATION, Finding
+from shockharness.ir.model import Span
 from shockharness.ir.python_catches import node_span
 from shockharness.rules.defaults import module_names
-from shockharness.rules.property_contracts_javascript import run_javascript_contracts
+from shockharness.rules.property_contracts_javascript import (
+    javascript_considered,
+    run_javascript_contracts,
+)
 from shockharness.rules.registry import (
     PROP001,
     PROP002,
@@ -84,6 +89,7 @@ from shockharness.rules.registry import (
     PROP005,
     PROP006,
     PROP007,
+    PROP008,
 )
 from shockharness.source import SourceText
 
@@ -94,6 +100,7 @@ VALUE_ONLY = 1
 RESULT_AND_SOURCE = 2
 RESULT_DECLARATIONS = (PRODUCES, PRESERVES, PRESERVES_EXCEPT)
 JOIN = "join"
+STATICMETHOD = "staticmethod"
 SCRIPT_LANGUAGES = (JAVASCRIPT, TYPESCRIPT)
 ENABLE = "enable"
 ENABLE_ARGUMENTS = 2  # enable(mode, static_properties)
@@ -120,6 +127,9 @@ class Unit:
     declarations: Mapping[ast.Call, Declaration]
     issues: tuple[Issue, ...]  # PROP003 and PROP006, from the declarations
     header: Header
+    # Parameters that require nothing, are never rebound, and are the source of a
+    # preserves: the result is parametric in them (decision 48).
+    parametric: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -127,6 +137,7 @@ class Contract:
     positional: tuple[str, ...]
     keywords: frozenset[str]
     requirements: Mapping[str, frozenset[str]]
+    parametric: frozenset[str]
 
 
 def own_nodes(statements: Sequence[ast.stmt]) -> Iterator[ast.AST]:
@@ -360,7 +371,7 @@ class Analysis:
         }
         self.units: dict[ast.AST, Unit] = {}
         self.contracts: dict[ast.AST, Contract] = {}
-        self.results: dict[tuple[ast.AST, int], PropSet] = {}
+        self.results: dict[tuple[ast.AST, int, tuple[tuple[str, PropSet], ...]], PropSet] = {}
         self.computing: set[ast.AST] = set()
 
     def _sinks(self, sinks: Sequence[CalleeSink]) -> dict[str, list[CalleeSink]]:
@@ -417,6 +428,7 @@ class Analysis:
             declarations=declarations,
             issues=tuple(issues),
             header=header,
+            parametric=_parametric(function, body, declarations, header),
         )
 
     def _declarations(
@@ -450,10 +462,11 @@ class Analysis:
                 positional=tuple(a.arg for a in [*arguments.posonlyargs, *arguments.args]),
                 keywords=frozenset(a.arg for a in [*arguments.args, *arguments.kwonlyargs]),
                 requirements=unit.header.requirements,
+                parametric=unit.parametric,
             )
         return self.contracts[function]
 
-    def result(self, target: Target, crossings: int) -> PropSet:
+    def result(self, target: Target, crossings: int, passed: Mapping[str, PropSet]) -> PropSet:
         """What a call of ``target`` gives, ``crossings`` calls away from the checked unit:
         its own returns, with its further calls followed up to ``max_depth`` (§5.3)."""
         assert target.module is not None and target.function is not None, "a unit target"
@@ -462,13 +475,14 @@ class Analysis:
             return unknown(
                 f"{target.reference} is more than max_depth = {self.max_depth} calls away"
             )
-        key = (function, crossings)
+        key = (function, crossings, tuple(sorted(passed.items())))
         if key not in self.results:
             if function in self.computing:
                 return unknown(f"{target.reference} calls itself (recursion is not followed)")
             self.computing.add(function)
             unit = self.function_unit(target.module, function)
-            summary = run_unit(UnitHooks(self, unit, None, crossings), unit.body, entry_state(unit))
+            hooks = UnitHooks(self, unit, None, crossings, passed)
+            summary = run_unit(hooks, unit.body, entry_state(unit))
             self.computing.discard(function)
             self.results[key] = _shaped(unit, summary)
         return self.results[key]
@@ -599,6 +613,53 @@ def _library_result(target: Target, passed: Sequence[PropSet]) -> PropSet:
     return EMPTY  # a library or builtin callee carries nothing
 
 
+def _parametric(
+    function: ast.FunctionDef | ast.AsyncFunctionDef | None,
+    body: Sequence[ast.stmt],
+    declarations: Mapping[ast.Call, Declaration],
+    header: Header,
+) -> frozenset[str]:
+    """Parameters that require nothing (no requires, or requires(x) with no property),
+    that the body never rebinds, and that a preserves names as its source."""
+    if function is None:
+        return frozenset()
+    open_parameters = {
+        name
+        for name in _parameters(function.args)
+        if name not in header.requirements or len(header.requirements[name]) == 0
+    }
+    rebound = {name for node in own_nodes(body) for name in _bindings(node)}
+    sources = {
+        d.call.args[1].id
+        for d in declarations.values()
+        if d.kind in (PRESERVES, PRESERVES_EXCEPT)
+        and d.valid
+        and isinstance(d.call.args[1], ast.Name)
+    }
+    return frozenset((open_parameters - rebound) & sources)
+
+
+def _parametric_arguments(
+    call: ast.Call,
+    contract: Contract,
+    arguments: Sequence[PropSet],
+    keywords: Sequence[tuple[str | None, PropSet]],
+) -> dict[str, PropSet]:
+    """The caller's set for each of the callee's parametric parameters (EMPTY when the
+    argument is not passed: the parameter's default is a literal)."""
+    found: dict[str, PropSet] = {}
+    for parameter in sorted(contract.parametric):
+        position = None
+        if parameter in contract.positional:
+            position = contract.positional.index(parameter)
+        named = parameter if parameter in contract.keywords else None
+        found[parameter] = EMPTY
+        passed = _argument(call, arguments, keywords, position, named)
+        if passed is not None:
+            found[parameter] = passed.value
+    return found
+
+
 def _reason(sink: CalleeSink | TargetSink) -> str:
     if sink.producer is not None:
         return f"{sink.reason}; its producer is {sink.producer}"
@@ -628,12 +689,24 @@ class UnitHooks:
     the unit itself). ``reporter`` None: computing a callee's result; nothing is reported."""
 
     def __init__(
-        self, analysis: Analysis, unit: Unit, reporter: Reporter | None, crossings: int
+        self,
+        analysis: Analysis,
+        unit: Unit,
+        reporter: Reporter | None,
+        crossings: int,
+        arguments: Mapping[str, PropSet],
     ) -> None:
         self.analysis = analysis
         self.unit = unit
         self.reporter = reporter
         self.crossings = crossings
+        self.arguments = arguments  # the caller's sets for the parametric parameters
+
+    def passed(self, name: str) -> PropSet | None:
+        found: PropSet | None = None
+        if name in self.arguments:
+            found = self.arguments[name]
+        return found
 
     def literal(self) -> PropSet:
         return self.analysis.compositions.literal_set()
@@ -679,14 +752,15 @@ class UnitHooks:
         if target.kind == UNKNOWN:
             return _unresolved(call, target)
         contract = None
-        if target.kind == UNIT and self.reporter is not None:
+        if target.kind == UNIT:
             contract = self.analysis.contract(target)
         if self.reporter is not None and reporting:
             self._sinks(call, target, contract, arguments, keywords)
             if contract is not None:
                 self._requirements(call, target, contract, arguments, keywords)
-        if target.kind == UNIT:
-            return self.analysis.result(target, self.crossings + 1)
+        if contract is not None:
+            passed = _parametric_arguments(call, contract, arguments, keywords)
+            return self.analysis.result(target, self.crossings + 1, passed)
         return _library_result(target, [*arguments, *(v for _name, v in keywords)])
 
     def _sinks(
@@ -752,9 +826,62 @@ def _declaration_findings(analysis: Analysis, unit: Unit, reporter: Reporter) ->
         reporter.add(PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION)
 
 
+def _contract_unit(tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A module-level function or a method of a module-level class (PROP008's units)."""
+    return _qualname(tree, function) is not None
+
+
+def _checked_parameters(
+    tree: ast.Module, function: ast.FunctionDef | ast.AsyncFunctionDef
+) -> list[ast.arg]:
+    """Every parameter, except a method's self or cls (a staticmethod has neither)."""
+    arguments = function.args
+    found = [*arguments.posonlyargs, *arguments.args]
+    in_class = _qualname(tree, function) != function.name
+    static = any(isinstance(d, ast.Name) and d.id == STATICMETHOD for d in function.decorator_list)
+    if in_class and not static and len(found) > 0:
+        found = found[1:]
+    found.extend(arguments.kwonlyargs)
+    found.extend(extra for extra in (arguments.vararg, arguments.kwarg) if extra is not None)
+    return found
+
+
+def _declared_return(unit: Unit, value: ast.expr) -> bool:
+    if isinstance(value, ast.Constant) and value.value is None:
+        return True  # return None: no result to declare
+    if not isinstance(value, ast.Call) or value not in unit.declarations:
+        return False
+    declaration = unit.declarations[value]
+    return declaration.kind in RESULT_DECLARATIONS and declaration.valid
+
+
+def _complete_findings(unit: Unit, reporter: Reporter) -> None:
+    """PROP008 (complete): a parameter with no requires, a return with no produces or
+    preserves, in a module-level function or a method."""
+    function = unit.function
+    if function is None or not _contract_unit(unit.module.tree, function):
+        return
+    for parameter in _checked_parameters(unit.module.tree, function):
+        if parameter.arg not in unit.header.requirements:
+            message = (
+                f"{function.name}: parameter {parameter.arg} has no requires; under complete "
+                f'every parameter declares what it must carry (requires({parameter.arg}, "p")) '
+                f"or that it needs nothing (requires({parameter.arg}))"
+            )
+            reporter.add(PROP008, parameter, message, STATUS_VIOLATION)
+    for node in own_nodes(unit.body):
+        if isinstance(node, ast.Return) and node.value is not None:
+            if not _declared_return(unit, node.value):
+                message = (
+                    f"this return of {function.name} has no produces or preserves; under "
+                    "complete every return declares what its result carries"
+                )
+                reporter.add(PROP008, node, message, STATUS_VIOLATION)
+
+
 def _flow_findings(analysis: Analysis, unit: Unit, reporter: Reporter) -> None:
     """PROP001 and PROP004: one walk of the unit, reporting."""
-    summary = run_unit(UnitHooks(analysis, unit, reporter, 0), unit.body, entry_state(unit))
+    summary = run_unit(UnitHooks(analysis, unit, reporter, 0, {}), unit.body, entry_state(unit))
     if unit.function is None:
         return
     for node, message in inconsistent_returns(unit.function.name, summary.returns):
@@ -767,12 +894,28 @@ def _file_findings(analysis: Analysis, module: Module, reporter: Reporter) -> No
     walked = {PROP001.rule_id, PROP004.rule_id} & reporter.file.applies
     for unit in units:
         _declaration_findings(analysis, unit, reporter)
+        if reporter.file.complete and PROP008.rule_id in reporter.file.applies:
+            _complete_findings(unit, reporter)
         if len(walked) > 0:
             _flow_findings(analysis, unit, reporter)
 
 
+def _arg_span(source: SourceText, node: ast.arg) -> Span:
+    end_line = node.end_lineno
+    end_column = node.end_col_offset
+    assert end_line is not None and end_column is not None, "a parsed parameter has an end"
+    return Span(
+        line=node.lineno,
+        column=source.column_from_byte_offset(node.lineno, node.col_offset),
+        end_line=end_line,
+        end_column=source.column_from_byte_offset(end_line, end_column),
+    )
+
+
 def _locator(source: SourceText) -> Callable[[object], Located]:
     def locate(node: object) -> Located:
+        if isinstance(node, ast.arg):
+            return Located(_arg_span(source, node), node.arg)
         assert isinstance(node, ast.expr | ast.stmt), "a located Python node"
         return Located(node_span(source, node), ast.unparse(node))
 
@@ -823,3 +966,45 @@ def property_contract_findings(
         scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings))
         found.update(run_javascript_contracts(script_files, scripts, settings))
     return found
+
+
+def _python_considered(analysis: Analysis, module: Module, path: str) -> list[Considered]:
+    units = [analysis.module_unit(module)]
+    units.extend(analysis.function_unit(module, function) for function in _functions(module.tree))
+    return [
+        Considered(path, declaration.call.lineno, ast.unparse(declaration.call))
+        for unit in units
+        for declaration in unit.declarations.values()
+        if declaration.kind == REQUIRES and declaration.valid and len(declaration.call.args) == 1
+    ]
+
+
+def considered_declarations(
+    files: Sequence[ContractFile],
+    sources: Mapping[str, tuple[str, SourceText]],
+    root: Path,
+    settings: Mapping[str, Any],
+) -> list[Considered]:
+    """Every no-property ``requires(x)`` in the files under complete (§9's sorry count)."""
+    found: list[Considered] = []
+    python_files = [f for f in files if f.language == PYTHON and f.complete]
+    if len(python_files) > 0:
+        trees = {
+            path: ast.parse(source.text, filename=path)
+            for path, (language, source) in sources.items()
+            if language == PYTHON
+        }
+        index = ProjectIndex(root, trees, python_runtime_modules(settings))
+        analysis = Analysis(index, settings)
+        for file in python_files:
+            found.extend(_python_considered(analysis, index.by_path[file.path], file.path))
+    script_files = [f for f in files if f.language in SCRIPT_LANGUAGES and f.complete]
+    if len(script_files) > 0:
+        texts = {
+            path: source.text
+            for path, (language, source) in sources.items()
+            if language in SCRIPT_LANGUAGES
+        }
+        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings))
+        found.extend(javascript_considered(script_files, scripts, settings))
+    return sorted(found, key=lambda c: (c.path, c.line))

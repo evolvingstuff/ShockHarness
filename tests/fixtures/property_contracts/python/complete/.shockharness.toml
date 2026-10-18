@@ -1,0 +1,15 @@
+[tool.shockharness]
+profile = "strict"
+include = ["app/**/*.py"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+# complete applies to the security layer only; the rest stays at declared.
+complete_paths = ["app/secure/**"]
+runtime_module = ["app/contracts.py"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "validated_path"
+description = "a path inside the user's notes directory"
+producers = []
+runtime = "static"

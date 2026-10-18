@@ -4960,3 +4960,108 @@ gate: PASS (exit 0)
 # scratch clone: gate against shockharness-policy-accepted, PASS; diff --base 15b3101:
 # 0 new, 0 fixed, 200 unchanged; 0 complexity regressions
 ```
+
+## Property contracts, milestone P3 — DONE except the agent runs (2026-10-17)
+
+On Tom's request, from the §14 P3 row (spec v0.12). The spec copy in `docs/` is synced
+from the MetaList3 copy: it already carried Fable's v0.11 and v0.12 patches (decision 49,
+the two-argument `enable` in §6.2a, the decision 49 wording in §5.2 and the P2 row), and
+it differed from ours by exactly those patches.
+
+**Built:**
+* **Parametric summaries** (decision 48), both languages. A parameter that requires
+  nothing (no `requires`, or a no-property `requires(x)`), that the body never rebinds,
+  and that is a `preserves`/`preserves_except` source makes the unit's result parametric.
+  Each call site passes its argument's set for it, positional or keyword, and summaries
+  are memoized per argument set. Recursion stays unknown (decision 44). Fixtures:
+  `python/parametric`, `javascript/parametric`, with the spec's `head(x, n)`.
+* **`enforcement = "complete"` and `complete_paths`** (globs matched like `overrides`),
+  with **PROP008** (review), both languages.
+  * PROP008 reports a parameter with no header `requires`, and a return of a value that
+    is not a `produces`/`preserves`/`preserves_except` call.
+  * Contract units: Python module-level functions and methods of module-level classes
+    (`self`/`cls` excepted; a staticmethod has neither); JavaScript module-level
+    functions, const functions and arrows, and class methods.
+  * An arrow's expression body is its return; `return None`/`null`/`undefined` and a
+    function with no return declare no result.
+  * Fixtures: `javascript/complete` (§11.3), `javascript/complete-fixed` (the same file
+    after the skill's procedure: zero findings), `python/complete` (`complete_paths`,
+    methods, staticmethod, nested functions).
+* **The sorry count.** `shockharness exceptions` lists every no-property `requires(x)` in
+  files under complete (`contracts/sorry.py`), in the text report and as
+  `no_property_requires` in the JSON, with a count in the summary.
+* **VERIFY003**: `enforcement` lowered from complete, and a `complete_paths` glob
+  removed.
+* **Skills.**
+  * `property-contracts`, the seventh, is in the manifest like the others and covered by
+    `skills update --check`. It covers choosing properties, the declarations and the
+    pass-through rule, what each finding means, examples in Python, JavaScript and
+    TypeScript, the runtime and `enable` patterns, predicates, the commands, `complete`
+    and the sorry count, and a checklist.
+  * `write-compliant-code` gains principle 10 and a checklist line, and `fix-violations`
+    PROP001 and PROP008 rows. Both stay under the 500-line limit;
+    `write-compliant-code`'s `EXIT_OK` example became one sentence to make room.
+* **Behavior suite:** `evals/behavior/cases/prop001/` (§13.4).
+  * The cases are `redact-before-model` (unambiguous), `inline-normalize` (judgment) and
+    `redaction-ask` (ask).
+  * The hidden tests turn the runtime's `check` mode on, so a deleted `requires` fails at
+    run time.
+  * The new detectors are `requires_removed`, `produces_without_test` and
+    `callee_moved_to_tests`.
+  * Every reference solution scores `intended`/`asked`, and seeded evasions score as
+    their detectors (`tests/unit/test_behavior_suite.py`).
+* **Docs:** `docs/property-contracts.md` (pass-through, `complete`, the skills),
+  rules.md, configuration.md, README, CHANGELOG, ideas, `evals/behavior/README.md`,
+  `docs/skills.md`.
+
+**Not done: the agent runs.** The P3 row asks for the three behavior cases "run on a
+real agent with distributions recorded". That spends agent time (3 cases × 5 runs plus
+judge calls), so it waits for Tom's go-ahead:
+`python evals/behavior/run.py --case prop001/<case> --runs 5 --agent claude --judge claude`.
+
+**Choices where the spec was ambiguous** (for Tom and Fable):
+1. **§11.3 says two PROP008, and the rule gives three.** §9 says every return needs a
+   `produces`/`preserves`, so `sendToModel`'s `return post(note)` is reported too. The
+   fixture keeps the spec's code and expects three.
+2. **There is no declaration for "this result carries nothing"**, the counterpart of a
+   no-property `requires(x)`. `produces(value)` with no property is PROP006. The fixed
+   §11.3 drops `sendToModel`'s return instead. A no-property result form would need a
+   decision.
+3. **PROP008 exempts `self`/`cls`, nested functions, lambdas and inline callbacks.**
+   "Every parameter of every production function" taken literally would demand
+   `requires(self)` and a `requires` on every arrow passed to `.map`.
+4. **A no-property `requires(x)` keeps a parameter parametric**, so a generic wrapper can
+   satisfy PROP008 and still pass its caller's properties on.
+5. **A generic wrapper of a generic wrapper** must itself say `preserves`. A
+   parametric parameter read without `preserves` still carries nothing (decision 45).
+6. **Decision 49 is not implemented.** Its PROP006 "no-op `preserves`" check exists only
+   until P3, and §7 says the sub-case is removed when decision 48 ships, which is this
+   milestone. v0.12 lists it in the P2 row; with 48 shipped, the same call now does what
+   its author meant.
+7. **The sorry count lists files under complete only** (§9: "under `complete`").
+
+**Evidence** (2026-10-17, macOS arm64, CPython 3.14.7, Node 24.7.0):
+
+```text
+$ ruff check src tests scripts evals
+All checks passed!
+$ ruff format --check src tests scripts evals
+205 files already formatted
+$ pytest -q
+1311 passed in 65.97s (0:01:05)
+$ shockharness check src tests scripts evals --format text
+shockharness 0.9.0: 199 file(s), 199 analyzed, 0 failed; 200 finding(s), 4 suppressed
+gate: PASS (exit 0)
+$ python evals/behavior/run.py --reference --shockharness "$(pwd)/.venv/bin/shockharness"
+prop001/inline-normalize     intended=1
+prop001/redact-before-model  intended=1
+prop001/redaction-ask        asked=1        (and every other case as before)
+
+# on a scratch clone with this tree committed as HEAD:
+$ shockharness gate --base refs/tags/shockharness-policy-accepted --head HEAD
+gate: PASS (exit 0)
+$ shockharness diff --base 7b8f3e5 --head HEAD
+shockharness 0.9.0 diff: base 7b8f3e5 (7b8f3e565f41) -> head HEAD (7d3462a741ae); 0 new, 0 fixed, 200 unchanged finding(s)
+  complexity regressions against base: 0 (gates.complexity_regressions = "warn")
+gate: PASS (exit 0)
+```

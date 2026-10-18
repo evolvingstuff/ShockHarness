@@ -723,6 +723,12 @@ fail_on_unknown = false
 runtime_module = []
 # PROP003 is an error while false; true makes it review (an undeclared name is accepted).
 allow_undeclared = false
+# "declared": the declarations are checked. "complete": every parameter of every function
+# in scope has a requires (requires(x) with no property: considered, needs nothing) and
+# every return a produces or preserves (PROP008, spec §9). complete_paths: globs where
+# "complete" applies while the rest stays "declared".
+enforcement = "declared"
+complete_paths = []
 # Call-graph crossings a result is followed through (spec §5.3); deeper calls are unknown.
 # Lowering it while fail_on_unknown is false is a VERIFY003 loosening; raising it never is
 # (decision 47).
@@ -756,4 +762,5 @@ PROP004 = "review"
 PROP005 = "review"
 PROP006 = "review"
 PROP007 = "review"
+PROP008 = "review"
 

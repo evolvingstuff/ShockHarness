@@ -94,6 +94,7 @@ IMPLEMENTED = {
     "PROP005",
     "PROP006",
     "PROP007",
+    "PROP008",
     "DOM001",
     "DOM002",
     "MAGIC002",

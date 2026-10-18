@@ -1,0 +1,6 @@
+[
+  {"path": "app/use.py", "rule": "PROP001", "line": 18, "column": 13, "status": "violation", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 32, "column": 9, "status": "violation", "severity": "review", "message": "app.use.fit requires 'normalized' on series; the value passed here has {redacted}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 37, "column": 13, "status": "violation", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the value passed here has {}"},
+  {"path": "app/use.py", "rule": "PROP001", "line": 38, "column": 13, "status": "violation", "severity": "review", "message": "app.use.deliver requires 'redacted' on text; the value passed here has {}"}
+]

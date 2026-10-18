@@ -171,6 +171,12 @@ a plain `check`; see the `refactor-complexity` skill.
        assert plan.steps, "a scheduled plan always has a step"
        return plan.steps[0]
    ```
+10. **Declare property contracts where the repository has them**
+   (`rules.property_contracts`; the `property-contracts` skill has the details). Put a
+   parameter's `requires(x, "p")` first in the body; write `requires(x)` with no
+   property to record that a parameter needs nothing; return `produces(...)` only where
+   the property is really established, and `preserves(result, source)` where a result
+   keeps its source's properties. Predicate tolerances go in named constants.
 
 ## Examples
 
@@ -234,17 +240,8 @@ def fetch(client: Client, url: str, settings: HttpSettings) -> Response:
     return response
 ```
 
-A meaningful 0 or 1 gets a name even though the rule allows it:
-
-```python
-EXIT_OK = 0
-EXIT_VIOLATIONS = 1
-
-def main(argv: Sequence[str]) -> int:
-    if run(argv):
-        return EXIT_OK
-    return EXIT_VIOLATIONS
-```
+A meaningful 0 or 1 gets a name even though the rule allows it: `EXIT_OK = 0`,
+`EXIT_VIOLATIONS = 1`, and `return EXIT_OK` rather than `return 0`.
 
 ### JavaScript
 
@@ -344,6 +341,7 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
 - [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses `python -O` only when the code asserts.
+- [ ] Where the repository declares property contracts, each new function on a declared pipeline states its `requires` first and its `produces`/`preserves` on return; nothing produces a property it has not established.
 
 ## Adopting ShockHarness
 

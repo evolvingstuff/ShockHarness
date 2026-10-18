@@ -110,6 +110,8 @@ class JsDeclaration:
 
 
 class JsHooks(Protocol):
+    def passed(self, name: str) -> PropSet | None: ...
+
     def literal(self) -> PropSet: ...
 
     def compose(self, operation: str, parts: Sequence[Part]) -> PropSet: ...
@@ -551,6 +553,16 @@ class JsFlow:
             sets = []  # a tagged template: the tag is the call, the template its argument
         return self.hooks.call(node, sets, self.reporting)
 
+    def _with_caller(self, declaration: JsDeclaration, sets: Sequence[PropSet]) -> list[PropSet]:
+        """A preserves whose source is a parametric parameter takes the caller's set."""
+        found = list(sets)
+        source = declaration.arguments[1]
+        if source.type == Kind.IDENTIFIER:
+            caller = self.hooks.passed(node_text(source))
+            if caller is not None:
+                found[1] = caller
+        return found
+
     def declared(self, declaration: JsDeclaration, env: Env) -> PropSet:
         sets = [self.expression(argument, env) for argument in declaration.arguments]
         if not declaration.valid:
@@ -560,6 +572,8 @@ class JsFlow:
             if self.hooks.checks_requires(declaration):
                 self.hooks.requirement(declaration, value, self.reporting)
             return value
+        if declaration.kind in (PRESERVES, PRESERVES_EXCEPT):
+            sets = self._with_caller(declaration, sets)
         result = _declared_result(declaration, sets)
         target = declaration.arguments[0]
         if target.type == Kind.IDENTIFIER:
@@ -568,6 +582,7 @@ class JsFlow:
 
 
 def _declared_result(declaration: JsDeclaration, sets: Sequence[PropSet]) -> PropSet:
+    """produces adds; preserves copies the source's set; preserves_except removes."""
     if declaration.kind == PRODUCES:
         value = sets[0]
         return replace(value, known=value.known | declaration.properties)

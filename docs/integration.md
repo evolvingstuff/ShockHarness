@@ -294,7 +294,7 @@ Only the edited file is analyzed, so the cross-file rules see that file alone:
 * The example workflows call the reusable workflow pinned to a tag, with a
   pinned analyzer version, and the two pins of the Python example agree
   (`tests/unit/test_consumer_script.py`, `tests/unit/test_workflows.py`).
-* The six skills install for `claude`, `codex` and `generic` in a fresh
+* The seven skills install for `claude`, `codex` and `generic` in a fresh
   directory, `skills update --check` then exits 0, and every reference
   solution of the eval corpus scores clean (`skill-evals` job,
   `evals/run_evals.py --reference`).

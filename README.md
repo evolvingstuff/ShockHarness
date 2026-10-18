@@ -102,6 +102,7 @@ Implemented rules:
 | `PROP005` | opt-in property contracts: a test bootstrap's `enable(...)` whose static-property list disagrees with the catalog, or a verify-level catalog with predicates its registration module never registers | review |
 | `PROP006` | opt-in property contracts: a declaration the analysis cannot read (a computed property, wrong arguments) | review |
 | `PROP007` | opt-in property contracts: a parameter `requires` that is not at the top of the function | review |
+| `PROP008` | opt-in property contracts, `complete` level: a parameter with no `requires`, or a return with no `produces`/`preserves` | review |
 | `IMPORT001` | a process, network request, socket, thread or deletion started at import time | warning |
 | `ASYNC001` | a coroutine or Promise created and dropped (an async call as a statement, `void`), across files | warning |
 | `ASYNC002` | `asyncio.create_task(...)` with its handle dropped, outside a `TaskGroup` | warning |

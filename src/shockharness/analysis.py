@@ -37,6 +37,7 @@ from shockharness.config import (
     is_opt_in,
     switched_off,
 )
+from shockharness.contracts.catalog import complete_scope
 from shockharness.contracts.report import ContractFile
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
@@ -986,15 +987,18 @@ def contract_findings(
     parsed = [p for p in pendings if not p.failed and p.source is not None]
     files: list[ContractFile] = []
     sources: dict[str, tuple[str, SourceText]] = {}
+    settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
     for pending in parsed:
         assert pending.source is not None, "a parsed file has its source"
         sources[pending.path] = (pending.language, pending.source)
         applies = frozenset(r.rule_id for r in CONTRACT_RULES if r.rule_id in pending.rules_applied)
         if len(applies) > 0:
-            files.append(ContractFile(pending.path, pending.language, pending.source, applies))
+            complete = complete_scope(settings, pending.path)
+            files.append(
+                ContractFile(pending.path, pending.language, pending.source, applies, complete)
+            )
     if len(files) == 0:
         return {}
-    settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
     return property_contract_findings(files, sources, config.root, settings)
 
 

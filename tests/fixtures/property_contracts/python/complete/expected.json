@@ -1,0 +1,8 @@
+[
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 4, "column": 16, "status": "violation", "severity": "review", "message": "load_notes: parameter path has no requires; under complete every parameter declares what it must carry (requires(path, \"p\")) or that it needs nothing (requires(path))"},
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 5, "column": 5, "status": "violation", "severity": "review", "message": "this return of load_notes has no produces or preserves; under complete every return declares what its result carries"},
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 36, "column": 28, "status": "violation", "severity": "review", "message": "fetch: parameter rest has no requires; under complete every parameter declares what it must carry (requires(rest, \"p\")) or that it needs nothing (requires(rest))"},
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 38, "column": 9, "status": "violation", "severity": "review", "message": "this return of fetch has no produces or preserves; under complete every return declares what its result carries"},
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 41, "column": 15, "status": "violation", "severity": "review", "message": "build: parameter root has no requires; under complete every parameter declares what it must carry (requires(root, \"p\")) or that it needs nothing (requires(root))"},
+  {"path": "app/secure/files.py", "rule": "PROP008", "line": 42, "column": 9, "status": "violation", "severity": "review", "message": "this return of build has no produces or preserves; under complete every return declares what its result carries"}
+]

@@ -1,0 +1,20 @@
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.js"]
+
+[tool.shockharness.rules.property_contracts]
+enabled = true
+enforcement = "complete"
+runtime_module = ["src/vendor/shockharness-contracts.js"]
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "decrypted"
+description = "a note decrypted with the user's key"
+producers = []
+runtime = "static"
+
+[[tool.shockharness.rules.property_contracts.properties]]
+name = "redacted"
+description = "a note with private passages removed"
+producers = ["src/notes/redact.js:redact"]
+runtime = "static"

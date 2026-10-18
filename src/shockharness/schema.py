@@ -509,6 +509,8 @@ CONFIG_SCHEMA = TableField(
                         "fail_on_unknown": BoolField(),
                         "runtime_module": ListField(StrField(allow_empty=False)),
                         "allow_undeclared": BoolField(),
+                        "enforcement": EnumField(("declared", "complete")),
+                        "complete_paths": ListField(StrField(allow_empty=False)),
                         "max_depth": IntField(minimum=1),
                         "runtime_mode_required": EnumField(("off", "check", "verify")),
                         "registration_module": StrField(allow_empty=True),
@@ -526,6 +528,7 @@ CONFIG_SCHEMA = TableField(
                                     "PROP005",
                                     "PROP006",
                                     "PROP007",
+                                    "PROP008",
                                 )
                             },
                             required=(),

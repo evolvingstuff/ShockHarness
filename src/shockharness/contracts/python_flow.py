@@ -173,6 +173,11 @@ class Part:
 
 
 class Hooks(Protocol):
+    def passed(self, name: str) -> PropSet | None:
+        """For a parametric parameter (decision 48), the set the caller passed for it;
+        None for any other name, or when no caller is in view."""
+        ...
+
     def literal(self) -> PropSet:
         """What a string literal with no interpolation carries (``literal_satisfies``)."""
         ...
@@ -600,6 +605,9 @@ class Flow:
         source = sets[1]
         if not isinstance(arguments[1], ast.Name):
             return unknown("preserves names a source that is not a local value")
+        caller = self.hooks.passed(arguments[1].id)
+        if caller is not None:
+            source = caller  # a generic pass-through: what this call site passed
         if declaration.kind == PRESERVES_EXCEPT:
             return replace(source, known=source.known - declaration.properties)
         assert declaration.kind == PRESERVES, f"unexpected declaration {declaration.kind}"

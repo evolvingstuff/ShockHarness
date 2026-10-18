@@ -68,6 +68,7 @@ from shockharness.contracts.python_index import LIBRARY, RUNTIME, UNIT, UNKNOWN
 from shockharness.contracts.report import (
     ASSIGNED,
     PASSED,
+    Considered,
     ContractFile,
     Issue,
     Located,
@@ -92,6 +93,7 @@ from shockharness.rules.registry import (
     PROP005,
     PROP006,
     PROP007,
+    PROP008,
 )
 from shockharness.source import SourceText
 
@@ -201,12 +203,14 @@ class JsUnit:
     declarations: Mapping[int, JsDeclaration]  # by call node id
     issues: tuple[Issue, ...]
     header: JsHeader
+    parametric: frozenset[str]  # decision 48: see the Python counterpart
 
 
 @dataclass(frozen=True)
 class JsContract:
     positional: tuple[str | None, ...]
     requirements: Mapping[str, frozenset[str]]
+    parametric: frozenset[str]
 
 
 # -- declarations (PROP003, PROP006) ------------------------------------------------------
@@ -368,7 +372,7 @@ class JsAnalysis:
         # Keyed by (path, node id): a node id is unique within one file's tree.
         self.units: dict[tuple[str, int], JsUnit] = {}
         self.contracts: dict[tuple[str, int], JsContract] = {}
-        self.results: dict[tuple[str, int, int], PropSet] = {}
+        self.results: dict[tuple[str, int, int, tuple[tuple[str, PropSet], ...]], PropSet] = {}
         self.computing: set[tuple[str, int]] = set()
         self.max_depth = int(settings["max_depth"])
         # Producers by canonical reference (re-exports resolved), and as written.
@@ -430,6 +434,7 @@ class JsAnalysis:
             declarations=declarations,
             issues=tuple(issues),
             header=header,
+            parametric=_parametric(function, body, declarations, header),
         )
 
     def _declarations(
@@ -461,10 +466,12 @@ class JsAnalysis:
         key = (target.module.path, target.function.id)
         if key not in self.contracts:
             unit = self.unit(target.module, target.function)
-            self.contracts[key] = JsContract(unit.parameters, unit.header.requirements)
+            self.contracts[key] = JsContract(
+                unit.parameters, unit.header.requirements, unit.parametric
+            )
         return self.contracts[key]
 
-    def result(self, target: JsTarget, crossings: int) -> PropSet:
+    def result(self, target: JsTarget, crossings: int, passed: Mapping[str, PropSet]) -> PropSet:
         """What a call of ``target`` gives, ``crossings`` calls away from the checked unit,
         its further calls followed up to ``max_depth`` (§5.3)."""
         assert target.module is not None and target.function is not None, "a unit target"
@@ -473,13 +480,13 @@ class JsAnalysis:
                 f"{target.reference} is more than max_depth = {self.max_depth} calls away"
             )
         node = (target.module.path, target.function.id)
-        key = (*node, crossings)
+        key = (*node, crossings, tuple(sorted(passed.items())))
         if key not in self.results:
             if node in self.computing:
                 return unknown(f"{target.reference} calls itself (recursion is not followed)")
             self.computing.add(node)
             unit = self.unit(target.module, target.function)
-            summary = run(JsUnitHooks(self, unit, None, crossings), unit)
+            summary = run(JsUnitHooks(self, unit, None, crossings, passed), unit)
             self.computing.discard(node)
             self.results[key] = _shaped(unit, summary)
         return self.results[key]
@@ -572,6 +579,44 @@ def _argument(call: Node, arguments: Sequence[PropSet], position: int) -> Passed
     return None
 
 
+def _parametric(
+    function: Node | None,
+    body: Sequence[Node],
+    declarations: Mapping[int, JsDeclaration],
+    header: JsHeader,
+) -> frozenset[str]:
+    """Parameters that require nothing, are never rebound, and are a preserves source."""
+    if function is None:
+        return frozenset()
+    open_parameters = {
+        name
+        for name in _parameters(function)
+        if name is not None
+        and (name not in header.requirements or len(header.requirements[name]) == 0)
+    }
+    sources = {
+        node_text(d.arguments[1])
+        for d in declarations.values()
+        if d.kind in (PRESERVES, PRESERVES_EXCEPT)
+        and d.valid
+        and d.arguments[1].type == Kind.IDENTIFIER
+    }
+    return frozenset((open_parameters - _rebound(body)) & sources)
+
+
+def _parametric_arguments(
+    call: Node, contract: JsContract, arguments: Sequence[PropSet]
+) -> dict[str, PropSet]:
+    """The caller's set for each parametric parameter (nothing when it is not passed)."""
+    found: dict[str, PropSet] = {}
+    for parameter in sorted(contract.parametric):
+        found[parameter] = EMPTY
+        passed = _argument(call, arguments, contract.positional.index(parameter))
+        if passed is not None:
+            found[parameter] = passed.value
+    return found
+
+
 def _reason(sink: CalleeSink | TargetSink) -> str:
     if sink.producer is not None:
         return f"{sink.reason}; its producer is {sink.producer}"
@@ -621,12 +666,24 @@ class JsUnitHooks:
     set, where a further project call is unknown (one hop) and nothing is reported."""
 
     def __init__(
-        self, analysis: JsAnalysis, unit: JsUnit, reporter: Reporter | None, crossings: int
+        self,
+        analysis: JsAnalysis,
+        unit: JsUnit,
+        reporter: Reporter | None,
+        crossings: int,
+        arguments: Mapping[str, PropSet],
     ) -> None:
         self.analysis = analysis
         self.unit = unit
         self.reporter = reporter
         self.crossings = crossings
+        self.arguments = arguments  # the caller's sets for the parametric parameters
+
+    def passed(self, name: str) -> PropSet | None:
+        found: PropSet | None = None
+        if name in self.arguments:
+            found = self.arguments[name]
+        return found
 
     def literal(self) -> PropSet:
         return self.analysis.compositions.literal_set()
@@ -666,14 +723,15 @@ class JsUnitHooks:
         if target.kind == UNKNOWN:
             return _unresolved(call, target)
         contract = None
-        if target.kind == UNIT and self.reporter is not None:
+        if target.kind == UNIT:
             contract = self.analysis.contract(target)
         if self.reporter is not None and reporting:
             self._sinks(call, target, arguments)
             if contract is not None:
                 self._requirements(call, target, contract, arguments)
-        if target.kind == UNIT:
-            return self.analysis.result(target, self.crossings + 1)
+        if contract is not None:
+            passed = _parametric_arguments(call, contract, arguments)
+            return self.analysis.result(target, self.crossings + 1, passed)
         return _library_result(target, arguments)
 
     def _sinks(self, call: Node, target: JsTarget, arguments: Sequence[PropSet]) -> None:
@@ -735,9 +793,84 @@ def _declaration_findings(analysis: JsAnalysis, unit: JsUnit, reporter: Reporter
         reporter.add(PROP007, declaration.call, _misplaced_message(declaration), STATUS_VIOLATION)
 
 
+CLASS_DECLARATIONS = (Kind.CLASS_DECLARATION, Kind.ABSTRACT_CLASS_DECLARATION)
+
+
+def _module_classes(root: Node) -> list[Node]:
+    """Classes declared at module level (exported or not)."""
+    statements = children(root)
+    declared = [*statements, *(d for s in statements for d in field_nodes(s, Field.DECLARATION))]
+    return [node for node in declared if node.type in CLASS_DECLARATIONS]
+
+
+def _module_methods(root: Node) -> set[int]:
+    """Methods of classes declared at module level."""
+    return {
+        member.id
+        for node in _module_classes(root)
+        for member in inner(node, Field.BODY)
+        if member.type == Kind.METHOD_DEFINITION
+    }
+
+
+def _contract_unit(unit: JsUnit) -> bool:
+    """A module-level function or arrow, or a method of a module-level class (PROP008)."""
+    function = unit.function
+    if function is None:
+        return False
+    functions = {node.id for node in unit.module.definitions.values()}
+    return function.id in functions or function.id in _module_methods(unit.module.root)
+
+
+def _declared_return(unit: JsUnit, value: Node) -> bool:
+    if value.type in (Kind.NULL, Kind.UNDEFINED):
+        return True  # no result to declare
+    if value.id not in unit.declarations:
+        return False
+    declaration = unit.declarations[value.id]
+    return declaration.kind in RESULT_DECLARATIONS and declaration.valid
+
+
+def _returned(unit: JsUnit) -> list[tuple[Node, Node]]:
+    """(where to report, the returned value) for each return of a value, and an arrow's
+    expression body."""
+    found = [(body, body) for body in unit.expression]
+    for node in own_nodes(unit.body):
+        if node.type == Kind.RETURN_STATEMENT:
+            found.extend((node, value) for value in children(node)[:1])
+    return found
+
+
+def _complete_findings(analysis: JsAnalysis, unit: JsUnit, reporter: Reporter) -> None:
+    """PROP008 (complete): a parameter with no requires, a return with no produces or
+    preserves."""
+    function = unit.function
+    if function is None or not _contract_unit(unit):
+        return
+    name = analysis.display_name(unit)
+    for parameter in _parameter_nodes(function):
+        binding, _default = parameter_parts(parameter)
+        if binding.type != Kind.IDENTIFIER or node_text(binding) in unit.header.requirements:
+            continue
+        text = node_text(binding)
+        message = (
+            f"{name}: parameter {text} has no requires; under complete every parameter "
+            f'declares what it must carry (requires({text}, "p")) or that it needs nothing '
+            f"(requires({text}))"
+        )
+        reporter.add(PROP008, binding, message, STATUS_VIOLATION)
+    for node, value in _returned(unit):
+        if not _declared_return(unit, value):
+            message = (
+                f"this return of {name} has no produces or preserves; under complete every "
+                "return declares what its result carries"
+            )
+            reporter.add(PROP008, node, message, STATUS_VIOLATION)
+
+
 def _flow_findings(analysis: JsAnalysis, unit: JsUnit, reporter: Reporter) -> None:
     """PROP001 and PROP004: one walk of the unit, reporting."""
-    summary = run(JsUnitHooks(analysis, unit, reporter, 0), unit)
+    summary = run(JsUnitHooks(analysis, unit, reporter, 0, {}), unit)
     if unit.function is None:
         return
     returns = {summary.return_nodes[key]: value for key, value in summary.returns.items()}
@@ -751,6 +884,8 @@ def _file_findings(analysis: JsAnalysis, module: JsModule, reporter: Reporter) -
     walked = {PROP001.rule_id, PROP004.rule_id} & reporter.file.applies
     for unit in units:
         _declaration_findings(analysis, unit, reporter)
+        if reporter.file.complete and PROP008.rule_id in reporter.file.applies:
+            _complete_findings(analysis, unit, reporter)
         if len(walked) > 0:
             _flow_findings(analysis, unit, reporter)
 
@@ -775,4 +910,31 @@ def run_javascript_contracts(
         reporter = Reporter(file, settings, _locator(module.source))
         _file_findings(analysis, module, reporter)
         found[file.path] = sorted(reporter.found.values(), key=lambda f: f.sort_key())
+    return found
+
+
+def javascript_considered(
+    files: Sequence[ContractFile], index: JsProjectIndex, settings: Mapping[str, Any]
+) -> list[Considered]:
+    """Every no-property ``requires(x)`` in the given files (the sorry count, §9)."""
+    analysis = JsAnalysis(index, settings)
+    found: list[Considered] = []
+    for file in files:
+        module = index.module(file.path)
+        if module is None:
+            continue
+        units = [analysis.unit(module, None)]
+        units.extend(analysis.unit(module, function) for function in _functions(module.root))
+        found.extend(
+            Considered(
+                file.path,
+                declaration.call.start_point.row + 1,
+                " ".join(node_text(declaration.call).split()),
+            )
+            for unit in units
+            for declaration in unit.declarations.values()
+            if declaration.kind == REQUIRES
+            and declaration.valid
+            and len(declaration.arguments) == 1
+        )
     return found

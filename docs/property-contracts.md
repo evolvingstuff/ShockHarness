@@ -54,6 +54,13 @@ def normalize(x):
 `normalized`. Any operation not declared destroys every property: that is the
 conservative default, and each `preserves` is a visible claim that a reviewer can check.
 
+**Pass-through helpers.** A property never passes through a parameter on its own:
+`def ident(x): return x` carries nothing, whatever the caller passed. A generic wrapper
+says `return preserves(x[:n], x)` on a parameter that requires nothing (or that has a
+no-property `requires(x)`). Its result is then *parametric*: each call site passes on
+what its own argument carried (decision 48). A wrapper that relies on a property says
+`requires(x, "p")` instead.
+
 ## What the analysis follows
 
 * **Within a function**, in source order: assignments, branches (the intersection),
@@ -166,11 +173,39 @@ never registers.
 objects weakly. Lists, dicts and slotted objects are held for the life of the process.
 That is one reason the modes are for tests, never production.
 
+## The `complete` level
+
+`declared` checks the declarations that exist. `complete` makes their absence visible.
+Under `enforcement = "complete"`, or in a file matching `complete_paths`:
+
+* every parameter of every module-level function and method needs a `requires` (PROP008);
+* every return of a value needs a `produces` or `preserves` (PROP008).
+
+`self` and `cls` are exempt. Nested functions, lambdas and inline callbacks are not
+contract units, and a function with no return has no result contract. `requires(x)`
+with no property is the honest declaration for a parameter that needs nothing:
+`shockharness exceptions .` lists each one under "the sorry count", and reviewers read
+that list like the suppressions.
+
+Adopting `complete` on an existing application goes path by path. Add the security
+layer to `complete_paths`, take a baseline, burn the PROP008 findings down, and then
+add the next area. A greenfield repository sets `enforcement = "complete"` and leaves
+the list empty. Narrowing `complete_paths`, or lowering `enforcement`, is a VERIFY003
+loosening.
+
+## Skills
+
+`shockharness skills install` ships three skills that cover contracts:
+* `property-contracts`: choosing properties, predicates, the runtime modes, where
+  `enable` goes, the catalog, the sorry count;
+* `write-compliant-code`, principle 10: declaring contracts in new code;
+* `fix-violations`: the PROP001 and PROP008 procedures. Route the value through the
+  producer, or `produces` with a test; never delete a `requires`; stop and ask when the
+  contract cannot be determined.
+
 ## Not there yet
 
-* The `complete` level (every production function declares its contract),
-  `complete_paths`, PROP008 and the skills are milestone P3.
 * Annotation forms of the declarations (`Annotated[T, Prop("p")]`, branded types) and
-  Hypothesis integration are P4.
+  Hypothesis integration are P4, with the two MetaList measurements.
 * Methods are not resolved through their receivers. Catalog preserving operations
   (slicing) are not implemented.

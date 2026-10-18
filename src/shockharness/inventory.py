@@ -29,6 +29,7 @@ from shockharness.config import (
     EffectiveConfig,
 )
 from shockharness.constants import REPORT_SCHEMA_VERSION
+from shockharness.contracts.report import Considered
 from shockharness.gating.baseline import Baseline
 from shockharness.loosening import EXCLUDE_KEY, deviation_key
 from shockharness.report import Report
@@ -119,6 +120,7 @@ class Inventory:
     configuration: tuple[ConfigurationEntry, ...]
     attempts: tuple[ConfigurationEntry, ...]
     baseline: BaselineSummary | None
+    considered: tuple[Considered, ...]  # no-property requires(x) under complete (§9)
 
     def summary(self) -> dict[str, int]:
         baseline_entries = 0
@@ -131,6 +133,7 @@ class Inventory:
             "configuration": len(self.configuration),
             "policy_attempts": len(self.attempts),
             "baseline_entries": baseline_entries,
+            "no_property_requires": len(self.considered),
         }
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -150,6 +153,7 @@ class Inventory:
             "configuration": [c.to_json_dict() for c in self.configuration],
             "policy_attempts": [a.to_json_dict() for a in self.attempts],
             "baseline": baseline,
+            "no_property_requires": [c.to_json_dict() for c in self.considered],
         }
 
 
@@ -328,6 +332,7 @@ def build_inventory(
     root: Path,
     texts: Mapping[str, str | None],
     baseline: tuple[Baseline, str] | None,
+    considered: tuple[Considered, ...],
 ) -> Inventory:
     """``texts`` maps the configuration source path and the policy path (as the config
     names them) to their text, ``None`` when there is none to point into."""
@@ -349,6 +354,7 @@ def build_inventory(
         configuration=tuple(_configuration(config, repository, policy)),
         attempts=tuple(_attempts(config, repository)),
         baseline=summary,
+        considered=considered,
     )
 
 
@@ -373,6 +379,8 @@ def render_text(inventory: Inventory, root: Path) -> str:
         f"configuration exception(s), {summary['policy_attempts']} policy attempt(s), "
         f"{summary['baseline_entries']} baseline entr(ies)"
     ]
+    if len(inventory.considered) > 0:
+        lines[0] += f", {len(inventory.considered)} no-property requires (the sorry count)"
     _section(
         lines,
         "inline suppressions",
@@ -393,6 +401,11 @@ def render_text(inventory: Inventory, root: Path) -> str:
         [f"{_where(c)}  {c.text}" for c in inventory.configuration],
     )
     _section(lines, "policy attempts", [f"{_where(a)}  {a.text}" for a in inventory.attempts])
+    _section(
+        lines,
+        "no-property requires under complete (the sorry count)",
+        [f"{c.path}:{c.line}  {c.text}" for c in inventory.considered],
+    )
     if inventory.baseline is not None:
         baseline = inventory.baseline
         _section(

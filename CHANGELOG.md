@@ -6,6 +6,19 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- Property contracts, milestone P3 (spec v0.12):
+  - **Parametric summaries (decision 48).** `preserves(result, x)` on a parameter that
+    requires nothing passes on what each caller's argument carried, in both languages.
+  - **`enforcement = "complete"` and `complete_paths`** with `PROP008` (review): a
+    parameter without `requires`, or a return without `produces`/`preserves`, in a
+    module-level function or method.
+  - **`shockharness exceptions`** lists every no-property `requires(x)` under `complete`
+    (the sorry count).
+  - **Skills.** The seventh skill, `property-contracts`. `write-compliant-code` gains
+    principle 10, and `fix-violations` the PROP001 and PROP008 procedures.
+  - **Behavior suite.** Three PROP001 cases (unambiguous, judgment, ask) with
+    `requires_removed`, `produces_without_test` and `callee_moved_to_tests` detectors.
+  - VERIFY003 reports `enforcement` lowered and `complete_paths` narrowed.
 - Property contracts, milestone P2 (spec v0.8):
   - **Transitive results.** A callee's result is followed through its own calls, up to
     `max_depth` (3); deeper calls and recursion are unknown. A function returning

@@ -1234,7 +1234,7 @@ from one (never `currentTarget`, the element the listener is on); `C` is in
 `HTMLInputElement`) is a deliberate filter and is not reported. JavaScript and
 TypeScript; exact.
 
-### PROP001-PROP007: property contracts (opt-in; Python, JavaScript, TypeScript; milestones P1a, P1b, P2)
+### PROP001-PROP008: property contracts (opt-in; Python, JavaScript, TypeScript; milestones P1a to P3)
 
 The family of `docs/shockharness_property_contracts_spec.md`, milestones P1a (Python),
 P1b (JavaScript; TypeScript is read as JavaScript) and P2 (transitive results, await and
@@ -1287,7 +1287,9 @@ There is no separate declaration.
   crossings (3 by default; deeper is unknown, and so is recursion). A function that
   returns another's result carries the property through without redeclaring it. The
   function's file is read from the analyzed files, or else from the project under the
-  root, so a check of one file still sees its imports' contracts.
+  root, so a check of one file still sees its imports' contracts. A `preserves(result, x)`
+  on a parameter that requires nothing makes the result parametric: each call site
+  substitutes its own argument's set (decision 48).
 * **Await and generators (§5.2c).** `await` of a project async function gives its
   result, and `await` is otherwise transparent; a coroutine or Promise used without
   `await` carries nothing. A `for`/`async for`/`for await` over a call of a project
@@ -1310,6 +1312,7 @@ There is no separate declaration.
 | `PROP004` | a return whose known set lacks a property another return of the same function carries: the result carries only the intersection (falling off the end is not reported) | review |
 | `PROP005` | a test bootstrap's `enable(mode, [...])` (in a test-role or config-role file such as `conftest.py`, whatever `roles` says) whose literal list is not the catalog's `runtime = "static"` set. The finding names what is missing and what the catalog does not mark static. `shockharness contracts static-properties` prints the list to paste. With `runtime_mode_required = "verify"`, also each non-static property the `registration_module` never passes to `register(...)`, reported on the configuration file at the `registration_module` line | review |
 | `PROP006` | a declaration the analysis cannot read: a property that is not a string literal, `produces`/`preserves_except` with no property, `preserves` without exactly two arguments, any keyword or starred argument. The call is the identity and contributes nothing. In a test bootstrap, an `enable(...)` whose second argument is not a literal list of string literals | review |
+| `PROP008` | under `enforcement = "complete"` or in `complete_paths`: a parameter of a module-level function or a method (`self`/`cls` excepted) with no `requires`, or a return of a value with no `produces`/`preserves`/`preserves_except`; `requires(x)` with no property satisfies it and is listed in `shockharness exceptions` as the sorry count | review |
 | `PROP007` | a `requires` on a parameter that is not at the top of the body (after a use of the parameter, or inside a branch, loop, try or with). It is not part of the contract. A parameter the body rebinds is a local after that, and a `requires` on it is a mid-body check | review |
 
 **Sinks.** A catalog sink is a callee or an assignment target. A callee is a project or
@@ -1335,6 +1338,8 @@ is a VERIFY003 loosening. So are these:
   * a composition rule that accepts parts no earlier rule with the same language,
     operation and `produces` accepted: an added rule, a property removed from
     `inputs_require`, a changed `produces`;
+  * `enforcement` lowered from `complete` to `declared`, or a glob removed from
+    `complete_paths`;
   * lowering `max_depth` while `fail_on_unknown` is false (paths that resolved to
     violations become unknown findings that do not gate), lowering
     `runtime_mode_required`;
@@ -1352,7 +1357,6 @@ resolve to the runtime module.
 
 * TypeScript-specific behaviour: type annotations are ignored;
 * catalog preserving operations (slicing);
-* `PROP008`, `complete` and `complete_paths` (P3), and the skills;
 * annotation forms of the declarations and Hypothesis integration (P4).
 
 Methods are not resolved through their receivers, and a class call (a constructor) is

@@ -25,6 +25,20 @@ class ContractFile:
     language: str
     source: SourceText
     applies: frozenset[str]  # the PROP rule IDs applied to this file
+    complete: bool  # enforcement = "complete" applies to it (PROP008)
+
+
+@dataclass(frozen=True)
+class Considered:
+    """A no-property ``requires(x)`` in a file under complete: a parameter someone decided
+    needs nothing. The ``exceptions`` command lists them, the project's sorry count (§9)."""
+
+    path: str
+    line: int
+    text: str
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"path": self.path, "line": self.line, "text": self.text}
 
 
 @dataclass(frozen=True)

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shockharness.globs import compile_globset
 from shockharness.rules.defaults import module_names
 from shockharness.schema import ConfigIssue
 
@@ -44,6 +45,7 @@ OPERATIONS = {
     TYPESCRIPT: ("template_literal", "concat"),
 }
 LITERAL_SATISFIES = "literal_satisfies"
+COMPLETE = "complete"
 # Keys of a sink entry: a call or an assignment, and the optional producer.
 CALLEE = "callee"
 TARGET_KEY = "target"
@@ -288,6 +290,14 @@ def catalog_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
             )
         )
     return issues
+
+
+def complete_scope(settings: Mapping[str, Any], path: str) -> bool:
+    """Whether ``complete`` applies to a file: ``enforcement = "complete"``, or a match of
+    ``complete_paths`` (globs matched like ``overrides`` paths, spec §9)."""
+    if settings["enforcement"] == COMPLETE:
+        return True
+    return compile_globset([str(glob) for glob in settings["complete_paths"]]).matches(path)
 
 
 def static_properties(settings: Mapping[str, Any]) -> list[str]:
