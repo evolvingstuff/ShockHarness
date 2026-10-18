@@ -5293,3 +5293,14 @@ JavaScript.
   files) and npm's `lib` (110 files, less one file the parser rejects), with no
   declarations. The analysis completes on all 344 files.
 * MetaList can drop its override once it upgrades to a release with this fix.
+
+## Release 0.11.0 (2026-10-18)
+
+On Tom's go-ahead. He chose 0.11.0 over a patch release, because main carried receivers R1
+as well as the fix. CI was green on 519ab0e (run 39145109913) and on the release commit
+ff230cf (run 39145483051), 16 of 16 jobs each. Every pin moved from 0.10.0. The
+changelog's `[0.11.0]` section says one change can make a passing gate fail: CPLX005
+counts the newly resolved calls, which on MetaList is 4 new warnings. Published by
+`publish.yml` (run 39145853010, 18 of 18 jobs). PyPI lists 0.11.0 with a wheel and an
+sdist. MetaList can drop its PROP001/PROP004 override for JavaScript once it moves to
+0.11.0.
