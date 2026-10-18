@@ -1,7 +1,8 @@
 # Proposal: resolving method calls through their receivers
 
-Status: **proposed (2026-10-18). Tom's position is recorded below, for Fable. R1 is in
-progress.**
+Status: **R1 (Python) built (2026-10-18), on Tom's position below; for Fable to confirm or
+change. R2 (JavaScript) and R3 (annotations) are not started.** Measured: STATUS.md,
+"Receivers R1".
 
 ## The problem
 
