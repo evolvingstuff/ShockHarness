@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-18
+
+Methods through their receivers, in Python (`docs/proposal-receivers.md`, R1), and
+MetaList's crash report on 0.10.0.
+
+**Upgrading from 0.10.0.** One change can make a passing gate fail:
+- **The call graph resolves more Python calls** (below), so CPLX005 counts more fan-out
+  targets. On MetaList that is 4 new CPLX005 warnings. On the third-party corpus
+  (32,667 findings) nothing changes. No ASYNC001, INPUT001, PROV001 or GUARD001 finding
+  appeared or disappeared on either. Existing findings keep their fingerprints.
+- Property contracts are still opt-in. In a repository that enables them, calls that
+  were `unknown` can become passes or PROP001 violations.
+- The cache schema is "21", so the first run after the upgrade analyzes every file.
+
 ### Added
 - **Property contracts resolve Python methods through their receivers**
   (`docs/proposal-receivers.md`, R1). A method call is checked against the method's
