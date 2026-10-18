@@ -5353,3 +5353,13 @@ machine load. A profile of the warm run:
 
 **Not done:** a run that changes one file still recomputes the whole phase (about 9 s of
 the 16.6). Making it incremental would need the contracts' dependency graph.
+
+## Release 0.12.0 (2026-10-18)
+
+On Tom's go-ahead. CI was green on 4fd71b5 (run 39158129943) and on the release commit
+fc03c06 (run 39158616664), 16 of 16 jobs each. Every pin moved from 0.11.0. The
+changelog's `[0.12.0]` section says no change makes a passing gate fail: the findings
+are identical, `coverage.cache` gains `contracts`, and the cache directory gains
+`contracts.json`.
+Published by `publish.yml` (run 39159016091, 18 of 18 jobs). PyPI lists 0.12.0 with a
+wheel and an sdist.
