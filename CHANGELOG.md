@@ -5,6 +5,18 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-18
+
+JavaScript methods through their receivers (`docs/proposal-receivers.md`, R2), and a fix
+for PROP005 with a JavaScript registration module.
+
+**Upgrading from 0.12.0.** One change can make a passing gate fail:
+- **The call graph resolves more JavaScript calls** (below). ASYNC001 sees an `async`
+  method of a singleton or object called without `await`. On MetaList that is two
+  ASYNC001 violations, and both are real. CPLX005 counts the new edges. On the corpus
+  nothing changes. Existing findings keep their fingerprints.
+- The cache schema is "22", so the first run after the upgrade analyzes every file.
+
 ### Changed
 - **JavaScript methods through exact receivers** (`docs/proposal-receivers.md`, R2;
   cache schema "22"), in property contracts and in the call graph:
