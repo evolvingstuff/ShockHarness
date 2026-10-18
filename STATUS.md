@@ -5489,3 +5489,12 @@ decision 36 removed the main reason, and the shapes that remained are reported n
 * **Behavior suite:** `magic001/report-indent` (19 cases), with the detectors
   `spaces_indent` and `whitespace_length` and two seeded evasions. The reference
   scores intended. It has not been run on an agent.
+
+## Release 0.14.0 (2026-10-18)
+
+On Tom's go-ahead. CI was green on 62c7ab5 (run 39176910445) and on the release commit
+46f5713 (run 39177284424), 16 of 16 jobs each. Every pin moved from 0.13.0. The
+changelog's `[0.14.0]` section says one change can make a passing gate fail: MAGIC005 is
+a new warning, which on MetaList and the corpus reports nothing. The cache schema is "23".
+Published by `publish.yml` (run 39177649690, 18 of 18 jobs). PyPI lists 0.14.0 with a
+wheel and an sdist.
