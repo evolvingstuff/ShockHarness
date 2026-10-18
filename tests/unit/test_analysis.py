@@ -157,6 +157,7 @@ APPLIED_TO_PYTHON = (
     "MAGIC002",
     "MAGIC003",
     "MAGIC004",
+    "MAGIC005",
     "PROCESS001",
     "PROV001",
     "RESULT001",

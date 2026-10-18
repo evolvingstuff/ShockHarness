@@ -154,7 +154,7 @@ def test_milestone_b_acceptance_python_and_js(
     assert code == 0
     data = json.loads(out)
     assert data["findings"] == []
-    assert data["coverage"]["rules_disabled_globally"] == ["MAGIC001", "MAGIC004"]
+    assert data["coverage"]["rules_disabled_globally"] == ["MAGIC001", "MAGIC004", "MAGIC005"]
     assert "rules.magic_numbers is disabled" in data["config"]["deviations"]
     assert all(
         {"rule_id": "MAGIC001", "reason": "rules.magic_numbers.enabled = false", "origin": "config"}

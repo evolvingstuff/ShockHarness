@@ -5437,3 +5437,55 @@ changelog's `[0.13.0]` section says one change can make a passing gate fail: ASY
 sees async methods of JavaScript singletons and objects, which on MetaList is two real
 violations. The cache schema is "22". Published by `publish.yml` (run 39168032012, 18 of
 18 jobs). PyPI lists 0.13.0 with a wheel and an sdist.
+
+## MAGIC005: numbers written as something else — DONE (2026-10-18)
+
+From the under-the-gate backlog. Agents met MAGIC001 by spelling the number otherwise;
+decision 36 removed the main reason, and the shapes that remained are reported now.
+
+* **Facts.**
+  * `ir/python_disguises.py` and `ir/javascript_disguises.py` produce
+    `ModuleFacts.disguises` (cache schema "23").
+  * Each `Disguise` has a kind (`length`, `conversion`, `parsed`, `indent`), the values
+    it stands for, the text and its scope.
+  * Indents through a module-level constant bound once to spaces are followed in the
+    same module.
+* **The rule** (`rules/magic_numbers.py`, `run_magic005`):
+  * reports a disguise whose value MAGIC001 would report;
+  * runs only where MAGIC001 runs (`analysis._magic_rules`), so the test exemption
+    `init` writes covers it and no configuration needs a new override;
+  * `warning` by default (decision 9), from `rules.magic_numbers.magic005_severity`;
+  * lowering the severity is a VERIFY003 loosening.
+* **The length check was narrowed by measurement.** At first any `len("<literal>")` was
+  reported: 24 on MetaList and 13 on the corpus, all prefix or suffix lengths and format
+  widths (`len(".metalist.db")`, `'YYYY-MM-DD'.length`), none a disguise. The experiment's
+  evasions were whitespace (`len("  ")`) and displays (`len(("event", "handler"))`), so
+  only those are reported.
+* **Measured:**
+
+  | | MAGIC005 findings |
+  |---|---|
+  | MetaList, its own configuration | 0 |
+  | Corpus | 0 |
+  | Under-the-gate builds, production code | 11 of the 12 disguises |
+  | Round-2 test files (configurations before decision 35) | 7 |
+
+  The disguise missed imports its indent constant from another module. The three
+  `Number("3000")` and four `json.loads(...)` in round-2 tests are test expectations, in
+  configurations that predate the test exemption.
+* **Our own code** had 7: `text[len("0x"):]`, `path[: len(path) - len("__init__.py")]`,
+  `token[len("-k"):]` and `GIT_STATUS_WIDTH = len("XY")`. They became `removeprefix` /
+  `removesuffix` and a named constant. The self-gate went from 204 to 196 findings.
+* **Goldens.** `javascript/strings_regex.js` gains MAGIC005 on `parseInt("30", 10)`.
+  `python/magic_strings_not_numbers.py` is unchanged (`len("abc")` has content). The
+  0.3.0 verdict comparison switches MAGIC005 off, like the other later rules.
+* **Skills.**
+  * write-compliant-code principle 2: a boundary names what the outside world raises,
+    never the project's own error.
+  * Principle 4 names MAGIC005's shapes.
+  * Principle 9 counts the configuration as input.
+  * fix-violations: never spell a number otherwise.
+  * Both files stay under 500 lines.
+* **Behavior suite:** `magic001/report-indent` (19 cases), with the detectors
+  `spaces_indent` and `whitespace_length` and two seeded evasions. The reference
+  scores intended. It has not been run on an agent.

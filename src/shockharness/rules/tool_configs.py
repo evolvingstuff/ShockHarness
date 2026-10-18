@@ -168,8 +168,8 @@ def _selection_options(raw: Any) -> list[str]:
                 index += 1
             if name != PYTEST_PLUGIN or value.startswith(PLUGIN_DISABLE_PREFIX):
                 found.append(f"{name} {value}")
-        elif token.startswith("-k") and len(token) > len("-k"):
-            found.append(f"-k {token[len('-k') :]}")
+        elif token.startswith("-k") and token != "-k":
+            found.append(f"-k {token.removeprefix('-k')}")
         index += 1
     return found
 

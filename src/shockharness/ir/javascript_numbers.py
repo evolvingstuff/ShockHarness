@@ -16,14 +16,13 @@ def parse_js_number(raw: str) -> int | float:
     token is grammar-validated, no branch here can fail.
     """
     text = raw.replace("_", "").lower()
-    if text.endswith("n"):
-        text = text[: len(text) - len("n")]
+    text = text.removesuffix("n")
     if text.startswith("0x"):
-        return int(text[len("0x") :], RADIX_HEX)
+        return int(text.removeprefix("0x"), RADIX_HEX)
     if text.startswith("0o"):
-        return int(text[len("0o") :], RADIX_OCTAL)
+        return int(text.removeprefix("0o"), RADIX_OCTAL)
     if text.startswith("0b"):
-        return int(text[len("0b") :], RADIX_BINARY)
+        return int(text.removeprefix("0b"), RADIX_BINARY)
     if LEGACY_OCTAL.fullmatch(text) is not None:
         return int(text, RADIX_OCTAL)
     if DECIMAL_INTEGER.fullmatch(text) is not None:

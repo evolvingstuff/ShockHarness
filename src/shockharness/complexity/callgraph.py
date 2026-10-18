@@ -271,7 +271,7 @@ class _ModuleIndex:
         packages: set[str] = set()
         for path in self.paths:
             if path.endswith(PYTHON_INIT) or path == "__init__.py":
-                packages.add(path[: len(path) - len("__init__.py")].rstrip("/"))
+                packages.add(path.removesuffix("__init__.py").rstrip("/"))
         self.by_dotted: dict[str, str] = {}
         for module in modules:
             if module.language != PYTHON:

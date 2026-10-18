@@ -129,6 +129,7 @@ def test_disabled_rule_produces_nothing_and_is_recorded(
     assert [(d.rule_id, d.origin) for d in result.rules_disabled] == [
         ("MAGIC001", "config"),
         ("MAGIC004", "config"),
+        ("MAGIC005", "config"),
     ]
     assert "rules.magic_numbers is disabled" in config.deviations
 

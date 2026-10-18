@@ -2365,6 +2365,59 @@ MAGIC004 = RuleSpec(
 )
 
 
+# --- MAGIC005 (the under-the-gate rounds' disguises) ---------------------------------------
+
+MAGIC005 = RuleSpec(
+    rule_id="MAGIC005",
+    version="1",
+    name="number written as something else",
+    family="magic_numbers",
+    config_section="rules.magic_numbers",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A number MAGIC001 would report, written so that it does not see it: the length of a "
+        'literal written for its length (len("  "), len(("a", "b")), [a, b].length), a string '
+        'converted to a number (int("30"), '
+        'Number("3000"), +"30"), numbers inside an inline string that is parsed '
+        '(json.loads("[2, 3]"), tomllib.loads("x = 24"), JSON.parse), or spaces given as an '
+        'indent (json.dumps(v, indent="  "), JSON.stringify(v, null, "  "))."'
+    ),
+    rationale=(
+        "Every one of these shapes appeared in the under-the-gate experiment: agents met "
+        "MAGIC001 by spelling the number differently, which keeps the number and hides it. "
+        "The disguise is worse than the literal: the value is still there, without a name, "
+        "and now also without a digit."
+    ),
+    guarantees=(
+        "Read from the syntax: len() of a whitespace-only string or of a tuple, list, set or "
+        "dict display; .length of a whitespace-only string or an array literal; int() / "
+        "float() / Number() / parseInt() / parseFloat() / unary + of a string literal that "
+        "is a plain finite number; "
+        "json.loads, tomllib.loads, tomli.loads, ast.literal_eval, yaml.safe_load and "
+        "JSON.parse of a string literal, with every number in it; an indent of only spaces. "
+        "Reported when a value is outside allowed_values (-1 as allow_unary_negative_one "
+        "says), only in files where MAGIC001 applies. Severity "
+        "rules.magic_numbers.magic005_severity (warning by default)."
+    ),
+    limitations=(
+        "The length of a string with content (a prefix to strip, a format width such as "
+        '"YYYY-MM-DD".length) is not reported: it says what the number is. Callees are '
+        "matched by the name as written: an alias of a parser is not seen. A "
+        'disguise through a name (INDENT = "  "; indent=INDENT) is not seen. Numbers in '
+        "data files next to the code are not read."
+    ),
+    remediation=(
+        "Write the number, with a name that says what it is for: INDENT_SPACES = 2, "
+        'TIMEOUT_SECONDS = 30. A prefix stripped by length is text.removeprefix("0x"). A '
+        "value that is configuration belongs in the configuration, read and validated once."
+    ),
+    noncompliant_example='indent = len("  ")\ntimeout = int("30")',
+    compliant_example="INDENT_SPACES = 2\nTIMEOUT_SECONDS = 30",
+)
+
+
 # --- PROP001, PROP003, PROP005, PROP006, PROP007 (property contracts, milestone P1a) --------------
 # docs/shockharness_property_contracts_spec.md. Opt-in: rules.property_contracts.enabled is
 # false by default and in every profile, and off is not a deviation.
@@ -2996,6 +3049,7 @@ RULES: tuple[RuleSpec, ...] = (
     GUARD001,
     MAGIC003,
     MAGIC004,
+    MAGIC005,
     EXC005,
     STATE002,
     PROP001,

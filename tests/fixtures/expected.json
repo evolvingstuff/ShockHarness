@@ -1428,6 +1428,13 @@
     "status": "analyzed",
     "findings": [
       [
+        "MAGIC005",
+        6,
+        16,
+        "parseInt(\"30\", 10) is 30 written as a string converted to a number: MAGIC001 would report the literal",
+        false
+      ],
+      [
         "MAGIC001",
         6,
         31,

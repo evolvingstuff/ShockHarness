@@ -112,7 +112,7 @@ H3_OFF = (
         )
     )
     + '[[tool.shockharness.overrides]]\npaths = ["**"]\n'
-    + 'disable = ["EXC004", "MAGIC004"]\nreason = "0.3.0"\n'
+    + 'disable = ["EXC004", "MAGIC004", "MAGIC005"]\nreason = "0.3.0"\n'
 )
 
 

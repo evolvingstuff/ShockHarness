@@ -53,6 +53,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.magic_numbers.allow_unary_negative_one": ("False", "True"),
     "rules.magic_numbers.named_constant_definitions": ("report", "allow"),
     "rules.magic_numbers.magic004_severity": ("error", "warning", "review"),
+    "rules.magic_numbers.magic005_severity": ("error", "warning", "review"),
     "complexity.fan_out_severity": ("warning", "review"),
     "rules.stubs.severity": ("error", "warning", "review"),
     "rules.assertions.severity": ("error", "warning", "review"),

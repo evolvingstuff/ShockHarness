@@ -64,8 +64,9 @@ a plain `check`; see the `refactor-complexity` skill.
    failure into a typed error the caller must handle; it never returns a
    success-shaped value, and a failed read or write reaches the caller or the
    user, never nothing. Declare a boundary for a catch you are writing, in that
-   file (an unused one is `EXC005`). A project's own error derives from
-   `Exception`, never `SystemExit`: only the entry point turns it into an exit.
+   file (an unused one is `EXC005`); it names what the outside world raises,
+   never the project's own error, which derives from `Exception`, never
+   `SystemExit`: only the entry point turns it into an exit.
 3. **No defaults, no fallbacks.** Do not write `b=1`, `.get(k, v)`, `x or v`,
    `x ?? v`, `os.getenv("X", "3")`, `process.env.PORT || 3000`. Read required
    data with indexing (`raw["PORT"]`, `env.PORT` followed by validation) so a
@@ -76,7 +77,7 @@ a plain `check`; see the `refactor-complexity` skill.
    protocol value) becomes a module-level named constant that says what it is
    for and cites its source (`EXIT_USAGE = 2  # SPEC.md`), with no suppression.
    Never name it after its value (`TWO = 2`, MAGIC004) or disguise it (`1 + 1`,
-   `len("  ")`, a string, a data file).
+   `len("  ")`, `int("30")`, `indent="  "`, a parsed string: MAGIC005; a data file).
 5. **Name a 0, 1 or -1 that carries meaning.** The rule permits them, it does
    not recommend them. An exit code, a sentinel ("nothing selected"), a flag, a
    first page, a protocol value: give it a name (`EXIT_OK = 0`, `NO_SELECTION =
@@ -159,8 +160,8 @@ a plain `check`; see the `refactor-complexity` skill.
 9. **Assert internal invariants; raise for expected failures.** Where the code
    relies on something being true (the ordering has a head here, a started run
    is in the history), assert it where it must hold: an assert that fires is a
-   bug found at its source. Input from outside (a request field, a file, an
-   environment variable, an argument) fails for reasons that are not bugs:
+   bug found at its source. Input from outside (a request field, a file, the
+   configuration, an environment variable, an argument) fails for reasons that are not bugs:
    check it where it enters and raise a typed error (`ASSERT001` reports an
    assert on input). Python drops asserts under `-O`, so an entry point whose
    code asserts refuses to run optimized (`ASSERT002`); code with no asserts

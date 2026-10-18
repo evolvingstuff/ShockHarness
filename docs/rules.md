@@ -1220,6 +1220,43 @@ filler (`NUMBER`, `NUM`, `VALUE`, `CONST`, `CONSTANT`, `INT`, `AND`): `TWO`,
 `rules.magic_numbers.magic004_severity`, `review` by default. On the measurement
 above it reported nothing.
 
+### MAGIC005: a number written as something else (warning)
+
+In the under-the-gate experiment, agents met MAGIC001 by spelling the number
+differently. That keeps the number and hides it. MAGIC005 reports these shapes,
+read from the syntax:
+
+* **The length of a literal written for its length:** `len("  ")` of a
+  whitespace-only string, `len((a, b))` or the length of another display, and in
+  JavaScript `"  ".length` or `[a, b].length`.
+* **A string converted to a number:** `int("30")`, `float("2.5")`,
+  `Number("3000")`, `parseInt("30")`, `parseFloat("1.5")`, `+"30"`, when the text
+  is a plain finite number.
+* **Numbers inside an inline string that is parsed:** `json.loads`,
+  `tomllib.loads`, `tomli.loads`, `ast.literal_eval`, `yaml.safe_load` or
+  `JSON.parse` of a string literal (`tomllib.loads("max_age_hours = 24")`).
+  Every number in the text is read; a version such as `"1.2.3"` is not a number.
+* **Spaces given where an indent count is meant:** `json.dumps(v, indent="  ")`,
+  `JSON.stringify(v, null, "  ")`, or the same through a module-level constant
+  bound once to spaces (`REPORT_INDENT = "  "`).
+
+A value outside `allowed_values` is reported (`-1` as `allow_unary_negative_one`
+says). The rule applies exactly where MAGIC001 applies: a file or role that has
+MAGIC001 off (the test exemption `init` writes) has MAGIC005 off too. Severity
+`rules.magic_numbers.magic005_severity`, `warning` by default.
+
+The length of a string with content is not reported. `line[len("Bearer "):]` or
+`"YYYY-MM-DD".length` says what the number is, and `text.removeprefix("0x")` says
+it better. Callees are matched by the name as written, so an alias of a parser is
+not seen, and a constant imported from another module is not followed.
+
+**Measured** (0.13.0 and this rule):
+* MetaList and the third-party corpus: no findings.
+* The experiment's gated builds: 11 of the 12 disguises in production code. The one
+  missed imports its indent constant from another module.
+* Before the length check was narrowed to whitespace, it reported 24 MetaList and 13
+  corpus prefix lengths, every one of them legitimate.
+
 ### DOM001: a delegated handler that drops SVG targets (warning)
 
 A delegated click handler that narrows `event.target` to `HTMLElement` before

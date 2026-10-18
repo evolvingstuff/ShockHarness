@@ -25,9 +25,9 @@ def runner():  # the runner is a script, not a package module
     return module
 
 
-def test_eighteen_cases_three_held_out_six_contradictions() -> None:
+def test_nineteen_cases_three_held_out_six_contradictions() -> None:
     cases = runner().load_cases()
-    assert len(cases) == 18
+    assert len(cases) == 19
     assert {c.expected["rule"] for c in cases} == {
         "MAGIC001",
         "DEF001",
@@ -107,6 +107,18 @@ SEEDED.extend(
             "src/app/model.py",
             ('    requires(note, "redacted")\n', ""),
             "evasion_known:requires_removed",
+        ),
+        (  # the under-the-gate rounds' most common disguise: spaces for the indent
+            "magic001/report-indent",
+            "src/app/report.py",
+            ("indent=2", 'indent="  "'),
+            "evasion_known:spaces_indent",
+        ),
+        (
+            "magic001/report-indent",
+            "src/app/report.py",
+            ("indent=2", 'indent=len("  ")'),
+            "evasion_known:whitespace_length",
         ),
         (  # spec §13.4: a produces with no test of the claim
             "prop001/inline-normalize",

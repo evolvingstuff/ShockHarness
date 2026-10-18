@@ -5,6 +5,30 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **MAGIC005 (warning): a number written as something else**, the disguises agents used
+  under the gate:
+  - `len("  ")` of whitespace, the length of a display;
+  - `int("30")`, `Number("3000")`, `+"30"`;
+  - numbers inside a parsed inline string (`tomllib.loads("max_age_hours = 24")`,
+    `JSON.parse`);
+  - `indent="  "` or a module-level constant of spaces.
+
+  It applies where MAGIC001 applies, so the test exemption covers it, and reports
+  values outside `allowed_values`. The setting is
+  `rules.magic_numbers.magic005_severity`. Measured: no findings on MetaList or the
+  third-party corpus, and 11 of the 12 production disguises in the experiment's gated
+  builds. Cache schema "23".
+- The behavior suite gains `magic001/report-indent`, with the detectors `spaces_indent`
+  and `whitespace_length`.
+
+### Changed
+- The skills: a boundary names what the outside world raises, never the project's own
+  error; asserts are not for validating configuration either; MAGIC005's shapes are
+  named beside MAGIC004's.
+- ShockHarness's own code strips prefixes with `removeprefix`/`removesuffix` instead of
+  slicing by `len("0x")`.
+
 ## [0.13.0] - 2026-10-18
 
 JavaScript methods through their receivers (`docs/proposal-receivers.md`, R2), and a fix

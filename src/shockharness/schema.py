@@ -311,6 +311,7 @@ CONFIG_SCHEMA = TableField(
                         "allow_unary_negative_one": BoolField(),
                         "named_constant_definitions": EnumField(NAMED_CONSTANT_MODES),
                         "magic004_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "magic005_severity": EnumField(VERIFICATION_SEVERITIES),
                         "exclude_configuration_files": BoolField(),
                         "configuration_files": ListField(StrField(allow_empty=False)),
                         "fail_on_unknown": BoolField(),

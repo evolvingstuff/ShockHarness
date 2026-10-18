@@ -81,7 +81,7 @@ from shockharness.rules.exceptions import (
 )
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
-from shockharness.rules.magic_numbers import run_magic001, run_magic004
+from shockharness.rules.magic_numbers import run_magic001, run_magic004, run_magic005
 from shockharness.rules.property_contracts import property_contract_findings
 from shockharness.rules.registry import (
     CATALOG_SECTIONS,
@@ -521,7 +521,8 @@ def _magic_rules(
     relative_path: str,
     disabled_ids: set[str],
 ) -> tuple[list[str], list[Finding]]:
-    """MAGIC001 and MAGIC004 (both read rules.magic_numbers): applied IDs and findings."""
+    """MAGIC001, MAGIC004 and MAGIC005 (all read rules.magic_numbers): applied IDs and
+    findings. MAGIC005 applies only where MAGIC001 does: it is MAGIC001 spelled otherwise."""
     settings = config.section(str(registry.MAGIC001.config_section))
     applied: list[str] = []
     findings: list[Finding] = []
@@ -531,6 +532,10 @@ def _magic_rules(
     if registry.MAGIC004.rule_id not in disabled_ids:
         applied.append(registry.MAGIC004.rule_id)
         findings.extend(run_magic004(facts, source, settings, relative_path))
+    magic005 = registry.MAGIC005.rule_id
+    if registry.MAGIC001.rule_id not in disabled_ids and magic005 not in disabled_ids:
+        applied.append(magic005)
+        findings.extend(run_magic005(facts, source, settings, relative_path))
     return applied, findings
 
 

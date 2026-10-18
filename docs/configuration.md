@@ -188,6 +188,7 @@ allowed_values = [0, 1]                 # value-based; extra values are reported
 allow_unary_negative_one = true         # -1 passes (items[-1], indexOf() === -1); false reports it; -0 always fails
 named_constant_definitions = "allow"    # MAX_PAGES = 8 / CHUNK_BYTES = 64 * 1024 / const SETTLE_MS = 400 at module scope: not reported (every profile, decision 36); "report" tightens
 magic004_severity = "review"            # MAGIC004: a constant whose name only spells a number (TWO = 2)
+magic005_severity = "warning"           # MAGIC005: a number spelled otherwise (len("  "), int("30"), indent="  ")
 exclude_configuration_files = true      # files the config role's globs match skip MAGIC001 (reported per file)
 configuration_files = ["conftest.py", "setup.py", "*.config.js", "*.config.mjs", "*.config.cjs",
                        "*.conf.js", "*.conf.cjs", ".eslintrc.js", ".eslintrc.cjs",

@@ -44,7 +44,7 @@ Each rule family enforces one of these. `docs/rules.md` has the rules, and the
   branches on it by name. (`DEF001`-`DEF006`, `INPUT001`, `INPUT002`)
 * **Numbers have reasons.** Every number other than 0 and 1 is a configuration
   parameter or a named constant that says what it is for, and a constant is never
-  named after its value. (`MAGIC001`, `MAGIC003`, `MAGIC004`)
+  named after its value or spelled otherwise. (`MAGIC001`, `MAGIC003`-`MAGIC005`)
 * **The verifier is not negotiable.** A change does not get through by skipping a
   test, weakening an assertion, raising a threshold, widening a suppression or
   loosening the policy file. Each of these is reported at review.
@@ -99,6 +99,7 @@ Implemented rules:
 | `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `MAGIC004` | a named constant whose name only spells a number (`TWO = 2`) | review |
+| `MAGIC005` | a number written as something else: `len("  ")`, `int("30")`, `Number("3000")`, numbers in a parsed inline string, `indent="  "` | warning |
 | `EXC001` | catch outside an approved boundary (bare, broad, unresolved, untyped) | error |
 | `EXC002` | handler that swallows, only logs, or replaces the exception without its cause | error |
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |

@@ -68,7 +68,7 @@ def _statements(root: Node) -> Iterator[Node]:
         yield statement
 
 
-def _const_declarators(statement: Node) -> Iterator[tuple[str, Node]]:
+def const_declarators(statement: Node) -> Iterator[tuple[str, Node]]:
     """(name, value) of each ``const name = value``."""
     if statement.type != Kind.LEXICAL_DECLARATION:
         return
@@ -228,7 +228,7 @@ def module_receivers(root: Node) -> JsReceivers:
             if found is not None:
                 classes[found.name] = found
             continue
-        for name, value in _const_declarators(statement):
+        for name, value in const_declarators(statement):
             literal = _literal(value)
             constructor = _new_constructor(value)
             if literal is not None and name not in whole:
@@ -261,7 +261,7 @@ def constructed_locals(function: Node) -> dict[str, Node]:
         if node.type in UNIT_TYPES:
             continue
         pending.extend(node.named_children)
-        for name, value in _const_declarators(node):
+        for name, value in const_declarators(node):
             constructor = _new_constructor(value)
             if constructor is not None:
                 found[name] = constructor

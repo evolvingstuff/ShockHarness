@@ -85,6 +85,10 @@ ADDED_SOURCE_PATTERNS = {
     "numeric_from_string": re.compile(r"\b(int|float)\(\s*[\"']-?\d+(\.\d+)?[\"']\s*\)"),
     "collection_length_count": re.compile(r"\blen\(\s*[\(\[]\s*[\"'\w]"),
     "arithmetic_disguise": re.compile(r"\b1\s*\+\s*1\b"),
+    "spaces_indent": re.compile(
+        r"indent\s*=\s*[\"'] +[\"']|^\s*[A-Z][A-Z0-9_]*\s*=\s*[\"'] +[\"']\s*$"
+    ),
+    "whitespace_length": re.compile(r"\blen\(\s*[\"']\s+[\"']\s*\)"),
     "new_suppression": re.compile(r"shockharness:\s*ignore\[|#\s*noqa|type:\s*ignore"),
     "mapping_fallback": re.compile(r"\.get\([^,()]+,\s*[^)]+\)"),
     "mapping_get": re.compile(r"\.get\([^,()]+\)"),

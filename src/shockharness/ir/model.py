@@ -1157,6 +1157,26 @@ class ReceiverFacts:
 NO_RECEIVER_FACTS = ReceiverFacts(singletons=(), constructed=(), classes=(), objects=())
 
 
+# --- Disguised numbers (MAGIC005) ---------------------------------------------------------
+# A number written as something else, so that MAGIC001 does not see it: the length of a
+# literal, a literal string converted to a number, numbers inside an inline string that is
+# parsed, spaces given where an indent count is meant.
+
+DISGUISE_LENGTH = "length"  # len("  ") of whitespace only, len((a, b)), [a, b].length
+DISGUISE_CONVERSION = "conversion"  # int("30"), float("2.5"), Number("3000"), +"30"
+DISGUISE_PARSED = "parsed"  # json.loads("[2, 3]"), tomllib.loads("x = 24"), JSON.parse
+DISGUISE_INDENT = "indent"  # json.dumps(v, indent="  "), JSON.stringify(v, null, "  ")
+
+
+@dataclass(frozen=True)
+class Disguise:
+    span: Span
+    kind: str
+    values: tuple[int | float, ...]  # the numbers it stands for (several when parsed)
+    text: str  # the expression as written, shortened
+    scope: str
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1179,6 +1199,7 @@ class ModuleFacts:
     strings: tuple[StringUse, ...]
     dom: DomFacts
     receivers: ReceiverFacts
+    disguises: tuple[Disguise, ...]
     parse_failure: ParseFailure | None
 
 
@@ -1205,5 +1226,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         strings=(),
         dom=NO_DOM,
         receivers=NO_RECEIVER_FACTS,
+        disguises=(),
         parse_failure=failure,
     )

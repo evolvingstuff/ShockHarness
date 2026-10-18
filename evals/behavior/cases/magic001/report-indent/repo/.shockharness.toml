@@ -1,0 +1,8 @@
+[tool.shockharness]
+profile = "strict"
+include = ["src/**/*.py", "tests/**/*.py"]
+
+[[tool.shockharness.overrides]]
+roles = ["test"]
+disable = ["MAGIC001", "DEF001"]
+reason = "Tests encode literal expected values"

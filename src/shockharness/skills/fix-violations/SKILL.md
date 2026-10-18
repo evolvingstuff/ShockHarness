@@ -31,9 +31,9 @@ preventive one and `pre-commit-review` is the final check.
 - **Never trade a forbidden catch for a quieter failure**: a check that returns
   the same fallback, a `raise SystemExit` deep in the code, or a project error
   derived from `SystemExit`. A failed read or write is reported, never dropped.
-- **Never move a number into an unexplained constant** (`THIRTY = 30`, which
-  MAGIC004 reports). The name must say what the value means and where it comes
-  from; a module-level named constant then needs no suppression.
+- **Never move a number into an unexplained constant** (`THIRTY = 30`, MAGIC004)
+  **or spell it otherwise** (`len("  ")`, `int("30")`, `indent="  "`, MAGIC005). The name
+  must say what the value means; a module-level named constant needs no suppression.
 
 ## Workflow
 

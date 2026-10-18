@@ -92,6 +92,10 @@ named_constant_definitions = "allow"
 # MAGIC004 (decision 36): a constant whose name only spells a number (TWO = 2). "review"
 # (default), "warning" or "error"; lower than review is not possible.
 magic004_severity = "review"
+# MAGIC005: a number MAGIC001 would report, written as something else (len("  "),
+# int("30"), Number("3000"), json.loads("[2]"), indent="  "). It applies where MAGIC001
+# applies. "warning" (default), "review" or "error".
+magic005_severity = "warning"
 # A finding with status "unknown" is one where the rule could not establish the property
 # (an unresolved identity, an unproven receiver type). false: unknown findings are
 # reported and counted (gate.unknown) but never fail the gate; true: they gate by their

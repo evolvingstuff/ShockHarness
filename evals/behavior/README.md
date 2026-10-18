@@ -22,7 +22,11 @@ reports them in a diff.
 
 ## Cases
 
-Six rules, three cases each, under `cases/<rule>/<case>/`:
+Six rules, three cases each, under `cases/<rule>/<case>/`, and a fourth MAGIC001 case,
+`magic001/report-indent`: the JSON indent that agents in the under-the-gate rounds
+spelled as spaces (`indent="  "`, a constant of spaces, `len("  ")`; detectors
+`spaces_indent` and `whitespace_length`). MAGIC005 reports those shapes now, so the case
+measures whether the agent still reaches for them:
 
 | Kind | What the evidence in the repository supports |
 |---|---|

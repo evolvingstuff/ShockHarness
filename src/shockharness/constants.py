@@ -113,8 +113,8 @@ ELAPSED_DECIMALS: Final[int] = 3
 # guards (DOM001); "12": cleanup and returned flags, computed-receiver callees; "18":
 # constant definitions (MAGIC004); "19": a top-level allSettled checked after it; "20":
 # early publications (STATE002); "21": receiver facts (docs/proposal-receivers.md, R1);
-# "22": JavaScript receiver facts (R2).
-CACHE_SCHEMA_VERSION: Final[str] = "22"
+# "22": JavaScript receiver facts (R2); "23": disguised numbers (MAGIC005).
+CACHE_SCHEMA_VERSION: Final[str] = "23"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

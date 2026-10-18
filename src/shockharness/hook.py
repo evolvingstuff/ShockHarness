@@ -51,7 +51,7 @@ EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit"})
 GIT_STATUS = ("status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all")
 GIT_NUL = "\0"
 # A porcelain v1 entry is "XY PATH": two status letters, a space, the path.
-GIT_STATUS_WIDTH = len("XY")
+GIT_STATUS_WIDTH = 2  # the two status letters "XY" (git status --porcelain=v1)
 GIT_DELETED = "D"
 # Claude Code's hook protocol: 0 lets the agent go on, HOOK_FEEDBACK (2) feeds stderr
 # back to it, any other code is a notice to the user that the agent does not act on.

@@ -19,6 +19,11 @@ all number words or digits (``TWO``, ``ONE_HUNDRED``, ``VALUE_100``) restates th
 which is what allowing named constants could invite. Filler words (``NUMBER``,
 ``VALUE``) do not count as meaning; a name with any other word (``TIMEOUT_30``) is not
 reported.
+
+MAGIC005 reads the adapters' disguises: a number written as something else so that
+MAGIC001 does not see it (``len("  ")``, ``int("30")``, ``Number("3000")``, numbers in an
+inline string that is parsed, spaces given as an indent). It applies where MAGIC001
+applies, and reports what MAGIC001 would: a value outside ``allowed_values``.
 """
 
 from collections.abc import Mapping
@@ -26,8 +31,18 @@ from typing import Any
 
 from shockharness.constants import NEGATIVE_ONE
 from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding
-from shockharness.ir.model import MODULE_SCOPE, ConstantDefinition, ModuleFacts, NumericLiteral
-from shockharness.rules.registry import MAGIC001, MAGIC004
+from shockharness.ir.model import (
+    DISGUISE_CONVERSION,
+    DISGUISE_INDENT,
+    DISGUISE_LENGTH,
+    DISGUISE_PARSED,
+    MODULE_SCOPE,
+    ConstantDefinition,
+    Disguise,
+    ModuleFacts,
+    NumericLiteral,
+)
+from shockharness.rules.registry import MAGIC001, MAGIC004, MAGIC005
 from shockharness.rules.severity import section_severity
 from shockharness.schema import NAMED_CONSTANT_MODES
 from shockharness.source import SourceText
@@ -35,6 +50,13 @@ from shockharness.source import SourceText
 SETTING_NAMED_CONSTANTS = "named_constant_definitions"
 NAMED_CONSTANTS_REPORT = NAMED_CONSTANT_MODES[0]
 SETTING_MAGIC004_SEVERITY = "magic004_severity"
+SETTING_MAGIC005_SEVERITY = "magic005_severity"
+DISGUISE_WORDS = {
+    DISGUISE_LENGTH: "the length of a literal",
+    DISGUISE_CONVERSION: "a string converted to a number",
+    DISGUISE_PARSED: "numbers inside an inline string that is parsed",
+    DISGUISE_INDENT: "spaces given where an indent count is meant",
+}
 NAME_SEPARATOR = "_"
 NUMBER_WORDS = frozenset(
     {
@@ -141,3 +163,56 @@ def run_magic004(
         for constant in facts.constants
         if spells_a_number(constant.name)
     ]
+
+
+def _value_allowed(value: int | float, allowed_values: list[Any], allow_negative_one: bool) -> bool:
+    if value < 0:
+        return allow_negative_one and value == NEGATIVE_ONE
+    return any(value == allowed for allowed in allowed_values)
+
+
+def _magic005_finding(
+    disguise: Disguise, hidden: list[int | float], source: SourceText, path: str, severity: str
+) -> Finding:
+    numbers = ", ".join(str(value) for value in hidden)
+    return Finding(
+        rule_id=MAGIC005.rule_id,
+        rule_version=MAGIC005.version,
+        severity=severity,
+        path=path,
+        span=disguise.span,
+        message=(
+            f"{disguise.text} is {numbers} written as {DISGUISE_WORDS[disguise.kind]}: "
+            "MAGIC001 would report the literal"
+        ),
+        evidence=source.excerpt(disguise.span.line),
+        confidence=CONFIDENCE_EXACT,
+        status=STATUS_VIOLATION,
+        remediation=MAGIC005.remediation,
+        safe_autofix=False,
+        scope=disguise.scope,
+        suppression=None,
+        fingerprint=None,
+        baseline=None,
+    )
+
+
+def run_magic005(
+    facts: ModuleFacts,
+    source: SourceText,
+    settings: Mapping[str, Any],
+    path: str,
+) -> list[Finding]:
+    allowed_values = list(settings["allowed_values"])
+    allow_negative_one = bool(settings["allow_unary_negative_one"])
+    severity = str(settings[SETTING_MAGIC005_SEVERITY])
+    findings: list[Finding] = []
+    for disguise in facts.disguises:
+        hidden = [
+            value
+            for value in disguise.values
+            if not _value_allowed(value, allowed_values, allow_negative_one)
+        ]
+        if len(hidden) > 0:
+            findings.append(_magic005_finding(disguise, hidden, source, path, severity))
+    return findings

@@ -158,6 +158,7 @@ IMPLEMENTED_IN_ORDER = (
     "GUARD001",
     "MAGIC003",
     "MAGIC004",
+    "MAGIC005",
     "EXC005",
     "STATE002",
     "PROP001",
