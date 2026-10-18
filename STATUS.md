@@ -4939,11 +4939,17 @@ git history. Raising with `fail_on_unknown = true` gives a review finding and ex
 lowering with `fail_on_unknown = false` gives an error finding and exit 1; raising with
 it false reports nothing. Docs: rules.md, configuration.md, defaults.toml, CHANGELOG.
 
-Spec v0.9 (in this commit) also records decisions 44–46 from P2. Decision 45 names
+Spec v0.9 (in this commit) also records decisions 44–46 from P2. Decision 45 named
 `return preserves(x, x)` as the way a pass-through helper "carries whatever the caller
 passed". P2 computes a callee's result once, with its undeclared parameters empty, so
-that form carries nothing today. `requires(x, "p"); return x` works as described.
-Carrying the caller's set into `preserves` of a parameter is a follow-up.
+that form carries nothing. `requires(x, "p"); return x` works as described.
+
+**Spec v0.10** (Fable, from that report) corrects decision 45: in P2, `preserves(x, x)`
+on an undeclared parameter carries nothing, which is what the analysis does. It adds
+decision 48: **parametric summaries in P3**. `preserves(result, x)` with `x` an
+undeclared parameter makes the result parametric in `x`, each call site substitutes its
+argument's set, and a generic-wrapper fixture (`head(x, n)`) goes with it. No code
+change was needed for v0.10.
 
 ```text
 $ pytest -q
