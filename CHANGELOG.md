@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-18
+
+The property-contracts phase reuses each file's findings while nothing they depend on
+changed.
+
+**Upgrading from 0.14.0.** No change makes a passing gate fail: the findings are
+identical to a full recompute. The report's `coverage.cache` gains `contracts_reused` and
+`contracts_files`. A `contracts.json` written by 0.14.0 is not read, so the first run
+computes the phase for every file.
+
 ### Changed
 - **The property-contracts phase is incremental.** Each checked file's findings are
   cached with what they depended on:

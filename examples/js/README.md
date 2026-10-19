@@ -8,8 +8,8 @@ ShockHarness repository.
 Install the analyzer once per machine (pick one):
 
 ```bash
-uv tool install 'shockharness==0.14.0'
-pipx install 'shockharness==0.14.0'
+uv tool install 'shockharness==0.15.0'
+pipx install 'shockharness==0.15.0'
 ```
 
 Then:
