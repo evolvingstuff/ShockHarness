@@ -5710,3 +5710,13 @@ reports no DEAD finding.
 
 Status sites: `rules/dead_code.py:_finding` is in the unknown inventory (a violation,
 approximate confidence). Cache schema "25".
+
+## Release 0.17.0 (2026-10-19)
+
+On Tom's go-ahead. CI was green on bccfb45 (run 39301643641, 16 of 16 jobs) and on the
+release commit 5c88b11 (run 39303266901). Every pin moved from 0.16.0, and the bump's
+diff was checked for lines that are not pins (none: the rest are sample outputs that
+show the current version, as in earlier bumps). The changelog's `[0.17.0]` section says
+no change makes a passing gate fail: DEAD001 and DEAD002 are opt-in and review. It also
+lists the internal functions removed as dead code. Published by `publish.yml` (run
+39304087684, 18 of 18 jobs). PyPI lists 0.17.0 with a wheel and an sdist.
