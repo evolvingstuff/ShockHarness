@@ -119,6 +119,68 @@ def _annotations(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> l
     return found
 
 
+def _class_names(node: ast.expr) -> set[str]:
+    """The final names an annotation or a constructor call mentions (``C | None``,
+    ``Optional[C]``, ``mod.C(...)``)."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    names = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+    names.update(n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute))
+    return names
+
+
+def _bound_classes(module: ast.Module) -> dict[str, set[str]]:
+    """For each name the file binds, the classes its annotations and constructor calls
+    mention."""
+    found: dict[str, set[str]] = {}
+    for node in ast.walk(module):
+        target: ast.expr | None = None
+        mentioned: set[str] = set()
+        if isinstance(node, ast.AnnAssign):
+            target, mentioned = node.target, _class_names(node.annotation)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            target, mentioned = node.targets[0], _class_names(node.value)
+        if isinstance(target, ast.Name):
+            if target.id not in found:
+                found[target.id] = set()
+            found[target.id].update(mentioned)
+    return found
+
+
+def _handed(module: ast.Module) -> set[str]:
+    """Classes whose instances are assigned to an attribute of an imported module."""
+    modules = {
+        import_binding(alias)
+        for node in ast.walk(module)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    bound = _bound_classes(module)
+    handed: set[str] = set()
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in modules
+            ):
+                continue
+            if isinstance(node.value, ast.Call):
+                handed.update(_class_names(node.value))
+            elif isinstance(node.value, ast.Name) and node.value.id in bound:
+                handed.update(bound[node.value.id])
+    return handed
+
+
+def _chained(node: ast.expr) -> bool:
+    """A name or a dotted chain of names (``a``, ``a.b.c``)."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name)
+
+
 def _registration(
     node: ast.FunctionDef | ast.AsyncFunctionDef, top_level: bool, exports: frozenset[str]
 ) -> str:
@@ -135,6 +197,7 @@ class _Collector:
     def __init__(self, source: SourceText, module: ast.Module) -> None:
         self.source = source
         self.exports = _exports(module)
+        self.module = module
         self.bindable = _bindable(module)
         self.imported = _imported(module)
         self.top_level = {id(statement) for statement in module.body}
@@ -196,7 +259,9 @@ class _Collector:
                 self.references.add(UsageReference(unit[0], unit[1], node.id, member=False))
             return
         if isinstance(node, ast.Attribute):
-            if not callee:
+            # A method called on a call's result (`Guard(x).check()`) is named here: the
+            # call graph records such a callee as an excerpt, not by its name.
+            if not callee or not _chained(node.value):
                 self.references.add(UsageReference(unit[0], unit[1], node.attr, member=True))
             self.stack.append((node.value, unit, False))
             return
@@ -210,7 +275,10 @@ class _Collector:
             node, unit, callee = self.stack.pop()
             self._visit(node, unit, callee)
         references = sorted(self.references, key=lambda r: (r.line, r.column, r.name, r.member))
-        return UsageFacts(declared=tuple(self.declared), references=tuple(references))
+        handed = tuple(sorted(_handed(self.module)))
+        return UsageFacts(
+            declared=tuple(self.declared), references=tuple(references), handed=handed
+        )
 
 
 def collect_python_usage(source: SourceText, module: ast.Module) -> UsageFacts:

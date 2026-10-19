@@ -1069,7 +1069,8 @@ def dead_findings(
     ]
     runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
     libraries = [str(m) for m in runtime if str(m).endswith(RUNTIME_SUFFIXES)]
-    return run_dead_code(files, graph, config.section(registry.DEAD_CODE_SECTION), libraries)
+    settings = config.section(registry.DEAD_CODE_SECTION)
+    return run_dead_code(files, graph, settings, libraries, config.entry_points)
 
 
 def contract_findings(

@@ -71,6 +71,17 @@ def _bindable(root: Node, imports: tuple[ImportFact, ...]) -> frozenset[str]:
     return frozenset(names)
 
 
+CHAIN_ROOTS = frozenset({Kind.IDENTIFIER, Kind.THIS, Kind.SUPER})
+
+
+def _chained(node: Node) -> bool:
+    """A name, ``this`` or ``super``, or a member chain on one (``a.b.c``)."""
+    current: Node | None = node
+    while current is not None and current.type == Kind.MEMBER_EXPRESSION:
+        current = current.child_by_field_name(Field.OBJECT)
+    return current is not None and current.type in CHAIN_ROOTS
+
+
 class _Collector:
     def __init__(self, source: SourceText, root: Node, imports: tuple[ImportFact, ...]) -> None:
         self.source = source
@@ -103,9 +114,10 @@ class _Collector:
 
     def _member(self, node: Node, unit: Unit, callee: bool) -> None:
         member = node.child_by_field_name(Field.PROPERTY)
-        if not callee and member is not None:
-            self._refer(unit, node_text(member), member=True)
         target = node.child_by_field_name(Field.OBJECT)
+        # A method called on a call's result (`make().run()`) is named here, as in Python.
+        if member is not None and (not callee or target is None or not _chained(target)):
+            self._refer(unit, node_text(member), member=True)
         if target is not None:
             self.stack.append((target, unit, False))
 
@@ -152,7 +164,7 @@ class _Collector:
             node, unit, callee = self.stack.pop()
             self._visit(node, unit, callee)
         references = sorted(self.references, key=lambda r: (r.line, r.column, r.name, r.member))
-        return UsageFacts(declared=tuple(self.declared), references=tuple(references))
+        return UsageFacts(declared=tuple(self.declared), references=tuple(references), handed=())
 
 
 def collect_javascript_usage(

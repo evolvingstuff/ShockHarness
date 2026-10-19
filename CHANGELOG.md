@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Fixed
+- **DEAD001/DEAD002 false positives MetaList found** (155 findings, 134 real): methods of
+  an exported instance (`export const S = Object.freeze(new Store())`, then
+  `S.createScope()`); a method called on a call's result (`Guard(\n x\n).check()`); a
+  function another module re-exports; a method of a class whose framework base is a
+  grandparent (`server_bind` under `ThreadingHTTPServer`); the methods of a stream
+  assigned to `sys.stdout`; `[project.scripts]` targets. On MetaList: 154 findings to
+  145, the nine removed all among those false positives, nothing added. Cache schema "26".
+
 ### Added
 - **Property contracts: `join` compositions.** `"sep".join(items)` (Python) and
   `[a, b].join(sep)` (JavaScript) compose by the catalog's `join` rules. The parts are a

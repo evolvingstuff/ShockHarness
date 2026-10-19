@@ -91,6 +91,15 @@ def test_code_only_tests_reach_is_dead002(tmp_path: Path) -> None:
         "def outer():\n    class Handler(Base):\n        def log_message(self):\n"
         "            return 1\n    return Handler\n\n\nouter()\n",
         "class Thing:\n    def __repr__(self):\n        return 'thing'\n",
+        # MetaList's false positives in 0.17.0:
+        "class Guard:\n    def check(self, x):\n        return x\n\n\n"
+        "def build(x):\n    return Guard(\n        x\n    ).check(x)\n\n\nbuild(1)\n",
+        "from http.server import ThreadingHTTPServer\n\n\n"
+        "class Bounded(ThreadingHTTPServer):\n    pass\n\n\n"
+        "class Proxy(Bounded):\n    def server_bind(self):\n        return 1\n",
+        "import sys\n\n\nclass Stream:\n    def isatty(self):\n        return False\n\n\n"
+        "_stream: Stream | None = None\n\n\ndef install():\n    global _stream\n"
+        "    _stream = Stream()\n    sys.stdout = _stream\n\n\ninstall()\n",
     ],
 )
 def test_what_reaches_a_function_without_a_call(tmp_path: Path, module: str) -> None:
@@ -178,3 +187,33 @@ def test_relaxing_it_is_a_loosening(tmp_path: Path) -> None:
     off = load_config(tmp_path, None)
     messages = [m.message for m in loosenings(before, frozenset(), off.values, off.deviations)]
     assert any("rules.dead_code.enabled changed from True to False" in m for m in messages)
+
+
+def test_a_project_scripts_target_is_a_root(tmp_path: Path) -> None:
+    files = {
+        "app/main.py": "def cli():\n    return 1\n",
+        "pyproject.toml": '[project]\nname = "x"\n\n[project.scripts]\nx = "app.main:cli"\n',
+    }
+    assert dead(tmp_path, files) == []
+
+
+def test_an_exported_instance_and_a_reexport_reach_their_functions(tmp_path: Path) -> None:
+    files = {
+        "app/state.js": (
+            "class Store {\n  createScope() { return 1; }\n}\n"
+            "export const State = Object.freeze(new Store());\n"
+        ),
+        "app/use.js": (
+            "import { State } from './state.js';\n"
+            "export function use() { return State.createScope(); }\nuse();\n"
+        ),
+        "app/__init__.py": "",
+        "app/impl.py": "def helper():\n    return 1\n",
+        "app/api.py": "from app.impl import helper\n",
+        "app/main.py": (
+            "from app.api import helper\n\n\ndef main():\n    return helper()\n\n\nmain()\n"
+        ),
+    }
+    # Inside a function both calls resolve to "path::name" external targets, which is how
+    # the graph records an exported instance's method and a re-exported function.
+    assert dead(tmp_path, files) == []

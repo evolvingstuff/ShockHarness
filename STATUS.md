@@ -5767,3 +5767,30 @@ Tom's position (answer 3):
 
 Not built: the payoff on the one real project is one finding. Revisit when a project
 with more annotated receivers and Python contracts on method calls shows unknowns.
+
+## DEAD001/DEAD002: MetaList's false positives — FIXED (2026-10-19)
+
+MetaList's review of 0.17.0 on its own code: 155 findings, 134 real. The six kinds of
+false positive, each reproduced on the MetaList export and fixed:
+
+* **An exported instance's methods** (`export const ApplicationState =
+  Object.freeze(new ApplicationStateStore())`, then `ApplicationState.createScope()`), and
+  **a re-exported function** (`content_formatting` re-imports
+  `extract_plain_text_from_note_html`): the call graph records both as external targets
+  named after the module (`path::State.createScope`), which the rule did not follow. It
+  now matches their final name, like an unresolved call.
+* **A method called on a call's result** (`NoteTextGuard(...).addresses_needing_confirmation()`):
+  the graph keeps such a callee as an excerpt. The usage collectors (Python, JavaScript)
+  now record its name as a member use.
+* **A framework base two levels up** (`_HttpsProxyServer` under `BoundedProxyServer`
+  under `ThreadingHTTPServer`): the check walks project ancestors.
+* **A stream assigned to `sys.stdout`**: a new usage fact, the classes whose instances a
+  file assigns to an imported module's attribute (directly, or through a name annotated
+  or constructed as that class). Their methods are roots.
+* **`[project.scripts]` targets** (`main:cli`): roots, read with the configuration like
+  DEF005's entry points.
+
+MetaList: 154 to 145, the nine removed all among those, none added. Each fix has a test
+that fails without it (checked by disabling each fix). Cache schema "26".
+
+Not covered, recorded in docs/ideas.md: unused classes, and routes no client code calls.

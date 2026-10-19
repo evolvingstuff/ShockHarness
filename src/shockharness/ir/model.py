@@ -1219,9 +1219,13 @@ class DeclaredFunction:
 class UsageFacts:
     declared: tuple[DeclaredFunction, ...]
     references: tuple[UsageReference, ...]
+    # Classes whose instances the file hands to a library by assigning them to an
+    # attribute of an imported module (``sys.stdout = stream``): the library calls their
+    # methods. Names as written; the rule keeps the project's classes.
+    handed: tuple[str, ...]
 
 
-NO_USAGE = UsageFacts(declared=(), references=())
+NO_USAGE = UsageFacts(declared=(), references=(), handed=())
 
 
 @dataclass(frozen=True)

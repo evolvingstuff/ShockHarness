@@ -26,7 +26,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from shockharness.complexity.callgraph import TARGET_UNIT, TARGET_UNRESOLVED, CallGraph
+from shockharness.complexity.callgraph import (
+    TARGET_EXTERNAL,
+    TARGET_UNIT,
+    TARGET_UNRESOLVED,
+    CallGraph,
+)
 from shockharness.complexity.metrics import UnitMetrics
 from shockharness.findings import CONFIDENCE_APPROXIMATE, STATUS_VIOLATION, Finding
 from shockharness.ir.model import (
@@ -36,6 +41,7 @@ from shockharness.ir.model import (
     ReceiverClass,
     UsageFacts,
 )
+from shockharness.rules.defaults import script_functions
 from shockharness.rules.registry import DEAD001, DEAD002, RuleSpec
 from shockharness.source import SourceText
 
@@ -72,6 +78,7 @@ NEUTRAL_BASES = frozenset(
 )
 DUNDER = re.compile(r"^__\w+__$")
 JS_CONSTRUCTOR = "constructor"
+PROJECT_MEMBER = "::"
 DUPLICATE_SUFFIX = re.compile(r"#\d+$")
 LISTED = 6  # members named in a message; the rest are counted
 
@@ -186,6 +193,11 @@ class _Edges:
                 self.add(edge.source, [edge.target.identifier])
             elif edge.target.kind == TARGET_UNRESOLVED:
                 self._add_named(edge.source, final_name(edge.target.identifier))
+            elif edge.target.kind == TARGET_EXTERNAL and PROJECT_MEMBER in edge.target.identifier:
+                # "path::name.member": a project module's value the graph did not resolve
+                # to a unit (an exported instance, a name another module re-exports).
+                _module, _separator, member = edge.target.identifier.partition(PROJECT_MEMBER)
+                self._add_named(edge.source, final_name(member))
 
     def references(self, imported: Mapping[str, list[tuple[str, str]]]) -> None:
         project = self.project
@@ -249,10 +261,12 @@ class _Classes:
         self.parent: dict[tuple[str, str], tuple[str, str]] = {}
         self.defined: dict[str, list[tuple[str, str]]] = {}
         self.external: dict[tuple[str, str], str] = {}
+        self.bases: dict[tuple[str, str], list[tuple[str, str]]] = {}
         for f in project.files.values():
             for cls in f.classes:
                 node = (f.path, cls.name)
                 self.parent[node] = node
+                self.bases[node] = []
                 if cls.name not in self.defined:
                     self.defined[cls.name] = []
                 self.defined[cls.name].append(node)
@@ -276,6 +290,7 @@ class _Classes:
                 continue
             for other in self.defined[final]:
                 self.parent[self._find(other)] = self._find((path, cls.name))
+                self.bases[(path, cls.name)].append(other)
 
     def families(self) -> dict[str, list[str]]:
         """Each method's family: the methods of its name in related classes."""
@@ -296,7 +311,14 @@ class _Classes:
         if unit.fact.class_name is None:
             return False
         node = (self.project.path_of[unit.key], unit.fact.class_name)
-        return node in self.external or node not in self.parent
+        return node not in self.parent or self._derives_externally(node, set())
+
+    def _derives_externally(self, node: tuple[str, str], seen: set[tuple[str, str]]) -> bool:
+        """The class or a project ancestor has a base the project does not define."""
+        if node in self.external:
+            return True
+        seen.add(node)
+        return any(self._derives_externally(a, seen) for a in self.bases[node] if a not in seen)
 
 
 # -- reachability ---------------------------------------------------------------------------
@@ -330,9 +352,19 @@ def _matches(key: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(plain, p) for p in patterns)
 
 
+def _handed(project: _Project) -> frozenset[str]:
+    """The classes whose instances some file hands to a library (``sys.stdout = s``)."""
+    return frozenset(name for f in project.files.values() for name in f.usage.handed)
+
+
+def _handed_method(unit: UnitMetrics, handed: frozenset[str]) -> bool:
+    return unit.fact.class_name is not None and final_name(unit.fact.class_name) in handed
+
+
 def _registered(
     project: _Project, classes: _Classes, declared: Mapping[str, str], patterns: Sequence[str]
 ) -> set[str]:
+    handed = _handed(project)
     found: set[str] = set()
     for key, reason in declared.items():
         unit = project.units[key]
@@ -342,10 +374,20 @@ def _registered(
             or DUNDER.match(name) is not None
             or name == JS_CONSTRUCTOR
             or classes.framework_method(unit)
+            or _handed_method(unit, handed)
             or _matches(key, patterns)
         ):
             found.add(key)
     return found
+
+
+def _script_patterns(project: _Project, scripts: Sequence[str]) -> list[str]:
+    """``[project.scripts]`` targets ("module:function") as unit patterns."""
+    return [
+        f"{path}::{function}"
+        for path in project.files
+        for function in sorted(script_functions(scripts, path))
+    ]
 
 
 def _declared(project: _Project) -> dict[str, str]:
@@ -508,12 +550,18 @@ def run_dead_code(
     graph: CallGraph,
     settings: Mapping[str, Any],
     libraries: Sequence[str],
+    scripts: Sequence[str],
 ) -> dict[str, list[Finding]]:
     """``libraries``: the files installed as libraries (the property-contracts runtime),
-    whose functions are there to be called, not judged."""
+    whose functions are there to be called, not judged. ``scripts``: the project's
+    ``[project.scripts]`` targets, "module:function"."""
     project = _Project(files)
     entry_points = [str(p) for p in settings[SETTING_ENTRY_POINTS]]
-    patterns = [*entry_points, *(f"{p}::*" for p in libraries)]
+    patterns = [
+        *entry_points,
+        *(f"{p}::*" for p in libraries),
+        *_script_patterns(project, scripts),
+    ]
     found: dict[str, list[Finding]] = {}
     for cluster in _judge(project, graph, patterns):
         rule, severity_key = DEAD001, SETTING_SEVERITY

@@ -1457,12 +1457,17 @@ not record. **Roots** are module and class bodies, functions a decorator registe
 decorator except the ones that only change how a function is called: `staticmethod`,
 `classmethod`, `property`, `cached_property`, `setter`, `cache`, `lru_cache`, `wraps`,
 `abstractmethod`, `override`, `overload`, `final`), names in `__all__`, dunder methods,
-JavaScript `constructor`s, every method of a class derived from a class the project does
-not define (a framework calls those: `HTMLParser.handle_*`, `NodeVisitor.visit_*`) or of a
-class nested in a function (its bases are not known), the files the property-contracts
-`runtime_module` names by path, and `rules.dead_code.entry_points`. **A function is
+JavaScript `constructor`s, every method of a class with a base the project does not
+define, directly or through project ancestors (a framework calls those:
+`HTMLParser.handle_*`, `NodeVisitor.visit_*`, `server_bind`), of a class nested in a
+function (its bases are not known), and of a class whose instance a file assigns to an
+attribute of an imported module (`sys.stdout = stream`: the library calls `write`,
+`isatty`), the `[project.scripts]` targets of the root `pyproject.toml`, the files the
+property-contracts `runtime_module` names by path, and `rules.dead_code.entry_points`. **A function is
 reached** through any call-graph edge, an unresolved call or an attribute read or write of
-its final name (`obj.name`, `obj['name']`, `getattr(obj, 'name')`, `this.h.bind(this)`),
+its final name (`obj.name`, `obj['name']`, `getattr(obj, 'name')`, `this.h.bind(this)`,
+a method called on a call's result such as `Guard(x).check()`, a method of an exported
+instance, a function another module re-exports),
 a bare name used as a value (passed, stored, listed, in an `Annotated[..., Depends(f)]`
 annotation), a used import of it, a name `__all__` re-exports, and a function nested in a
 reached one. **A method** is alive while a method it overrides, or one that overrides it,
