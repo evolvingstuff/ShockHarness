@@ -22,7 +22,8 @@ JAVASCRIPT_FAMILY = frozenset({JAVASCRIPT, TYPESCRIPT})
 # not in ALL_LANGUAGES: a rule runs on C# only once its family has C# facts and lists it.
 CSHARP = "csharp"
 SUPPORTED_LANGUAGES = (*ALL_LANGUAGES, CSHARP)
-# The rules G1 runs on C#: numbers, unit complexity and suppression comments.
+# The rules that run on C#: numbers, unit complexity and suppression comments (G1);
+# exceptions and defaults (G2).
 WITH_CSHARP = SUPPORTED_LANGUAGES
 # Languages whose rule coverage is partial: the text report names the rules that do not
 # run on them (coverage.rules_not_applicable lists them for every language).
@@ -114,7 +115,7 @@ EXC001 = RuleSpec(
     config_section="rules.exceptions",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "Every catch is forbidden unless the file is inside a configured boundary that names "
         "exactly the exception the handler catches."
@@ -191,7 +192,7 @@ EXC002 = RuleSpec(
     config_section="rules.exceptions",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A handler that passes, only logs, returns a fabricated value, or replaces the exception "
         "without its cause hides the failure, even inside an approved boundary."
@@ -253,7 +254,7 @@ EXC003 = RuleSpec(
     config_section="rules.exceptions",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "An approved catch may protect only the one sanctioned external operation; a try body "
         "with more statements, or a statement that cannot be attributed to a single call, is "
@@ -360,7 +361,7 @@ DEF001 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "Parameter default values (and dataclass field defaults) are forbidden in strict mode: "
         "every argument is passed explicitly."
@@ -414,7 +415,7 @@ DEF002 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "mapping.get(key, fallback), getattr(obj, name, fallback), obj?.x ?? fallback and "
         "destructuring defaults substitute a value for data that is not there."
@@ -493,7 +494,7 @@ DEF003 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "'x or default' / 'x || default' substitute for every falsy value, so 0, '', [], false "
         "and None/null are all replaced alike."
@@ -541,7 +542,7 @@ DEF004 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "'x ?? default' and 'x if x is not None else default' substitute a value for a missing "
         "one; strict mode fails clear substitutions."
@@ -587,7 +588,7 @@ DEF005 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A handler that returns a literal, a module-level constant, an empty constructor, or a "
         "helper's literal converts a failure into a value."
@@ -643,7 +644,7 @@ DEF006 = RuleSpec(
     config_section="rules.defaults",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "os.getenv('X', value), process.env.X || value and friends decide configuration at the "
         "point of use instead of at a validated configuration boundary."
@@ -2823,7 +2824,7 @@ EXC005 = RuleSpec(
     config_section="rules.exceptions",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A declared boundary (rules.exceptions.boundaries) names an exception that no catch "
         "in the files it covers catches: it approves a catch nobody has written, or no longer "

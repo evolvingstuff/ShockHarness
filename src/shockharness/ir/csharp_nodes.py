@@ -103,6 +103,26 @@ class Kind:
     TUPLE_PATTERN = "tuple_pattern"
     PARENTHESIZED_VARIABLE_DESIGNATION = "parenthesized_variable_designation"
     PREDEFINED_TYPE = "predefined_type"
+    # G2: literals, statements and patterns the catch and default collectors read
+    STRING_LITERAL = "string_literal"
+    VERBATIM_STRING_LITERAL = "verbatim_string_literal"
+    RAW_STRING_LITERAL = "raw_string_literal"
+    INTERPOLATED_STRING_EXPRESSION = "interpolated_string_expression"
+    CHARACTER_LITERAL = "character_literal"
+    BOOLEAN_LITERAL = "boolean_literal"
+    NULL_LITERAL = "null_literal"
+    DEFAULT_EXPRESSION = "default_expression"
+    COLLECTION_EXPRESSION = "collection_expression"
+    AWAIT_EXPRESSION = "await_expression"
+    RETURN_STATEMENT = "return_statement"
+    THROW_STATEMENT = "throw_statement"
+    THROW_EXPRESSION = "throw_expression"
+    IS_PATTERN_EXPRESSION = "is_pattern_expression"
+    CONSTANT_PATTERN = "constant_pattern"
+    TYPE_PATTERN = "type_pattern"
+    NEGATED_PATTERN = "negated_pattern"
+    ELEMENT_ACCESS_EXPRESSION = "element_access_expression"
+    ATTRIBUTE_ARGUMENT_LIST = "attribute_argument_list"
 
 
 class Field:

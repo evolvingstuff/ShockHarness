@@ -63,7 +63,7 @@ def test_boundary_language_enum() -> None:
     messages = issues_for(raw)
     assert messages == [
         "rules.exceptions.boundaries[0].language: must be one of 'python', 'javascript', "
-        "'typescript', got 'rust'"
+        "'typescript', 'csharp', got 'rust'"
     ]
 
 

@@ -165,6 +165,8 @@ UNSUPPORTED_SOURCE_POLICIES = ("fail", "warn", "ignore")
 # remedy the rule asks for; recommended and minimal).
 NAMED_CONSTANT_MODES = ("report", "allow")
 LANGUAGES = ("python", "javascript", "typescript")
+# A catch boundary may name C# (G2, decision 41); contracts and catalogs do not cover it yet.
+BOUNDARY_LANGUAGES = (*LANGUAGES, "csharp")
 # Built-in profiles, strictest first. "strict" is the bundled defaults; the others are
 # overlays shipped as package data under shockharness/profiles/.
 PROFILE_STRICT = "strict"
@@ -183,7 +185,7 @@ FAN_OUT_SEVERITIES = ("warning", "review")
 BOUNDARY_SCHEMA = TableField(
     fields={
         "path": StrField(allow_empty=False),
-        "language": EnumField(LANGUAGES),
+        "language": EnumField(BOUNDARY_LANGUAGES),
         "exception": StrField(allow_empty=False),
         "exceptions": ListField(StrField(allow_empty=False)),
         "reason": StrField(allow_empty=False),

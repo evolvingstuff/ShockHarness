@@ -54,6 +54,7 @@ from shockharness.ir.model import (
     BOUND_ASSIGNMENT,
     BOUND_WITH_AS,
     CATCH_CLAUSE,
+    CATCH_CSHARP,
     CATCH_EXCEPT,
     CATCH_EXCEPT_STAR,
     CATCH_MANAGER,
@@ -73,6 +74,7 @@ from shockharness.ir.model import (
     Span,
 )
 from shockharness.rules.registry import (
+    CSHARP,
     EXC001,
     EXC002,
     EXC003,
@@ -92,6 +94,7 @@ KIND_LABELS: Mapping[str, str] = {
     CATCH_PROMISE: "promise .catch handler",
     CATCH_PROMISE_THEN: "promise .then rejection handler",
     CATCH_MANAGER: "context manager",
+    CATCH_CSHARP: "catch clause",
 }
 SUPPRESS_MANAGER = "contextlib.suppress"
 EXC002_CLASSIFICATIONS = frozenset(
@@ -181,6 +184,8 @@ def _bare_problem(catch: CatchFact) -> str:
             "untyped catch binds every error; a JavaScript catch passes only inside an approved "
             "boundary whose error class the handler checks with instanceof and otherwise rethrows"
         )
+    if catch.kind == CATCH_CSHARP:
+        return "untyped catch catches every exception; no boundary can approve it"
     if catch.kind == CATCH_MANAGER:
         return (
             "no positional argument names an exception type, so the manager captures an "
@@ -465,7 +470,8 @@ def _written(catch: CatchFact) -> str:
         return ""
     written = " of " + ", ".join(repr(i.source) for i in catch.identities)
     if catch.narrowed_from is not None:
-        written += f" (narrowed from {catch.narrowed_from!r} by its isinstance guard)"
+        guard = "when filter" if catch.kind == CATCH_CSHARP else "isinstance guard"
+        written += f" (narrowed from {catch.narrowed_from!r} by its {guard})"
     return written
 
 
@@ -542,6 +548,7 @@ BOUNDARY_LANGUAGES = {
     PYTHON: frozenset({PYTHON}),
     JAVASCRIPT: frozenset({JAVASCRIPT}),
     TYPESCRIPT: frozenset({TYPESCRIPT, JAVASCRIPT}),
+    CSHARP: frozenset({CSHARP}),
 }
 
 

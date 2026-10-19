@@ -515,7 +515,7 @@ def test_registry_metadata_for_exception_rules() -> None:
         assert rule.implemented
         assert rule.version == "1"
         assert rule.config_section == "rules.exceptions"
-        assert rule.languages == ("python", "javascript", "typescript")
+        assert rule.languages == ("python", "javascript", "typescript", "csharp")
 
 
 # --- 0.2.0 feedback round, item 3: transparent guards and multi-type boundaries ------------

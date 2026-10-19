@@ -24,6 +24,8 @@ import tree_sitter_c_sharp
 from tree_sitter import Language, Node, Parser
 
 from shockharness.constants import EVIDENCE_MAX_CHARS
+from shockharness.ir.csharp_catches import collect_csharp_catches
+from shockharness.ir.csharp_defaults import collect_csharp_defaults
 from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_numbers import parse_csharp_number
@@ -159,26 +161,23 @@ def _first_error(root: Node) -> Node | None:
 
 
 def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
-    """G1 facts: numeric literals, named definitions, comments and function facts. The
-    other families have no C# facts yet; their rules do not list C# among their languages,
-    so they never run on these files (the report lists them as not applicable)."""
+    """The facts of a C# file: numbers and named definitions, comments, function facts
+    (G1), catches and defaults (G2). The other families have no C# facts yet; their rules
+    do not list C# among their languages, so they never run on these files (the report
+    lists them as not applicable)."""
     root, error = parse_csharp(source.text)
     if error is not None:
         return failed_facts(CSHARP_LANGUAGE, PARSER_NAME, _parse_failure(source, filename, error))
-    definitions = _definitions(root)
-    literals, comments = _literals_and_comments(source, root, _definition_literals(definitions))
+    literals, constants, comments = _number_facts(source, root)
     return ModuleFacts(
         language=CSHARP_LANGUAGE,
         parser=PARSER_NAME,
         numeric_literals=literals,
-        constants=tuple(
-            ConstantDefinition(name=node_text(name), span=node_span(source, name))
-            for name, _value in definitions
-        ),
+        constants=constants,
         comments=comments,
-        catches=(),
-        managers=(),
-        defaults=(),
+        catches=collect_csharp_catches(source, root),
+        managers=(),  # C# has no exception-capturing using idiom
+        defaults=collect_csharp_defaults(source, root),
         functions=collect_csharp_functions(source, root, comments),
         imports=(),
         bindings=(),
@@ -197,6 +196,20 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         shapes=(),
         parse_failure=None,
     )
+
+
+def _number_facts(
+    source: SourceText, root: Node
+) -> tuple[tuple[NumericLiteral, ...], tuple[ConstantDefinition, ...], tuple[Comment, ...]]:
+    """The numeric literals (marked when a named definition holds them), the named
+    definitions, and the comments."""
+    definitions = _definitions(root)
+    literals, comments = _literals_and_comments(source, root, _definition_literals(definitions))
+    constants = tuple(
+        ConstantDefinition(name=node_text(name), span=node_span(source, name))
+        for name, _value in definitions
+    )
+    return literals, constants, comments
 
 
 def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:

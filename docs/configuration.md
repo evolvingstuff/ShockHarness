@@ -265,12 +265,18 @@ path = "src/proc/**"
 language = "python"
 exceptions = ["OSError", "ProcessLookupError"]      # exactly one of `exception` / `exceptions` per entry
 reason = "The child process may already be gone"
+
+[[tool.shockharness.rules.exceptions.boundaries]]   # C# (G2): the type as qualified as you like;
+path = "src/Game/SaveSystem.cs"                     # it matches a catch's written type by its
+language = "csharp"                                 # last segments (IOException)
+exception = "System.IO.IOException"
+reason = "Save files live on the player's disk"
 ```
 
 **C# is opt-in (G1).** The default `include` does not list `**/*.cs`, so upgrading never
-starts analyzing a project's C# files on its own: only MAGIC001, the complexity rules and
-suppression comments run on C# so far (`coverage.rules_not_applicable.csharp` lists the
-rest), and strict MAGIC001 would fail a gate that passed before. A project turns C# on by
+starts analyzing a project's C# files on its own: only numbers, complexity, suppression
+comments, exceptions and defaults run on C# so far (`coverage.rules_not_applicable.csharp`
+lists the rest), and strict MAGIC001 would fail a gate that passed before. A project turns C# on by
 listing it in its own `include` (the list replaces the default, so repeat the other
 languages it uses):
 
@@ -296,10 +302,10 @@ the other roles keep theirs.
 
 | Role | Default globs |
 |---|---|
-| `generated` | `**/generated/**`, `**/*_pb2.py`, `**/*.min.js` |
+| `generated` | `**/generated/**`, `**/*_pb2.py`, `**/*.min.js`, `**/*.g.cs`, `**/*.Designer.cs` |
 | `vendor` | `**/vendor/**`, `**/third_party/**` |
 | `config` | `conftest.py`, `setup.py`, `*.config.js`, `*.config.mjs`, `*.config.cjs`, `*.conf.js`, `*.conf.cjs`, `.eslintrc.js`, `.eslintrc.cjs`, `.prettierrc.js`, `.prettierrc.cjs`, `gulpfile.js`, `Gruntfile.js` |
-| `test` | `tests/**`, `test/**`, `**/__tests__/**`, `**/test_*.py`, `**/*_test.py`, `**/*.test.js`, `**/*.spec.js`, `**/*.test.mjs`, `**/*.spec.mjs`, `**/conftest.py` |
+| `test` | `tests/**`, `test/**`, `**/__tests__/**`, `**/test_*.py`, `**/*_test.py`, `**/*.test.js`, `**/*.spec.js`, `**/*.test.mjs`, `**/*.spec.mjs`, `**/*Tests.cs`, `**/*.Tests/**`, `**/conftest.py` |
 | `docs` | `docs/**` |
 | `production` | everything else, `examples/` included |
 

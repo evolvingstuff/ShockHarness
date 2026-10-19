@@ -421,16 +421,36 @@ Stated so that a clean report is never read as more than it is.
 * Declaration files (`**/*.d.ts`) are excluded by default; listing one
   explicitly analyzes it like any TypeScript file.
 
-## C# (Godot .NET, milestone G1)
+## C# (Godot .NET, milestones G1 and G2)
 
 * **Opt-in.** The default `include` does not list `**/*.cs`; a project adds it
   (docs/configuration.md).
-* **Partial coverage.** G1 runs MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 on
-  `.cs` files. Every other rule has no C# facts yet and does not run there:
-  `coverage.rules_not_applicable.csharp` lists them, and the text report prints a warning
-  naming them. A C# file is never clean for a rule that did not look at it. Exceptions,
-  defaults and results follow in G2, the Godot project model and dead code in G3 (spec
+* **Partial coverage.** MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 (G1),
+  EXC001-EXC003, EXC005 and DEF001-DEF006 (G2) run on `.cs` files. Every other rule has
+  no C# facts yet and does not run there: `coverage.rules_not_applicable.csharp` lists
+  them, and the text report prints a warning naming them. A C# file is never clean for a
+  rule that did not look at it. The Godot project model and dead code follow in G3 (spec
   21.2).
+* **Catch types are names as written**, at approximate confidence: `using` directives,
+  global usings and the SDK's implicit usings are not resolved, so a boundary's
+  `System.IO.IOException` matches a catch of `IOException` by its last segments, and a
+  project type of the same name would match too. `catch (Exception)` and
+  `catch (SystemException)` are broad; `catch { }` is untyped. A `when` filter narrows the
+  catch only when it tests the caught exception's type (`when (e is A or B)`); any other
+  filter leaves the written type. `throw e;` is reported (EXC002) because it resets the
+  stack trace; `throw;` rethrows unchanged. EXC004 does not apply: C# rejects a `return`
+  in `finally`. Godot logs an exception thrown in a callback and carries on, so a catch
+  that only logs is reported like any other.
+* **Defaults** (DEF001-DEF006): an optional parameter, except one the compiler fills
+  (`[CallerMemberName]` and its siblings); `??` and `??=` (not `?? throw`), including lazy
+  initialization (`return _x ??= new X();`), as in JavaScript; null ternaries in their
+  four spellings; `string.IsNullOrEmpty(s) ? v : s` (DEF003); `GetValueOrDefault`, LINQ's
+  `*OrDefault` (review without a fallback argument), `GetMeta(name, v)`, and
+  `TryGetValue`/`ContainsKey` ternaries (DEF002); `Environment.GetEnvironmentVariable`,
+  Godot's `OS.GetEnvironment`, `ProjectSettings.GetSetting(name, v)` and a three-argument
+  `GetValue(section, key, v)`, read as a `ConfigFile` by its shape (DEF006). The statement
+  forms of a membership fallback (`if (m.TryGetValue(k, out var v)) return v; return d;`)
+  are not recognized yet.
 * **Syntax only**, as for JavaScript: no Roslyn, no .NET at run time, no semantic model.
   Types, overloads and the members Godot's source generators add (`MethodName`,
   `SignalName`, `PropertyName`) are not known; generated files are not on disk.

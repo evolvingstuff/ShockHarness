@@ -21,6 +21,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     and `**/*.Tests/**` (test); none of them matches a file the defaults analyze today.
   - `coverage.rules_not_applicable`: per analyzed language, the implemented rules that
     never run on it.
+- **C# exceptions and defaults, milestone G2 part one** (decision 41). EXC001-EXC003,
+  EXC005 and DEF001-DEF006 run on C# (opt-in). Catch types are matched as written, by
+  their last segments (`IOException` against a `System.IO.IOException` boundary); a
+  `when (e is A or B)` filter narrows; `throw e;` is EXC002 (it resets the stack trace).
+  Boundaries accept `language = "csharp"`. Defaults: optional parameters (not
+  `[CallerMemberName]` ones), `??`/`??=` (not `?? throw`), null ternaries,
+  `string.IsNullOrEmpty` ternaries, `GetValueOrDefault`, LINQ `*OrDefault`, `GetMeta`,
+  `TryGetValue`/`ContainsKey` ternaries, environment reads, `ProjectSettings.GetSetting`
+  and `ConfigFile.GetValue` fallbacks. Cache schema "28".
 
 ### Fixed
 - **A rule's `languages` is now honored for every family.** The per-file phase ran

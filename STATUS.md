@@ -5985,3 +5985,99 @@ errors on game code would fail a gate that passed before.
 * TheLivingLabyrinth has no ShockHarness configuration yet; when it gets one, it lists
   `"**/*.cs"` in `include`. Not written here: that repository is Tom's.
 
+## Milestone G2, part one: C# exceptions and defaults — DONE (2026-10-19)
+
+Spec 21.1 decision 41 and the G2 row of 21.2, on Tom's go-ahead relayed by the lead
+session ("Let's go with all of your recommendations"). Part two (RESULT001, BOOL001,
+STUB001-STUB003) follows.
+
+### What was built
+
+* **Catch facts** (`ir/csharp_catches.py`): one `CatchFact` per `catch` clause, kind
+  `catch (C#)` (label "catch clause"). Identities are the written type names at
+  approximate confidence, as JavaScript's are; `Exception` and `SystemException` are
+  broad; `catch { }` is untyped. A `when (e is A or B)` filter narrows the identities (the
+  grammar reads `e is A` as a constant pattern; it is taken as a type test there). Handler
+  bodies: empty, logging only (`GD.Print*`, `GD.PushError`, `GD.PushWarning`, the console,
+  `Debug`/`Trace`, logger objects), a literal return (`return default;`, `return null;`,
+  `[]`, an empty `new()`), `throw;` (rethrow), `throw new X(..., e)` (chained), `throw e;`
+  (raise without its stack, so EXC002), anything else unclassified. Protected statements
+  are attributed to their one call, as in JavaScript.
+* **Default facts** (`ir/csharp_defaults.py`), with the shapes listed in
+  docs/limitations.md: DEF001 optional parameters except `[Caller*]` ones; DEF002
+  `GetValueOrDefault`, LINQ `*OrDefault`, `GetMeta`, `TryGetValue`/`ContainsKey`
+  ternaries, `?.x ?? v`; DEF003 `string.IsNullOrEmpty` ternaries; DEF004 `??`, `??=` and
+  null ternaries, not `?? throw`; DEF006 environment reads and two settings shapes under a
+  new kind, `setting_get` ("setting display/w falls back to 640").
+* **Rules**: EXC001-EXC003, EXC005 and DEF001-DEF006 list C#; boundaries accept
+  `language = "csharp"` (`schema.BOUNDARY_LANGUAGES`; contracts and catalogs still take
+  the three other languages); `BOUNDARY_LANGUAGES` in `rules/exceptions.py` covers C#
+  with C# boundaries only. DEF004 says "when null" for C#, DEF003 "when null or empty".
+  Cache schema "28".
+
+### Decisions (mine; review these)
+
+1. **Names as written, approximate.** Resolving `using` directives needs the type index
+   G3 builds; until then a boundary for `System.IO.IOException` also approves a project
+   class named `IOException`. Unresolved names are never "unknown": C# has no dynamic
+   import that would hide a type.
+2. **`throw e;` is EXC002.** It is the same exception object, but its stack trace starts
+   again at the handler, which is the information a rethrow exists to keep.
+3. **Strict keeps `transparent_rethrow` off**, so `catch (X) { throw; }` is still an
+   EXC001 outside a boundary, as in Python and JavaScript.
+4. **Lazy initialization is reported** (`return _channel ??= new Channel();`), as
+   JavaScript's `??=` is. Whether `x ??= new T(...)` should be exempt in every language is
+   a row in docs/ideas.md.
+5. **`ConfigFile` by shape**: a three-argument `GetValue(section, key, default)` on any
+   receiver is DEF006 at approximate confidence; no other common API has that shape.
+6. **No exception-capturing `using`**: C#'s `using` disposes, it does not catch, so
+   manager facts stay empty.
+
+### Evidence (2026-10-19, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ shockharness check src tests scripts
+gate: PASS  192 findings
+
+$ pytest -q        # CPython 3.14.7
+1416 passed
+```
+
+No verdict changes for Python, JavaScript or TypeScript: the committed tool (9c0c323)
+and this one give identical findings and exits on ShockHarness (194, scanning the
+committed tree) and MetaList (2,208; a first run differed by one line because a MetaList
+file was being edited during it, and the rerun was identical).
+
+**C# measured** (`include = ["**/*.cs"]`; the G2 rules only):
+
+| code base | files | EXC001 | EXC002 | DEF001 | DEF002 | DEF004 | DEF005 |
+|---|---|---|---|---|---|---|---|
+| TheLivingLabyrinth | 2 | 2 | 0 | 2 | 4 | 0 | 0 |
+| godot-demo-projects `mono/` | 33 | 4 | 4 | 1 | 4 | 0 | 0 |
+| GameDemo | 163 | 0 | 0 | 1 | 0 | 0 | 0 |
+| Sakuga-Engine | 227 | 32 | 5 | 37 | 9 | 4 | 8 |
+
+Every finding on the game and the demos was read: all are the shape they name. On the
+game, four `TryGetValue(...) ? ... : default` reads of the JSON visual registry (a
+missing key quietly becomes a default) and two `catch (Exception)` blocks in the capture
+mode that log and quit (a process edge: a boundary, or a narrower type). On Sakuga-Engine
+the EXC and DEF005 findings sit mostly in its vendored LiteNetLib (empty catches of
+`ObjectDisposedException`, `return;` after `ThreadAbortException`), and the four DEF004
+are lazy channel initialization.
+
+New tests: `tests/unit/test_csharp_policy.py` (5: catch facts and classification, broad
+types, EXC001/EXC002/DEF005 on C#, a C# boundary with EXC003, every default shape with its
+severity and wording); the boundary-language and registry tests updated.
+
+### Failures observed during development (and what was done)
+
+* A fully qualified `[System.Runtime.CompilerServices.CallerMemberName]` was not
+  recognized; attributes are now matched by their last segment.
+* The narrowing message said "isinstance guard" for a C# filter; it says "when filter".
+* I expected `catch (ArgumentException) { throw; }` to pass in strict; it does not
+  (`transparent_rethrow` is off), and the test now says so.
+* The self-gate caught `x if x is not None else y` fallbacks and two literal argument
+  counts in the new code, and five complexity warnings; all fixed.

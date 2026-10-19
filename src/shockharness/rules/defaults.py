@@ -70,6 +70,7 @@ from shockharness.ir.model import (
     KIND_NEXT_DEFAULT,
     KIND_PARAMETER,
     KIND_PARAMETER_DESTRUCTURING,
+    KIND_SETTING_GET,
     CatchFact,
     DefaultFact,
     ModuleFacts,
@@ -77,15 +78,18 @@ from shockharness.ir.model import (
 )
 from shockharness.rules.exceptions import KIND_LABELS, Boundary, evaluate_approval
 from shockharness.rules.registry import (
+    CSHARP,
     DEF001,
     DEF002,
     DEF003,
     DEF004,
     DEF005,
     DEF006,
+    JAVASCRIPT,
     PYTHON,
     SEVERITY_ERROR,
     SEVERITY_REVIEW,
+    TYPESCRIPT,
     RuleSpec,
 )
 from shockharness.rules.severity import section_severity
@@ -147,6 +151,13 @@ DECLARATION_KINDS = frozenset(
         KIND_ENV_DESTRUCTURING,
     }
 )
+# How each language spells the absent value DEF004 is about.
+MISSING_VALUE_NAMES = {
+    PYTHON: "None",
+    JAVASCRIPT: "null or undefined",
+    TYPESCRIPT: "null or undefined",
+    CSHARP: "null",
+}
 MISSING_KEY_KINDS = frozenset(
     {KIND_MEMBERSHIP_TERNARY, KIND_MEMBERSHIP_RETURN, KIND_FALLBACK_HELPER, KIND_GETATTR}
 )
@@ -207,14 +218,17 @@ def _message(fact: DefaultFact, language: str) -> str:
         return fact.detail
     if fact.kind in DECLARATION_KINDS:
         return f"{fact.detail}: {fact.fallback}"
+    if fact.kind == KIND_SETTING_GET:
+        return f"setting {fact.subject} falls back to {fact.fallback}; {fact.detail}"
     if fact.family == FAMILY_CONFIGURATION:
         return f"environment variable {fact.subject} falls back to {fact.fallback}; {fact.detail}"
     if fact.family == FAMILY_EXCEPTION:
         return f"exception handler converts the failure into a default: {fact.detail}"
     if fact.family == FAMILY_TRUTHINESS:
-        return f"{fact.subject} falls back to {fact.fallback} when falsy; {fact.detail}"
+        falsy = "null or empty" if language == CSHARP else "falsy"
+        return f"{fact.subject} falls back to {fact.fallback} when {falsy}; {fact.detail}"
     if fact.family == FAMILY_NULLISH:
-        missing = "None" if language == PYTHON else "null or undefined"
+        missing = MISSING_VALUE_NAMES[language]
         return f"{fact.subject} falls back to {fact.fallback} when {missing}; {fact.detail}"
     if fact.kind == KIND_MEMBER_NULLISH:
         return f"{fact.subject} falls back to {fact.fallback}; {fact.detail}"

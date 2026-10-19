@@ -91,6 +91,7 @@ CATCH_CLAUSE = "catch"  # JavaScript ``catch`` clause of ``try``
 CATCH_PROMISE = "promise.catch"  # JavaScript ``promise.catch(handler)``
 CATCH_PROMISE_THEN = "promise.then"  # JavaScript ``promise.then(onFulfilled, onRejected)``
 CATCH_MANAGER = "context manager"  # Python ``with suppress(T):`` / a configured capture manager
+CATCH_CSHARP = "catch (C#)"  # C# ``catch`` clause of ``try`` (G2)
 
 # Handler body classifications.
 BODY_EMPTY = "empty"  # ``pass`` / ``...`` / ``{}``: the failure vanishes
@@ -318,6 +319,9 @@ KIND_ENV_GET_IMPLICIT = "env_get_implicit"  # os.getenv("X") / os.environ.get("X
 KIND_ENV_TRUTHINESS = "env_or"  # process.env.X || v / os.environ.get("X") or v
 KIND_ENV_NULLISH = "env_coalesce"  # process.env.X ?? v
 KIND_ENV_DESTRUCTURING = "env_destructuring"  # const { X = v } = process.env
+KIND_SETTING_GET = (
+    "setting_get"  # C#: ProjectSettings.GetSetting(name, v) / config.GetValue(s, k, v)
+)
 
 # Syntactic context of a fallback expression.
 CONTEXT_ASSIGNMENT = "assignment"  # value of an assignment, declaration, or object property
