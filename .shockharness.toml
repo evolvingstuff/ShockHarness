@@ -301,6 +301,11 @@ disable = ["CPLX006"]
 reason = "The tree-sitter names the JavaScript IR uses, one constant per line in two classes (Kind, Field); a list of names, not a long unit"
 
 [[tool.shockharness.overrides]]
+paths = ["src/shockharness/ir/csharp_nodes.py"]
+disable = ["CPLX006"]
+reason = "The tree-sitter names the C# IR uses, one constant per line in two classes (Kind, Field); a list of names, not a long unit"
+
+[[tool.shockharness.overrides]]
 roles = ["test"]
 disable = ["MAGIC001", "DEF001"]
 reason = "Test code encodes literal expected outputs and pytest fixture signatures"
