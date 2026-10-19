@@ -90,6 +90,7 @@ from shockharness.rules.defaults import (
     run_default_rules,
     script_functions,
 )
+from shockharness.rules.duplicates import ShapeFile, run_duplicates
 from shockharness.rules.exceptions import (
     applicable_boundaries,
     manager_catches,
@@ -372,6 +373,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         *STRING_SECTIONS,
         registry.PROPERTY_CONTRACTS_SECTION,
         registry.DEAD_CODE_SECTION,
+        registry.DUPLICATES_SECTION,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -413,6 +415,7 @@ def _units(
 
 
 DEAD_RULES = (registry.DEAD001, registry.DEAD002)
+DUPLICATE_RULES = (registry.DUP001, registry.DUP002)
 # A runtime module given as a project path, not a module name (rules.property_contracts).
 RUNTIME_SUFFIXES = (".py", ".js", ".mjs", ".cjs", ".ts")
 # The rules recorded as applied by role and scope; most find in the cross-file phase.
@@ -427,6 +430,7 @@ SCOPED_RULES = (
     registry.DOM002,
     *CONTRACT_RULES,
     *DEAD_RULES,
+    *DUPLICATE_RULES,
 )
 
 
@@ -1073,6 +1077,29 @@ def dead_findings(
     return run_dead_code(files, graph, settings, libraries, config.entry_points)
 
 
+def duplicate_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig
+) -> dict[str, list[Finding]]:
+    """DUP001, DUP002: helpers written out in several files, and copies that drifted."""
+    ids = frozenset(rule.rule_id for rule in DUPLICATE_RULES)
+    applying = [p for p in pendings if len(ids & frozenset(p.rules_applied)) > 0]
+    if len(applying) == 0 or not _whole_project(pendings, config):
+        return {}
+    files = [
+        ShapeFile(
+            p.path,
+            p.language,
+            ids & frozenset(p.rules_applied),
+            p.source,
+            p.facts.shapes,
+            p.facts.receivers.classes,
+        )
+        for p in applying
+        if p.facts is not None and p.source is not None
+    ]
+    return run_duplicates(files, config.section(registry.DUPLICATES_SECTION))
+
+
 def contract_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, cache: FileCache | None
 ) -> dict[str, list[Finding]]:
@@ -1220,6 +1247,7 @@ def complete(
         contract_findings(pendings, config, cache),
         string_findings(pendings, config),
         type_findings(pendings, config),
+        duplicate_findings(pendings, config),
     )
     results: list[FileResult] = []
     for pending in pendings:

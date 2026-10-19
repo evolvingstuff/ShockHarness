@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from shockharness.ir.model import SHAPE_MIN_STATEMENTS
 from shockharness.roles import CLASSIFIED_ROLES, ROLES
 
 # A RESULT001 catalog entry: a qualified function or ".method", optionally with the number
@@ -510,6 +511,18 @@ CONFIG_SCHEMA = TableField(
                             },
                             required=(),
                         ),
+                    },
+                    required=(),
+                ),
+                "duplicates": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "roles": ListField(EnumField(ROLES)),
+                        "min_statements": IntField(minimum=SHAPE_MIN_STATEMENTS),
+                        "min_tokens": IntField(minimum=1),
+                        "similarity": NumberField(),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "dup002_severity": EnumField(VERIFICATION_SEVERITIES),
                     },
                     required=(),
                 ),

@@ -115,6 +115,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "TYPE002 is exact on the counts and the configuration files it reads: violation",
     ),
+    ("rules/duplicates.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "DUP001/DUP002 are exact on the shapes they compare (identical tokens, or a ratio at "
+        "or above the similarity); judged only when every included file was analyzed",
+    ),
     ("rules/dead_code.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "DEAD001/DEAD002 judge only a run that analyzed every included file; then a function "

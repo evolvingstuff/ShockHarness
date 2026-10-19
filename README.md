@@ -98,6 +98,8 @@ Implemented rules:
 | `DOM002` | opt-in: a pressable element attached to `document.body` that the named skip lists of page-level press handlers miss | review |
 | `DEAD001` | opt-in: a function no production code calls or names and nothing registers, reported once with everything reachable only through it | review |
 | `DEAD002` | opt-in: a production function only tests call or name (dead in production, kept alive by its tests) | review |
+| `DUP001` | opt-in: the same function body written out in two or more files | review |
+| `DUP002` | opt-in: copies of one helper that have drifted apart, with the first line where they differ | review |
 | `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `MAGIC004` | a named constant whose name only spells a number (`TWO = 2`) | review |

@@ -10,11 +10,13 @@ module-level ``__all__``.
 """
 
 import ast
+from dataclasses import dataclass
 
 from shockharness.constants import FIRST_COLUMN, FIRST_LINE
 from shockharness.ir.model import DeclaredFunction, UsageFacts, UsageReference
 from shockharness.ir.python_catches import bound_name, node_span
 from shockharness.ir.python_functions import import_binding
+from shockharness.ir.python_receivers import decorator_name, is_dotted
 from shockharness.source import SourceText
 
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -49,15 +51,6 @@ EXPORTED = "listed in __all__"
 Unit = tuple[int, int]
 
 
-def _decorator_name(decorator: ast.expr) -> str:
-    target = decorator.func if isinstance(decorator, ast.Call) else decorator
-    if isinstance(target, ast.Name):
-        return target.id
-    if isinstance(target, ast.Attribute):
-        return target.attr
-    return ""
-
-
 def _exports(module: ast.Module) -> frozenset[str]:
     """The strings of every module-level ``__all__ = [...]`` / ``__all__ += [...]``."""
     names: set[str] = set()
@@ -82,29 +75,6 @@ def _exports(module: ast.Module) -> frozenset[str]:
     return frozenset(names)
 
 
-def _bindable(module: ast.Module) -> frozenset[str]:
-    """Names a bare reference may mean a project function by: every def in the file and
-    every name an import binds."""
-    names: set[str] = set()
-    for node in ast.walk(module):
-        if isinstance(node, FUNCTIONS):
-            names.add(node.name)
-        elif isinstance(node, ast.Import):
-            names.update(import_binding(alias) for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            names.update(bound_name(alias) for alias in node.names)
-    return frozenset(names)
-
-
-def _imported(module: ast.Module) -> frozenset[str]:
-    return frozenset(
-        bound_name(alias)
-        for node in ast.walk(module)
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    )
-
-
 def _annotations(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> list[ast.expr]:
     """Parameter and return annotations, evaluated with the def (``Depends(handler)`` in
     an ``Annotated`` parameter names a function a framework calls)."""
@@ -124,68 +94,77 @@ def _class_names(node: ast.expr) -> set[str]:
     ``Optional[C]``, ``mod.C(...)``)."""
     if isinstance(node, ast.Call):
         node = node.func
-    names = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
-    names.update(n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute))
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            names.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            names.add(n.attr)
     return names
 
 
-def _bound_classes(module: ast.Module) -> dict[str, set[str]]:
-    """For each name the file binds, the classes its annotations and constructor calls
-    mention."""
-    found: dict[str, set[str]] = {}
-    for node in ast.walk(module):
-        target: ast.expr | None = None
-        mentioned: set[str] = set()
-        if isinstance(node, ast.AnnAssign):
-            target, mentioned = node.target, _class_names(node.annotation)
-        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            target, mentioned = node.targets[0], _class_names(node.value)
+@dataclass
+class _Scan:
+    """What one walk over the module gives the collector. ``bindable``: names a bare
+    reference may mean a project function by (every def, every name an import binds);
+    ``imported`` and ``modules``: the names ``from ... import`` and ``import`` bind;
+    ``bound``: for each name the file binds, the classes its annotations and constructor
+    calls mention; ``handoffs``: (root name, value) of each ``root.attribute = value``."""
+
+    bindable: set[str]
+    imported: set[str]
+    modules: set[str]
+    bound: dict[str, set[str]]
+    handoffs: list[tuple[str, ast.expr]]
+
+    def bind(self, target: ast.expr, mentioned: set[str]) -> None:
         if isinstance(target, ast.Name):
-            if target.id not in found:
-                found[target.id] = set()
-            found[target.id].update(mentioned)
-    return found
+            if target.id not in self.bound:
+                self.bound[target.id] = set()
+            self.bound[target.id].update(mentioned)
 
-
-def _handed(module: ast.Module) -> set[str]:
-    """Classes whose instances are assigned to an attribute of an imported module."""
-    modules = {
-        import_binding(alias)
-        for node in ast.walk(module)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    }
-    bound = _bound_classes(module)
-    handed: set[str] = set()
-    for node in ast.walk(module):
-        if not isinstance(node, ast.Assign):
-            continue
+    def assignment(self, node: ast.Assign) -> None:
+        if isinstance(node.value, ast.Call):
+            self.bind(node.targets[0], _class_names(node.value))
         for target in node.targets:
-            if not (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id in modules
-            ):
+            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                self.handoffs.append((target.value.id, node.value))
+
+    def handed(self) -> set[str]:
+        """Classes whose instances are assigned to an attribute of an imported module."""
+        found: set[str] = set()
+        for root, value in self.handoffs:
+            if root not in self.modules:
                 continue
-            if isinstance(node.value, ast.Call):
-                handed.update(_class_names(node.value))
-            elif isinstance(node.value, ast.Name) and node.value.id in bound:
-                handed.update(bound[node.value.id])
-    return handed
+            if isinstance(value, ast.Call):
+                found.update(_class_names(value))
+            elif isinstance(value, ast.Name) and value.id in self.bound:
+                found.update(self.bound[value.id])
+        return found
 
 
-def _chained(node: ast.expr) -> bool:
-    """A name or a dotted chain of names (``a``, ``a.b.c``)."""
-    while isinstance(node, ast.Attribute):
-        node = node.value
-    return isinstance(node, ast.Name)
+def _scan(module: ast.Module) -> _Scan:
+    scan = _Scan(set(), set(), set(), {}, [])
+    for node in ast.walk(module):
+        if isinstance(node, FUNCTIONS):
+            scan.bindable.add(node.name)
+        elif isinstance(node, ast.Import):
+            scan.modules.update(import_binding(alias) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            scan.imported.update(bound_name(alias) for alias in node.names)
+        elif isinstance(node, ast.AnnAssign):
+            scan.bind(node.target, _class_names(node.annotation))
+        elif isinstance(node, ast.Assign):
+            scan.assignment(node)
+    scan.bindable.update(scan.modules, scan.imported)
+    return scan
 
 
 def _registration(
     node: ast.FunctionDef | ast.AsyncFunctionDef, top_level: bool, exports: frozenset[str]
 ) -> str:
     for decorator in node.decorator_list:
-        name = _decorator_name(decorator)
+        name = decorator_name(decorator)
         if name not in TRANSPARENT_DECORATORS:
             return DECORATOR + name
     if top_level and node.name in exports:
@@ -197,9 +176,9 @@ class _Collector:
     def __init__(self, source: SourceText, module: ast.Module) -> None:
         self.source = source
         self.exports = _exports(module)
-        self.module = module
-        self.bindable = _bindable(module)
-        self.imported = _imported(module)
+        self.scan = _scan(module)
+        self.bindable = frozenset(self.scan.bindable)
+        self.imported = frozenset(self.scan.imported)
         self.top_level = {id(statement) for statement in module.body}
         self.declared: list[DeclaredFunction] = []
         self.references: set[UsageReference] = set()
@@ -261,7 +240,7 @@ class _Collector:
         if isinstance(node, ast.Attribute):
             # A method called on a call's result (`Guard(x).check()`) is named here: the
             # call graph records such a callee as an excerpt, not by its name.
-            if not callee or not _chained(node.value):
+            if not callee or not is_dotted(node.value):
                 self.references.add(UsageReference(unit[0], unit[1], node.attr, member=True))
             self.stack.append((node.value, unit, False))
             return
@@ -275,7 +254,7 @@ class _Collector:
             node, unit, callee = self.stack.pop()
             self._visit(node, unit, callee)
         references = sorted(self.references, key=lambda r: (r.line, r.column, r.name, r.member))
-        handed = tuple(sorted(_handed(self.module)))
+        handed = tuple(sorted(self.scan.handed()))
         return UsageFacts(
             declared=tuple(self.declared), references=tuple(references), handed=handed
         )

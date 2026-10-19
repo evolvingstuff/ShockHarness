@@ -37,6 +37,7 @@ from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.javascript_numbers import parse_js_number
 from shockharness.ir.javascript_receivers import collect_javascript_receivers
 from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
+from shockharness.ir.javascript_shapes import collect_javascript_shapes
 from shockharness.ir.javascript_strings import collect_javascript_strings
 from shockharness.ir.javascript_usage import collect_javascript_usage
 from shockharness.ir.javascript_verification import collect_javascript_verification
@@ -47,6 +48,7 @@ from shockharness.ir.model import (
     CatalogFacts,
     Comment,
     ConstantDefinition,
+    FunctionShape,
     GuardrailFacts,
     ImportFact,
     ModuleFacts,
@@ -291,7 +293,7 @@ def _extract_facts(
         return failed_facts(language, parser_name, _parse_failure(source, filename, error))
     literals, comments = _literals_and_comments(source, root)
     guardrails, asynchrony, catalog = _policy_facts(source, root)
-    imports, usage = _module_uses(source, root)
+    imports, usage, shapes = _module_uses(source, root, filename)
     return ModuleFacts(
         language=language,
         parser=parser_name,
@@ -316,14 +318,19 @@ def _extract_facts(
         disguises=collect_javascript_disguises(source, root),
         annotations=NO_ANNOTATIONS,  # TypeScript is checked by tsc where a tsconfig exists
         usage=usage,
+        shapes=shapes,
         parse_failure=None,
     )
 
 
-def _module_uses(source: SourceText, root: Node) -> tuple[tuple[ImportFact, ...], UsageFacts]:
-    """The imports, and the uses of functions that read them (DEAD001, DEAD002)."""
+def _module_uses(
+    source: SourceText, root: Node, filename: str
+) -> tuple[tuple[ImportFact, ...], UsageFacts, tuple[FunctionShape, ...]]:
+    """The imports, the uses of functions that read them (DEAD001, DEAD002), and the
+    functions' shapes (DUP001, DUP002)."""
     imports = collect_javascript_imports(source, root)
-    return imports, collect_javascript_usage(source, root, imports)
+    usage = collect_javascript_usage(source, root, imports)
+    return imports, usage, collect_javascript_shapes(source, root, filename)
 
 
 def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:

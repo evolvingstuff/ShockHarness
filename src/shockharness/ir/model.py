@@ -1228,6 +1228,32 @@ class UsageFacts:
 NO_USAGE = UsageFacts(declared=(), references=(), handed=())
 
 
+# --- Function shapes (DUP001, DUP002) -----------------------------------------------------
+# What a function's body is, independent of layout and of the names it gives its own
+# values, so that copies in different files compare equal.
+
+SHAPE_MIN_STATEMENTS = 3  # smaller bodies are not recorded (rules.duplicates may raise it)
+SHAPE_FILE = "<file>"  # a string's mention of the file it is in
+SHAPE_NAME = "<name>"  # a string's mention of the function's own name
+
+
+@dataclass(frozen=True)
+class FunctionShape:
+    """A named function with at least ``SHAPE_MIN_STATEMENTS`` statements, by the start
+    and last line of its unit, and the class it is a method of. ``tokens``: its body in
+    source order with comments, layout and docstrings dropped, parameters and locals
+    renamed by first appearance, and every string's mention of the file's own path or the
+    function's own name replaced."""
+
+    line: int
+    column: int
+    end_line: int
+    name: str
+    owner: str  # the class a method is defined in; "" for a function
+    statements: int
+    tokens: tuple[str, ...]
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1253,6 +1279,7 @@ class ModuleFacts:
     disguises: tuple[Disguise, ...]
     annotations: AnnotationFacts
     usage: UsageFacts
+    shapes: tuple[FunctionShape, ...]
     parse_failure: ParseFailure | None
 
 
@@ -1282,5 +1309,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         disguises=(),
         annotations=NO_ANNOTATIONS,
         usage=NO_USAGE,
+        shapes=(),
         parse_failure=failure,
     )

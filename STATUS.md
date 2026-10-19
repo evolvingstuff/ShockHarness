@@ -5794,3 +5794,40 @@ MetaList: 154 to 145, the nine removed all among those, none added. Each fix has
 that fails without it (checked by disabling each fix). Cache schema "26".
 
 Not covered, recorded in docs/ideas.md: unused classes, and routes no client code calls.
+
+## Decision 39: DUP001 and DUP002, duplicated helpers — DONE (2026-10-19)
+
+Tom's go-ahead: "build DUP001 (exact copies) and DUP002 (drifted copies), review,
+production roles, opt-in, with the self-path string normalization; re-measure on
+MetaList."
+
+**What it is.** New per-file facts, function shapes (`ir/python_shapes.py`,
+`ir/javascript_shapes.py`): each named function with at least 3 statements, as its body's
+syntax tokens with comments, layout, docstrings and its own locals' names set aside, and a
+string's mention of the file's own path or the function's own name replaced. The rule
+(`rules/duplicates.py`) groups identical shapes across files (DUP001), and links versions
+of one helper (same name once leading underscores and case are set aside, difflib ratio
+0.85 or more) that differ (DUP002). DUP002 leaves out constructors and overrides within
+one inheritance family, and names the first pair of lines that differ in more than their
+names (else the first changed pair). Opt-in, review, production roles, judged only on a
+whole-project run like DEAD001. Thresholds `min_statements` (3, the fact floor),
+`min_tokens` (25), `similarity`; relaxing any is a loosening.
+
+**Choices made here:** pairing for drift by name ignoring a leading underscore and case,
+because exact-name pairing missed the motivating escapers (`escapeHtml` against
+`_escapeHtml`). Overrides in one class family are not drift: MetaList's undo/redo and
+modal methods differ by design (61 DUP002 before, 45 after). A token floor of 25 keeps
+one-line accessors (`_conn`) out.
+
+**Measured on MetaList HEAD e60e88dc** (scratch export): 55 DUP001 and 45 DUP002; outside
+its browser test scripts (which MetaList's roles count as production) 43 and 24. Of those
+24, about 21 are worth acting on (`parsePort` and `_validate_job_id` throw different
+exception types across copies, `getNoteElementById` escapes the id in one copy only,
+`reminderDisplayTitle` has two defaults, `_stop_process` and `_authRequest` differ in
+logic) and 3 differ on purpose. Cost: the warm run gains 0.4 s; the cold run about 5 s
+(54.6 to 59.6), measured while another session was running on the machine.
+
+**Our own code:** two copies I had added today were merged first
+(`python_usage._chained` into `python_receivers.is_dotted`, and its `_decorator_name`
+into `python_receivers.decorator_name`). ShockHarness has about 30 more exact groups from
+earlier work; the rules stay off here until those are merged, Tom's call.

@@ -5,6 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **DUP001 and DUP002 (review, opt-in, Python and JavaScript): helpers written out in
+  several files, and copies that have drifted apart** (spec 21.1 decision 39). DUP001:
+  identical function bodies in two or more files, compared with comments, layout and
+  local names set aside and with a string's mention of its own file or function replaced.
+  DUP002: functions of the same name (leading underscores and case aside) in several files
+  that are alike but not the same, with the first line where they differ; constructors and
+  overrides within one class family are left out.
+  - Turn them on with `[tool.shockharness.rules.duplicates] enabled = true`. Settings:
+    `roles`, `min_statements`, `min_tokens`, `similarity`, `severity`,
+    `dup002_severity`. Turning the family off, removing a role or raising a threshold is
+    a VERIFY003 loosening.
+  - On MetaList, outside its browser test scripts: 43 DUP001 and 24 DUP002, among them
+    copies that throw different exception types and one that escapes a selector the other
+    does not. Cache schema "27"; the function shapes add about 9% to a cold run.
+
 ### Fixed
 - **DEAD001/DEAD002 false positives MetaList found** (155 findings, 134 real): methods of
   an exported instance (`export const S = Object.freeze(new Store())`, then

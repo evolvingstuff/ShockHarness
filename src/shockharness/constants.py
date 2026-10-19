@@ -115,8 +115,9 @@ ELAPSED_DECIMALS: Final[int] = 3
 # early publications (STATE002); "21": receiver facts (docs/proposal-receivers.md, R1);
 # "22": JavaScript receiver facts (R2); "23": disguised numbers (MAGIC005); "24":
 # annotation coverage (TYPE002); "25": uses of functions (DEAD001, DEAD002);
-# "26": methods named on call results, classes handed to a library (DEAD001, DEAD002).
-CACHE_SCHEMA_VERSION: Final[str] = "26"
+# "26": methods named on call results, classes handed to a library (DEAD001, DEAD002);
+# "27": function shapes (DUP001, DUP002).
+CACHE_SCHEMA_VERSION: Final[str] = "27"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

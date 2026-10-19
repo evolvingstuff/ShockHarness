@@ -43,6 +43,7 @@ from shockharness.ir.python_functions import (
 from shockharness.ir.python_guardrails import collect_python_guardrails
 from shockharness.ir.python_receivers import collect_python_receivers
 from shockharness.ir.python_sentinels import collect_python_sentinels
+from shockharness.ir.python_shapes import collect_python_shapes
 from shockharness.ir.python_strings import collect_python_strings
 from shockharness.ir.python_usage import collect_python_usage
 from shockharness.ir.python_verification import collect_python_verification
@@ -340,5 +341,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         disguises=collect_python_disguises(source, parsed),
         annotations=collect_python_annotations(source, parsed),
         usage=collect_python_usage(source, parsed),
+        shapes=collect_python_shapes(source, parsed, filename),
         parse_failure=None,
     )

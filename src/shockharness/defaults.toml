@@ -789,3 +789,16 @@ roles = ["production"]
 entry_points = []
 severity = "review"            # DEAD001
 dead002_severity = "review"
+
+[tool.shockharness.rules.duplicates]         # DUP001, DUP002: opt-in, Python and JavaScript
+# Off by default: a project-wide judgment, and most code bases have some copies to merge.
+enabled = false
+roles = ["production"]
+# The smallest function compared: statements, and tokens (a body's syntax tokens; 25 keeps
+# one-line accessors out).
+min_statements = 3
+min_tokens = 25
+# DUP002: how alike two versions must be to count as one helper drifted (difflib ratio).
+similarity = 0.85
+severity = "review"            # DUP001
+dup002_severity = "review"

@@ -155,7 +155,7 @@ def method_receivers(
     return _receiver(function, scope), constructed
 
 
-def _decorator_name(decorator: ast.expr) -> str:
+def decorator_name(decorator: ast.expr) -> str:
     """The last identifier of a decorator: ``staticmethod``, ``setter`` of ``x.setter``."""
     node = decorator
     if isinstance(node, ast.Call):
@@ -169,7 +169,7 @@ def _decorator_name(decorator: ast.expr) -> str:
 
 def method_kind(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
     """instance, static or class; None for a property (accessed, not called)."""
-    names = {_decorator_name(d) for d in function.decorator_list}
+    names = {decorator_name(d) for d in function.decorator_list}
     if len(names & NOT_A_METHOD) > 0:
         return None
     if STATIC_DECORATOR in names:

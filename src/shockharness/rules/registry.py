@@ -3055,6 +3055,95 @@ DEAD002 = RuleSpec(
 )
 
 
+# --- Duplicated helpers (DUP001, DUP002) ----------------------------------------------------
+# Opt-in (rules.duplicates.enabled), judged only when the run analyzed every included file.
+
+DUPLICATES_SECTION = "rules.duplicates"
+DUPLICATES_FAMILY = "duplicates"
+DUPLICATES_GUARANTEES = (
+    "Functions with a name (a def or method; a JavaScript declaration, method, or function "
+    "bound to a declared name, class field or object key) and at least "
+    "rules.duplicates.min_statements statements and min_tokens tokens, in the roles "
+    "rules.duplicates.roles lists. A body is compared as its syntax tokens in order, with "
+    "comments, layout and the docstring dropped, parameters and locals renamed by first "
+    "appearance, and a string's mention of the file's own path or the function's own name "
+    "set aside. Python and JavaScript are compared separately, JavaScript and TypeScript "
+    "together. Judged only when the run analyzed every included file and none failed to parse."
+)
+DUPLICATES_LIMITATIONS = (
+    "Syntax only: two bodies that do the same thing differently are not matched, and two "
+    "identical bodies calling different functions of the same name are. Drift is looked for "
+    "only among functions whose names match once leading underscores and case are set aside."
+)
+
+DUP001 = RuleSpec(
+    rule_id="DUP001",
+    version="1",
+    name="helper copied into several files",
+    family=DUPLICATES_FAMILY,
+    config_section=DUPLICATES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "The same function body, written out in two or more files: one finding per group of "
+        "copies, at the first, listing the rest."
+    ),
+    rationale=(
+        "Copies drift. A fix made to one copy does not reach the others, and the copies that "
+        "were not fixed keep the bug. MetaList had twenty HTML escapers, one per dialog; some "
+        "returned an empty string for a non-string where the others threw."
+    ),
+    guarantees=DUPLICATES_GUARANTEES,
+    limitations=DUPLICATES_LIMITATIONS,
+    remediation=(
+        "Keep one definition in a shared module and import it where it is needed; delete the "
+        "copies. A copy that must stay separate (an entry script that may not import the "
+        "application, a vendored file) gets an inline suppression with that reason."
+    ),
+    noncompliant_example=(
+        "// dialog-a.js and dialog-b.js\nfunction escapeHtml(value) { ... }  // the same body twice"
+    ),
+    compliant_example="import { escapeHtml } from './html.js';",
+)
+
+DUP002 = RuleSpec(
+    rule_id="DUP002",
+    version="1",
+    name="copies of a helper that have drifted apart",
+    family=DUPLICATES_FAMILY,
+    config_section=DUPLICATES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "Functions of the same name in several files whose bodies are alike but not the "
+        "same: versions of one helper that have drifted. One finding per group, with the "
+        "first line where the two most common versions differ."
+    ),
+    rationale=(
+        "A difference between copies is either a fix that reached only some of them or a bug "
+        "that only some have, and the caller cannot tell which version it gets. MetaList's "
+        "escapers drifted: some threw on a non-string, some returned an empty string, so the "
+        "same bad input failed loudly in one dialog and showed blank text in another."
+    ),
+    guarantees=DUPLICATES_GUARANTEES
+    + " Versions are linked when difflib's ratio over their tokens is at least "
+    "rules.duplicates.similarity (0.85).",
+    limitations=DUPLICATES_LIMITATIONS,
+    remediation=(
+        "Decide which version is right, keep that one in a shared module, and import it "
+        "everywhere; if the difference is intended, give the functions different names that "
+        "say how they differ."
+    ),
+    noncompliant_example=(
+        "function escapeHtml(v) { if (typeof v !== 'string') throw new Error('...'); ... }\n"
+        "function _escapeHtml(v) { if (typeof v !== 'string') return ''; ... }"
+    ),
+    compliant_example="import { escapeHtml } from './html.js';  // one version",
+)
+
+
 # --- MAGIC002 (decision 31) ---------------------------------------------------------------
 
 MAGIC_STRINGS_SECTION = "rules.magic_strings"
@@ -3178,6 +3267,8 @@ RULES: tuple[RuleSpec, ...] = (
     DOM002,
     DEAD001,
     DEAD002,
+    DUP001,
+    DUP002,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -3237,6 +3328,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     "dom": CATEGORY_CONTRACT,
     PROPERTY_CONTRACTS_FAMILY: CATEGORY_CONTRACT,
     DEAD_CODE_FAMILY: CATEGORY_STRUCTURAL,
+    DUPLICATES_FAMILY: CATEGORY_STRUCTURAL,
 }
 
 

@@ -27,7 +27,8 @@ The sources of looseness, each reported once per key:
    composition rule that accepts more, a role or runtime module removed, a severity
    lowered.
 5. **Dead code** (``rules.dead_code``, opt-in): turning it off, and while it is on, an
-   entry point added or a role removed.
+   entry point added or a role removed. **Duplicated helpers** (``rules.duplicates``,
+   opt-in): turning it off, a role removed while it is on, a raised threshold.
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -83,6 +84,8 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.dom.dom002_severity": ("error", "warning", "review"),
     "rules.dead_code.severity": ("error", "warning", "review"),
     "rules.dead_code.dead002_severity": ("error", "warning", "review"),
+    "rules.duplicates.severity": ("error", "warning", "review"),
+    "rules.duplicates.dup002_severity": ("error", "warning", "review"),
     "rules.magic_strings.mode": ("fail", "review"),
 }
 # A higher value reports less.
@@ -95,6 +98,9 @@ THRESHOLDS = (
     "complexity.max_lines_warn",
     "rules.types.annotated_share",  # TYPE002: a higher share needed before it reports
     "rules.types.min_annotated_functions",
+    "rules.duplicates.min_statements",  # DUP001/DUP002: larger functions only
+    "rules.duplicates.min_tokens",
+    "rules.duplicates.similarity",  # DUP002: versions must be more alike to be linked
 )
 INCLUDE_KEY = "include"
 EXCLUDE_KEY = "exclude"
@@ -409,31 +415,44 @@ def _property_contracts(
 # -- dead code (DEAD001, DEAD002) -------------------------------------------------------------
 
 DEAD_CODE = "rules.dead_code"
+DUPLICATES = "rules.duplicates"
+
+
+def _opt_in_off_or_roles(
+    section: str, before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """An opt-in family turned off, or, while it is on, a role removed."""
+    if not has_key(before_values, section) or not has_key(after_values, section):
+        return []
+    before, after = value_at(before_values, section), value_at(after_values, section)
+    if before["enabled"] is not True:
+        return []
+    if after["enabled"] is not True:
+        key = f"{section}.enabled"
+        return [Loosening(key, f"{key} changed from True to False: the family is off")]
+    removed = [r for r in before["roles"] if r not in after["roles"]]
+    if len(removed) == 0:
+        return []
+    key = f"{section}.roles"
+    return [Loosening(key, f"{key} no longer lists {', '.join(map(repr, removed))}")]
 
 
 def _dead_code(
     before_values: Mapping[str, Any], after_values: Mapping[str, Any]
 ) -> list[Loosening]:
-    """Opt-in like property contracts: turning it off loosens; while it is on in both, an
-    entry point added or a role removed does (each exempts functions from the judgment)."""
+    """Turning the family off or removing a role, and, while it is on in both, an entry
+    point added (each exempts functions from the judgment)."""
+    found = _opt_in_off_or_roles(DEAD_CODE, before_values, after_values)
     if not has_key(before_values, DEAD_CODE) or not has_key(after_values, DEAD_CODE):
-        return []
+        return found
     before, after = value_at(before_values, DEAD_CODE), value_at(after_values, DEAD_CODE)
-    if before["enabled"] is not True:
-        return []
-    if after["enabled"] is not True:
-        key = f"{DEAD_CODE}.enabled"
-        return [Loosening(key, f"{key} changed from True to False: the dead-code rules are off")]
-    found: list[Loosening] = []
+    if before["enabled"] is not True or after["enabled"] is not True:
+        return found
     added = [p for p in after["entry_points"] if p not in before["entry_points"]]
     if len(added) > 0:
         key = f"{DEAD_CODE}.entry_points"
         listed = ", ".join(map(repr, added))
         found.append(Loosening(key, f"{key} adds {listed}: functions no longer judged dead"))
-    removed = [r for r in before["roles"] if r not in after["roles"]]
-    if len(removed) > 0:
-        key = f"{DEAD_CODE}.roles"
-        found.append(Loosening(key, f"{key} no longer lists {', '.join(map(repr, removed))}"))
     return found
 
 
@@ -483,6 +502,7 @@ def loosenings(
     # Several entries may share a key (two sinks); the family reports no deviation lines.
     found.extend(_property_contracts(before_values, after_values))
     found.extend(_dead_code(before_values, after_values))
+    found.extend(_opt_in_off_or_roles(DUPLICATES, before_values, after_values))
     return found
 
 

@@ -1495,6 +1495,43 @@ annotations, a `__all__` re-export) are roots now. On ShockHarness itself: 16, o
 were dead and are deleted; the other 4 are the contracts runtime's public API, the
 repository's one entry point. ShockHarness runs both rules on itself.
 
+### DUP001 and DUP002: helpers copied into several files, and copies that drifted (review, opt-in)
+
+Spec 21.1 decision 39, from MetaList: twenty HTML escapers, one per dialog, all escaping the
+same five characters, but some returned `''` for a non-string where the others threw, so a
+bad value failed loudly in one dialog and showed blank text in another.
+
+Both rules compare **function shapes**: a named function's body (a def or method; a
+JavaScript declaration or method, or a function bound to a declared name, class field or
+object key) as its syntax tokens in source order, with comments, layout and the docstring
+dropped, parameters and locals renamed by first appearance, and a string's mention of the
+file's own path or the function's own name set aside (copies that label themselves, such
+as `boundary='app/a.py:run'`, compare equal). Only functions with at least
+`min_statements` (3) statements and `min_tokens` (25) tokens, in the roles `roles` lists,
+take part. Python is compared with Python, JavaScript with JavaScript and TypeScript.
+
+* **DUP001** reports identical shapes in two or more files: one finding per group, at its
+  first copy, listing the others.
+* **DUP002** reports versions that have drifted apart: functions whose names match once
+  leading underscores and case are set aside (`escapeHtml`, `_escapeHtml`), in two or more
+  files, whose shapes differ but are at least `similarity` (0.85, difflib's ratio) alike.
+  One finding per group, at the first copy of its most common version, with the first
+  pair of lines where the two most common versions differ. Constructors are left out, and
+  so are overrides of one method in classes of one inheritance family (polymorphism is
+  meant to differ); DUP001 still reports identical ones.
+
+Judged only when the run analyzed every included file and none failed to parse. Syntax
+only: bodies that do the same thing differently are not matched.
+
+**Measured** on MetaList at e60e88dc, outside its browser test scripts: 43 DUP001 groups
+(`showModalElement` in 17 modal classes, `dom-utils.js` and `dom-utils-fixed.js` sharing
+eleven functions, process helpers copied into `main.py` and two services) and 24 DUP002,
+about 21 of them worth acting on: `parsePort` and `_validate_job_id` throw different
+exception types in their copies, one `getNoteElementById` escapes the id and one does not,
+`reminderDisplayTitle` returns two different defaults. The rest differ on purpose
+(`_normalize_direction` for two domains). Before the escaper merge (add573e3^) the escapers
+are an 11-copy and a 4-copy DUP001 group and one DUP002 naming `throw` against `return ''`.
+
 ## Registered, not implemented
 
 None since MAGIC002 landed. A rule registered before it is built is listed in

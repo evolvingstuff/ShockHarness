@@ -928,6 +928,26 @@ their functions are not judged. While the family is on, turning it off, adding a
 point or removing a role is a VERIFY003 loosening, and so is lowering either severity.
 looseness.
 
+## Duplicated helpers (DUP001, DUP002)
+
+Opt-in (spec 21.1 decision 39): off is the default in every profile and is not a
+deviation. Like the dead-code rules, the judgment is made only when the run analyzed every
+included file.
+
+```toml
+[tool.shockharness.rules.duplicates]
+enabled = false                  # true turns the two rules on
+roles = ["production"]           # the files whose functions are compared
+min_statements = 3               # the smallest function compared (at least 3)
+min_tokens = 25                  # ... and its fewest syntax tokens
+similarity = 0.85                # DUP002: how alike two versions must be (difflib ratio)
+severity = "review"              # DUP001
+dup002_severity = "review"
+```
+
+While the family is on, turning it off or removing a role is a VERIFY003 loosening, and so
+is raising `min_statements`, `min_tokens` or `similarity`, or lowering either severity.
+
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a, P1b and P2,
