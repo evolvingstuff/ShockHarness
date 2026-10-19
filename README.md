@@ -7,7 +7,7 @@
 </p>
 
 A strict, deterministic static-analysis quality gate for Python, JavaScript and
-TypeScript, with C# (Godot .NET) in progress: numbers, complexity and suppressions so far.
+TypeScript, with C# (Godot .NET) in progress and opt-in: numbers, complexity and suppressions so far.
 Its one idea: unexpected failures, missing information, and unexplained
 decisions must not silently become apparently valid program behavior.
 

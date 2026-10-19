@@ -363,21 +363,32 @@ def test_control_tree_of_branches_patterns_switches_and_catches() -> None:
 # -- the pipeline ------------------------------------------------------------------------
 
 
-def test_csharp_files_are_discovered_and_godot_output_excluded(
+OPT_IN = 'include = ["**/*.py", "**/*.cs"]\n'
+GODOT_TREE = {
+    "Player.cs": "",
+    ".godot/mono/temp/obj/Gen.cs": "",
+    "obj/Debug/net8.0/GlobalUsings.g.cs": "",
+    "bin/Debug/x.cs": "",
+    "addons/plugin/Tool.cs": "",
+    "tools/geometry.py": "",
+}
+
+
+def test_the_default_include_does_not_pick_up_csharp(
     empty_root: Path, strict_config: EffectiveConfig
 ) -> None:
-    write(
-        empty_root,
-        {
-            "Player.cs": "",
-            ".godot/mono/temp/obj/Gen.cs": "",
-            "obj/Debug/net8.0/GlobalUsings.g.cs": "",
-            "bin/Debug/x.cs": "",
-            "addons/plugin/Tool.cs": "",
-            "tools/geometry.py": "",
-        },
-    )
+    """C# is opt-in: an upgrade never starts analyzing a project's .cs files."""
+    write(empty_root, GODOT_TREE)
     result = discover(empty_root, [empty_root], strict_config)
+    assert [f.relative for f in result.files] == ["tools/geometry.py"]
+    assert "**/*.cs" not in strict_config.values["include"]
+
+
+def test_csharp_files_are_discovered_once_included_and_godot_output_excluded(
+    empty_root: Path, make_config: Any
+) -> None:
+    write(empty_root, GODOT_TREE)
+    result = discover(empty_root, [empty_root], make_config(OPT_IN))
     assert [(f.relative, f.language) for f in result.files] == [
         ("Player.cs", "csharp"),
         ("addons/plugin/Tool.cs", "csharp"),
@@ -393,11 +404,11 @@ def test_complexity_rules_run_on_csharp(make_config: Any) -> None:
 
 
 def test_rules_without_csharp_facts_do_not_run_and_are_listed(
-    empty_root: Path, strict_config: EffectiveConfig
+    empty_root: Path, make_config: Any
 ) -> None:
     outcome = project(
         empty_root,
-        strict_config,
+        make_config(OPT_IN),
         {
             "Player.cs": "class P { void M() { try { F(); } catch (Exception) { } } }\n",
             "tools/geometry.py": "def area(w, h):\n    return w * h\n",

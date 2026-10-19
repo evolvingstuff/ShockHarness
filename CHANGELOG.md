@@ -13,10 +13,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   text report warns. Named numbers in C#: `const` fields, `static readonly` and
   `[Export]` members of literal arithmetic or of a Godot value type built from literals
   (`static readonly Vector2 Spawn = new(64, 32);`), and explicit enum values.
-  - **The default `include` adds `**/*.cs`**, and the default `exclude` adds
-    `**/.godot/**`, `**/bin/**/*.cs` and `**/obj/**/*.cs`. A C# repository on the defaults
-    now gets findings instead of unsupported-source warnings; set `include` to keep the
-    old scope.
+  - **C# is opt-in.** The default `include` does not list `**/*.cs`; a project turns
+    C# on by adding `"**/*.cs"` to its own `include` (docs/configuration.md). Upgrading
+    changes nothing for a project with `.cs` files that relies on the default include.
+    The default `exclude` adds `**/.godot/**`, `**/bin/**/*.cs` and `**/obj/**/*.cs`, and
+    the default roles `**/*.g.cs` and `**/*.Designer.cs` (generated) and `**/*Tests.cs`
+    and `**/*.Tests/**` (test); none of them matches a file the defaults analyze today.
   - `coverage.rules_not_applicable`: per analyzed language, the implemented rules that
     never run on it.
 

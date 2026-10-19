@@ -423,6 +423,8 @@ Stated so that a clean report is never read as more than it is.
 
 ## C# (Godot .NET, milestone G1)
 
+* **Opt-in.** The default `include` does not list `**/*.cs`; a project adds it
+  (docs/configuration.md).
 * **Partial coverage.** G1 runs MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 on
   `.cs` files. Every other rule has no C# facts yet and does not run there:
   `coverage.rules_not_applicable.csharp` lists them, and the text report prints a warning

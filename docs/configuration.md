@@ -158,8 +158,8 @@ rule IDs, and unsupported include extensions are **errors**, never warnings.
 [tool.shockharness]
 profile = "strict"                      # "strict" | "recommended" | "minimal"; see Profiles
 include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs",
-           "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts",   # TypeScript since H-TS
-           "**/*.cs"]                   # C# since G1 (Godot .NET)
+           "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]   # TypeScript since H-TS
+                                        # C# (Godot .NET, G1) is opt-in: add "**/*.cs" (see below)
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**",
            "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**",
            "**/*.d.ts",                 # declaration files hold types only
@@ -266,6 +266,22 @@ language = "python"
 exceptions = ["OSError", "ProcessLookupError"]      # exactly one of `exception` / `exceptions` per entry
 reason = "The child process may already be gone"
 ```
+
+**C# is opt-in (G1).** The default `include` does not list `**/*.cs`, so upgrading never
+starts analyzing a project's C# files on its own: only MAGIC001, the complexity rules and
+suppression comments run on C# so far (`coverage.rules_not_applicable.csharp` lists the
+rest), and strict MAGIC001 would fail a gate that passed before. A project turns C# on by
+listing it in its own `include` (the list replaces the default, so repeat the other
+languages it uses):
+
+```toml
+[tool.shockharness]
+include = ["**/*.py", "**/*.cs"]
+```
+
+The default `exclude` already leaves out `.godot/` and .NET build output (`bin/**/*.cs`,
+`obj/**/*.cs`). To leave third-party Godot plugins out too, set `exclude` to the default
+list plus `"addons/**"`.
 
 ## File roles
 

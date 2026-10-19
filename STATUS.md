@@ -5890,7 +5890,8 @@ questions to my judgment (decisions 3 and 4 below).
    Python. Measured: in TheLivingLabyrinth's LookTest.cs about half the findings are
    `Vector2`/`Color` arguments in method bodies (a visual prototype); nothing else is
    relaxed until the game has more code.
-4. **`**/*.cs` is in the default `include` (Tom: "use your best judgment").** As for
+4. **`**/*.cs` is in the default `include` (Tom: "use your best judgment"; reversed the
+   same day, see "G1 follow-up: C# is opt-in" below).** As for
    TypeScript, support means analysis; a C# repository on the defaults now gets
    MAGIC001 and complexity findings instead of unsupported-source warnings. The exclusions
    are scoped to `.cs` so a Python `bin/` directory is still analyzed.
@@ -5964,3 +5965,23 @@ complexity rules, rules not applicable and coverage); five C# shapes at depth 20
   complexity warnings.
 * Another session merged two identical `elif` branches in `csharp_functions.py` while it
   was being written (its new duplicate-code rule); kept.
+
+## G1 follow-up: C# is opt-in — DONE (2026-10-19)
+
+Tom accepted the lead session's recommendation to keep C# out of the default `include`
+until its coverage is broader (his words, relayed: "Let's go with all of your
+recommendations"). Decision 4 of G1 is reversed: an adopter with `.cs` files who relies on
+the default `include` would otherwise have them analyzed on upgrade, and strict MAGIC001
+errors on game code would fail a gate that passed before.
+
+* `defaults.toml`: `**/*.cs` removed from `include`. The `.godot/`, `bin/**/*.cs` and
+  `obj/**/*.cs` excludes and the C# role globs stay; they match nothing the defaults
+  analyze.
+* docs/configuration.md says how to turn C# on (`"**/*.cs"` in the project's own
+  `include`); the CHANGELOG entry says so as an upgrade note; spec decision 40 and
+  docs/limitations.md follow.
+* Tests: the default include discovers no `.cs` file; the C# discovery and coverage
+  tests opt in through `include`.
+* TheLivingLabyrinth has no ShockHarness configuration yet; when it gets one, it lists
+  `"**/*.cs"` in `include`. Not written here: that repository is Tom's.
+

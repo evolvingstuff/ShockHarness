@@ -5,9 +5,10 @@
 [tool.shockharness]
 profile = "strict"
 # TypeScript (.ts, .tsx, .mts, .cts) since H-TS; declaration files (.d.ts) hold types only
-# and are excluded. C# (.cs) since G1; the Godot editor's .godot/ folder and .NET build
-# output (bin/ and obj/, which hold generated .cs) are excluded.
-include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.cs"]
+# and are excluded. C# (.cs, since G1) is opt-in while its rule coverage is partial: a
+# project adds "**/*.cs" to its own include. The Godot editor's .godot/ folder and .NET
+# build output (bin/ and obj/, which hold generated .cs) are excluded either way.
+include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**", "**/*.d.ts", "**/.godot/**", "**/bin/**/*.cs", "**/obj/**/*.cs"]
 parse_errors = "fail"
 # A file that `include` matches but no adapter can parse (.pyx, .vue):
