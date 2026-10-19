@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-19
+
+DEAD001 and DEAD002 (spec 21.1 decision 38): functions nothing in production reaches,
+reported by cluster.
+
+**Upgrading from 0.16.0.** No change makes a passing gate fail: both rules are opt-in
+(`rules.dead_code.enabled`, off by default) and `review`. The cache schema is "25", so
+the first run after upgrading rebuilds the cache.
+
 ### Added
 - **DEAD001 and DEAD002 (review, opt-in, Python and JavaScript): functions nothing in
   production reaches** (spec 21.1 decision 38). One finding per dead head, listing what
@@ -21,6 +30,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     lost search highlighting. On ShockHarness: 16. The 12 dead functions are deleted (108
     lines), and the repository now turns the rules on, with the contracts runtime's public
     API as its one entry point.
+
+### Removed
+- Internal functions nothing in production called, found by DEAD001/DEAD002:
+  `shockharness.analysis.analyze_file` (use `analyze_files([file], ...)` or
+  `shockharness.api.analyze_paths`), `shockharness.skills.skill_names` (read
+  `SKILL_NAMES`), `python_receivers.receiver_parameter`, and eight unused helpers. None
+  was part of the documented API.
 
 ## [0.16.0] - 2026-10-19
 
