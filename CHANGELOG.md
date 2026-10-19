@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-19
+
+TYPE002 (spec 21.1 decision 33), and ShockHarness checks its own annotations with mypy.
+
+**Upgrading from 0.15.0.** No change makes a passing gate fail: TYPE002 is `review` and
+reports once per run, only for a project with at least 20 annotated functions and no type
+checker configured. The cache schema is "24".
+
 ### Added
 - **TYPE002 (review, Python): type annotations nothing checks** (spec 21.1 decision 33).
   It reports once per run when at least half of the production functions, and at least
