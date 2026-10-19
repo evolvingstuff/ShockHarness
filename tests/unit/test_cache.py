@@ -147,6 +147,8 @@ def test_second_run_is_identical_and_every_file_is_a_hit(
         "errors": 0,
         "problems": [],
         "contracts": "off",  # the family is off
+        "contracts_reused": 0,
+        "contracts_files": 0,
     }
     assert cache_block(warm)["hits"] == 3 == json.loads(warm)["execution_summary"]["files"]
     assert cache_block(warm)["misses"] == 0
@@ -392,11 +394,13 @@ FREE = "def {name}(note):\n    return note\n"
 
 
 def contracts_run(root: Path) -> tuple[str, list[int]]:
-    """(coverage.cache.contracts, the lines of the PROP001 findings) of one run."""
+    """(coverage.cache.contracts with reused/files, the PROP001 lines) of one run."""
     report = analyze_paths([root], root, load_config(root, None), OPTIONS)
     out = json_output.render(report)
     lines = [f["span"]["line"] for f in json.loads(out)["findings"] if f["rule_id"] == "PROP001"]
-    return str(cache_block(out)["contracts"]), lines
+    block = cache_block(out)
+    status = f"{block['contracts']} {block['contracts_reused']}/{block['contracts_files']}"
+    return status, lines
 
 
 def test_the_contracts_phase_is_reused_while_nothing_it_read_changed(tmp_path: Path) -> None:
@@ -404,21 +408,22 @@ def test_the_contracts_phase_is_reused_while_nothing_it_read_changed(tmp_path: P
     write(tmp_path, "app/__init__.py", "")
     write(tmp_path, "app/use.py", CONTRACTS_USE)
     write(tmp_path, "app/model.py", REQUIRES.format(name="send"))
-    assert contracts_run(tmp_path) == ("miss", [6])
-    assert contracts_run(tmp_path) == ("hit", [6])
-    # A file the phase read from disk changes: the key matches, the entry is stale.
+    # Two checked files: app/use.py and app/__init__.py.
+    assert contracts_run(tmp_path) == ("miss 0/2", [6])
+    assert contracts_run(tmp_path) == ("hit 2/2", [6])
+    # A file app/use.py read from disk changes: only app/use.py is computed again.
     write(tmp_path, "app/model.py", FREE.format(name="send"))
-    assert contracts_run(tmp_path) == ("stale", [])
-    assert contracts_run(tmp_path) == ("hit", [])
-    # A file the phase looked for and did not find appears: stale.
+    assert contracts_run(tmp_path) == ("stale 1/2", [])
+    assert contracts_run(tmp_path) == ("hit 2/2", [])
+    # A file app/use.py looked for and did not find appears.
     write(tmp_path, "app/later.py", REQUIRES.format(name="keep"))
-    assert contracts_run(tmp_path) == ("stale", [10])
-    # An analyzed file changes: another key.
+    assert contracts_run(tmp_path) == ("stale 1/2", [10])
+    # An analyzed file changes: that file alone.
     write(tmp_path, "app/use.py", CONTRACTS_USE + "\n")
-    assert contracts_run(tmp_path) == ("miss", [10])
-    # Another configuration: another header.
+    assert contracts_run(tmp_path) == ("stale 1/2", [10])
+    # Another configuration: another header, every file afresh.
     write(tmp_path, ".shockharness.toml", CONTRACTS_CONFIG.replace("static", "check"))
-    assert contracts_run(tmp_path)[0] == "miss"
+    assert contracts_run(tmp_path)[0] == "miss 0/2"
 
 
 def test_without_the_cache_the_contracts_phase_is_not_cached(tmp_path: Path) -> None:
@@ -429,3 +434,46 @@ def test_without_the_cache_the_contracts_phase_is_not_cached(tmp_path: Path) -> 
     report = analyze_paths([tmp_path], tmp_path, load_config(tmp_path, None), NO_CACHE)
     assert cache_block(json_output.render(report))["contracts"] == "off"
     assert not (tmp_path / ".shockharness-cache" / "contracts.json").exists()
+
+
+MEMO_CONFIG = CONTRACTS_CONFIG.replace(
+    'include = ["app/use.py", "app/__init__.py"]', 'include = ["app/**/*.py"]'
+)
+
+
+def test_a_reused_result_carries_its_dependencies(tmp_path: Path) -> None:
+    # first.py and second.py both deliver relay(note). relay's result comes, two calls
+    # deep, from clean in leaf.py; it is computed once, for first.py, and reused from the
+    # memo for second.py, whose own units never resolve leaf.py. A change to leaf.py must
+    # still reach second.py.
+    write(tmp_path, ".shockharness.toml", MEMO_CONFIG)
+    write(tmp_path, "app/__init__.py", "")
+    write(tmp_path, "app/contracts.py", "")
+    write(
+        tmp_path,
+        "app/leaf.py",
+        "from app.contracts import produces\n\n\n"
+        'def clean(note):\n    return produces(note.strip(), "redacted")\n',
+    )
+    write(
+        tmp_path,
+        "app/inner.py",
+        "from app.leaf import clean\n\n\ndef pass_on(note):\n    return clean(note)\n",
+    )
+    write(
+        tmp_path,
+        "app/middle.py",
+        "from app.inner import pass_on\n\n\ndef relay(note):\n    return pass_on(note)\n",
+    )
+    deliver = (
+        "from app.contracts import requires\nfrom app.middle import relay\n\n\n"
+        'def deliver(note):\n    requires(note, "redacted")\n    return note\n\n\n'
+        "def go(note):\n    return deliver(relay(note))\n"
+    )
+    write(tmp_path, "app/first.py", deliver)
+    write(tmp_path, "app/second.py", deliver)
+    assert contracts_run(tmp_path) == ("miss 0/7", [])
+    write(tmp_path, "app/leaf.py", "def clean(note):\n    return note.strip()\n")
+    status, lines = contracts_run(tmp_path)
+    assert lines == [11, 11]  # both files report, from the cache and afresh alike
+    assert status == "stale 2/7"  # only __init__.py's and contracts.py's entries hold

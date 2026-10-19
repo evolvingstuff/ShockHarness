@@ -1077,19 +1077,24 @@ diffs, history) is recomputed on every run, with one exception below; a hit
 yields byte-identical findings and metrics for that file.
 
 **The property-contracts phase** is the one cross-file phase the cache covers
-(0.14.0). It is the most expensive, and it only runs when
-`rules.property_contracts.enabled` is true. Its findings are reused when all of
-these are unchanged:
+(first for an unchanged tree only, now file by file; see CHANGELOG.md). It is
+the most expensive, and it only runs when `rules.property_contracts.enabled` is true.
+Each checked file's findings are kept with what they depended on, and reused while all
+of it is unchanged:
 * the header (tool version, configuration digest, host);
-* every analyzed file's path, language and text, and which contract rules and
-  `complete` scope apply to it;
-* every other file the phase looked at. The contract indexes resolve callees
-  into project files that may not be analyzed, so each existence check (a file
-  that was there, or was not) and each read (the digest of its text) is
-  recorded with the result, and all of them are checked again before the result
-  is reused.
+* the file's text, and which contract rules and `complete` scope apply to it;
+* every name its analysis resolved, which must resolve to the same file;
+* the text of every module it depended on, analyzed or read from disk, including
+  modules reached only through a callee's result the analysis had already computed for
+  another file;
+* every JavaScript path it looked for, which must still exist or still be missing;
+* when an override check ran for it, the classes of every analyzed module (their names,
+  bases and methods).
 
-A run that changes any analyzed file computes the phase afresh.
+Every other file is computed afresh, and with it only what its findings need. On
+MetaList (981 files, contracts on) an edit to one file recomputes 3 to 7 files. A
+change to a class (a new subclass, a renamed method) recomputes the files that ran an
+override check, about 200 there.
 
 **Layout.** `index.json` holds the key header; `entries/<ab>/<sha256 of the
 path>.json` holds one JSON entry per file, and `contracts.json` the last
@@ -1103,8 +1108,9 @@ analyzed afresh; a corrupt index rebuilds the cache.
 **Reporting.** `coverage.cache` carries `status` (`enabled`, `disabled`,
 `bypassed`), `directory`, `reason`, the counters `hits`, `misses`,
 `invalidated`, `errors`, the distinct `problems`, and `contracts`: `off` (the
-phase did not run, or the cache is not open), `hit`, `miss`, or `stale` (the key
-matched, but a file the phase read or looked for changed). It is the one block of
+phase did not run, or the cache is not open), `hit` (every checked file reused its
+entry), `stale` (some did) or `miss` (none did), with `contracts_reused` of
+`contracts_files`. It is the one block of
 the JSON report that legitimately differs between a cold and a warm run over
 the same tree; a determinism comparison (two runs byte-identical) must drop it,
 as the tool's own tests do. The text output prints one `cache:` line and a
@@ -1115,7 +1121,9 @@ $ shockharness check .                  # cold: every file analyzed and stored
   cache: .shockharness-cache: 0 hit(s), 906 miss(es), 0 invalidated, 0 error(s)
 $ shockharness check .                  # warm: only cross-file work runs
   cache: .shockharness-cache: 906 hit(s), 0 miss(es), 0 invalidated, 0 error(s)
-  cache: property contracts: reused (no file they read changed)
+  cache: property contracts: reused for every file (981 of 981 files)
+$ shockharness check .                  # after an edit to one file
+  cache: property contracts: reused where nothing they depend on changed (974 of 981 files)
 ```
 
 On a CI runner, restoring `.shockharness-cache/` between jobs (keyed by the

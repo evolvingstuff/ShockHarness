@@ -35,6 +35,7 @@ from shockharness.contracts.catalog import (
     static_properties,
 )
 from shockharness.contracts.compose import Compositions
+from shockharness.contracts.deps import Deps
 from shockharness.contracts.javascript_flow import (
     JsDeclaration,
     JsFlow,
@@ -390,8 +391,10 @@ class JsAnalysis:
         self.compositions = Compositions(catalog, JAVASCRIPT)
         # Keyed by (path, node id): a node id is unique within one file's tree.
         self.units: dict[tuple[str, int], JsUnit] = {}
+        self.unit_deps: dict[tuple[str, int], Deps] = {}
         self.contracts: dict[tuple[str, int], JsContract] = {}
         self.results: dict[tuple[str, int, int, tuple[tuple[str, PropSet], ...]], PropSet] = {}
+        self.result_deps: dict[tuple[str, int, int, tuple[tuple[str, PropSet], ...]], Deps] = {}
         self.computing: set[tuple[str, int]] = set()
         self.max_depth = int(settings["max_depth"])
         # Producers by canonical reference (re-exports resolved), and as written.
@@ -421,8 +424,14 @@ class JsAnalysis:
         if function is not None:
             node = function
         key = (module.path, node.id)
-        if key not in self.units:
-            self.units[key] = self._build(module, function)
+        tracker = self.index.tracker
+        if key in self.units:
+            tracker.add(self.unit_deps[key])
+            return self.units[key]
+        tracker.push()
+        tracker.path(module.path)
+        self.units[key] = self._build(module, function)
+        self.unit_deps[key] = tracker.pop()
         return self.units[key]
 
     def _build(self, module: JsModule, function: Node | None) -> JsUnit:
@@ -490,6 +499,8 @@ class JsAnalysis:
         """A resolved callee's parameters and the requirements at the top of its body."""
         assert target.module is not None and target.function is not None, "a unit target"
         key = (target.module.path, target.function.id)
+        if key in self.contracts:
+            self.index.tracker.add(self.unit_deps[key])
         if key not in self.contracts:
             unit = self.unit(target.module, target.function)
             self.contracts[key] = JsContract(
@@ -507,14 +518,19 @@ class JsAnalysis:
             )
         node = (target.module.path, target.function.id)
         key = (*node, crossings, tuple(sorted(passed.items())))
-        if key not in self.results:
-            if node in self.computing:
-                return unknown(f"{target.reference} calls itself (recursion is not followed)")
-            self.computing.add(node)
-            unit = self.unit(target.module, target.function)
-            summary = run(JsUnitHooks(self, unit, None, crossings, passed), unit)
-            self.computing.discard(node)
-            self.results[key] = _shaped(unit, summary)
+        tracker = self.index.tracker
+        if key in self.results:
+            tracker.add(self.result_deps[key])
+            return self.results[key]
+        if node in self.computing:
+            return unknown(f"{target.reference} calls itself (recursion is not followed)")
+        self.computing.add(node)
+        tracker.push()
+        unit = self.unit(target.module, target.function)
+        summary = run(JsUnitHooks(self, unit, None, crossings, passed), unit)
+        self.computing.discard(node)
+        self.results[key] = _shaped(unit, summary)
+        self.result_deps[key] = tracker.pop()
         return self.results[key]
 
     def producer_issues(self, unit: JsUnit) -> list[Issue]:
@@ -926,16 +942,28 @@ def _locator(source: SourceText) -> Callable[[object], Located]:
 
 
 def run_javascript_contracts(
-    files: Sequence[ContractFile], index: JsProjectIndex, settings: Mapping[str, Any]
+    files: Sequence[ContractFile],
+    index: JsProjectIndex,
+    settings: Mapping[str, Any],
+    deps: dict[str, Deps],
 ) -> dict[str, list[Finding]]:
+    """Each file's findings; ``deps`` receives what each file's findings depend on, the
+    catalog's resolutions (made once, for every file) included."""
+    tracker = index.tracker
+    tracker.push()
     analysis = JsAnalysis(index, settings)
+    shared = tracker.pop()
     found: dict[str, list[Finding]] = {}
     for file in files:
+        tracker.push()
+        tracker.add(shared)
         module = index.module(file.path)
         if module is None or len(file.applies) == 0 or index.is_runtime(file.path):
+            tracker.pop()
             continue
         reporter = Reporter(file, settings, _locator(module.source))
         _file_findings(analysis, module, reporter)
+        deps[file.path] = tracker.pop()
         found[file.path] = sorted(reporter.found.values(), key=lambda f: f.sort_key())
     return found
 

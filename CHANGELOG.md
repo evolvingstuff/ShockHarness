@@ -5,6 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **The property-contracts phase is incremental.** Each checked file's findings are
+  cached with what they depended on:
+  - every name its analysis resolved, and where to;
+  - the text of every module involved, including modules reached only through a
+    memoized callee result;
+  - JavaScript existence checks;
+  - for an override check, the analyzed classes.
+
+  A later run reuses a file's entry while all of that holds, and computes only the other
+  files. On MetaList an edit to one file recomputes 3 to 7 of 981 files: a check after
+  an edit takes about 10 s, where 0.14.0 took about 16.6 s, and the findings are
+  identical to a full recompute in every scenario tried. `coverage.cache` gains
+  `contracts_reused` and `contracts_files`, and `stale` now means some files reused
+  their entry.
+
 ## [0.14.0] - 2026-10-18
 
 MAGIC005, the disguised numbers of the under-the-gate rounds, and skill wording from the

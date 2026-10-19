@@ -8,7 +8,6 @@ missing, each read file has the same text, and each unreadable one is still unre
 """
 
 import hashlib
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,18 +52,3 @@ class DiskLog:
 
 def new_log(root: Path) -> DiskLog:
     return DiskLog(root, {}, {})
-
-
-def unchanged(root: Path, probes: Mapping[str, bool], reads: Mapping[str, str]) -> bool:
-    """Whether every logged answer would be the same now."""
-    for path, found in probes.items():
-        if (root / path).is_file() != found:
-            return False
-    for path, digest in reads.items():
-        text, _why = read_text(root / path)
-        now = UNREADABLE
-        if text is not None:
-            now = text_digest(text)
-        if now != digest:
-            return False
-    return True

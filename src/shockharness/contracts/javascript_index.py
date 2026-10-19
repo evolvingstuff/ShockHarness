@@ -42,6 +42,7 @@ from shockharness.contracts.catalog import (
     is_javascript_path,
     split_sink_callee,
 )
+from shockharness.contracts.deps import Deps, Tracker
 from shockharness.contracts.disk import DiskLog, new_log
 from shockharness.contracts.python_index import LIBRARY, RUNTIME, UNIT, UNKNOWN
 from shockharness.ir.javascript import parse_tree
@@ -290,14 +291,17 @@ class JsProjectIndex:
         analyzed: Mapping[str, str],
         runtime: frozenset[str],
         disk: DiskLog,
+        tracker: Tracker,
     ) -> None:
         self.root = root
         self.disk = disk  # every probe and read of a file that is not analyzed
+        self.tracker = tracker  # what each file's findings depend on (contracts/deps.py)
         self.runtime = runtime
         self.texts = dict(analyzed)
         self.modules: dict[str, JsModule | None] = {}
         self.unreadable: dict[str, str] = {}
         self.ancestry: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
+        self.ancestry_deps: dict[tuple[str, str], Deps] = {}
         self.definers: dict[str, list[tuple[JsModule, JsClass]]] | None = None
 
     def is_runtime(self, path: str) -> bool:
@@ -306,6 +310,7 @@ class JsProjectIndex:
     def module(self, path: str) -> JsModule | None:
         if path not in self.modules:
             self.modules[path] = self._load(path)
+        self.tracker.path(path)
         return self.modules[path]
 
     def _load(self, path: str) -> JsModule | None:
@@ -318,7 +323,9 @@ class JsProjectIndex:
         return build_module(path, text)
 
     def _exists(self, path: str) -> bool:
-        return path in self.texts or self.disk.is_file(self.root / path)
+        found = path in self.texts or self.disk.is_file(self.root / path)
+        self.tracker.probe(path, found)
+        return found
 
     def specifier(self, importer: str, specifier: str) -> Specifier:
         if not specifier.startswith((".", "/")):
@@ -559,7 +566,10 @@ class JsProjectIndex:
 
     def _ancestors(self, module: JsModule, owner: JsClass) -> frozenset[tuple[str, str]]:
         key = (module.path, owner.name)
+        if key in self.ancestry_deps:
+            self.tracker.add(self.ancestry_deps[key])
         if key not in self.ancestry:
+            self.tracker.push()
             self.ancestry[key] = frozenset()  # a cycle in the bases ends here
             found: set[tuple[str, str]] = set()
             parent = None
@@ -569,10 +579,12 @@ class JsProjectIndex:
                 found.add((parent[0].path, parent[1].name))
                 found.update(self._ancestors(parent[0], parent[1]))
             self.ancestry[key] = frozenset(found)
+            self.ancestry_deps[key] = self.tracker.pop()
         return self.ancestry[key]
 
     def _overriding(self, module: JsModule, owner: JsClass, name: str) -> str | None:
         """An analyzed class deriving from ``owner`` whose own body defines ``name``."""
+        self.tracker.classes()  # the answer depends on every analyzed class
         key = (module.path, owner.name)
         if self.definers is None:
             self.definers = self._definers()
@@ -663,7 +675,7 @@ def _references(settings: Mapping[str, Any]) -> list[tuple[str, str, bool]]:
 
 def javascript_reference_issues(root: Path, values: Mapping[str, Any]) -> list[ConfigIssue]:
     settings = values["rules"]["property_contracts"]
-    index = JsProjectIndex(root, {}, frozenset(), new_log(root))
+    index = JsProjectIndex(root, {}, frozenset(), new_log(root), Tracker())
     issues: list[ConfigIssue | None] = []
     for where, reference, must_be_project in _references(settings):
         check = _producer_issue if must_be_project else _callee_issue

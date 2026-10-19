@@ -5498,3 +5498,68 @@ changelog's `[0.14.0]` section says one change can make a passing gate fail: MAG
 a new warning, which on MetaList and the corpus reports nothing. The cache schema is "23".
 Published by `publish.yml` (run 39177649690, 18 of 18 jobs). PyPI lists 0.14.0 with a
 wheel and an sdist.
+
+## The property-contracts phase is incremental — DONE (2026-10-18)
+
+Second half of MetaList's speed report. After 0.12.0 a check with nothing changed reused
+the whole phase, but any edit recomputed all of it (about 16.6 s on MetaList).
+
+* **Dependencies** (`contracts/deps.py`). A `Tracker` holds a stack of frames, and every
+  recorded dependency goes into each open frame:
+  * a Python name and the file it resolved to (or none);
+  * a module whose text matters;
+  * a JavaScript existence check;
+  * `classes`, when an override check consulted every analyzed class.
+
+  Both indexes record through it: `module()`, `_load`, `_exists`, `_overriding`, and
+  `_ancestors`, which memoizes its own dependencies. Both analyses keep a record for each
+  memoized unit and result, and a reuse adds that record to the file now being checked.
+  The catalog's sinks and producers, resolved once when the analysis starts, form a
+  shared frame that every file's record includes.
+* **Entries** (`cache/contracts.py`). One `FileEntry` per checked file holds its digest,
+  rules, scope, findings, resolved names, probes, the digest of each module involved,
+  and the `classes` flag. The result also stores the class digest of its run, made from
+  the per-file facts: every class's name, bases and method names, for files that have
+  classes.
+* **Reuse** (`contracts/incremental.py`, `analysis._incremental_contracts`). An entry is
+  reused when:
+  * its own text, rules and scope are the same;
+  * every name resolves to the same file, the way the index resolves it (analyzed names
+    first, then the flat or src layout on disk);
+  * every probe gives the same answer;
+  * every module has the same text;
+  * when it is flagged, the class digest is the same.
+
+  The other files go through the phase, with an index over every analyzed file, and the
+  merged entries are stored.
+* **Why reuse is safe with memoization.** Results are memoized by (function, crossings,
+  arguments). The recursion guard fires only on a cycle, and the spec makes every
+  function in a cycle unknown. So a memoized result is the same whichever file asked
+  first, and computing a subset of files gives the same findings as computing all.
+* **Equivalence on MetaList** (a read-only copy, contracts on). Each edit was checked
+  with the cache (incremental) and with `--no-cache` (full), and the findings compared,
+  every rule included:
+
+  | Edit | Identical | Files recomputed | Incremental |
+  |---|---|---|---|
+  | none (warm) | yes | 0 of 981 | 7.6 to 8.2 s |
+  | the callee `ai_send.py` loses a `requires` (a finding disappears) | yes | 7 | 9.9 s |
+  | the caller `agent_loop.py` touched | yes | 7 | 10.1 s |
+  | a new module calling `send_text_stream` | yes | 3 of 982 | 9.5 s |
+  | a new subclass of `AgentRuntime` (the class digest changes) | yes | 208 | 15.0 s |
+  | `main.js` touched | yes | 5 | 9.3 s |
+
+  The first version put every file in the class digest, so a new module without classes
+  recomputed the 208 files that ran override checks. Files without classes are left out
+  now.
+* **Tests** (`test_cache.py`):
+  * per-file counts for hit, a changed disk read, a probed file appearing, a changed
+    analyzed file and a changed configuration;
+  * a memoized result two calls deep, reused by a second file whose own units never
+    resolve the leaf. Removing the memo's dependency propagation makes this test fail,
+    which was checked.
+* **Found on the way:** the release bumps replace every old version string in the pinned
+  files, and they had rewritten a "(0.12.0)" in `docs/configuration.md` to 0.14.0. That
+  prose now carries no version, and `docs/releasing.md` says to move pins only.
+* **Not done:** about 7.6 s of a warm run is still per-file cache decoding and the other
+  cross-file phases (the call graph, INPUT001 and the rest), which are recomputed.

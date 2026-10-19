@@ -157,9 +157,9 @@ def finding_lines(findings: Sequence[Finding]) -> list[str]:
 
 
 CONTRACTS_WORDS = {
-    CONTRACTS_HIT: "reused (no file they read changed)",
-    CONTRACTS_MISS: "computed",
-    CONTRACTS_STALE: "computed (a file they read from disk changed)",
+    CONTRACTS_HIT: "reused for every file",
+    CONTRACTS_MISS: "computed for every file",
+    CONTRACTS_STALE: "reused where nothing they depend on changed",
 }
 
 
@@ -171,7 +171,10 @@ def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
         f"{cache['invalidated']} invalidated, {cache['errors']} error(s)"
     ]
     if cache["contracts"] != CONTRACTS_OFF:
-        lines.append(f"  cache: property contracts: {CONTRACTS_WORDS[cache['contracts']]}")
+        lines.append(
+            f"  cache: property contracts: {CONTRACTS_WORDS[cache['contracts']]} "
+            f"({cache['contracts_reused']} of {cache['contracts_files']} files)"
+        )
     lines.extend(f"  warning: cache: {problem}" for problem in cache["problems"])
     return lines
 

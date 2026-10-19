@@ -18,9 +18,9 @@ corrupt or mismatched index or entry is counted, described once, and ignored, an
 the file is analyzed afresh. Nothing read from the cache is ever executed.
 
 Cross-file work is recomputed on every run, with one exception: the property-contracts
-phase, whose findings are reused when the header, every analyzed file (path, language,
-text, rules applied) and every other file the phase probed or read are unchanged
-(``contracts.json``; the caller checks the files on disk).
+phase, whose findings are reused file by file while the header and everything a file's
+findings depended on are unchanged (``contracts.json``; ``contracts/incremental.py``
+decides).
 """
 
 import hashlib
@@ -43,9 +43,9 @@ INDEX_FILENAME = "index.json"
 CONTRACTS_FILENAME = "contracts.json"
 # coverage.cache.contracts: what the property-contracts phase did with its entry.
 CONTRACTS_OFF = "off"  # the phase did not run (the family is off, or no file applies)
-CONTRACTS_HIT = "hit"
-CONTRACTS_MISS = "miss"  # no entry, another key, or an entry that could not be read
-CONTRACTS_STALE = "stale"  # the key matched; a file the phase read or probed has changed
+CONTRACTS_HIT = "hit"  # every checked file reused its entry
+CONTRACTS_MISS = "miss"  # no file did (no entry, another header, or everything changed)
+CONTRACTS_STALE = "stale"  # some did; the others were computed afresh
 ENTRIES_DIRNAME = "entries"
 TAG_FILENAME = "CACHEDIR.TAG"
 TAG_CONTENT = (
@@ -91,6 +91,8 @@ def cache_coverage_without_cache(status: str, directory: str, reason: str) -> di
         "errors": 0,
         "problems": [],
         "contracts": CONTRACTS_OFF,
+        "contracts_reused": 0,
+        "contracts_files": 0,
     }
 
 
@@ -128,6 +130,8 @@ class FileCache:
         self.counters = _Counters(0, 0, 0, 0, [])
         self.writable = False
         self.contracts = CONTRACTS_OFF
+        self.contracts_reused = 0
+        self.contracts_files = 0
 
     # --- opening -----------------------------------------------------------------------
 
@@ -242,7 +246,7 @@ class FileCache:
 
     def lookup_contracts(self, key: Mapping[str, str], decode: Callable[[Any], Any]) -> Any | None:
         """The decoded result of the last run's contracts phase when ``key`` (with the
-        header) matches; ``None`` otherwise. The caller still checks the files on disk."""
+        header) matches; ``None`` otherwise. The caller checks each file's entry."""
         self.contracts = CONTRACTS_MISS
         path = self.directory / CONTRACTS_FILENAME
         if not path.is_file():
@@ -268,8 +272,15 @@ class FileCache:
             return None
         return decoded
 
-    def contracts_status(self, status: str) -> None:
-        self.contracts = status
+    def contracts_counts(self, reused: int, files: int) -> None:
+        """How many of the checked files reused their entry."""
+        self.contracts_reused = reused
+        self.contracts_files = files
+        self.contracts = CONTRACTS_STALE
+        if reused == files:
+            self.contracts = CONTRACTS_HIT
+        elif reused == 0:
+            self.contracts = CONTRACTS_MISS
 
     def store_contracts(self, key: Mapping[str, str], plain: Any) -> None:
         if not self.writable:
@@ -345,6 +356,8 @@ class FileCache:
             "errors": counters.errors,
             "problems": list(counters.problems),
             "contracts": self.contracts,
+            "contracts_reused": self.contracts_reused,
+            "contracts_files": self.contracts_files,
         }
 
 

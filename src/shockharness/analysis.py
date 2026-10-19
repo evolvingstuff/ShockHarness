@@ -22,8 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from shockharness.cache.codec import from_plain, to_plain
-from shockharness.cache.contracts import ContractsResult, decode_contracts, encode_contracts
-from shockharness.cache.store import CONTRACTS_HIT, CONTRACTS_STALE, FileCache
+from shockharness.cache.contracts import (
+    ContractsResult,
+    FileEntry,
+    decode_contracts,
+    encode_contracts,
+    entries_by_path,
+)
+from shockharness.cache.store import FileCache
 from shockharness.complexity.assemble import ComplexityOutcome, assemble
 from shockharness.complexity.callgraph import (
     CONFIDENCE_RESOLVED,
@@ -40,14 +46,23 @@ from shockharness.config import (
     switched_off,
 )
 from shockharness.contracts.catalog import complete_scope
-from shockharness.contracts.disk import new_log, text_digest, unchanged
+from shockharness.contracts.deps import Deps, no_deps
+from shockharness.contracts.disk import new_log, text_digest
+from shockharness.contracts.incremental import Current, current_of, entry_for, reusable
 from shockharness.contracts.report import ContractFile
 from shockharness.discovery import DiscoveredFile, DiscoveryResult
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
-from shockharness.ir.model import NO_VERIFICATION, CatchFact, ModuleFacts, ParseFailure
+from shockharness.ir.model import (
+    NO_VERIFICATION,
+    UNIT_CLASS,
+    UNIT_METHOD,
+    CatchFact,
+    ModuleFacts,
+    ParseFailure,
+)
 from shockharness.ir.python import extract_python_facts
 from shockharness.roles import FILE_ROLES_KEY, ROLE_CONFIG, ROLE_TEST, FileRole, role_classifier
 from shockharness.rules import registry
@@ -1012,56 +1027,80 @@ def contract_findings(
         return {}
     if cache is None:
         return property_contract_findings(
-            files, sources, config.root, settings, new_log(config.root)
+            files, sources, config.root, settings, new_log(config.root), {}
         )
-    return _cached_contracts(files, sources, config, cache)
+    return _incremental_contracts(files, sources, pendings, config, cache)
 
 
-def _cached_contracts(
+def _incremental_contracts(
     files: Sequence[ContractFile],
     sources: Mapping[str, tuple[str, SourceText]],
+    pendings: Sequence[PendingFile],
     config: EffectiveConfig,
     cache: FileCache,
 ) -> dict[str, list[Finding]]:
-    """The last run's findings when nothing the phase read changed; else the phase, with
-    its result stored for the next run."""
-    key = {"contracts": _contracts_key(files, sources)}
-    reused = cache.lookup_contracts(key, decode_contracts)
-    if reused is not None and unchanged(config.root, reused.probes, reused.reads):
-        cache.contracts_status(CONTRACTS_HIT)
-        return {path: list(findings) for path, findings in reused.findings}
-    if reused is not None:
-        cache.contracts_status(CONTRACTS_STALE)
-    disk = new_log(config.root)
-    settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
-    found = property_contract_findings(files, sources, config.root, settings, disk)
-    result = ContractsResult(
-        tuple((path, tuple(found[path])) for path in sorted(found)),
-        dict(disk.probes),
-        dict(disk.reads),
-    )
-    cache.store_contracts(key, encode_contracts(result))
-    return found
+    """The last run's findings for every file whose findings' inputs are unchanged
+    (``contracts/incremental.py``); the phase for the others; the merged entries stored."""
+    current = current_of(config.root, sources, _classes_digest(pendings))
+    previous = cache.lookup_contracts({}, decode_contracts)
+    entries: dict[str, FileEntry] = {}
+    stale: list[ContractFile] = []
+    for file in files:
+        entry = _previous_entry(previous, file, current)
+        if entry is None:
+            stale.append(file)
+        else:
+            entries[file.path] = entry
+    deps: dict[str, Deps] = {}
+    found: dict[str, list[Finding]] = {}
+    if len(stale) > 0:
+        settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)
+        disk = new_log(config.root)
+        found = property_contract_findings(stale, sources, config.root, settings, disk, deps)
+    for file in stale:
+        findings: list[Finding] = []
+        if file.path in found:
+            findings = found[file.path]
+        file_deps = no_deps()
+        if file.path in deps:
+            file_deps = deps[file.path]
+        entries[file.path] = entry_for(file, findings, file_deps, current)
+    cache.contracts_counts(len(files) - len(stale), len(files))
+    result = ContractsResult(current.classes, tuple(entries[path] for path in sorted(entries)))
+    cache.store_contracts({}, encode_contracts(result))
+    return {path: list(entry.findings) for path, entry in entries.items()}
 
 
-def _contracts_key(
-    files: Sequence[ContractFile], sources: Mapping[str, tuple[str, SourceText]]
-) -> str:
-    """One digest of everything the phase reads from the run: each analyzed file's path,
-    language and text, and which contract rules and scope apply to each checked file."""
-    checked = {file.path: (sorted(file.applies), file.complete) for file in files}
-    material = [
-        [path, language, text_digest(source.text), *_checked(checked, path)]
-        for path, (language, source) in sorted(sources.items())
-    ]
+def _previous_entry(
+    previous: ContractsResult | None, file: ContractFile, current: Current
+) -> FileEntry | None:
+    if previous is None:
+        return None
+    entries = entries_by_path(previous)
+    if file.path not in entries:
+        return None
+    entry = entries[file.path]
+    if not reusable(entry, file, current, previous.classes):
+        return None
+    return entry
+
+
+# The units whose names make up a class's structure for the override checks.
+CLASS_UNIT_KINDS = frozenset({UNIT_CLASS, UNIT_METHOD})
+
+
+def _classes_digest(pendings: Sequence[PendingFile]) -> str:
+    """Every analyzed class: its name, its bases, the names of its methods (properties
+    included), from the per-file facts."""
+    material = []
+    for pending in sorted(pendings, key=lambda p: p.path):
+        if pending.facts is None:
+            continue
+        classes = [[c.name, list(c.bases)] for c in pending.facts.receivers.classes]
+        methods = sorted(u.name for u in pending.units if u.kind in CLASS_UNIT_KINDS)
+        if len(classes) > 0 or len(methods) > 0:  # a file without classes changes nothing
+            material.append([pending.path, classes, methods])
     return text_digest(json.dumps(material, separators=(",", ":")))
-
-
-def _checked(checked: Mapping[str, tuple[list[str], bool]], path: str) -> list[Any]:
-    if path not in checked:
-        return []
-    rules, complete = checked[path]
-    return [rules, complete]
 
 
 # The cross-file rules that need the call graph or the module graph (built here when

@@ -37,6 +37,7 @@ from shockharness.contracts.catalog import (
     static_properties,
 )
 from shockharness.contracts.compose import Compositions
+from shockharness.contracts.deps import Deps, Tracker
 from shockharness.contracts.disk import DiskLog, new_log
 from shockharness.contracts.javascript_index import JsProjectIndex
 from shockharness.contracts.python_flow import (
@@ -371,8 +372,10 @@ class Analysis:
             name: frozenset(entry.producers) for name, entry in catalog.properties.items()
         }
         self.units: dict[ast.AST, Unit] = {}
+        self.unit_deps: dict[ast.AST, Deps] = {}
         self.contracts: dict[tuple[ast.AST, int], Contract] = {}
         self.results: dict[tuple[ast.AST, int, tuple[tuple[str, PropSet], ...]], PropSet] = {}
+        self.result_deps: dict[tuple[ast.AST, int, tuple[tuple[str, PropSet], ...]], Deps] = {}
         self.computing: set[ast.AST] = set()
 
     def _sinks(self, sinks: Sequence[CalleeSink]) -> dict[str, list[CalleeSink]]:
@@ -389,16 +392,31 @@ class Analysis:
         return found
 
     def module_unit(self, module: Module) -> Unit:
-        if module.tree not in self.units:
-            self.units[module.tree] = self._build_unit(module, None, module.tree.body)
-        return self.units[module.tree]
+        return self._unit(module, module.tree, None, module.tree.body)
 
     def function_unit(
         self, module: Module, function: ast.FunctionDef | ast.AsyncFunctionDef
     ) -> Unit:
-        if function not in self.units:
-            self.units[function] = self._build_unit(module, function, function.body)
-        return self.units[function]
+        return self._unit(module, function, function, function.body)
+
+    def _unit(
+        self,
+        module: Module,
+        key: ast.AST,
+        function: ast.FunctionDef | ast.AsyncFunctionDef | None,
+        body: Sequence[ast.stmt],
+    ) -> Unit:
+        """A memoized unit; its dependencies (its module, what its calls resolved to) go
+        to whoever asks for it."""
+        tracker = self.index.tracker
+        if key in self.units:
+            tracker.add(self.unit_deps[key])
+            return self.units[key]
+        tracker.push()
+        tracker.path(module.path)
+        self.units[key] = self._build_unit(module, function, body)
+        self.unit_deps[key] = tracker.pop()
+        return self.units[key]
 
     def _build_unit(
         self,
@@ -470,6 +488,8 @@ class Analysis:
         assert target.module is not None and target.function is not None, "a unit target"
         function = target.function
         key = (function, target.implicit)
+        if key in self.contracts:
+            self.index.tracker.add(self.unit_deps[function])
         if key not in self.contracts:
             unit = self.function_unit(target.module, function)
             arguments = function.args
@@ -494,15 +514,20 @@ class Analysis:
                 f"{target.reference} is more than max_depth = {self.max_depth} calls away"
             )
         key = (function, crossings, tuple(sorted(passed.items())))
-        if key not in self.results:
-            if function in self.computing:
-                return unknown(f"{target.reference} calls itself (recursion is not followed)")
-            self.computing.add(function)
-            unit = self.function_unit(target.module, function)
-            hooks = UnitHooks(self, unit, None, crossings, passed)
-            summary = run_unit(hooks, unit.body, entry_state(unit))
-            self.computing.discard(function)
-            self.results[key] = _shaped(unit, summary)
+        tracker = self.index.tracker
+        if key in self.results:
+            tracker.add(self.result_deps[key])
+            return self.results[key]
+        if function in self.computing:
+            return unknown(f"{target.reference} calls itself (recursion is not followed)")
+        self.computing.add(function)
+        tracker.push()
+        unit = self.function_unit(target.module, function)
+        hooks = UnitHooks(self, unit, None, crossings, passed)
+        summary = run_unit(hooks, unit.body, entry_state(unit))
+        self.computing.discard(function)
+        self.results[key] = _shaped(unit, summary)
+        self.result_deps[key] = tracker.pop()
         return self.results[key]
 
     def producer_issues(self, unit: Unit) -> list[Issue]:
@@ -951,16 +976,27 @@ def _locator(source: SourceText) -> Callable[[object], Located]:
 
 
 def run_property_contracts(
-    files: Sequence[ContractFile], index: ProjectIndex, settings: Mapping[str, Any]
+    files: Sequence[ContractFile],
+    index: ProjectIndex,
+    settings: Mapping[str, Any],
+    deps: dict[str, Deps],
 ) -> dict[str, list[Finding]]:
-    analysis = Analysis(index, settings)
+    """Each file's findings; ``deps`` receives what each file's findings depend on."""
+    tracker = index.tracker
+    tracker.push()
+    analysis = Analysis(index, settings)  # resolves the catalog's sinks, for every file
+    shared = tracker.pop()
     found: dict[str, list[Finding]] = {}
     for file in files:
         module = index.by_path[file.path]
         if len(file.applies) == 0 or index.is_runtime(module):
             continue
         reporter = Reporter(file, settings, _locator(file.source))
+        index.tracker.push()
+        index.tracker.add(shared)
+        index.tracker.path(file.path)
         _file_findings(analysis, module, reporter)
+        deps[file.path] = index.tracker.pop()
         found[file.path] = sorted(reporter.found.values(), key=lambda f: f.sort_key())
     return found
 
@@ -971,10 +1007,12 @@ def property_contract_findings(
     root: Path,
     settings: Mapping[str, Any],
     disk: DiskLog,
+    deps: dict[str, Deps],
 ) -> dict[str, list[Finding]]:
     """Both languages: each file's language decides its index and its checks. ``sources``
-    are every analyzed file, where resolved callees' contracts are read first; ``disk``
-    logs every other file the indexes probe or read."""
+    are every analyzed file, where resolved callees' contracts are read first (``files``
+    may be only some of them); ``disk`` logs every other file the indexes probe or read,
+    and ``deps`` receives what each file's findings depend on."""
     found: dict[str, list[Finding]] = {}
     python_files = [file for file in files if file.language == PYTHON]
     if len(python_files) > 0:
@@ -984,8 +1022,9 @@ def property_contract_findings(
             for path, (language, source) in sources.items()
             if language == PYTHON
         }
-        index = ProjectIndex(root, trees, python_runtime_modules(settings), disk)
-        found.update(run_property_contracts(python_files, index, settings))
+        modules = python_runtime_modules(settings)
+        index = ProjectIndex(root, trees, modules, disk, Tracker())
+        found.update(run_property_contracts(python_files, index, settings, deps))
     script_files = [file for file in files if file.language in SCRIPT_LANGUAGES]
     if len(script_files) > 0:
         texts = {
@@ -993,8 +1032,9 @@ def property_contract_findings(
             for path, (language, source) in sources.items()
             if language in SCRIPT_LANGUAGES
         }
-        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings), disk)
-        found.update(run_javascript_contracts(script_files, scripts, settings))
+        runtime = javascript_runtime_modules(settings)
+        scripts = JsProjectIndex(root, texts, runtime, disk, Tracker())
+        found.update(run_javascript_contracts(script_files, scripts, settings, deps))
     return found
 
 
@@ -1024,7 +1064,8 @@ def considered_declarations(
             for path, (language, source) in sources.items()
             if language == PYTHON
         }
-        index = ProjectIndex(root, trees, python_runtime_modules(settings), new_log(root))
+        modules = python_runtime_modules(settings)
+        index = ProjectIndex(root, trees, modules, new_log(root), Tracker())
         analysis = Analysis(index, settings)
         for file in python_files:
             found.extend(_python_considered(analysis, index.by_path[file.path], file.path))
@@ -1035,6 +1076,7 @@ def considered_declarations(
             for path, (language, source) in sources.items()
             if language in SCRIPT_LANGUAGES
         }
-        scripts = JsProjectIndex(root, texts, javascript_runtime_modules(settings), new_log(root))
+        runtime = javascript_runtime_modules(settings)
+        scripts = JsProjectIndex(root, texts, runtime, new_log(root), Tracker())
         found.extend(javascript_considered(script_files, scripts, settings))
     return sorted(found, key=lambda c: (c.path, c.line))

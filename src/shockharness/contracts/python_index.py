@@ -19,6 +19,7 @@ from pathlib import Path
 
 from shockharness.complexity.callgraph import PYTHON_BUILTINS
 from shockharness.contracts.catalog import DECLARATIONS, parse_module, probed_module_file
+from shockharness.contracts.deps import Deps, Tracker
 from shockharness.contracts.disk import DiskLog
 from shockharness.ir.python_receivers import (
     METHOD_INSTANCE,
@@ -205,15 +206,19 @@ class ProjectIndex:
         analyzed: Mapping[str, ast.Module],
         runtime: frozenset[str],
         disk: DiskLog,
+        tracker: Tracker,
     ) -> None:
         self.root = root
         self.disk = disk  # every probe and read of a file that is not analyzed
+        self.tracker = tracker  # what each file's findings depend on (contracts/deps.py)
+        self.resolved: dict[str, str] = {}  # dotted -> the file it resolved to, or ""
         self.runtime = runtime
         self.by_path: dict[str, Module] = {}
         self.by_name: dict[str, Module | None] = {}
         self.unreadable: dict[str, str] = {}
         self.analyzed: list[Module] = []
         self.ancestry: dict[tuple[str, str], frozenset[tuple[str, str]]] = {}
+        self.ancestry_deps: dict[tuple[str, str], Deps] = {}
         self.definers: dict[str, list[tuple[Module, ast.ClassDef]]] | None = None
         self.class_bodies: dict[
             ast.ClassDef, Mapping[str, ast.FunctionDef | ast.AsyncFunctionDef]
@@ -225,6 +230,7 @@ class ProjectIndex:
             self.analyzed.append(module)
             for name in names:
                 self.by_name[name] = module
+                self.resolved[name] = path
 
     def is_runtime(self, module: Module) -> bool:
         return len(module_names(module.path) & self.runtime) > 0
@@ -232,13 +238,16 @@ class ProjectIndex:
     def module(self, dotted: str) -> Module | None:
         if dotted not in self.by_name:
             self.by_name[dotted] = self._load(dotted)
+        self.tracker.name(dotted, self.resolved[dotted])
         return self.by_name[dotted]
 
     def _load(self, dotted: str) -> Module | None:
         found = probed_module_file(self.root, dotted.split("."), self.disk.is_file)
+        self.resolved[dotted] = ""
         if found is None:
             return None
         path = found.relative_to(self.root).as_posix()
+        self.resolved[dotted] = path
         if path in self.by_path:
             return self.by_path[path]
         text, why = self.disk.read_text(found)
@@ -463,7 +472,10 @@ class ProjectIndex:
         """Every project class ``owner`` derives from, through the bases the analysis
         can read."""
         key = (module.path, owner.name)
+        if key in self.ancestry_deps:
+            self.tracker.add(self.ancestry_deps[key])
         if key not in self.ancestry:
+            self.tracker.push()
             self.ancestry[key] = frozenset()  # a cycle in the bases ends here
             found: set[tuple[str, str]] = set()
             for base in owner.bases:
@@ -474,10 +486,12 @@ class ProjectIndex:
                     found.add((parent[0].path, parent[1].name))
                     found.update(self._ancestors(parent[0], parent[1]))
             self.ancestry[key] = frozenset(found)
+            self.ancestry_deps[key] = self.tracker.pop()
         return self.ancestry[key]
 
     def _overriding(self, module: Module, owner: ast.ClassDef, name: str) -> str | None:
         """An analyzed class that derives from ``owner`` and defines ``name`` itself."""
+        self.tracker.classes()  # the answer depends on every analyzed class
         key = (module.path, owner.name)
         if self.definers is None:
             self.definers = self._definers()

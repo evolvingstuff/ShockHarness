@@ -1,9 +1,10 @@
-"""The cached result of the property-contracts phase (``contracts.json``).
+"""The cached result of the property-contracts phase (``contracts.json``), per file.
 
-The phase is cross-file: its findings depend on every analyzed file and on the project
-files its indexes probed or read outside them. The entry keeps the findings with the
-log of those probes and reads; ``cache/store.py`` matches the key, and the caller
-reuses the findings only when ``contracts.disk.unchanged`` holds for the log.
+The phase is cross-file: a file's findings depend on the modules its calls resolved into,
+on files the indexes looked for, and, for an override check, on every analyzed class.
+Each file's entry keeps its findings with those dependencies (``contracts/deps.py``);
+``analysis.py`` reuses an entry only while every one of them is unchanged, and computes
+the other files afresh.
 """
 
 from collections.abc import Mapping
@@ -13,41 +14,36 @@ from typing import Any
 from shockharness.cache.codec import CacheEntryError, from_plain, to_plain
 from shockharness.findings import Finding
 
-FINDINGS = "findings"
-PROBES = "probes"
-READS = "reads"
-FINDINGS_HINT = tuple[tuple[str, tuple[Finding, ...]], ...]
+
+@dataclass(frozen=True)
+class FileEntry:
+    path: str
+    digest: str  # of the file's text
+    applies: tuple[str, ...]  # the contract rules that apply to it
+    complete: bool  # under enforcement = "complete" or complete_paths
+    findings: tuple[Finding, ...]
+    names: tuple[tuple[str, str], ...]  # a Python name -> the file it resolved to, or ""
+    probes: tuple[tuple[str, bool], ...]  # a JavaScript path -> whether it was a file
+    contents: tuple[tuple[str, str], ...]  # a module it depends on -> the digest of its text
+    classes: bool  # depends on every analyzed class (an override check ran)
 
 
 @dataclass(frozen=True)
 class ContractsResult:
-    findings: tuple[tuple[str, tuple[Finding, ...]], ...]  # (path, its findings), sorted
-    probes: Mapping[str, bool]  # path -> it was a file
-    reads: Mapping[str, str]  # path -> the digest of its text ("" when unreadable)
+    classes: str  # the digest of every analyzed class, when the entries were made
+    files: tuple[FileEntry, ...]
 
 
-def encode_contracts(result: ContractsResult) -> dict[str, Any]:
-    return {
-        FINDINGS: to_plain(result.findings),
-        PROBES: dict(sorted(result.probes.items())),
-        READS: dict(sorted(result.reads.items())),
-    }
-
-
-def _mapping(data: Any, value_type: type, where: str) -> dict[str, Any]:
-    if not isinstance(data, dict):
-        raise CacheEntryError(f"{where}: expected an object")
-    for key, value in data.items():
-        if not isinstance(key, str) or type(value) is not value_type:
-            raise CacheEntryError(f"{where}: expected {value_type.__name__} values")
-    return dict(data)
+def encode_contracts(result: ContractsResult) -> Any:
+    return to_plain(result)
 
 
 def decode_contracts(plain: Any) -> ContractsResult:
-    if not isinstance(plain, dict) or set(plain) != {FINDINGS, PROBES, READS}:
-        raise CacheEntryError("contracts: expected findings, probes and reads")
-    return ContractsResult(
-        findings=from_plain(FINDINGS_HINT, plain[FINDINGS], "contracts.findings"),
-        probes=_mapping(plain[PROBES], bool, "contracts.probes"),
-        reads=_mapping(plain[READS], str, "contracts.reads"),
-    )
+    if not isinstance(plain, dict):
+        raise CacheEntryError("contracts: expected an object")
+    decoded: ContractsResult = from_plain(ContractsResult, plain, "contracts")
+    return decoded
+
+
+def entries_by_path(result: ContractsResult) -> Mapping[str, FileEntry]:
+    return {entry.path: entry for entry in result.files}
