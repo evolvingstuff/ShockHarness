@@ -319,10 +319,6 @@ def describe_statement(stmt: ast.stmt, source: SourceText) -> str:
     return text.split("\n")[0].strip()
 
 
-def classify_handler(handler: ast.ExceptHandler, source: SourceText) -> HandlerBody:
-    return classify_statements(list(handler.body), handler.name, source)
-
-
 def classify_statements(
     statements: list[ast.stmt], bound_name: str | None, source: SourceText
 ) -> HandlerBody:

@@ -33,11 +33,6 @@ class Frontmatter:
     description: str
 
 
-def skill_names() -> tuple[str, ...]:
-    """The shipped skills, in documentation order."""
-    return SKILL_NAMES
-
-
 def skill_relative_path(name: str) -> str:
     """Where a skill lives below any destination directory (forward slashes)."""
     return f"{name}/{SKILL_FILENAME}"

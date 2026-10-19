@@ -41,9 +41,6 @@ class Field(ABC):
     @abstractmethod
     def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None: ...
 
-    @abstractmethod
-    def describe(self) -> str: ...
-
 
 class StrField(Field):
     def __init__(self, allow_empty: bool) -> None:
@@ -55,9 +52,6 @@ class StrField(Field):
             return
         if not self.allow_empty and value.strip() == "":
             issues.append(ConfigIssue(key_path, "must not be empty"))
-
-    def describe(self) -> str:
-        return "string"
 
 
 class PatternField(Field):
@@ -72,17 +66,11 @@ class PatternField(Field):
         if self.pattern.fullmatch(value) is None:
             issues.append(ConfigIssue(key_path, f"expected {self.description}, got {value!r}"))
 
-    def describe(self) -> str:
-        return self.description
-
 
 class BoolField(Field):
     def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None:
         if not isinstance(value, bool):
             issues.append(ConfigIssue(key_path, f"expected true or false, got {type_name(value)}"))
-
-    def describe(self) -> str:
-        return "boolean"
 
 
 class IntField(Field):
@@ -96,17 +84,11 @@ class IntField(Field):
         if value < self.minimum:
             issues.append(ConfigIssue(key_path, f"must be at least {self.minimum}, got {value}"))
 
-    def describe(self) -> str:
-        return f"integer >= {self.minimum}"
-
 
 class NumberField(Field):
     def check(self, value: Any, key_path: str, issues: list[ConfigIssue]) -> None:
         if isinstance(value, bool) or not isinstance(value, int | float):
             issues.append(ConfigIssue(key_path, f"expected a number, got {type_name(value)}"))
-
-    def describe(self) -> str:
-        return "number"
 
 
 class EnumField(Field):
@@ -117,9 +99,6 @@ class EnumField(Field):
         if not isinstance(value, str) or value not in self.choices:
             rendered = ", ".join(repr(c) for c in self.choices)
             issues.append(ConfigIssue(key_path, f"must be one of {rendered}, got {value!r}"))
-
-    def describe(self) -> str:
-        return "one of " + ", ".join(self.choices)
 
 
 class ListField(Field):
@@ -132,9 +111,6 @@ class ListField(Field):
             return
         for index, element in enumerate(value):
             self.item.check(element, f"{key_path}[{index}]", issues)
-
-    def describe(self) -> str:
-        return f"list of {self.item.describe()}"
 
 
 class TableField(Field):
@@ -157,9 +133,6 @@ class TableField(Field):
             if key not in value:
                 child_path = key if key_path == "" else f"{key_path}.{key}"
                 issues.append(ConfigIssue(child_path, "required key is missing"))
-
-    def describe(self) -> str:
-        return "table"
 
 
 def type_name(value: Any) -> str:

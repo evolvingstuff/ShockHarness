@@ -309,3 +309,9 @@ reason = "Test code encodes literal expected outputs and pytest fixture signatur
 paths = ["evals/run_evals.py", "evals/behavior/run.py"]
 disable = ["MAGIC001"]
 reason = "The eval runner is stdlib-only by design (it scores the analyzer from outside), so it cannot import shockharness.constants and holds its one JSON indent constant itself"
+
+# DEAD001, DEAD002 (decision 38). The contracts runtime is a library other projects install
+# and call (`shockharness contracts install`); nothing in this repository calls its API.
+[tool.shockharness.rules.dead_code]
+enabled = true
+entry_points = ["src/shockharness/contracts/runtime/contracts.py::*"]

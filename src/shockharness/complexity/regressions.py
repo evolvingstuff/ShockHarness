@@ -2,7 +2,7 @@
 abstraction-displacement heuristic. Both read the two reports' ``metrics``
 sections, so they compare exactly what each report shows."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from shockharness.complexity.assemble import SETTING_DISPLACEMENT
@@ -176,7 +176,3 @@ def abstraction_displacement(
 
 
 __all__ = ["abstraction_displacement", "complexity_regressions"]
-
-
-def regression_keys(regressions: Sequence[Mapping[str, Any]]) -> list[str]:
-    return sorted({r["key"] for r in regressions})

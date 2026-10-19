@@ -433,14 +433,6 @@ class ControlNode:
 EMPTY_EXPR = ControlNode(CK_EXPR, (), 0, 0, "", labeled=False)
 
 
-def control_node(kind: str, children: tuple[ControlNode, ...], label: str) -> ControlNode:
-    return ControlNode(kind, children, 0, 0, label, labeled=False)
-
-
-def expr_node(operators: int, sequences: int, children: tuple[ControlNode, ...]) -> ControlNode:
-    return ControlNode(CK_EXPR, children, operators, sequences, "", labeled=False)
-
-
 @dataclass(frozen=True)
 class CallSite:
     """A call performed inside a unit, as written, before any resolution.

@@ -1480,7 +1480,8 @@ class field, and object-literal methods only when the object is bound to a name.
 named as still tested). Of two random samples of 30 heads, 26 and 24 were dead; the false
 positives (methods of a class nested in a function, FastAPI dependencies named only in
 annotations, a `__all__` re-export) are roots now. On ShockHarness itself: 16, of which 12
-are dead and 4 are the contracts runtime's public API (an entry point covers it).
+were dead and are deleted; the other 4 are the contracts runtime's public API, the
+repository's one entry point. ShockHarness runs both rules on itself.
 
 ## Registered, not implemented
 

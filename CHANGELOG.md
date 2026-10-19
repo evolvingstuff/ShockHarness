@@ -18,8 +18,9 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   - New per-file facts: functions named as values, attribute uses, registering
     decorators and `__all__`. Cache schema "25"; the facts add about 4% to a cold run.
   - On MetaList: 154 findings, among them the `build_note_tree` cluster that held the
-    lost search highlighting. On ShockHarness: 16 (12 dead, 4 the contracts runtime's API),
-    left for the maintainer to decide; the repository does not turn the rules on yet.
+    lost search highlighting. On ShockHarness: 16. The 12 dead functions are deleted (108
+    lines), and the repository now turns the rules on, with the contracts runtime's public
+    API as its one entry point.
 
 ## [0.16.0] - 2026-10-19
 

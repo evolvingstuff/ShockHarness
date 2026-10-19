@@ -12,7 +12,7 @@ from shockharness.ir.python_receivers import (
     constructed_locals,
     implicit_parameters,
     method_kind,
-    receiver_parameter,
+    method_receivers,
     singleton_constructors,
 )
 
@@ -92,10 +92,10 @@ def test_method_kinds_and_what_a_call_supplies() -> None:
     assert method_kind(methods["static"]) == METHOD_STATIC
     assert method_kind(methods["make"]) == METHOD_CLASS
     assert method_kind(methods["size"]) is None
-    assert receiver_parameter(methods["plain"]) == "self"
-    assert receiver_parameter(methods["make"]) == "cls"
-    assert receiver_parameter(methods["static"]) is None
-    assert receiver_parameter(methods["rebinds"]) is None
+    assert method_receivers(methods["plain"])[0] == "self"
+    assert method_receivers(methods["make"])[0] == "cls"
+    assert method_receivers(methods["static"])[0] is None
+    assert method_receivers(methods["rebinds"])[0] is None
     assert implicit_parameters(METHOD_INSTANCE, THROUGH_INSTANCE) == 1
     assert implicit_parameters(METHOD_INSTANCE, THROUGH_CLASS) == 0
     assert implicit_parameters(METHOD_CLASS, THROUGH_CLASS) == 1

@@ -1,9 +1,22 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from shockharness.analysis import CACHE_CONFIGURED, AnalysisOptions, analyze_file, analyze_text
+from shockharness.analysis import (
+    CACHE_CONFIGURED,
+    AnalysisOptions,
+    FileResult,
+    analyze_files,
+    analyze_text,
+)
 from shockharness.config import EffectiveConfig
 from shockharness.discovery import DiscoveredFile
+
+
+def analyze_file(
+    file: DiscoveredFile, config: EffectiveConfig, options: AnalysisOptions
+) -> FileResult:
+    """One discovered file through the pipeline production runs."""
+    return analyze_files([file], config, options, None).files[0]
 
 
 def test_override_disables_rule_with_origin(make_config: Callable[[str], EffectiveConfig]) -> None:

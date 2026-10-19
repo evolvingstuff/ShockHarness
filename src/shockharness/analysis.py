@@ -1303,10 +1303,3 @@ def analyze_text(
     """One in-memory file through the whole pipeline (its graph is the file alone)."""
     outcome = complete([prepare_text(relative_path, language, text, config)], config, options, None)
     return outcome.files[0]
-
-
-def analyze_file(
-    file: DiscoveredFile, config: EffectiveConfig, options: AnalysisOptions
-) -> FileResult:
-    outcome = complete([prepare_file(file, config, None)], config, options, None)
-    return outcome.files[0]

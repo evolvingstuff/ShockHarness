@@ -18,7 +18,6 @@ from shockharness.skills import (
     parse_frontmatter,
     shipped_frontmatter,
     skill_bytes,
-    skill_names,
     skill_text,
 )
 from shockharness.skills.adapters import (
@@ -70,7 +69,7 @@ def section(text: str, heading: str) -> str:
 
 
 def test_seven_skills_ship_with_valid_frontmatter() -> None:
-    assert skill_names() == (
+    assert SKILL_NAMES == (
         "write-compliant-code",
         "fix-violations",
         "refactor-complexity",

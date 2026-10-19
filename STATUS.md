@@ -5693,17 +5693,20 @@ as still tested. Two samples of 30 heads: 26 and 24 dead; every false positive f
 a root now. Cost: the usage facts add about 2 s to a cold run (52.9 s to 54.6 s); the
 rule adds about 0.3 s to a warm run.
 
-**On ShockHarness itself: 16 findings,** not acted on. Removing them was blocked as
-outside the request, and it is Tom's call:
-* never called: `regression_keys`, `plain_deps`, `deps_from`, `own_children`,
+**On ShockHarness itself: 16 findings, fixed** (Tom: "I don't understand why we don't
+fix those"):
+* never called, deleted: `regression_keys`, `plain_deps`, `deps_from`, `own_children`,
   `control_node`, `expr_node`, `classify_handler`, `registry._planned`, and the nine
   `describe` methods of the schema fields (one cluster);
-* only tests call them: `analysis.analyze_file`, `skills.skill_names`,
-  `python_receivers.receiver_parameter`;
+* only tests called them, deleted: `analysis.analyze_file` (its tests go through
+  `analyze_files`), `skills.skill_names` (the test reads `SKILL_NAMES`),
+  `python_receivers.receiver_parameter` (the test reads `method_receivers(...)[0]`, what
+  production uses);
 * the contracts runtime's public API (`enable`, `register`, `preserves`,
-  `preserves_except`), which other projects call: an entry point for
-  `src/shockharness/contracts/runtime/*` covers it.
-The repository does not turn the rules on until those are settled.
+  `preserves_except`), which other projects call: the one entry point in
+  `.shockharness.toml`.
+108 lines removed. `.shockharness.toml` now turns `rules.dead_code` on; the repository
+reports no DEAD finding.
 
 Status sites: `rules/dead_code.py:_finding` is in the unknown inventory (a violation,
 approximate confidence). Cache schema "25".

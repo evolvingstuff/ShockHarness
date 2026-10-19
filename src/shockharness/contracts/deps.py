@@ -9,7 +9,6 @@ contracts and results across files; each memoized entry keeps the dependencies i
 computed with, and a file that reuses the entry takes them on (``Tracker.add``).
 """
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -68,18 +67,3 @@ class Tracker:
     def classes(self) -> None:
         for frame in self.frames:
             frame.classes = True
-
-
-def plain_deps(deps: Deps) -> dict[str, object]:
-    return {
-        "names": dict(sorted(deps.names.items())),
-        "probes": dict(sorted(deps.probes.items())),
-        "paths": sorted(deps.paths),
-        "classes": deps.classes,
-    }
-
-
-def deps_from(
-    names: Mapping[str, str], probes: Mapping[str, bool], paths: list[str], classes: bool
-) -> Deps:
-    return Deps(dict(names), dict(probes), set(paths), classes=classes)

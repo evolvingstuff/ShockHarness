@@ -21,7 +21,7 @@ literal's method is not exact: it depends on how the method is called.
 """
 
 import posixpath
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -681,7 +681,3 @@ def javascript_reference_issues(root: Path, values: Mapping[str, Any]) -> list[C
         check = _producer_issue if must_be_project else _callee_issue
         issues.append(check(index, where, reference))
     return [issue for issue in issues if issue is not None]
-
-
-def own_children(node: Node) -> Sequence[Node]:
-    return [child for child in node.named_children if child.type != Kind.COMMENT]

@@ -39,33 +39,6 @@ class RuleSpec:
     compliant_example: str
 
 
-def _planned(
-    rule_id: str,
-    name: str,
-    family: str,
-    config_section: str,
-    default_severity: str,
-    summary: str,
-) -> RuleSpec:
-    return RuleSpec(
-        rule_id=rule_id,
-        version="0",
-        name=name,
-        family=family,
-        config_section=config_section,
-        default_severity=default_severity,
-        implemented=False,
-        languages=ALL_LANGUAGES,
-        summary=summary,
-        rationale="See the specification; this rule is registered but not yet implemented.",
-        guarantees="None. The rule produces no findings in this version.",
-        limitations="Not implemented. Files are reported as not analyzed for this rule.",
-        remediation="Not applicable until the rule is implemented.",
-        noncompliant_example="",
-        compliant_example="",
-    )
-
-
 MAGIC001 = RuleSpec(
     rule_id="MAGIC001",
     version="1",

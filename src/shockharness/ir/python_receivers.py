@@ -193,12 +193,6 @@ def class_methods(node: ast.ClassDef) -> dict[str, ast.FunctionDef | ast.AsyncFu
     return {item.name: item for item in node.body if isinstance(item, FUNCTIONS)}
 
 
-def receiver_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """The parameter a method receives its instance or class in, when the body never
-    rebinds it; None for a static method, a property or a method with no parameters."""
-    return method_receivers(function)[0]
-
-
 def _receiver(function: ast.FunctionDef | ast.AsyncFunctionDef, scope: _Scope) -> str | None:
     kind = method_kind(function)
     if kind is None or kind == METHOD_STATIC:
