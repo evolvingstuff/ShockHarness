@@ -5644,3 +5644,13 @@ annotated, no checker).
   `ConfigError` rather than an assert, since ASSERT001 traces those values to a file
   read.
 * Self-gate: no TYPE002 any more. Tests 1,342 passing.
+
+## Release 0.16.0 (2026-10-19)
+
+On Tom's go-ahead. CI was green on e5046a4 (run 39278850280) and on the release commit
+6ecdf30 (run 39283169406). GitHub left 10 of the 16 jobs on e5046a4 marked in progress
+for about half an hour after each had finished every step successfully. The poll counted
+them as failures until the run itself reported success. Every pin moved from 0.15.0, and
+the bump's diff was checked for lines that are not pins (none). The changelog's `[0.16.0]`
+section says no change makes a passing gate fail: TYPE002 is review. Published by
+`publish.yml` (run 39286125813). PyPI lists 0.16.0 with a wheel and an sdist.
