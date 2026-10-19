@@ -776,3 +776,16 @@ PROP006 = "review"
 PROP007 = "review"
 PROP008 = "review"
 
+
+[tool.shockharness.rules.dead_code]          # DEAD001, DEAD002: opt-in, Python and JavaScript
+# Off by default: the judgment is project-wide and needs the project's entry points.
+enabled = false
+# The roles whose dead functions are reported. Test and config files are the roots of
+# DEAD002 (code only tests reach), never reported themselves.
+roles = ["production"]
+# Functions reached in ways the analysis cannot see, as globs over "path::qualified.name":
+# getattr with a computed name ("app/db/migrations.py::_migration_*"), a function only an
+# HTML page or a template calls ("app/static/js/main.js::on*"). Each one is a loosening.
+entry_points = []
+severity = "review"            # DEAD001
+dead002_severity = "review"

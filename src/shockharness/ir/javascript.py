@@ -38,6 +38,7 @@ from shockharness.ir.javascript_numbers import parse_js_number
 from shockharness.ir.javascript_receivers import collect_javascript_receivers
 from shockharness.ir.javascript_sentinels import collect_javascript_sentinels
 from shockharness.ir.javascript_strings import collect_javascript_strings
+from shockharness.ir.javascript_usage import collect_javascript_usage
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -47,9 +48,11 @@ from shockharness.ir.model import (
     Comment,
     ConstantDefinition,
     GuardrailFacts,
+    ImportFact,
     ModuleFacts,
     NumericLiteral,
     ParseFailure,
+    UsageFacts,
     failed_facts,
 )
 from shockharness.source import SourceText
@@ -288,6 +291,7 @@ def _extract_facts(
         return failed_facts(language, parser_name, _parse_failure(source, filename, error))
     literals, comments = _literals_and_comments(source, root)
     guardrails, asynchrony, catalog = _policy_facts(source, root)
+    imports, usage = _module_uses(source, root)
     return ModuleFacts(
         language=language,
         parser=parser_name,
@@ -298,7 +302,7 @@ def _extract_facts(
         managers=(),  # JavaScript has no exception-capturing context manager idiom
         defaults=collect_javascript_defaults(source, root),
         functions=collect_javascript_functions(source, root, comments),
-        imports=collect_javascript_imports(source, root),
+        imports=imports,
         bindings=collect_javascript_bindings(source, root),
         verification=collect_javascript_verification(source, root, comments),
         guardrails=guardrails,
@@ -311,8 +315,15 @@ def _extract_facts(
         receivers=collect_javascript_receivers(source, root),
         disguises=collect_javascript_disguises(source, root),
         annotations=NO_ANNOTATIONS,  # TypeScript is checked by tsc where a tsconfig exists
+        usage=usage,
         parse_failure=None,
     )
+
+
+def _module_uses(source: SourceText, root: Node) -> tuple[tuple[ImportFact, ...], UsageFacts]:
+    """The imports, and the uses of functions that read them (DEAD001, DEAD002)."""
+    imports = collect_javascript_imports(source, root)
+    return imports, collect_javascript_usage(source, root, imports)
 
 
 def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:

@@ -540,6 +540,16 @@ CONFIG_SCHEMA = TableField(
                     },
                     required=(),
                 ),
+                "dead_code": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "roles": ListField(EnumField(ROLES)),
+                        "entry_points": ListField(StrField(allow_empty=False)),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "dead002_severity": EnumField(VERIFICATION_SEVERITIES),
+                    },
+                    required=(),
+                ),
                 "role_integrity": TableField(
                     fields={
                         "enabled": BoolField(),

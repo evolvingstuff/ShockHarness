@@ -50,7 +50,7 @@ from shockharness.contracts.deps import Deps, no_deps
 from shockharness.contracts.disk import new_log, text_digest
 from shockharness.contracts.incremental import Current, current_of, entry_for, reusable
 from shockharness.contracts.report import ContractFile
-from shockharness.discovery import DiscoveredFile, DiscoveryResult
+from shockharness.discovery import DiscoveredFile, DiscoveryResult, discover
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
@@ -83,6 +83,7 @@ from shockharness.rules.dataflow import (
     run_input001,
     run_input002,
 )
+from shockharness.rules.dead_code import DeadFile, run_dead_code
 from shockharness.rules.defaults import (
     DEFAULT_RULES,
     EntryExits,
@@ -370,6 +371,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         *SENTINEL_SECTIONS,
         *STRING_SECTIONS,
         registry.PROPERTY_CONTRACTS_SECTION,
+        registry.DEAD_CODE_SECTION,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -388,10 +390,12 @@ def _active_guardrails(
 
 
 def _units(
-    relative_path: str, facts: ModuleFacts, complexity: Mapping[str, Any], applied: list[str]
+    relative_path: str, facts: ModuleFacts, config: EffectiveConfig, applied: list[str]
 ) -> tuple[UnitMetrics, ...]:
     """ASYNC001 resolves callees through the call graph, which is built from the units, so
-    they are measured for it even when complexity is disabled (and then not reported)."""
+    they are measured for it even when complexity is disabled (and then not reported).
+    The dead-code rules need every file's units, test files' too (they are its roots)."""
+    complexity = config.section(COMPLEXITY_SECTION)
     graph_rules = (
         registry.ASYNC001.rule_id,
         registry.INPUT001.rule_id,
@@ -399,11 +403,18 @@ def _units(
         registry.PROV001.rule_id,
         registry.GUARD001.rule_id,
     )
-    if complexity["enabled"] is True or any(rule in applied for rule in graph_rules):
+    if (
+        complexity["enabled"] is True
+        or any(rule in applied for rule in graph_rules)
+        or config.section(registry.DEAD_CODE_SECTION)["enabled"] is True
+    ):
         return measure_units(relative_path, facts.functions, complexity)
     return ()
 
 
+DEAD_RULES = (registry.DEAD001, registry.DEAD002)
+# A runtime module given as a project path, not a module name (rules.property_contracts).
+RUNTIME_SUFFIXES = (".py", ".js", ".mjs", ".cjs", ".ts")
 # The rules recorded as applied by role and scope; most find in the cross-file phase.
 SCOPED_RULES = (
     *CATALOG_RULES,
@@ -415,6 +426,7 @@ SCOPED_RULES = (
     registry.MAGIC002,
     registry.DOM002,
     *CONTRACT_RULES,
+    *DEAD_RULES,
 )
 
 
@@ -619,7 +631,7 @@ def prepare_text(
     findings.extend(policy_findings)
 
     complexity = config.section(COMPLEXITY_SECTION)
-    units = _units(relative_path, facts, complexity, applied)
+    units = _units(relative_path, facts, config, applied)
     if complexity["enabled"] is True:
         active_unit_rules = frozenset(
             rule.rule_id for rule in UNIT_RULES if rule.rule_id not in disabled_ids
@@ -1024,6 +1036,42 @@ def consistency_findings(
     return found
 
 
+def _whole_project(pendings: Sequence[PendingFile], config: EffectiveConfig) -> bool:
+    """Every file the configuration includes was analyzed and parsed: a partial run (a
+    path argument, the edit hook) cannot tell dead code from code called elsewhere."""
+    analyzed = {p.path for p in pendings if not p.failed}
+    every = discover(config.root, [config.root], config).files
+    return all(f.relative in analyzed for f in every)
+
+
+def dead_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """DEAD001, DEAD002: functions nothing in production reaches, by cluster."""
+    ids = frozenset(rule.rule_id for rule in DEAD_RULES)
+    if graph is None or not any(ids & set(p.rules_applied) for p in pendings):
+        return {}
+    if not _whole_project(pendings, config):
+        return {}
+    files = [
+        DeadFile(
+            path=p.path,
+            tested=p.role in (ROLE_TEST, ROLE_CONFIG),
+            applied=ids & frozenset(p.rules_applied),
+            source=p.source,
+            units=p.units,
+            usage=p.facts.usage,
+            imports=p.facts.imports,
+            classes=p.facts.receivers.classes,
+        )
+        for p in pendings
+        if p.facts is not None and p.source is not None
+    ]
+    runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
+    libraries = [str(m) for m in runtime if str(m).endswith(RUNTIME_SUFFIXES)]
+    return run_dead_code(files, graph, config.section(registry.DEAD_CODE_SECTION), libraries)
+
+
 def contract_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, cache: FileCache | None
 ) -> dict[str, list[Finding]]:
@@ -1137,6 +1185,7 @@ GRAPH_RULES = (
     registry.GUARD001,
     registry.STUB003,
     registry.DOM002,
+    *DEAD_RULES,
 )
 GRAPH_PHASES = (
     async_findings,
@@ -1146,6 +1195,7 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
+    dead_findings,
 )
 
 

@@ -73,7 +73,7 @@ SEVERITY_SECTIONS: Mapping[str, str] = {
 # it, and the rules it covers. A family is named after the last part of its section.
 FAIL_ON_UNKNOWN_KEY = "fail_on_unknown"
 # Rule sections a repository opts into; off is their default and not a deviation.
-OPT_IN_SECTIONS = frozenset({"property_contracts"})
+OPT_IN_SECTIONS = frozenset({"property_contracts", "dead_code"})
 
 
 def is_opt_in(section: str) -> bool:

@@ -6,7 +6,7 @@ it being reported). Pure functions over configuration *values* and their *deviat
 lines*; the caller computes the deviations (``config._deviations``), so this module
 does not import the configuration loader.
 
-Three sources of looseness, each reported once per key:
+The sources of looseness, each reported once per key:
 
 1. **Deviation lines.** Every documented loosening relative to the strict profile is
    already a deviation line (disabled families, lowered severities, allowed values,
@@ -26,6 +26,8 @@ Three sources of looseness, each reported once per key:
    lowered, its ``producers`` dropped or widened or ``literal_satisfies`` set, a
    composition rule that accepts more, a role or runtime module removed, a severity
    lowered.
+5. **Dead code** (``rules.dead_code``, opt-in): turning it off, and while it is on, an
+   entry point added or a role removed.
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -79,6 +81,8 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.sentinels.severity": ("error", "warning", "review"),
     "rules.dom.severity": ("error", "warning", "review"),
     "rules.dom.dom002_severity": ("error", "warning", "review"),
+    "rules.dead_code.severity": ("error", "warning", "review"),
+    "rules.dead_code.dead002_severity": ("error", "warning", "review"),
     "rules.magic_strings.mode": ("fail", "review"),
 }
 # A higher value reports less.
@@ -402,6 +406,37 @@ def _property_contracts(
     ]
 
 
+# -- dead code (DEAD001, DEAD002) -------------------------------------------------------------
+
+DEAD_CODE = "rules.dead_code"
+
+
+def _dead_code(
+    before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """Opt-in like property contracts: turning it off loosens; while it is on in both, an
+    entry point added or a role removed does (each exempts functions from the judgment)."""
+    if not has_key(before_values, DEAD_CODE) or not has_key(after_values, DEAD_CODE):
+        return []
+    before, after = value_at(before_values, DEAD_CODE), value_at(after_values, DEAD_CODE)
+    if before["enabled"] is not True:
+        return []
+    if after["enabled"] is not True:
+        key = f"{DEAD_CODE}.enabled"
+        return [Loosening(key, f"{key} changed from True to False: the dead-code rules are off")]
+    found: list[Loosening] = []
+    added = [p for p in after["entry_points"] if p not in before["entry_points"]]
+    if len(added) > 0:
+        key = f"{DEAD_CODE}.entry_points"
+        listed = ", ".join(map(repr, added))
+        found.append(Loosening(key, f"{key} adds {listed}: functions no longer judged dead"))
+    removed = [r for r in before["roles"] if r not in after["roles"]]
+    if len(removed) > 0:
+        key = f"{DEAD_CODE}.roles"
+        found.append(Loosening(key, f"{key} no longer lists {', '.join(map(repr, removed))}"))
+    return found
+
+
 def scope_changes(
     before_values: Mapping[str, Any], after_values: Mapping[str, Any]
 ) -> list[Loosening]:
@@ -447,6 +482,7 @@ def loosenings(
         reported.add(item.key)
     # Several entries may share a key (two sinks); the family reports no deviation lines.
     found.extend(_property_contracts(before_values, after_values))
+    found.extend(_dead_code(before_values, after_values))
     return found
 
 

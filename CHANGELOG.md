@@ -5,6 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **DEAD001 and DEAD002 (review, opt-in, Python and JavaScript): functions nothing in
+  production reaches** (spec 21.1 decision 38). One finding per dead head, listing what
+  is reachable only through it; DEAD002 when only tests reach it.
+  - Turn them on with `[tool.shockharness.rules.dead_code] enabled = true`. Settings:
+    `roles`, `entry_points` (globs over `path::qualified.name` for callers the analysis
+    cannot see), `severity` and `dead002_severity`. Turning the family off, adding an
+    entry point or removing a role is a VERIFY003 loosening.
+  - Judged only when the run analyzed every included file: a run over a path, and the
+    edit hook, report nothing.
+  - New per-file facts: functions named as values, attribute uses, registering
+    decorators and `__all__`. Cache schema "25"; the facts add about 4% to a cold run.
+  - On MetaList: 154 findings, among them the `build_note_tree` cluster that held the
+    lost search highlighting. On ShockHarness: 16 (12 dead, 4 the contracts runtime's API),
+    left for the maintainer to decide; the repository does not turn the rules on yet.
+
 ## [0.16.0] - 2026-10-19
 
 TYPE002 (spec 21.1 decision 33), and ShockHarness checks its own annotations with mypy.

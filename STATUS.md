@@ -5654,3 +5654,56 @@ them as failures until the run itself reported success. Every pin moved from 0.1
 the bump's diff was checked for lines that are not pins (none). The changelog's `[0.16.0]`
 section says no change makes a passing gate fail: TYPE002 is review. Published by
 `publish.yml` (run 39286125813). PyPI lists 0.16.0 with a wheel and an sdist.
+
+## Decision 38: DEAD001 and DEAD002, dead code by cluster — DONE (2026-10-19)
+
+Tom's proposal from MetaList, built on his go-ahead: "build the dead-code rule over call
+and value-reference edges with the four false-positive fixes, re-measure on MetaList, and
+keep it at review."
+
+**What it is.** Opt-in (`rules.dead_code.enabled`), review, Python and JavaScript. One
+reachability judgment (`rules/dead_code.py`) over the shared call graph plus new per-file
+usage facts (`ir/python_usage.py`, `ir/javascript_usage.py`): bare names used as values,
+attribute uses outside a call (`obj.name`, `obj['name']`, `getattr(obj, 'name')`), the
+functions each file declares, and what registers them (a decorator other than the
+call-shaping ones, `__all__`). Roots: module and class bodies, registered functions,
+dunders, JavaScript constructors, methods of a class whose base the project does not
+define or that is nested in a function, `entry_points` globs, and the property-contracts
+runtime files named by path. Tests and config files are separate roots: a dead function
+only they reach is DEAD002. A method family (overrides in either direction) lives and
+dies together. One finding per head, listing its cluster, its logical lines and the
+members tests still call.
+
+**Choices made here, for Tom to revisit:**
+* Off by default, like property contracts: the judgment needs the project's entry
+  points, and without them a new adopter would get a long review list at once.
+* Judged only when the run analyzed every file `include` selects (the same test EXC005
+  uses), so the edit hook and path runs never report it.
+* Same-name matching leans toward "alive": a dead function sharing a final name with a
+  called method is missed rather than reported.
+* Counting any textual mention as a use was measured and rejected: it hid the
+  motivating cluster, which tests and docs name.
+
+**Measured on MetaList HEAD e60e88dc** (a scratch export; MetaList's checkout was not
+touched): graph edges alone gave 441 heads, about half dead in a sample of 20. With the
+four fixes: 166, then 154 after three more found by sampling (classes nested in
+functions, `Depends(f)` in annotations, `__all__` re-exports). `build_note_tree` is
+reported with 19 more functions (375 logical lines) and names `highlight_search_terms`
+as still tested. Two samples of 30 heads: 26 and 24 dead; every false positive found is
+a root now. Cost: the usage facts add about 2 s to a cold run (52.9 s to 54.6 s); the
+rule adds about 0.3 s to a warm run.
+
+**On ShockHarness itself: 16 findings,** not acted on. Removing them was blocked as
+outside the request, and it is Tom's call:
+* never called: `regression_keys`, `plain_deps`, `deps_from`, `own_children`,
+  `control_node`, `expr_node`, `classify_handler`, `registry._planned`, and the nine
+  `describe` methods of the schema fields (one cluster);
+* only tests call them: `analysis.analyze_file`, `skills.skill_names`,
+  `python_receivers.receiver_parameter`;
+* the contracts runtime's public API (`enable`, `register`, `preserves`,
+  `preserves_except`), which other projects call: an entry point for
+  `src/shockharness/contracts/runtime/*` covers it.
+The repository does not turn the rules on until those are settled.
+
+Status sites: `rules/dead_code.py:_finding` is in the unknown inventory (a violation,
+approximate confidence). Cache schema "25".

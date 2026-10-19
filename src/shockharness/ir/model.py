@@ -1194,6 +1194,44 @@ class AnnotationFacts:
 NO_ANNOTATIONS = AnnotationFacts(functions=0, annotated=0, first=None)
 
 
+# --- Uses of functions (DEAD001, DEAD002) -------------------------------------------------
+# What the call graph does not record: a function named as a value instead of called
+# (passed, stored, bound, read as an attribute), and what registers one without a call.
+
+
+@dataclass(frozen=True)
+class UsageReference:
+    """A name used as a value, not called, inside the unit that starts at (line, column).
+    ``member`` for an attribute (``obj.name``, ``obj['name']``, ``getattr(obj, 'name')``),
+    else a bare name the file defines as a function or binds by an import."""
+
+    line: int
+    column: int
+    name: str
+    member: bool
+
+
+@dataclass(frozen=True)
+class DeclaredFunction:
+    """A function the dead-code rules judge, by the start of its unit: a def or method, a
+    JavaScript function declaration or method, or a function bound to a declared name or a
+    class field. ``registered`` names what reaches it without a call (a decorator,
+    ``__all__``); empty for nothing."""
+
+    line: int
+    column: int
+    registered: str
+
+
+@dataclass(frozen=True)
+class UsageFacts:
+    declared: tuple[DeclaredFunction, ...]
+    references: tuple[UsageReference, ...]
+
+
+NO_USAGE = UsageFacts(declared=(), references=())
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1218,6 +1256,7 @@ class ModuleFacts:
     receivers: ReceiverFacts
     disguises: tuple[Disguise, ...]
     annotations: AnnotationFacts
+    usage: UsageFacts
     parse_failure: ParseFailure | None
 
 
@@ -1246,5 +1285,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         receivers=NO_RECEIVER_FACTS,
         disguises=(),
         annotations=NO_ANNOTATIONS,
+        usage=NO_USAGE,
         parse_failure=failure,
     )

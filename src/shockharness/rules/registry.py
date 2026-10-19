@@ -2986,6 +2986,99 @@ DOM002 = RuleSpec(
 )
 
 
+# --- Dead code (DEAD001, DEAD002) ---------------------------------------------------------
+# Opt-in (rules.dead_code.enabled): a project-wide reachability judgment, made only when the
+# run analyzed every file the configuration includes.
+
+DEAD_CODE_SECTION = "rules.dead_code"
+DEAD_CODE_FAMILY = "dead_code"
+DEAD_CODE_GUARANTEES = (
+    "Judged only when the run analyzed every file the configuration includes and none "
+    "failed to parse. Roots: module and class bodies, test and config files, functions a "
+    "decorator other than staticmethod/classmethod/property and the like registers, names "
+    "in __all__, dunder methods, JavaScript constructors, methods of a class derived from a "
+    "class the project does not define, and rules.dead_code.entry_points (globs over "
+    "path::qualified.name). Reached: through any call-graph edge, an unresolved call or an "
+    "attribute read of the same final name, a function named as a value (passed, stored, "
+    "bound, listed), an import of it that is used, and a function nested in a reached one; "
+    "a method is reached while a method it overrides or that overrides it is. One finding "
+    "per head (a dead function no dead function reaches), listing what only it reaches."
+)
+DEAD_CODE_LIMITATIONS = (
+    "Names are matched loosely (any method of a called or read name counts), so dead code "
+    "that shares a name with live code is not reported. Calls the analysis cannot see make "
+    "live code look dead: getattr with a computed name, dispatch tables keyed by strings "
+    "built elsewhere, functions only an HTML page, a template or a file outside the "
+    "analysis calls. List those in entry_points. Arrow functions and function expressions "
+    "count only when bound to a declared name or a class field; methods of an object "
+    "literal only when the object is bound to a name."
+)
+
+DEAD001 = RuleSpec(
+    rule_id="DEAD001",
+    version="1",
+    name="function nothing reaches",
+    family=DEAD_CODE_FAMILY,
+    config_section=DEAD_CODE_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A function or method that no production code calls or names and nothing registers, "
+        "reported once with everything reachable only through it: a dead cluster."
+    ),
+    rationale=(
+        "Code that lost its last caller still reads as working, and its tests still pass. "
+        "MetaList's build_note_tree had no callers and about 400 lines hung off it; one of "
+        "them was the only code that highlighted search terms, so highlighting silently "
+        "stopped for a year. The cluster is the unit of decision: delete it, or reconnect "
+        "the behavior it holds."
+    ),
+    guarantees=DEAD_CODE_GUARANTEES,
+    limitations=DEAD_CODE_LIMITATIONS,
+    remediation=(
+        "Decide whether the behavior is still wanted. If it is, call it from where it "
+        "belongs and test that path; if not, delete the cluster and the tests that only "
+        "exercise it. A function reached in a way the analysis cannot see goes in "
+        "rules.dead_code.entry_points with the reason in a comment."
+    ),
+    noncompliant_example=(
+        "def build_note_tree(notes, query):  # nothing calls it any more\n"
+        "    return highlight_search_terms(render(notes), query)"
+    ),
+    compliant_example="# deleted, or called again from the notes view that needs it",
+)
+
+DEAD002 = RuleSpec(
+    rule_id="DEAD002",
+    version="1",
+    name="function only tests reach",
+    family=DEAD_CODE_FAMILY,
+    config_section=DEAD_CODE_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A production function that only tests call or name: dead in production, kept "
+        "alive by its tests, reported with everything reachable only through it."
+    ),
+    rationale=(
+        "A passing test of code production never runs is false assurance: the behavior it "
+        "checks is not the behavior users get."
+    ),
+    guarantees=DEAD_CODE_GUARANTEES,
+    limitations=DEAD_CODE_LIMITATIONS,
+    remediation=(
+        "Either production should call it (reconnect it, and test the production path), "
+        "or it and its tests should go. A test helper belongs under tests/."
+    ),
+    noncompliant_example=(
+        "def highlight_search_terms(html, query): ...  # only tests/test_render.py calls it"
+    ),
+    compliant_example="# called from the renderer the notes list uses, and tested there",
+)
+
+
 # --- MAGIC002 (decision 31) ---------------------------------------------------------------
 
 MAGIC_STRINGS_SECTION = "rules.magic_strings"
@@ -3107,6 +3200,8 @@ RULES: tuple[RuleSpec, ...] = (
     PROP008,
     DOM001,
     DOM002,
+    DEAD001,
+    DEAD002,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -3165,6 +3260,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     SENTINELS_FAMILY: CATEGORY_CONTRACT,
     "dom": CATEGORY_CONTRACT,
     PROPERTY_CONTRACTS_FAMILY: CATEGORY_CONTRACT,
+    DEAD_CODE_FAMILY: CATEGORY_STRUCTURAL,
 }
 
 

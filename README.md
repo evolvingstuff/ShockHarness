@@ -96,6 +96,8 @@ Implemented rules:
 | `MAGIC001` | numeric literal other than `0`, `1` or `-1` in executable code (a module-level named constant is the remedy) | error |
 | `MAGIC002` | a string (a status, a mode, an error code) written out 3+ times across files and compared in two of them | review |
 | `DOM002` | opt-in: a pressable element attached to `document.body` that the named skip lists of page-level press handlers miss | review |
+| `DEAD001` | opt-in: a function no production code calls or names and nothing registers, reported once with everything reachable only through it | review |
+| `DEAD002` | opt-in: a production function only tests call or name (dead in production, kept alive by its tests) | review |
 | `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `MAGIC004` | a named constant whose name only spells a number (`TWO = 2`) | review |

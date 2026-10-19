@@ -1438,6 +1438,50 @@ JavaScript static methods and default imports are not resolved through their
 receivers, and a class call (a constructor) is unknown. A JavaScript method sink (`insertAdjacentHTML`) can therefore not match, and
 the subscript form of a target matches only a named receiver.
 
+### DEAD001 and DEAD002: functions nothing in production reaches (review, opt-in)
+
+Spec 21.1 decision 38, from MetaList: `note_renderer.build_note_tree` had no callers and
+about 400 lines hung off it, among them `highlight_search_terms`, the only code that
+highlighted search phrases. When the notes list moved to a new renderer its last caller
+went away, and highlighting stopped for about a year while its tests kept passing.
+
+Both rules are one reachability judgment over the call graph and the references it does
+not record. **Roots** are module and class bodies, functions a decorator registers (any
+decorator except the ones that only change how a function is called: `staticmethod`,
+`classmethod`, `property`, `cached_property`, `setter`, `cache`, `lru_cache`, `wraps`,
+`abstractmethod`, `override`, `overload`, `final`), names in `__all__`, dunder methods,
+JavaScript `constructor`s, every method of a class derived from a class the project does
+not define (a framework calls those: `HTMLParser.handle_*`, `NodeVisitor.visit_*`) or of a
+class nested in a function (its bases are not known), the files the property-contracts
+`runtime_module` names by path, and `rules.dead_code.entry_points`. **A function is
+reached** through any call-graph edge, an unresolved call or an attribute read or write of
+its final name (`obj.name`, `obj['name']`, `getattr(obj, 'name')`, `this.h.bind(this)`),
+a bare name used as a value (passed, stored, listed, in an `Annotated[..., Depends(f)]`
+annotation), a used import of it, a name `__all__` re-exports, and a function nested in a
+reached one. **A method** is alive while a method it overrides, or one that overrides it,
+is alive: dispatch decides which runs.
+
+Test and config files are roots of their own. A dead function only they reach is DEAD002;
+the rest are DEAD001. One finding per head, a dead function no other dead function
+reaches: the message lists what is reachable only through it (a dead method and its dead
+overrides are one cluster), the logical lines in all, and which of those functions tests
+still call. The judgment is made only when the run analyzed every included file and none
+failed to parse.
+
+Names are matched loosely toward "alive": a dead function that shares a final name with a
+called one is not reported. Live code looks dead when its caller is invisible: `getattr`
+with a computed name, a dispatch table keyed by strings built elsewhere, a function only an
+HTML page, a template or an excluded file calls. Those go in `entry_points`. Arrow
+functions and function expressions are judged only when bound to a declared name or a
+class field, and object-literal methods only when the object is bound to a name.
+
+**Measured** on MetaList at e60e88dc: 154 findings (111 DEAD001, 43 DEAD002), the
+`build_note_tree` cluster among them (20 functions, 375 logical lines, `highlight_search_terms`
+named as still tested). Of two random samples of 30 heads, 26 and 24 were dead; the false
+positives (methods of a class nested in a function, FastAPI dependencies named only in
+annotations, a `__all__` re-export) are roots now. On ShockHarness itself: 16, of which 12
+are dead and 4 are the contracts runtime's public API (an entry point covers it).
+
 ## Registered, not implemented
 
 None since MAGIC002 landed. A rule registered before it is built is listed in

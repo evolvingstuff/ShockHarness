@@ -115,6 +115,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "TYPE002 is exact on the counts and the configuration files it reads: violation",
     ),
+    ("rules/dead_code.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "DEAD001/DEAD002 judge only a run that analyzed every included file; then a function "
+        "no root reaches is a violation (approximate: names are matched loosely, toward live)",
+    ),
     ("rules/magic_numbers.py", "_magic005_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "MAGIC005 is exact on the syntax (the literal's length or value is computed): violation",

@@ -172,6 +172,8 @@ IMPLEMENTED_IN_ORDER = (
     "PROP008",
     "DOM001",
     "DOM002",
+    "DEAD001",
+    "DEAD002",
 )
 
 

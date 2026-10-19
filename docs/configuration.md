@@ -903,6 +903,31 @@ function is not found in an analyzed file is an `unknown` DOM002 finding.
 Removing a class or a role is a policy deviation; adding a narrower class
 (`HTMLButtonElement`) reports those filters too.
 
+## Dead code (DEAD001, DEAD002)
+
+Opt-in (spec 21.1 decision 38): off is the default in every profile and is not a
+deviation. The judgment is project-wide, so it is made only when the run analyzed every
+file `include` selects and none failed to parse; a run over a path, and the edit hook,
+report nothing.
+
+```toml
+[tool.shockharness.rules.dead_code]
+enabled = false                  # true turns the two rules on
+roles = ["production"]           # where dead functions are reported; test and config
+                                 # files are the roots of DEAD002, never reported
+# Functions reached in ways the analysis cannot see, as globs over
+# "path::qualified.name": a getattr with a computed name, a function only an HTML
+# page or a template calls.
+entry_points = ["app/db/migrations.py::_migration_*", "app/static/js/main.js::on*"]
+severity = "review"              # DEAD001
+dead002_severity = "review"
+```
+
+The files a `rules.property_contracts.runtime_module` entry names by path are libraries:
+their functions are not judged. While the family is on, turning it off, adding an entry
+point or removing a role is a VERIFY003 loosening, and so is lowering either severity.
+looseness.
+
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a, P1b and P2,
