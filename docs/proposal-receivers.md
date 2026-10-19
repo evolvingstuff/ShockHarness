@@ -1,7 +1,8 @@
 # Proposal: resolving method calls through their receivers
 
 Status: **R1 (Python) and R2 (JavaScript) built (2026-10-18), on Tom's position below;
-for Fable to confirm or change. R3 (annotations) is not started.** Measured: STATUS.md,
+for Fable to confirm or change. R3 (annotations) is measured and deferred (2026-10-19):
+on MetaList it makes 164 calls exact and changes one finding (STATUS.md, "R3 measured").** Measured: STATUS.md,
 "Receivers R1" and "Receivers R2".
 
 ## The problem

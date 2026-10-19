@@ -5745,3 +5745,25 @@ only reworded. Following `.map(arrow)` would need the arrow's scope inlined: not
 Fixtures: python/fstring gains a join rule and `joined_raw`, `indented` (the indent case)
 and `listed`; javascript/innerhtml gains a join rule, `listed` and `listedRaw`;
 python/generators' `joined` (no join rule) is now PROP001.
+
+## R3 measured: annotation receivers — DEFERRED (2026-10-19)
+
+Measured before building, as R1 and R2 were. A scratch prototype over the shared call
+graph resolved attribute calls through annotations (parameters, annotated locals,
+`self` attributes annotated in the class body or in a method; `Optional[C]`, `C | None`
+and string annotations; methods found through project bases by name, unique classes
+only). On MetaList HEAD e60e88dc, whose `[tool.mypy]` would make them resolved under
+Tom's position (answer 3):
+
+* 164 call sites resolvable (156 through parameters or locals, 8 through `self`
+  attributes), all unresolved today; 37 more name a project class that does not define
+  the method or is ambiguous.
+* 110 unresolved, name-matched edges in 74 functions would become exact.
+* DEAD001/DEAD002: one more finding (154 to 155),
+  `PrivacyGuardedInference.stream_tool_turn` (DEAD002), which a same-name call through
+  another class kept alive.
+* Property contracts: nothing; MetaList's Python contracts have no unknown findings.
+* ASYNC001: nothing; 2 targets are async, both awaited.
+
+Not built: the payoff on the one real project is one finding. Revisit when a project
+with more annotated receivers and Python contracts on method calls shows unknowns.
