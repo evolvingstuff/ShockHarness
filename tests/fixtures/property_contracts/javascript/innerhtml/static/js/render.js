@@ -32,3 +32,11 @@ export function concatenated(el, raw) {
 export function noLiteral(el, a, b) {
   el.innerHTML = sanitize(a) + sanitize(b);
 }
+
+export function listed(el, a, b) {
+  el.innerHTML = [sanitize(a), sanitize(b)].join("\n");
+}
+
+export function listedRaw(el, a, raw) {
+  el.innerHTML = [sanitize(a), raw].join("");
+}

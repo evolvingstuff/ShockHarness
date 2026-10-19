@@ -81,7 +81,9 @@ what its own argument carried (decision 48). A wrapper that relies on a property
     the intersection of the generator's yields. `yield from` and `yield*` delegate.
 * **Strings.** A plain string literal carries the properties marked
   `literal_satisfies`. A composition carries what the catalog's rules say: an f-string,
-  a template literal, a concatenation with a string literal in it, or `str.format`.
+  a template literal, a concatenation with a string literal in it, `str.format`, or a
+  join of written-out items or a comprehension (`"".join(f"<li>{escape(i)}</li>" for i in
+  items)`, `[a, b].join("")`). A join over a variable or `.map(...)` is unknown.
 * **Sinks.** These are catalog callees (`json.dumps:0`, `fetch:1`, a project function)
   and assignment targets (`el.innerHTML = v`, `headers[k] = v`).
 

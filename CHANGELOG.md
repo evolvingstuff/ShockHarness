@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **Property contracts: `join` compositions.** `"sep".join(items)` (Python) and
+  `[a, b].join(sep)` (JavaScript) compose by the catalog's `join` rules. The parts are a
+  non-literal separator and the items: the elements of a list, tuple, set or array
+  literal, or the element expression of a comprehension or generator expression. A
+  finding names the part that falls short (`"\n".join(prefix + line for line in
+  text.splitlines())` names `prefix + line`).
+  - A join over any other value (a variable, `.map(...)`) stays unknown, with a message
+    that says so.
+  - A join that a catalog has no `join` rule for now carries nothing, like an f-string
+    with no rule: such findings change from unknown to violation. On MetaList: 15 more
+    PROP004 review findings (functions returning `""` on one path and a join on
+    another), nothing gating.
+
 ### Changed
 - **write-compliant-code skill:** a checklist item for values the program offers and then
   checks. Where code rejects a value outside a set ("not a known tag") that other code

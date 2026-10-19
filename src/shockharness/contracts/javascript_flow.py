@@ -43,6 +43,7 @@ from shockharness.ir.javascript_nodes import Field, Kind
 
 TEMPLATE_LITERAL = "template_literal"
 CONCAT = "concat"
+JOIN = "join"
 EITHER = frozenset({"||", "??"})
 BOTH = "&&"
 LOGICAL_ASSIGNMENTS = frozenset({"||=", "??=", "&&="})
@@ -542,6 +543,9 @@ class JsFlow:
     def call(self, node: Node, env: Env) -> PropSet:
         if self.hooks.is_declaration(node):
             return self.declared(self.hooks.declaration(node), env)
+        joined = _array_join(node)
+        if joined is not None:
+            return self._join(joined, inner(node, Field.ARGUMENTS), env)
         function = field(node, Field.FUNCTION)
         arguments = field(node, Field.ARGUMENTS)
         if function is not None and function.type == Kind.IMPORT:
@@ -553,6 +557,21 @@ class JsFlow:
         if arguments is not None and arguments.type == Kind.TEMPLATE_STRING:
             sets = []  # a tagged template: the tag is the call, the template its argument
         return self.hooks.call(node, sets, self.reporting)
+
+    def _join(self, array: Node, separator: Sequence[Node], env: Env) -> PropSet:
+        """``[a, b].join(sep)``: a composition of the separator (unless it is a string
+        literal or left out) and each element; a spread element is not followed."""
+        given = [s for s in separator if s.type != Kind.STRING]
+        parts = [Part(self.expression(s, env), node_text(s)) for s in given]
+        for element in children(array):
+            if element.type == Kind.SPREAD_ELEMENT:
+                for child in children(element):
+                    self.expression(child, env)
+                why = "a spread element (its items are not followed)"
+                parts.append(Part(unknown(why), node_text(element)))
+                continue
+            parts.extend(self._parts([element], env))
+        return self.hooks.compose(JOIN, parts)
 
     def _with_caller(self, declaration: JsDeclaration, sets: Sequence[PropSet]) -> list[PropSet]:
         """A preserves whose source is a parametric parameter takes the caller's set."""
@@ -594,6 +613,20 @@ def _declared_result(declaration: JsDeclaration, sets: Sequence[PropSet]) -> Pro
         return replace(source, known=source.known - declaration.properties)
     assert declaration.kind == PRESERVES, f"unexpected declaration {declaration.kind}"
     return source
+
+
+def _array_join(call: Node) -> Node | None:
+    """The array literal of ``[...].join()`` or ``[...].join(sep)``, else None."""
+    function = field(call, Field.FUNCTION)
+    if function is None or function.type != Kind.MEMBER_EXPRESSION:
+        return None
+    target = field(function, Field.OBJECT)
+    name = field(function, Field.PROPERTY)
+    if target is None or name is None or target.type != Kind.ARRAY or node_text(name) != JOIN:
+        return None
+    if len(inner(call, Field.ARGUMENTS)) > 1:
+        return None
+    return target
 
 
 def _loop_names(left: Node) -> list[str]:

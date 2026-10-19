@@ -655,7 +655,7 @@ def _argument(
 
 def _unresolved(call: ast.Call, target: Target) -> PropSet:
     if isinstance(call.func, ast.Attribute) and call.func.attr == JOIN:
-        return unknown("a .join build (not a composition in this release)")
+        return unknown("a .join on a separator that is not a string literal (not a composition)")
     return unknown(target.why)
 
 

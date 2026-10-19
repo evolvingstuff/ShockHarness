@@ -3,9 +3,9 @@ a meaning, and only because the catalog says so, with a reason.
 
 A plain string literal carries every property marked ``literal_satisfies``. A
 composition (an f-string, a template literal, a concatenation with a string literal in
-it, ``str.format`` or ``%``) carries a rule's ``produces`` when every non-literal part
-satisfies one of the rules with that ``produces`` for its operation; literal parts are
-constants and are not checked. A part that is known not to satisfy any of them makes the
+it, ``str.format`` or ``%``, a join of written-out items or of a comprehension) carries
+a rule's ``produces`` when every non-literal part satisfies one of the rules with that
+``produces`` for its operation; literal parts are constants and are not checked. A part that is known not to satisfy any of them makes the
 whole carry nothing (and the note names the part); a part whose set is unknown makes the
 result unknown.
 """

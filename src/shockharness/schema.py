@@ -244,7 +244,7 @@ CONTRACT_SINK_SCHEMA = TableField(
     },
     required=("language", "requires", "reason"),
 )
-CONTRACT_OPERATIONS = ("template_literal", "concat", "fstring", "format")
+CONTRACT_OPERATIONS = ("template_literal", "concat", "fstring", "format", "join")
 CONTRACT_COMPOSITION_SCHEMA = TableField(
     fields={
         "language": EnumField(LANGUAGES),

@@ -545,9 +545,10 @@ class Flow:
         env.update(merged)
         return result
 
-    def comprehension(
+    def _scope(
         self, node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp, env: Env
-    ) -> PropSet:
+    ) -> tuple[Env, bool]:
+        """A comprehension's names bound to their items, and whether it is async."""
         inner = dict(env)
         asynchronous = False
         for generator in node.generators:
@@ -557,6 +558,12 @@ class Flow:
             for condition in generator.ifs:
                 self.expression(condition, inner)
             asynchronous = asynchronous or bool(generator.is_async)
+        return inner, asynchronous
+
+    def comprehension(
+        self, node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp, env: Env
+    ) -> PropSet:
+        inner, asynchronous = self._scope(node, env)
         elements = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
         for element in elements:
             self.expression(element, inner)
@@ -573,10 +580,43 @@ class Flow:
         if isinstance(func, ast.Attribute) and func.attr == FORMAT and _is_literal(func.value):
             values = [*node.args, *(kw.value for kw in node.keywords)]
             return self.hooks.compose(FORMAT, self._parts(values, env))
+        if _is_join(node):
+            return self._join(node, env)
         self.expression(node.func, env)
         arguments = [self.expression(argument, env) for argument in node.args]
         keywords = [(kw.arg, self.expression(kw.value, env)) for kw in node.keywords]
         return self.hooks.call(node, arguments, keywords, self.reporting)
+
+    def _join(self, node: ast.Call, env: Env) -> PropSet:
+        """``"sep".join(items)``: a composition of the separator (unless it is a literal)
+        and each item, when the items are written out (a list, tuple or set display) or
+        built by a comprehension or generator expression; else the items' sets are not
+        followed."""
+        assert isinstance(node.func, ast.Attribute), "a join is a method call"
+        parts: list[Part] = []
+        if not _is_literal(node.func.value):
+            parts.append(Part(self.expression(node.func.value, env), ast.unparse(node.func.value)))
+        items = node.args[0]
+        if isinstance(items, ast.List | ast.Tuple | ast.Set):
+            parts.extend(self._item(element, env) for element in items.elts)
+        elif isinstance(items, ast.ListComp | ast.SetComp | ast.GeneratorExp):
+            inner, asynchronous = self._scope(items, env)
+            value = self.expression(items.elt, inner)
+            if asynchronous:
+                value = unknown("an async comprehension (its items are not followed)")
+            parts.append(Part(value, ast.unparse(items.elt)))
+        else:
+            value = self.expression(items, env)
+            why = f"the items of {ast.unparse(items)} (a joined value's items are not followed)"
+            parts.append(Part(_items(value, why), ast.unparse(items)))
+        return self.hooks.compose(JOIN, parts)
+
+    def _item(self, element: ast.expr, env: Env) -> Part:
+        if isinstance(element, ast.Starred):
+            self.expression(element.value, env)
+            why = "a starred item (its items are not followed)"
+            return Part(unknown(why), ast.unparse(element))
+        return Part(self.expression(element, env), ast.unparse(element))
 
     def declared(self, declaration: Declaration, env: Env) -> PropSet:
         arguments = declaration.call.args
@@ -619,6 +659,27 @@ def _is_literal(node: ast.expr) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
+def _is_join(node: ast.Call) -> bool:
+    """``"sep".join(items)`` (or an f-string separator): one positional argument."""
+    func = node.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == JOIN
+        and _is_text(func.value)
+        and len(node.args) == 1
+        and not isinstance(node.args[0], ast.Starred)
+        and len(node.keywords) == 0
+    )
+
+
+def _items(value: PropSet, why: str) -> PropSet:
+    """What a joined value's items carry: a resolved generator function's items, else not
+    followed (a container's elements are not tracked)."""
+    if value.items is not None:
+        return value.items
+    return unknown(why)
+
+
 def _is_text(node: ast.expr) -> bool:
     """A string literal or an f-string: what makes ``+`` a concatenation."""
     return _is_literal(node) or isinstance(node, ast.JoinedStr)
@@ -638,6 +699,7 @@ def _concatenated(node: ast.BinOp) -> list[ast.expr]:
 
 FSTRING = "fstring"
 CONCAT = "concat"
+JOIN = "join"
 FORMAT = "format"
 
 STATEMENTS: dict[type[ast.stmt], Callable[..., Env | None]] = {

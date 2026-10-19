@@ -761,9 +761,9 @@ properties = []
 # reason, producer (optional).
 sinks = []
 # [[tool.shockharness.rules.property_contracts.compositions]]: language, operation
-# ("template_literal" | "concat" | "fstring" | "format"), inputs_require, produces, reason.
-# A template literal, f-string, concatenation or format whose every non-literal part
-# carries inputs_require carries `produces` (spec §5.2a).
+# ("template_literal" | "concat" | "fstring" | "format" | "join"), inputs_require, produces,
+# reason. A template literal, f-string, concatenation, format or join whose every
+# non-literal part carries inputs_require carries `produces` (spec §5.2a).
 compositions = []
 
 [tool.shockharness.rules.property_contracts.severities]

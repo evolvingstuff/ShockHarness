@@ -40,9 +40,9 @@ SOURCE_DIRECTORY = "src"
 JAVASCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts")
 # Which composition operations each language has (spec §5.2a).
 OPERATIONS = {
-    PYTHON: ("fstring", "concat", "format"),
-    JAVASCRIPT: ("template_literal", "concat"),
-    TYPESCRIPT: ("template_literal", "concat"),
+    PYTHON: ("fstring", "concat", "format", "join"),
+    JAVASCRIPT: ("template_literal", "concat", "join"),
+    TYPESCRIPT: ("template_literal", "concat", "join"),
 }
 LITERAL_SATISFIES = "literal_satisfies"
 COMPLETE = "complete"

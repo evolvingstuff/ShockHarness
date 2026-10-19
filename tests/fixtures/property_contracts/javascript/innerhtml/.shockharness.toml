@@ -42,6 +42,13 @@ inputs_require = ["sanitized_html"]
 produces = "sanitized_html"
 reason = "safe markup joined to safe markup is safe markup"
 
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "javascript"
+operation = "join"
+inputs_require = ["sanitized_html"]
+produces = "sanitized_html"
+reason = "safe markup joined with safe markup is safe markup"
+
 [[tool.shockharness.rules.property_contracts.sinks]]
 language = "javascript"
 target = "innerHTML"

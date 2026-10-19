@@ -35,6 +35,13 @@ reason = "safe markup joined to safe markup is safe markup"
 
 [[tool.shockharness.rules.property_contracts.compositions]]
 language = "python"
+operation = "join"
+inputs_require = ["sanitized_html"]
+produces = "sanitized_html"
+reason = "safe markup joined with safe markup (or a literal separator) is safe markup"
+
+[[tool.shockharness.rules.property_contracts.compositions]]
+language = "python"
 operation = "format"
 inputs_require = ["escaped_html"]
 produces = "sanitized_html"

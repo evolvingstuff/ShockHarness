@@ -462,7 +462,7 @@ def test_sink_forms_and_compositions_are_checked_at_load(empty_root: Path) -> No
         'operation = "fstring"\ninputs_require = ["q"]\nproduces = "p"\nreason = "r"\n'
     )
     message = config_error(empty_root, "\n" + PROPERTY.format(name="p") + rule)
-    assert "javascript has template_literal, concat, not 'fstring'" in message
+    assert "javascript has template_literal, concat, join, not 'fstring'" in message
     assert "'q' is not a catalog property" in message
 
 

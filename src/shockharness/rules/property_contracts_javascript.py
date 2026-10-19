@@ -694,7 +694,7 @@ def _unresolved(call: Node, target: JsTarget) -> PropSet:
         for prop in field_nodes(function, Field.PROPERTY)
     ]
     if names == [JOIN]:
-        return unknown("a .join build (not a composition in this release)")
+        return unknown("a .join of a value other than an array literal (items not followed)")
     return unknown(target.why)
 
 

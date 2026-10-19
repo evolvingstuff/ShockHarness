@@ -5720,3 +5720,28 @@ show the current version, as in earlier bumps). The changelog's `[0.17.0]` secti
 no change makes a passing gate fail: DEAD001 and DEAD002 are opt-in and review. It also
 lists the internal functions removed as dead code. Published by `publish.yml` (run
 39304087684, 18 of 18 jobs). PyPI lists 0.17.0 with a wheel and an sdist.
+
+## Property contracts: join compositions — DONE (2026-10-19)
+
+The follow-up from Tom's indent proposal (docs/ideas.md): `.join` was always unknown.
+Now `join` is a catalog composition operation (Python and JavaScript). Python
+`"sep".join(items)` with a literal or f-string separator, and JavaScript
+`[...].join(sep)`. The parts are a non-literal separator and the items: a display's
+elements or a comprehension's element expression. Other items (a variable, a call,
+`.map(...)`) stay unknown, with the message saying so; a resolved generator function's
+items are used where known.
+
+**Choice made here:** a join with no `join` rule in the catalog carries nothing, like an
+f-string with no rule (spec §5.2a: an undeclared operation destroys every property). It
+is not kept unknown. On MetaList HEAD that adds 15 PROP004 review findings, all in
+functions returning `""` on one path (which carries `sanitized_html` by
+`literal_satisfies`) and a join on another. MetaList already had 168 of that kind from
+f-strings. Nothing gates. The 27 JavaScript `.map(...).join('')` findings stay unknown,
+only reworded. Following `.map(arrow)` would need the arrow's scope inlined: not done.
+
+**For Fable and Tom:** the spec's §5.2a list of composition operations does not name
+`join`; the spec was not edited (Tom: "Don't directly update the doc").
+
+Fixtures: python/fstring gains a join rule and `joined_raw`, `indented` (the indent case)
+and `listed`; javascript/innerhtml gains a join rule, `listed` and `listedRaw`;
+python/generators' `joined` (no join rule) is now PROP001.

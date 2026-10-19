@@ -2474,7 +2474,8 @@ PROP001 = RuleSpec(
         "nothing; branches meet in the intersection; loops reach a fixed point; an except "
         "handler starts from the set at the start of its try. A call that cannot be resolved "
         "(a method on a value, a callable in a variable or container, getattr) and every "
-        "await, generator and .join build make the set unknown, reported as unknown."
+        "await, generator, and .join over a value whose items are not written out make the "
+        "set unknown, reported as unknown."
     ),
     limitations=(
         "One hop: a callee whose result comes from a further call it does not declare carries "

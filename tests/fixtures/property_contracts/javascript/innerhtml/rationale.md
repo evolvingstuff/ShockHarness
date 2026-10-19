@@ -12,12 +12,13 @@ is a vendored path excluded from analysis.
 - `sanitized`: the cross-file producer.
 - `interpolated`: PROP001, naming the interpolation `tag` that lacks `escaped_html`.
 - `mixed`: PROP001. The template part is unestablished, so the whole carries nothing.
-- `joined`: `.map(...).join("")` is not a composition in this release, so the finding is
-  unknown.
+- `joined`: `.map(...).join("")` joins a value whose items are not followed (only an
+  array literal's elements are), so the finding is unknown.
 - `concatenated`: `"<p>" + sanitize(raw) + "</p>"` is satisfied by the second concat rule.
 
 Without that rule it would be PROP001: the typical one-rule catalog of §5.2a accepts
 only escaped parts.
 - `noLiteral`: `sanitize(a) + sanitize(b)` has no string literal, so it is not a
   composition (decision 42) and is PROP001.
-
+- `listed`: `[sanitize(a), sanitize(b)].join("\n")` composes by the join rule.
+- `listedRaw`: PROP001, naming the element `raw`.

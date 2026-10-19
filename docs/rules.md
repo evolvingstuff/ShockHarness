@@ -1336,9 +1336,16 @@ There is no separate declaration.
   carries every property marked `literal_satisfies`. A composition carries a catalog
   rule's `produces` when every non-literal part carries one of the rules' `inputs_require`
   for that operation and `produces`. The compositions are an f-string, a JavaScript
-  template literal, a `+` chain with a string literal in it, `"...".format(...)` and
-  `"..." % x`. Literal parts are not checked. One part known to fall short makes the
-  whole carry nothing, and the finding names that part; an unknown part makes it unknown.
+  template literal, a `+` chain with a string literal in it, `"...".format(...)`,
+  `"..." % x`, and a join (`join` rules): `"sep".join(items)` in Python and
+  `[a, b].join(sep)` in JavaScript. A join's parts are a non-literal separator and the
+  items: the elements of a list, tuple or set display (an array literal in JavaScript), or
+  the element expression of a comprehension or generator expression (`"\n".join(prefix +
+  line for line in text.splitlines())` names `prefix + line`). A join over any other
+  value (a variable, `.map(...)`) is unknown: a container's items are not tracked.
+  Literal parts are not checked. One part known to fall short makes the whole carry
+  nothing, and the finding names that part; an unknown part makes it unknown. With no
+  rule for its operation, a composition carries nothing.
 * **What destroys them.** Any other operation, literal or library call carries nothing.
 * **Control flow.** Branches meet in the intersection, and loops iterate to a fixed
   point. An except handler starts from the set at the start of its try. A parameter

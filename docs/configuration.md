@@ -976,8 +976,8 @@ runtime = "static"
 literal_satisfies = true           # optional: "" and "<hr>" carry it by themselves
 
 [[tool.shockharness.rules.property_contracts.compositions]]
-language = "javascript"            # "python": "fstring" | "concat" | "format"
-operation = "template_literal"     # "javascript": "template_literal" | "concat"
+language = "javascript"            # "python": "fstring" | "concat" | "format" | "join"
+operation = "template_literal"     # "javascript": "template_literal" | "concat" | "join"
 inputs_require = ["escaped_html"]  # every non-literal part must carry these
 produces = "sanitized_html"
 reason = "constant markup around escaped text is safe markup"
