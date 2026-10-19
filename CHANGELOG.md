@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **write-compliant-code skill:** a checklist item for values the program offers and then
+  checks. Where code rejects a value outside a set ("not a known tag") that other code
+  offers the user, both build from one function, and a test checks that every offered
+  value is accepted. From MetaList, where two separately built tag vocabularies drifted
+  apart; no static rule can see the drift across an HTTP request.
+
 ## [0.17.0] - 2026-10-19
 
 DEAD001 and DEAD002 (spec 21.1 decision 38): functions nothing in production reaches,

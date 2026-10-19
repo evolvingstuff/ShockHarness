@@ -343,6 +343,7 @@ gate ignores it. A suppression with no rule ID, or a reason-less one, is a
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
 - [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses `python -O` only when the code asserts.
 - [ ] Where the repository declares property contracts, each new function on a declared pipeline states its `requires` first and its `produces`/`preserves` on return; nothing produces a property it has not established.
+- [ ] Where code rejects a value outside a set ("not a known tag") that other code offers the user (suggestions, a menu), both build from one function, and a test checks that every offered value of each kind is accepted: separately built lists drift, and no static check sees across an HTTP request.
 
 ## Adopting ShockHarness
 
