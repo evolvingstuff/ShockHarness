@@ -22,6 +22,7 @@ from shockharness.ir.model import (
     Span,
     failed_facts,
 )
+from shockharness.ir.python_annotations import collect_python_annotations
 from shockharness.ir.python_async import collect_python_async
 from shockharness.ir.python_catalog import collect_python_catalog
 from shockharness.ir.python_catches import (
@@ -330,5 +331,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         dom=NO_DOM,  # the DOM is JavaScript's
         receivers=collect_python_receivers(parsed),
         disguises=collect_python_disguises(source, parsed),
+        annotations=collect_python_annotations(source, parsed),
         parse_failure=None,
     )

@@ -1847,6 +1847,50 @@ TYPE001 = RuleSpec(
     compliant_example="def load(raw: object) -> Config:\n    return Config.parse(raw)",
 )
 
+
+TYPE002 = RuleSpec(
+    rule_id="TYPE002",
+    version="1",
+    name="type annotations nothing checks",
+    family="types",
+    config_section=TYPES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "Most production functions carry type annotations and no Python type checker is "
+        "configured: one finding per run (spec 21.1 decision 33)."
+    ),
+    rationale=(
+        "An annotation is a claim. Without a checker nothing verifies it, so a wrong one "
+        "reads as true to the next reader and to an agent; MetaList was 96% annotated with "
+        "no checker configured."
+    ),
+    guarantees=(
+        "Reported when at least rules.types.annotated_share (0.5) of the functions and "
+        "methods where the rule applies, and at least rules.types.min_annotated_functions "
+        "(20) of them, carry an annotation (a parameter other than "
+        "self/cls, or the return) and the analysis root configures no checker: mypy.ini, "
+        ".mypy.ini, pyrightconfig.json, .pyre_configuration, ty.toml, a [tool.mypy], "
+        "[tool.pyright], [tool.basedpyright], [tool.pyre] or [tool.ty] table in "
+        "pyproject.toml, or [mypy] in setup.cfg or tox.ini. Severity "
+        "rules.types.type002_severity (review by default)."
+    ),
+    limitations=(
+        "Configuration only: a configured checker that CI never runs is not seen, and a "
+        "checker configured outside the analysis root (a parent directory, a command line) "
+        "is not either. TypeScript is not covered: a TypeScript project that builds has a "
+        "tsconfig.json."
+    ),
+    remediation=(
+        "Configure the checker and run it in CI (mypy or pyright with the project's own "
+        "settings). Annotations a project does not mean to "
+        "check are better left out than left unverified."
+    ),
+    noncompliant_example="def total(items: list[Item]) -> int:  # no [tool.mypy], no mypy.ini",
+    compliant_example="[tool.mypy]\nstrict = true  # pyproject.toml, and mypy runs in CI",
+)
+
 SLEEP001 = RuleSpec(
     rule_id="SLEEP001",
     version="1",
@@ -3038,6 +3082,7 @@ RULES: tuple[RuleSpec, ...] = (
     PROCESS001,
     RESULT001,
     TYPE001,
+    TYPE002,
     SLEEP001,
     RETRY001,
     BATCH001,

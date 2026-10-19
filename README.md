@@ -141,6 +141,7 @@ Implemented rules:
 | `PROCESS001` | a shell command built from data; a subprocess whose exit status nothing checks | warning |
 | `RESULT001` | a must-use call used as a statement (`name.strip()`, `sorted(xs)`, `items.map(f)`) | warning |
 | `TYPE001` | `Any`, `cast(...)`, `# type: ignore` (Python) | review |
+| `TYPE002` | most production functions are annotated and no Python type checker is configured (once per run) | review |
 | `SLEEP001` | a fixed sleep where a condition is needed (polling in a loop) | review |
 | `RETRY001` | a retry with no limit (endless loop, unbounded `@retry`) | warning |
 | `BATCH001` | a loop that drops per-item failures | warning |

@@ -484,6 +484,7 @@ OVERRIDE_APPLIED = (
     "SUPP001",
     "SUPP002",
     "TYPE001",
+    "TYPE002",
 )
 
 

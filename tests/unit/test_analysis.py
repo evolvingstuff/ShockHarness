@@ -172,6 +172,7 @@ APPLIED_TO_PYTHON = (
     "SUPP001",
     "SUPP002",
     "TYPE001",
+    "TYPE002",
 )
 
 

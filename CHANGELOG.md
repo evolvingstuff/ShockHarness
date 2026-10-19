@@ -5,6 +5,18 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **TYPE002 (review, Python): type annotations nothing checks** (spec 21.1 decision 33).
+  It reports once per run when at least half of the production functions, and at least
+  20 of them, carry an annotation and the root configures no type checker (mypy,
+  pyright, basedpyright, pyre or ty).
+  - Settings: `rules.types.annotated_share`, `min_annotated_functions` and
+    `type002_severity`. Relaxing any of them is a VERIFY003 loosening, and threshold
+    loosenings now compare decimal values too.
+  - On MetaList it reports nothing, because MetaList configures `[tool.mypy]`. On
+    ShockHarness itself it reports 2,226 of 2,226 functions.
+  - Cache schema "24".
+
 ## [0.15.0] - 2026-10-18
 
 The property-contracts phase reuses each file's findings while nothing they depend on

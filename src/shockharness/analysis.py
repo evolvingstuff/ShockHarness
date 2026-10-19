@@ -109,6 +109,7 @@ from shockharness.rules.registry import (
 from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.sentinels import run_magic003
 from shockharness.rules.strings import StringFile, run_magic002
+from shockharness.rules.type_coverage import TypedFile, run_type002
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
 from shockharness.suppressions import Suppression, apply_suppressions, parse_suppressions
@@ -403,6 +404,20 @@ def _units(
     return ()
 
 
+# The rules recorded as applied by role and scope; most find in the cross-file phase.
+SCOPED_RULES = (
+    *CATALOG_RULES,
+    registry.TYPE002,
+    *INPUT_RULES,
+    registry.PROV001,
+    registry.GUARD001,
+    registry.MAGIC003,
+    registry.MAGIC002,
+    registry.DOM002,
+    *CONTRACT_RULES,
+)
+
+
 def _policy_rules(
     facts: ModuleFacts,
     source: SourceText,
@@ -419,16 +434,7 @@ def _policy_rules(
     guardrails = _active_guardrails(language, role, config, disabled_ids)
     catalog = frozenset(
         rule.rule_id
-        for rule in (
-            *CATALOG_RULES,
-            *INPUT_RULES,
-            registry.PROV001,
-            registry.GUARD001,
-            registry.MAGIC003,
-            registry.MAGIC002,
-            registry.DOM002,
-            *CONTRACT_RULES,
-        )
+        for rule in SCOPED_RULES
         if rule.rule_id not in disabled_ids
         and language in rule.languages
         and _in_scope(rule, role, config)
@@ -921,6 +927,22 @@ def assert_findings(
     return found
 
 
+def type_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig
+) -> dict[str, list[Finding]]:
+    """TYPE002 (decision 33): annotations that no configured type checker verifies."""
+    files = [
+        TypedFile(p.path, p.language, p.source, p.facts.annotations)
+        for p in pendings
+        if registry.TYPE002.rule_id in p.rules_applied
+        and p.facts is not None
+        and p.source is not None
+    ]
+    if len(files) == 0:
+        return {}
+    return run_type002(files, config.root, config.section(registry.TYPES_SECTION))
+
+
 def string_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig
 ) -> dict[str, list[Finding]]:
@@ -1146,6 +1168,7 @@ def complete(
         *(phase(pendings, config, graph) for phase in GRAPH_PHASES),
         contract_findings(pendings, config, cache),
         string_findings(pendings, config),
+        type_findings(pendings, config),
     )
     results: list[FileResult] = []
     for pending in pendings:

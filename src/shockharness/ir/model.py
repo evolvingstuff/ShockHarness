@@ -1177,6 +1177,23 @@ class Disguise:
     scope: str
 
 
+# --- Annotation coverage (TYPE002, decision 33) -------------------------------------------
+
+
+@dataclass(frozen=True)
+class AnnotationFacts:
+    """Python functions and methods (lambdas aside) and how many carry a type annotation:
+    a parameter other than the receiver, or the return. ``first`` is the first annotated
+    one, where a project-level finding is anchored."""
+
+    functions: int
+    annotated: int
+    first: Span | None
+
+
+NO_ANNOTATIONS = AnnotationFacts(functions=0, annotated=0, first=None)
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1200,6 +1217,7 @@ class ModuleFacts:
     dom: DomFacts
     receivers: ReceiverFacts
     disguises: tuple[Disguise, ...]
+    annotations: AnnotationFacts
     parse_failure: ParseFailure | None
 
 
@@ -1227,5 +1245,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         dom=NO_DOM,
         receivers=NO_RECEIVER_FACTS,
         disguises=(),
+        annotations=NO_ANNOTATIONS,
         parse_failure=failure,
     )

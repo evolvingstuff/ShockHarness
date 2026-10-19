@@ -5572,3 +5572,45 @@ diff was checked for lines that are not pins (none). The changelog's `[0.15.0]` 
 says no change makes a passing gate fail: the findings are identical to a full recompute.
 Published by `publish.yml` (run 39193517657, 18 of 18 jobs). PyPI lists 0.15.0 with a
 wheel and an sdist.
+
+## Decision 33: TYPE002, annotations that nothing checks — DONE (2026-10-19)
+
+The backlog's one proposed decision. MetaList's report: 96% annotated, no type checker.
+
+* **Facts.** `AnnotationFacts` per file: the Python functions (lambdas aside), how many
+  carry an annotation (a parameter other than `self`/`cls`, or the return), and the
+  first one's span. Collected by `ir/python_annotations.py`; cache schema "24".
+* **Checkers.** `tool_configs.python_checkers_in` reads `pyproject.toml` tables
+  (`mypy`, `pyright`, `basedpyright`, `pyre`, `ty`) and `[mypy]` in `setup.cfg` /
+  `tox.ini`, inside the boundaries VERIFY003 already declares there.
+  `type_coverage.python_checkers` adds the checkers' own files at the root.
+* **Rule** (`rules/type_coverage.py`, cross-file phase `analysis.type_findings`):
+  * one finding per run, on the first annotated function of the first file, with the
+    counts;
+  * it applies where TYPE001's roles say (production);
+  * settings `annotated_share` (0.5), `min_annotated_functions` (20) and
+    `type002_severity` (review);
+  * VERIFY003 reports raising either threshold or lowering the severity, and its
+    threshold check now compares decimal values as well as integers.
+* **Changed from the backlog line, recorded in decision 33:**
+  * TYPE001's message is not extended. It is cached per file, and the checker's
+    configuration is not part of that key, so the message would go stale.
+  * TypeScript is not covered: a TypeScript project that builds has a `tsconfig.json`. A
+    first version reported TypeScript files with no `tsconfig.json` above them, and it
+    fired on a lone `.d.ts` runtime file and on the TypeScript samples.
+  * The minimum of 20: without it, every annotated eval task, example project and lone
+    runtime file was reported (8 test failures).
+* **Measured:**
+
+  | Project | TYPE002 |
+  |---|---|
+  | MetaList | none: it now configures `[tool.mypy]` |
+  | ShockHarness | 1: 2,226 of 2,226 functions annotated, no checker |
+  | Corpus copy | 1: the copied packages lost their own `pyproject.toml` |
+
+* **Tests:** `tests/unit/test_type002.py` (9 tests): one finding with the counts; five
+  ways of configuring a checker; a pyproject without a checker table; the share, the
+  minimum and test files not counting; the loosenings. Rule lists and an inventory row
+  were updated.
+* **Open:** ShockHarness reports itself. Configuring mypy here means a new dev
+  dependency, which is Tom's call.

@@ -111,6 +111,10 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "EXC005 is exact once every covered file was analyzed: violation; a boundary whose "
         "files were not all analyzed is not judged at all",
     ),
+    ("rules/type_coverage.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "TYPE002 is exact on the counts and the configuration files it reads: violation",
+    ),
     ("rules/magic_numbers.py", "_magic005_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "MAGIC005 is exact on the syntax (the literal's length or value is computed): violation",

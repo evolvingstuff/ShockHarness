@@ -41,6 +41,7 @@ from shockharness.ir.javascript_strings import collect_javascript_strings
 from shockharness.ir.javascript_verification import collect_javascript_verification
 from shockharness.ir.model import (
     MODULE_SCOPE,
+    NO_ANNOTATIONS,
     AsyncFacts,
     CatalogFacts,
     Comment,
@@ -309,6 +310,7 @@ def _extract_facts(
         dom=collect_javascript_floating(source, root),
         receivers=collect_javascript_receivers(source, root),
         disguises=collect_javascript_disguises(source, root),
+        annotations=NO_ANNOTATIONS,  # TypeScript is checked by tsc where a tsconfig exists
         parse_failure=None,
     )
 

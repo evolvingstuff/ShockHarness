@@ -539,6 +539,14 @@ report_cast = true
 report_non_null = true
 # # type: ignore (Python); @ts-ignore, @ts-expect-error, @ts-nocheck (TypeScript).
 report_type_ignore = true
+# TYPE002 (decision 33): Python annotations no type checker verifies. Reported when at
+# least this share of the production functions carry an annotation and no Python checker
+# (mypy, pyright, basedpyright, pyre, ty) is configured at the root...
+annotated_share = 0.5
+# ...and at least this many are annotated: a script or a small tool is not reported.
+min_annotated_functions = 20
+# "review" (default), "warning" or "error".
+type002_severity = "review"
 
 [tool.shockharness.rules.sleep]            # SLEEP001
 enabled = true

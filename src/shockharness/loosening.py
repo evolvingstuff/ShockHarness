@@ -54,6 +54,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.magic_numbers.named_constant_definitions": ("report", "allow"),
     "rules.magic_numbers.magic004_severity": ("error", "warning", "review"),
     "rules.magic_numbers.magic005_severity": ("error", "warning", "review"),
+    "rules.types.type002_severity": ("error", "warning", "review"),
     "complexity.fan_out_severity": ("warning", "review"),
     "rules.stubs.severity": ("error", "warning", "review"),
     "rules.assertions.severity": ("error", "warning", "review"),
@@ -88,6 +89,8 @@ THRESHOLDS = (
     "complexity.npath_warn",
     "complexity.fan_out_warn",
     "complexity.max_lines_warn",
+    "rules.types.annotated_share",  # TYPE002: a higher share needed before it reports
+    "rules.types.min_annotated_functions",
 )
 INCLUDE_KEY = "include"
 EXCLUDE_KEY = "exclude"
@@ -166,13 +169,17 @@ def _ordered(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosen
     return found
 
 
+def _number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
 def _thresholds(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[Loosening]:
     found: list[Loosening] = []
     for key in THRESHOLDS:
         if not has_key(before, key) or not has_key(after, key):
             continue
         old, new = value_at(before, key), value_at(after, key)
-        if isinstance(old, int) and isinstance(new, int) and new > old:
+        if _number(old) and _number(new) and new > old:
             found.append(
                 Loosening(key, f"{key} raised from {old} to {new}: fewer units are reported")
             )

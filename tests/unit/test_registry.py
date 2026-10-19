@@ -74,6 +74,7 @@ IMPLEMENTED = {
     "PROCESS001",
     "RESULT001",
     "TYPE001",
+    "TYPE002",
     "SLEEP001",
     "RETRY001",
     "BATCH001",

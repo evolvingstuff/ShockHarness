@@ -760,6 +760,9 @@ report_any = true                     # Any / any
 report_cast = true                    # cast(...); x as T, <T>x (not as const)
 report_non_null = true                # x! (TypeScript)
 report_type_ignore = true             # # type: ignore; @ts-ignore, @ts-expect-error, @ts-nocheck
+annotated_share = 0.5                 # TYPE002: this share of production functions annotated...
+min_annotated_functions = 20          # ...and at least this many, with no type checker configured
+type002_severity = "review"           # TYPE002's severity
 
 [tool.shockharness.rules.sleep]       # SLEEP001, review
 python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]

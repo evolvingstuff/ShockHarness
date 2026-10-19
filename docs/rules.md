@@ -1026,6 +1026,32 @@ BaseModal.shouldCloseOnClickOutside, which already answers yes: remove the
 override`). Classes are matched by the last name of each base (approximate).
 Severity `rules.stubs.stub003_severity` (`review` by default).
 
+### TYPE002: Python annotations that nothing checks (review)
+
+Spec 21.1 decision 33. An annotation is a claim, and without a type checker nothing
+verifies it: a wrong one reads as true to the next reader and to an agent. TYPE002
+reports once per run when both of these hold:
+
+* at least `rules.types.annotated_share` (0.5) of the production functions and methods
+  where the rule applies, and at least `rules.types.min_annotated_functions` (20) of them,
+  carry an annotation (a parameter other than `self`/`cls`, or the return);
+* the analysis root configures no Python checker: `mypy.ini`, `.mypy.ini`,
+  `pyrightconfig.json`, `.pyre_configuration`, `ty.toml`, a `[tool.mypy]`,
+  `[tool.pyright]`, `[tool.basedpyright]`, `[tool.pyre]` or `[tool.ty]` table in
+  `pyproject.toml`, or `[mypy]` in `setup.cfg` or `tox.ini`.
+
+The finding sits on the first annotated function of the lexically first file and gives
+the counts. Severity `rules.types.type002_severity`, `review` by default. Raising the share
+or the minimum, or lowering the severity, is a VERIFY003 loosening.
+
+It reads configuration only: a configured checker that CI never runs is not seen, and
+neither is one configured outside the root. TypeScript is not covered, because a
+TypeScript project that builds has a `tsconfig.json`. TYPE001's message is unchanged: it is
+cached per file, and a checker configured elsewhere is not part of that file's key.
+
+**Measured:** MetaList configures `[tool.mypy]` (since the backlog's measurement) and gets
+no finding. ShockHarness itself gets one: 2,226 of 2,226 functions annotated, no checker.
+
 ### ROLE001: is code classified as a test really a test? (warning; review for empty test files)
 
 The test role is an exemption: the H3 and H5 rules apply to production files

@@ -385,3 +385,44 @@ def tool_loosenings(before: ToolSettings, after: ToolSettings) -> list[ToolLoose
         *_fail_under(before, after),
         *_eslint_loosenings(before, after),
     ]
+
+
+# -- type checkers (TYPE002, decision 33) ---------------------------------------------------
+
+# A Python type checker's own configuration files at the analysis root.
+PYTHON_CHECKER_FILES = (
+    "mypy.ini",
+    ".mypy.ini",
+    "pyrightconfig.json",
+    ".pyre_configuration",
+    "ty.toml",
+)
+# Their tables in pyproject.toml ([tool.mypy], ...), and mypy's section in setup.cfg / tox.ini.
+PYTHON_CHECKER_TABLES = ("mypy", "pyright", "basedpyright", "pyre", "ty")
+CHECKER_INI_FILES = ("setup.cfg", "tox.ini")
+MYPY_SECTION = "mypy"
+PYPROJECT = "pyproject.toml"
+
+
+def python_checkers_in(name: str, text: str) -> tuple[frozenset[str], str | None]:
+    """The Python type checkers ``pyproject.toml``, ``setup.cfg`` or ``tox.ini`` configures,
+    or the error that makes the file unreadable."""
+    if name == PYPROJECT:
+        # Boundary (declared in .shockharness.toml): a tool's configuration file is external input.
+        try:
+            document = tomllib.loads(text)
+        except tomllib.TOMLDecodeError as exc:
+            return frozenset(), f"{name} is not valid TOML: {exc}"
+        tool = _table(document, "tool")
+        if tool is None:
+            return frozenset(), None
+        return frozenset(t for t in PYTHON_CHECKER_TABLES if _table(tool, t) is not None), None
+    parser = configparser.ConfigParser(interpolation=None)
+    # Boundary (declared in .shockharness.toml): a tool's configuration file is external input.
+    try:
+        parser.read_string(text, source=name)
+    except configparser.Error as exc:
+        return frozenset(), f"{name} is not a valid INI file: {exc}"
+    if parser.has_section(MYPY_SECTION):
+        return frozenset({MYPY_SECTION}), None
+    return frozenset(), None
