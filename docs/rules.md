@@ -85,7 +85,7 @@ lists policy-integrity findings first, under their own heading.
 
 ## Implemented
 
-### MAGIC001: numeric literal outside 0/1 (error, Python and JavaScript)
+### MAGIC001: numeric literal outside 0/1 (error, Python, JavaScript and C#)
 
 Every numeric literal in executable code must be exactly `0` or `1`.
 
@@ -111,6 +111,7 @@ of a module-level named constant definition is marked by the adapters:
 | Covered (marked) | Not covered (always reported) |
 |---|---|
 | Python: `MAX_PAGES = 8`, `_PORT_WAIT_SECONDS = 10.0`, `NEGATIVE = -8` (one UPPER_SNAKE_CASE target, leading underscores allowed), `wait: Final = 2.5`, `limit: t.Final[int] = 7` (any simple name annotated `Final`), `MAX_RETRIES: int = 5`, `CHUNK_BYTES = 64 * 1024` (literal arithmetic, 0.3.0: every literal of the expression); a statement of the module body itself | `LIMITS = {"retries": 3}` and `SIZES = [8, 16]` (containers), `TIMEOUT = BASE * 2` and `SIZE = int(x) * 2` (a name or call in the expression: every literal), `A = B = 9` (chained targets), `lower = 4`, class bodies, function bodies, `if ...: NESTED = 11` at module level |
+| C# (G1, decision 40): `const int Size = 8;` (any name), `static readonly Vector2 Spawn = new(64, 32);` (a Godot value type of literals), `[Export] public float Speed { get; set; } = 300f;`, `Layer = 1 << 3` in an enum | a local `const` in a method, an instance field (`Vector2 _p = new(120, -110);`), `static readonly Vector2 O = new(Speed, 2);` (a name in it), anything else |
 | JavaScript: `const MAX_PAGES = 8;`, `export const _SETTLE_MS = -400;`, `const MAX_MS = 30 * 60 * 1000;` (literal arithmetic, 0.3.0), each declarator of `const A = 1, TWO = 2;` | `let maxPages = 8;`, `var LIMIT = 8;`, `const camel = 8;`, `const SIZES = [8, 16];`, `const T = BASE * 2;`, a `const` inside a function or block, `export default 5;` |
 
 **Literal arithmetic (0.3.0).** The value may also be an expression built only

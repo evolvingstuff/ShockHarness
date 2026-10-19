@@ -445,6 +445,7 @@
               "python",
               "javascript",
               "typescript",
+              "csharp",
               "unsupported"
             ]
           },

@@ -6,6 +6,28 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **C# (Godot .NET), milestone G1** (spec 21.1 decision 40, `docs/proposal-godot.md`).
+  `.cs` files are parsed with `tree-sitter-c-sharp` (a new runtime dependency, approved
+  2026-10-19) and checked by MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002. The
+  other rules do not run on C# yet: `coverage.rules_not_applicable` lists them, and the
+  text report warns. Named numbers in C#: `const` fields, `static readonly` and
+  `[Export]` members of literal arithmetic or of a Godot value type built from literals
+  (`static readonly Vector2 Spawn = new(64, 32);`), and explicit enum values.
+  - **The default `include` adds `**/*.cs`**, and the default `exclude` adds
+    `**/.godot/**`, `**/bin/**/*.cs` and `**/obj/**/*.cs`. A C# repository on the defaults
+    now gets findings instead of unsupported-source warnings; set `include` to keep the
+    old scope.
+  - `coverage.rules_not_applicable`: per analyzed language, the implemented rules that
+    never run on it.
+
+### Fixed
+- **A rule's `languages` is now honored for every family.** The per-file phase ran
+  MAGIC001/MAGIC004/MAGIC005, EXC001-EXC003, DEF001-DEF006, the complexity rules and
+  ROLE001 on any file, and the cross-file phases read every file's facts, whatever the
+  rule's languages; this changed nothing while every language had every family. No
+  Python, JavaScript or TypeScript verdict changes.
+
+### Added
 - **DUP001 and DUP002 (review, opt-in, Python and JavaScript): helpers written out in
   several files, and copies that have drifted apart** (spec 21.1 decision 39). DUP001:
   identical function bodies in two or more files, compared with comments, layout and

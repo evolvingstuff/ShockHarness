@@ -158,10 +158,12 @@ rule IDs, and unsupported include extensions are **errors**, never warnings.
 [tool.shockharness]
 profile = "strict"                      # "strict" | "recommended" | "minimal"; see Profiles
 include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs",
-           "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]   # TypeScript since H-TS
+           "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts",   # TypeScript since H-TS
+           "**/*.cs"]                   # C# since G1 (Godot .NET)
 exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**",
            "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**",
-           "**/*.d.ts"]                 # declaration files hold types only
+           "**/*.d.ts",                 # declaration files hold types only
+           "**/.godot/**", "**/bin/**/*.cs", "**/obj/**/*.cs"]   # Godot editor and .NET build output
 parse_errors = "fail"                   # "fail" -> exit 3 on any unparseable file; "warn" -> reported, gate unaffected
 unsupported_sources = "warn"            # an included file no adapter parses (.pyx, .vue): "fail" -> exit 3, "warn" -> listed, "ignore" -> counted only ("ignore" in minimal)
 follow_symlinks = false                 # never leave the root through a link unless asked

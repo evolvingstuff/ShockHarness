@@ -12,6 +12,7 @@ Per-file analysis                                                      (analysis
     Python: ast + tokenize                                             (ir/python.py, ir/python_catches.py, ir/python_defaults.py)
     JavaScript: tree-sitter + tree-sitter-javascript                   (ir/javascript.py, ir/javascript_catches.py, ir/javascript_defaults.py)
     TypeScript: tree-sitter + tree-sitter-typescript (.tsx: its TSX grammar), read by the JavaScript extractors
+    C# (G1): tree-sitter + tree-sitter-c-sharp; literals, definitions, units  (ir/csharp.py, ir/csharp_functions.py)
     |
 Rules over facts -> Findings                                           (rules/magic_numbers.py, rules/exceptions.py, rules/defaults.py)
 Per-unit metrics over the control tree -> CPLX001-CPLX004, CPLX006     (complexity/{cyclomatic,cognitive,nesting,npath,size,metrics}.py, rules/complexity.py)

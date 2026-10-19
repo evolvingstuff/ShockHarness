@@ -5831,3 +5831,136 @@ logic) and 3 differ on purpose. Cost: the warm run gains 0.4 s; the cold run abo
 (`python_usage._chained` into `python_receivers.is_dotted`, and its `_decorator_name`
 into `python_receivers.decorator_name`). ShockHarness has about 30 more exact groups from
 earlier work; the rules stay off here until those are merged, Tom's call.
+
+## Milestone G1: C# (Godot .NET), the adapter and facts — DONE (2026-10-19)
+
+C# as a fourth language, for Tom's Godot prototype (TheLivingLabyrinth), as proposed in
+`docs/proposal-godot.md` and recorded in spec 21.1 decision 40 and 21.2 (G1-G4). Tom
+approved the design, the dependency (`tree-sitter-c-sharp`), syntax-only analysis with no
+Roslyn, and the corpus clones on 2026-10-19; he left the game-number and default-include
+questions to my judgment (decisions 3 and 4 below).
+
+### What was built
+
+* **Parsing** (`ir/csharp.py`): `tree-sitter-c-sharp` 0.23.5 (language ABI 15). Two
+  rewrites keep every line and column: the `#if` branch of each conditional is kept and
+  the other branches and the directive lines blanked; and, only when a file fails to
+  parse, the `in`/`ref`/`out` modifiers of an explicit lambda parameter list are blanked
+  and the file parsed again (the released grammar rejects `(in T x) =>`).
+* **Facts**: numeric literals (`ir/csharp_numbers.py`: suffixes, separators, hex and
+  binary), named definitions, comments, and function facts (`ir/csharp_functions.py`):
+  units for types, methods, constructors, accessors, expression-bodied properties, local
+  functions, lambdas and anonymous methods; control trees with `else if`, switch
+  statements and switch expressions as switches, pattern `and`/`or` as boolean operators,
+  `??` and `??=`, catches with filters, `goto` as a labeled jump; calls, locals
+  (parameters, declarations, pattern designations, `out var`), writes, `async`, iterators.
+* **Plumbing**: `registry.CSHARP`, outside `ALL_LANGUAGES`; `SUPPORTED_LANGUAGES`;
+  `WITH_CSHARP` on MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002; `.cs` in
+  discovery and the default `include`; `**/.godot/**`, `**/bin/**/*.cs` and
+  `**/obj/**/*.cs` excluded; `**/*.g.cs` and `**/*.Designer.cs` generated;
+  `**/*Tests.cs` and `**/*.Tests/**` test; the report schema's language enum.
+* **Language gating, found by the audit the proposal promised.** The 40 two-way language
+  branches were not the whole story: the per-file phase never checked a rule's
+  `languages` for MAGIC001/MAGIC004/MAGIC005, EXC001-EXC003, DEF001-DEF006, the unit
+  complexity rules, CPLX005 or ROLE001, because every language had them. It now does
+  (`registry.not_applicable_ids`), and the cross-file builders (ROLE001, the flow files
+  of INPUT001/ASSERT/PROV001/GUARD001, MAGIC002, STUB003, DOM002, DEAD, property
+  contracts) take only files of a language the family covers. Without this a C# file
+  crashed the exception rules (`BOUNDARY_LANGUAGES` has no C#) and the dataflow index,
+  and property contracts would have parsed C# as JavaScript. The call graph's built-in
+  names are explicit per language and raise for an unknown one.
+* **Coverage**: `coverage.rules_not_applicable` lists, per analyzed language, the
+  implemented rules that never run on it, and the text report warns for a language whose
+  support is partial (C#), naming them.
+
+### Decisions (mine; review these)
+
+1. **C# stays out of `ALL_LANGUAGES`**; a family lists it once it has C# facts. The
+   report says which rules did not look at a C# file.
+2. **The `#if` branch is kept.** Godot code puts editor-only code under `#if TOOLS`,
+   which is code worth checking; `#else` branches are not analyzed (a limitation, in
+   docs/limitations.md).
+3. **Game numbers (Tom: "use your best judgment").** Named definitions are `const`
+   fields, `static readonly` fields and `[Export]` fields and auto-properties whose
+   value is literal arithmetic or a Godot value type built from literals (`new(64, 32)`),
+   and explicit enum values, with `<<` accepted for flags. The `[Export]` initializer
+   counts because the editor is where the value is configured; the value types count
+   because C# cannot make them `const`. Any name qualifies (C# constants are
+   PascalCase). Numbers in attribute arguments and local `const`s stay findings, as in
+   Python. Measured: in TheLivingLabyrinth's LookTest.cs about half the findings are
+   `Vector2`/`Color` arguments in method bodies (a visual prototype); nothing else is
+   relaxed until the game has more code.
+4. **`**/*.cs` is in the default `include` (Tom: "use your best judgment").** As for
+   TypeScript, support means analysis; a C# repository on the defaults now gets
+   MAGIC001 and complexity findings instead of unsupported-source warnings. The exclusions
+   are scoped to `.cs` so a Python `bin/` directory is still analyzed.
+5. **`addons/` is not a default vendor glob**: Odoo keeps its own code in `addons/`. The
+   limitations say to exclude Godot plugins by hand.
+6. **C# units are in the call graph** (same-file resolution only), so `metrics` covers
+   them; no C# rule reads the graph yet.
+
+### Evidence (2026-10-19, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts   # cold, then warm
+gate: PASS  193 findings  (cache hits 0 / misses 223, then 223 / 0)
+
+$ pytest -q        # CPython 3.14.7; 3.11.11, 3.12.8, 3.13.1 in uv environments
+1410 passed        (3.14); 1409 passed, 1 skipped (3.11, 3.12, 3.13: a 3.14-only test)
+
+$ python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
+consumer upgrade check: 2 example(s), 14 step(s), 0 failed
+```
+
+Determinism: three `check src tests scripts --format json --no-cache` runs, and three on
+TheLivingLabyrinth, are byte-identical with `coverage.cache` removed.
+
+**No verdict changes for Python, JavaScript or TypeScript.** The committed tool (1718047)
+and this one, run over the same trees with every `.cs` finding set aside, give identical
+findings and exits: ShockHarness itself (192), MetaList (2,207), TheLivingLabyrinth's
+Python tools (247). The self-scan grows by one finding: CPLX006 on the 97-line `Kind`
+class of `ir/csharp_nodes.py`. `javascript_nodes.py` has a CPLX006 override for the same
+shape; an override loosens the gate, so it waits for Tom's go-ahead (decision 35).
+
+**C# measured** (G1 rules only; scratch clones, never committed): 0 parse failures in
+424 files, about 39,000 lines. Without the two rewrites: 22 failures (19 in GameDemo, all
+`(in T x) =>` lambdas; 3 in Sakuga-Engine's vendored LiteNetLib, all `#if`/`#else`).
+Facts for the four code bases take about one second.
+
+| code base | `.cs` files | lines | MAGIC001 | CPLX001-004, 006 |
+|---|---|---|---|---|
+| TheLivingLabyrinth (Tom's game, LookTest.cs) | 1 | 291 | 133 | 4 (`_Process`, `_UnhandledInput`) |
+| godot-demo-projects `mono/` (MIT) | 33 | 3,015 | 111 | 13 |
+| chickensoft-games/GameDemo (MIT) | 163 | 10,658 | 40 | 1 |
+| NoisyChain/Sakuga-Engine (MIT) | 227 | 25,022 | 689 | 149 |
+
+Where the reported numbers sit (definitions included in this count): in LookTest.cs, 69
+of 133 are `Vector2`/`Color` constructor arguments in method bodies and 42 arithmetic; in
+the corpus, mostly arithmetic, comparisons and initializers (Sakuga-Engine also 84 in
+attribute arguments).
+
+New tests: `tests/unit/test_csharp.py` (28: number values, both rewrites and their
+positions, parse failure, named definitions, MAGIC001 and `"report"`, 0/1/-1 spellings,
+suppressions, unit names and kinds, parameters/async/iterators/calls/locals/writes,
+control trees computed by hand (cyclomatic 17, cognitive 17), discovery and exclusions,
+complexity rules, rules not applicable and coverage); five C# shapes at depth 2000 in
+`tests/unit/test_deep_sources.py`; the C# role globs in `tests/unit/test_file_roles.py`.
+
+### Failures observed during development (and what was done)
+
+* The first lambda-modifier pattern also blanked `in`/`out` in ordinary calls
+  (`F(in x, out var y)`): its type class allowed commas. It now applies only inside a
+  parenthesized list directly followed by `=>`.
+* Keeping the directive lines left LiteNetLib's `LiteNetManager.cs` (Sakuga-Engine)
+  unparseable; blanking them as the preprocessor does fixed it.
+* Three expected values in the first tests were wrong (an `#if` line keeps its length as
+  spaces; a cognitive count; an enum's line); each was recomputed by hand before the
+  test was changed.
+* The self-gate caught `[-1]` indexes, a `group(2)`, and five `x if x is not None else y`
+  fallbacks in the new code; the larger functions were split to stay under the
+  complexity warnings.
+* Another session merged two identical `elif` branches in `csharp_functions.py` while it
+  was being written (its new duplicate-code rule); kept.

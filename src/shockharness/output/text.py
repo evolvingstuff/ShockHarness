@@ -25,6 +25,7 @@ from shockharness.gate import GateResult, advisory_line
 from shockharness.gating.diff import STATUS_UNCHANGED, DiffReport
 from shockharness.history.hotspots import STATUS_AVAILABLE as HISTORY_AVAILABLE
 from shockharness.report import Report
+from shockharness.rules import registry
 from shockharness.rules.complexity import is_cycle_finding
 from shockharness.rules.registry import CATEGORY_POLICY, PYTHON, RuleSpec, category_of
 from shockharness.rules.verification import COVERAGE_DISABLED as VERIFICATION_DISABLED
@@ -163,6 +164,20 @@ CONTRACTS_WORDS = {
 }
 
 
+def _partial_language_lines(coverage: Mapping[str, Any]) -> list[str]:
+    """A warning per analyzed language whose rule coverage is still partial (G1: C#)."""
+    lines: list[str] = []
+    for language, rules in coverage["rules_not_applicable"].items():
+        if language not in registry.PARTIAL_LANGUAGES:
+            continue
+        files = coverage["languages"][language]["files"]
+        lines.append(
+            f"  warning: {files} {language} file(s): {len(rules)} implemented rule(s) do not "
+            f"run on {language} yet and found nothing there: {', '.join(rules)}"
+        )
+    return lines
+
+
 def _cache_lines(cache: Mapping[str, Any]) -> list[str]:
     if cache["status"] != CACHE_ENABLED:
         return [f"  cache: {cache['status']} ({cache['reason']})"]
@@ -252,6 +267,7 @@ def _unanalyzed_rule_lines(coverage: Mapping[str, Any]) -> list[str]:
         lines.append(
             "  rules disabled by config: " + ", ".join(coverage["rules_disabled_globally"])
         )
+    lines.extend(_partial_language_lines(coverage))
     return lines
 
 

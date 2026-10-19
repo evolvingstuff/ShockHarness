@@ -1,6 +1,6 @@
 # Godot support: C# as a fourth language
 
-Status: **proposed (2026-10-19), waiting for Tom's decisions** (questions at the end).
+Status: **accepted (Tom, 2026-10-19); G1 built** (spec 21.1 decision 40, STATUS.md). Tom's answers: 1, 2, 5 yes; 3 and 4 left to my judgment (both yes, as recommended); 6 the game is `~/Desktop/TheLivingLabyrinth`; 7 the recommended order.
 Tom's Godot prototype is C# on Godot .NET. Its geometry and image-processing tools are
 Python, which ShockHarness already covers, so nothing needs adding for them. Nothing has
 been built and no package has been added. A first draft of this document targeted

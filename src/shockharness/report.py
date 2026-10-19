@@ -17,7 +17,7 @@ role of the file they are in, every role listed).
 """
 
 import platform
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -158,6 +158,7 @@ def _coverage(
         "rules_implemented": [r.rule_id for r in registry.implemented_rules()],
         "rules_not_implemented": [r.rule_id for r in registry.RULES if not r.implemented],
         "rules_disabled_globally": disabled_globally,
+        "rules_not_applicable": _not_applicable(by_language),
         "rules_needing_base_revision": [r.rule_id for r in registry.base_revision_rules()],
         VERIFICATION_COVERAGE: not_applicable_coverage(config.section(VERIFICATION_SECTION)),
         "files_analyzed": sum(1 for f in files if not f.failed),
@@ -180,6 +181,16 @@ def _coverage(
             "JavaScript regular-expression internals and string contents are not analyzed for "
             "numeric policy.",
         ],
+    }
+
+
+def _not_applicable(languages: Iterable[str]) -> dict[str, list[str]]:
+    """Per analyzed language, the implemented rules that never run on its files (G1: a
+    C# file is not clean for a rule that does not look at C#)."""
+    return {
+        language: [r.rule_id for r in registry.implemented_rules() if language not in r.languages]
+        for language in sorted(languages)
+        if language in registry.SUPPORTED_LANGUAGES
     }
 
 

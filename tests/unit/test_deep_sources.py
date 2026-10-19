@@ -42,6 +42,26 @@ JAVASCRIPT_SHAPES = {
     "arrows": "export const f = " + "() => " * JAVASCRIPT_DEPTH + "1;\n",
 }
 
+CSHARP_SHAPES = {
+    "binary": "class C { int G(int a) { return " + " + ".join(["a"] * JAVASCRIPT_DEPTH) + "; } }\n",
+    "calls": "class C { object V = "
+    + "F(" * JAVASCRIPT_DEPTH
+    + "1"
+    + ")" * JAVASCRIPT_DEPTH
+    + "; }\n",
+    "ifs": "class C { int G(int a) {\n"
+    + "if (a > 0) {\n" * JAVASCRIPT_DEPTH
+    + "return a;\n"
+    + "}\n" * JAVASCRIPT_DEPTH
+    + "return 0; } }\n",
+    "lambdas": "class C { object F = " + "() => " * JAVASCRIPT_DEPTH + "1; }\n",
+    "switches": "class C { int G(int a) => "
+    + "a switch { 0 => " * JAVASCRIPT_DEPTH
+    + "0"
+    + ", _ => 1 }" * JAVASCRIPT_DEPTH
+    + "; }\n",
+}
+
 
 @pytest.mark.parametrize("shape", sorted(PYTHON_SHAPES))
 def test_deep_python_is_analyzed(shape: str, strict_config: EffectiveConfig) -> None:
@@ -75,3 +95,9 @@ def test_a_tree_the_parser_cannot_build_is_a_parse_failure(
     assert result.parse_failure.message.startswith(
         "RecursionError: nested too deeply for this interpreter's parser"
     )
+
+
+@pytest.mark.parametrize("shape", sorted(CSHARP_SHAPES))
+def test_deep_csharp_is_analyzed(shape: str, strict_config: EffectiveConfig) -> None:
+    result = analyze_text("Deep.cs", "csharp", CSHARP_SHAPES[shape], strict_config, OPTIONS)
+    assert result.status == "analyzed"

@@ -52,7 +52,7 @@ from shockharness.ir.model import (
     ReceiverObject,
     Span,
 )
-from shockharness.rules.registry import JAVASCRIPT_FAMILY, PYTHON
+from shockharness.rules.registry import CSHARP, JAVASCRIPT_FAMILY, PYTHON
 
 CONFIDENCE_RESOLVED = "resolved"
 CONFIDENCE_PROBABLE = "probable"
@@ -516,7 +516,11 @@ class _Resolution:
 def _builtins_for(language: str) -> frozenset[str]:
     if language == PYTHON:
         return PYTHON_BUILTINS
-    return JAVASCRIPT_GLOBALS
+    if language in JAVASCRIPT_FAMILY:
+        return JAVASCRIPT_GLOBALS
+    if language == CSHARP:
+        return frozenset()  # G1: a C# call of an unknown name stays unresolved
+    raise ValueError(f"no built-in names for language {language!r}")
 
 
 class _Resolver:

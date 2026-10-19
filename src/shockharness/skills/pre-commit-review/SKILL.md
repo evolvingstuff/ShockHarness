@@ -196,8 +196,8 @@ pip install 'shockharness==0.17.0'                        # Python project: keep
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
-Python, JavaScript or TypeScript. Its only runtime dependencies are `tree-sitter`,
-`tree-sitter-javascript` and `tree-sitter-typescript`. The pin that CI installs must live where an updater
+Python, JavaScript, TypeScript or C#. Its only runtime dependencies are `tree-sitter`,
+`tree-sitter-javascript`, `tree-sitter-typescript` and `tree-sitter-c-sharp`. The pin that CI installs must live where an updater
 can read it (`pyproject.toml`, a requirements file, or the workflow input in
 step 4), never only inside a shell command.
 

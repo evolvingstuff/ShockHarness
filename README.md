@@ -7,7 +7,7 @@
 </p>
 
 A strict, deterministic static-analysis quality gate for Python, JavaScript and
-TypeScript.
+TypeScript, with C# (Godot .NET) in progress: numbers, complexity and suppressions so far.
 Its one idea: unexpected failures, missing information, and unexplained
 decisions must not silently become apparently valid program behavior.
 
@@ -272,8 +272,8 @@ pip install 'shockharness==0.17.0'                        # Python project: keep
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
-Python, JavaScript or TypeScript. Its only runtime dependencies are `tree-sitter`,
-`tree-sitter-javascript` and `tree-sitter-typescript`. The pin that CI installs must live where an updater
+Python, JavaScript, TypeScript or C#. Its only runtime dependencies are `tree-sitter`,
+`tree-sitter-javascript`, `tree-sitter-typescript` and `tree-sitter-c-sharp`. The pin that CI installs must live where an updater
 can read it (`pyproject.toml`, a requirements file, or the workflow input in
 step 4), never only inside a shell command.
 

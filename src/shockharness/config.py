@@ -130,6 +130,7 @@ SUPPORTED_EXTENSIONS: Mapping[str, str] = {
     ".tsx": registry.TYPESCRIPT,
     ".mts": registry.TYPESCRIPT,
     ".cts": registry.TYPESCRIPT,
+    ".cs": registry.CSHARP,
 }
 
 

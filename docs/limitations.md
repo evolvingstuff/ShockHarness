@@ -421,6 +421,40 @@ Stated so that a clean report is never read as more than it is.
 * Declaration files (`**/*.d.ts`) are excluded by default; listing one
   explicitly analyzes it like any TypeScript file.
 
+## C# (Godot .NET, milestone G1)
+
+* **Partial coverage.** G1 runs MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 on
+  `.cs` files. Every other rule has no C# facts yet and does not run there:
+  `coverage.rules_not_applicable.csharp` lists them, and the text report prints a warning
+  naming them. A C# file is never clean for a rule that did not look at it. Exceptions,
+  defaults and results follow in G2, the Godot project model and dead code in G3 (spec
+  21.2).
+* **Syntax only**, as for JavaScript: no Roslyn, no .NET at run time, no semantic model.
+  Types, overloads and the members Godot's source generators add (`MethodName`,
+  `SignalName`, `PropertyName`) are not known; generated files are not on disk.
+* **Conditional compilation.** Before parsing, the `#if` branch of each conditional is
+  kept and the `#elif`/`#else` branches and directive lines are blanked, as the compiler
+  does when every condition holds. Code only in an `#else` branch is not analyzed.
+  Lines and columns are unchanged.
+* **Lambda parameter modifiers.** The pinned grammar (0.23.5) rejects `(in T x) => ...`.
+  When a file fails to parse, the `in`/`ref`/`out` of such lambda parameters is blanked
+  and the file parsed again; a file that still fails is a parse failure.
+* **Named definitions** for MAGIC001: a `const` field (literal arithmetic, `<<`
+  included), a `static readonly` field or an `[Export]` field or auto-property whose value
+  is literal arithmetic or a Godot value type built from it (`new Vector2(64, 32)`,
+  `new(1, 0.5f, 0)` for `Vector2`, `Vector2I`, `Vector3`, `Vector3I`, `Vector4`,
+  `Vector4I`, `Color`, `Rect2`, `Rect2I`, `Quaternion`, `Plane`), and an explicit `enum`
+  value. A local `const` inside a method is not one, as Python's function-level
+  constants are not. Numbers in attribute arguments are executable code, as Python
+  decorator arguments are. Values in `.tscn` scene files are data and never scanned.
+* **Units** are named within the file, without the namespace (`Player._Ready`,
+  `Player.Health.set`). `partial` declarations of one class in several files are separate
+  classes until G3's type index merges them.
+* **The call graph** reads C# units but resolves only same-file names; a C# call of any
+  other name is unresolved.
+* `addons/` (Godot plugins) is analyzed like the project's own code; add
+  `"addons/**"` to `exclude` to leave third-party plugins out.
+
 ## ROLE001
 
 * Only resolved module edges count: an import the module graph cannot resolve

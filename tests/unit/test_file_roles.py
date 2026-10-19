@@ -24,6 +24,8 @@ DEFAULT_GLOB_EXAMPLES: list[tuple[str, str, str]] = [
     ("generated", "**/generated/**", "pkg/generated/models.py"),
     ("generated", "**/*_pb2.py", "api/service_pb2.py"),
     ("generated", "**/*.min.js", "static/app.min.js"),
+    ("generated", "**/*.g.cs", "obj/Debug/net8.0/GlobalUsings.g.cs"),
+    ("generated", "**/*.Designer.cs", "Properties/Resources.Designer.cs"),
     ("vendor", "**/vendor/**", "vendor/lib/x.js"),
     ("vendor", "**/third_party/**", "src/third_party/y.py"),
     ("config", "conftest.py", "conftest.py"),
@@ -57,6 +59,8 @@ DEFAULT_GLOB_EXAMPLES: list[tuple[str, str, str]] = [
     ("test", "**/*.spec.tsx", "src/ui/a.spec.tsx"),
     ("test", "**/*.test.mts", "src/a.test.mts"),
     ("test", "**/*.spec.mts", "src/a.spec.mts"),
+    ("test", "**/*Tests.cs", "src/PlayerTests.cs"),
+    ("test", "**/*.Tests/**", "Game.Tests/PlayerSpec.cs"),
     ("docs", "docs/**", "docs/conf.py"),
 ]
 

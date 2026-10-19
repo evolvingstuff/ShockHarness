@@ -54,6 +54,7 @@ from shockharness.discovery import DiscoveredFile, DiscoveryResult, discover
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
+from shockharness.ir.csharp import extract_csharp_facts
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
 from shockharness.ir.model import (
     NO_VERIFICATION,
@@ -501,6 +502,8 @@ def _extract(language: str, source: SourceText, filename: str) -> ModuleFacts:
         return extract_javascript_facts(source, filename)
     if language == registry.TYPESCRIPT:
         return extract_typescript_facts(source, filename)
+    if language == registry.CSHARP:
+        return extract_csharp_facts(source, filename)
     raise ValueError(f"no parser adapter for language {language!r}")
 
 
@@ -585,6 +588,9 @@ def prepare_text(
     role = file_role(relative_path, config)
     disabled = _script_disable(source, _disabled_rules(relative_path, role, config))
     disabled_ids = {d.rule_id for d in disabled}
+    # A rule whose family has no facts for this language never runs on it (G1: C#); the
+    # report lists it under coverage.rules_not_applicable instead.
+    disabled_ids |= registry.not_applicable_ids(language)
 
     if facts.parse_failure is not None:
         return _failed(
@@ -891,7 +897,10 @@ def role_findings(
             applies=registry.ROLE001.rule_id in p.rules_applied,
         )
         for p in pendings
-        if not p.failed and p.facts is not None and p.source is not None
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.ROLE001.languages
     ]
     return run_role_integrity(files, graph, config.section(registry.ROLE_INTEGRITY_SECTION))
 
@@ -917,7 +926,10 @@ def _flow_files(pendings: Sequence[PendingFile], rule: registry.RuleSpec) -> lis
             applies=rule.rule_id in p.rules_applied,
         )
         for p in pendings
-        if not p.failed and p.facts is not None and p.source is not None
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in rule.languages
     ]
 
 
@@ -971,7 +983,10 @@ def string_findings(
             applies=registry.MAGIC002.rule_id in p.rules_applied,
         )
         for p in pendings
-        if not p.failed and p.facts is not None and p.source is not None
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.MAGIC002.languages
     ]
     if not any(file.applies for file in files):
         return {}
@@ -994,7 +1009,10 @@ def stub_findings(
             applies=registry.STUB003.rule_id in p.rules_applied,
         )
         for p in pendings
-        if not p.failed and p.facts is not None and p.source is not None
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.STUB003.languages
     ]
     if not any(file.applies for file in files):
         return {}
@@ -1016,7 +1034,10 @@ def dom_findings(
             applies=registry.DOM002.rule_id in p.rules_applied,
         )
         for p in pendings
-        if not p.failed and p.facts is not None and p.source is not None
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.DOM002.languages
     ]
     if not any(file.applies for file in files):
         return {}
@@ -1069,7 +1090,7 @@ def dead_findings(
             classes=p.facts.receivers.classes,
         )
         for p in pendings
-        if p.facts is not None and p.source is not None
+        if p.facts is not None and p.source is not None and p.language in registry.DEAD001.languages
     ]
     runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
     libraries = [str(m) for m in runtime if str(m).endswith(RUNTIME_SUFFIXES)]
@@ -1108,7 +1129,11 @@ def contract_findings(
     analyzed files, or from the project's files under the root for the others. The one
     cross-file phase the cache covers: its findings are reused while every analyzed file
     and every other file it probed or read is unchanged."""
-    parsed = [p for p in pendings if not p.failed and p.source is not None]
+    parsed = [
+        p
+        for p in pendings
+        if not p.failed and p.source is not None and p.language in registry.PROP001.languages
+    ]
     files: list[ContractFile] = []
     sources: dict[str, tuple[str, SourceText]] = {}
     settings = config.section(registry.PROPERTY_CONTRACTS_SECTION)

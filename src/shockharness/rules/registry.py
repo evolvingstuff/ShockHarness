@@ -18,6 +18,15 @@ JAVASCRIPT = "javascript"
 TYPESCRIPT = "typescript"  # H-TS: parsed with tree-sitter-typescript, judged by the JS rules
 ALL_LANGUAGES = (PYTHON, JAVASCRIPT, TYPESCRIPT)
 JAVASCRIPT_FAMILY = frozenset({JAVASCRIPT, TYPESCRIPT})
+# G1 (spec 21.1 decision 40): C# for Godot .NET, parsed with tree-sitter-c-sharp. It is
+# not in ALL_LANGUAGES: a rule runs on C# only once its family has C# facts and lists it.
+CSHARP = "csharp"
+SUPPORTED_LANGUAGES = (*ALL_LANGUAGES, CSHARP)
+# The rules G1 runs on C#: numbers, unit complexity and suppression comments.
+WITH_CSHARP = SUPPORTED_LANGUAGES
+# Languages whose rule coverage is partial: the text report names the rules that do not
+# run on them (coverage.rules_not_applicable lists them for every language).
+PARTIAL_LANGUAGES = frozenset({CSHARP})
 
 
 @dataclass(frozen=True)
@@ -47,7 +56,7 @@ MAGIC001 = RuleSpec(
     config_section="rules.magic_numbers",
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary="Every numeric literal in executable code must be exactly 0, 1 or -1.",
     rationale=(
         "A bare number carries no contract: nobody can tell whether 30 is a timeout, a "
@@ -299,7 +308,7 @@ SUPP001 = RuleSpec(
     config_section=None,
     default_severity=SEVERITY_ERROR,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A shockharness suppression comment is malformed, names an unknown rule, or lacks a reason."
     ),
@@ -327,7 +336,7 @@ SUPP002 = RuleSpec(
     config_section=None,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary="A suppression comment names a rule that produced no finding on that line.",
     rationale=(
         "Stale suppressions accumulate and later hide real violations. They also suggest the "
@@ -699,7 +708,7 @@ CPLX001 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary="A unit's cyclomatic complexity (convention cyclomatic/1) is above cyclomatic_warn.",
     rationale=(
         "Each decision point is a path a test has to cover and a reader has to follow. The "
@@ -734,7 +743,7 @@ CPLX002 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary="A unit's cognitive complexity (convention cognitive/1) is above cognitive_warn.",
     rationale=(
         "Nesting and interrupted flow cost a reader more than a flat sequence of the same "
@@ -773,7 +782,7 @@ CPLX003 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary="A unit's decision nesting depth (convention nesting/1) is above max_nesting_warn.",
     rationale=(
         "Deep nesting means a reader must hold every enclosing condition in mind to understand "
@@ -805,7 +814,7 @@ CPLX004 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A unit's NPath estimate (convention npath/1) is at or above npath_warn, or saturated "
         "at npath_cap."
@@ -905,7 +914,7 @@ CPLX006 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A unit's logical line count (convention size/1) is above max_lines_warn; module "
         "bodies are exempt."
@@ -3344,3 +3353,8 @@ def needs_base_revision(rule: RuleSpec) -> bool:
 def base_revision_rules() -> tuple[RuleSpec, ...]:
     """Implemented rules that only run in a revision comparison."""
     return tuple(rule for rule in implemented_rules() if needs_base_revision(rule))
+
+
+def not_applicable_ids(language: str) -> frozenset[str]:
+    """The rules that never run on ``language``: their family has no facts for it."""
+    return frozenset(rule.rule_id for rule in RULES if language not in rule.languages)

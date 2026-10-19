@@ -5,9 +5,10 @@
 [tool.shockharness]
 profile = "strict"
 # TypeScript (.ts, .tsx, .mts, .cts) since H-TS; declaration files (.d.ts) hold types only
-# and are excluded.
-include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
-exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**", "**/*.d.ts"]
+# and are excluded. C# (.cs) since G1; the Godot editor's .godot/ folder and .NET build
+# output (bin/ and obj/, which hold generated .cs) are excluded.
+include = ["**/*.py", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.cs"]
+exclude = ["**/.git/**", "**/node_modules/**", "**/.venv/**", "**/venv/**", "**/dist/**", "**/build/**", "**/generated/**", "**/__pycache__/**", "**/*.d.ts", "**/.godot/**", "**/bin/**/*.cs", "**/obj/**/*.cs"]
 parse_errors = "fail"
 # A file that `include` matches but no adapter can parse (.pyx, .vue):
 # "fail" -> analysis failure, exit 3, like an unparseable file; "warn" -> listed under
@@ -27,7 +28,7 @@ overrides = []
 # [[overrides]] (`roles = [...]`) and the MAGIC001 configuration-file exemption. A list
 # set here replaces the default list for that role.
 [tool.shockharness.file_roles]
-generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
+generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js", "**/*.g.cs", "**/*.Designer.cs"]
 vendor = ["**/vendor/**", "**/third_party/**"]
 # Tooling configuration rather than application source. The default is the list that
 # rules.magic_numbers.configuration_files had in 0.3.0; that key is the legacy spelling
@@ -68,6 +69,8 @@ test = [
   "**/*.spec.tsx",
   "**/*.test.mts",
   "**/*.spec.mts",
+  "**/*Tests.cs",
+  "**/*.Tests/**",
   "**/conftest.py",
 ]
 docs = ["docs/**"]
