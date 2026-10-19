@@ -32,7 +32,9 @@ def _number(node: ast.expr | None) -> float | None:
         current = current.operand
     if not isinstance(current, ast.Constant) or type(current.value) not in NUMERIC_TYPES:
         return None
-    value = float(current.value)
+    number = current.value
+    assert isinstance(number, int | float), "NUMERIC_TYPES are int and float"
+    value = float(number)
     if negative:
         return -value
     return value

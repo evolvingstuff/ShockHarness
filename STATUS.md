@@ -5614,3 +5614,33 @@ The backlog's one proposed decision. MetaList's report: 96% annotated, no type c
   were updated.
 * **Open:** ShockHarness reports itself. Configuring mypy here means a new dev
   dependency, which is Tom's call.
+
+## mypy --strict on ShockHarness's own source (2026-10-19)
+
+On Tom's go-ahead, after TYPE002 reported ShockHarness itself (2,226 of 2,226 functions
+annotated, no checker).
+
+* `mypy>=1.13` is in the dev extra (2.4.0 installed). `[tool.mypy]` sets
+  `files = ["src"]` and `strict = true`. CI runs `mypy` after Ruff in every matrix job.
+* **29 strict errors, fixed without `cast` or `# type: ignore`** (TYPE001 would report
+  both):
+  * *Returning Any* (7): a value checked through `document[key]` is bound to a local
+    before `isinstance`; the codec's `_is_int` is a `TypeGuard`; `config.section` and
+    `cache_settings` assert the validated table they return.
+  * *Loop variables reused with another type* (3): renamed (`keyword_default`,
+    `module_edge`).
+  * *Unions from `ast.Constant.value` and `ast.walk`* (6): asserts on the internal
+    invariant (a folded literal is numeric; an exit is a statement) or a filter
+    (`isinstance(part, ast.expr)`).
+  * *The flow dispatch tables* (4): typed `dict[type[ast.stmt], Callable[..., Env | None]]`
+    and the expression counterpart, with no `Any` added.
+  * *Missing annotations* (4): `HISTORY_NOT_COLLECTED`, `details`, `expression`, and the
+    `yes` set (an invariance error at its use).
+  * *A redundant check:* `node is not module` after `isinstance(node, UNIT_NODES)` could
+    never be false.
+* **Found by the change, not by mypy.** `config._protect` read a leaf value through
+  `_section`, which says it returns a table. The new assert caught it (6 policy tests),
+  and `_protect` now uses `loosening.value_at` after `has_key`. A missing key raises
+  `ConfigError` rather than an assert, since ASSERT001 traces those values to a file
+  read.
+* Self-gate: no TYPE002 any more. Tests 1,342 passing.

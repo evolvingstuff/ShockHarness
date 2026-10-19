@@ -270,7 +270,8 @@ def run_post_edit(
     candidates = _candidates(event.value, root)
     state = store.load_state()
     changed = _changed(root, candidates.files, state, store)
-    message, details = "", []
+    message = ""
+    details: list[str] = []
     if len(changed) > 0:
         message, details = _feedback(root, sorted(changed), config, options, fail_on)
     config_message, config_details, config_changed = _config_feedback(

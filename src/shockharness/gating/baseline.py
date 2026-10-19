@@ -148,15 +148,21 @@ def render_baseline(baseline: Baseline) -> str:
 
 
 def _require_str(document: Mapping[str, Any], key: str, origin: str) -> str:
-    if key not in document or not isinstance(document[key], str):
+    if key not in document:
         raise UsageError(f"baseline is missing the string field {key!r}", origin)
-    return document[key]
+    value = document[key]
+    if not isinstance(value, str):
+        raise UsageError(f"baseline is missing the string field {key!r}", origin)
+    return value
 
 
 def _optional_str(document: Mapping[str, Any], key: str, origin: str) -> str | None:
-    if key not in document or not (document[key] is None or isinstance(document[key], str)):
+    if key not in document:
         raise UsageError(f"baseline entry is missing the string-or-null field {key!r}", origin)
-    return document[key]
+    value = document[key]
+    if value is not None and not isinstance(value, str):
+        raise UsageError(f"baseline entry is missing the string-or-null field {key!r}", origin)
+    return value
 
 
 def _require_int(document: Mapping[str, Any], key: str, origin: str) -> int:

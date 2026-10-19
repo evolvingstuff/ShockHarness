@@ -519,6 +519,7 @@ report = with_history(report, Path("."), "HEAD", config)
 uv pip install -e ".[dev]"
 pytest -q -n auto -m "not serial" && pytest -q -m serial   # parallel, then the timing test alone
 ruff check src tests scripts evals && ruff format --check src tests scripts evals
+mypy                                         # strict, over src ([tool.mypy] in pyproject.toml)
 shockharness check src tests scripts evals   # the tool gates its own source
 python -m build && python scripts/consumer_upgrade_check.py --dist dist --examples examples
 python evals/run_evals.py --reference   # the skill eval corpus: every reference solution scores clean

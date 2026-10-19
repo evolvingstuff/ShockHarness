@@ -176,8 +176,11 @@ def _selection_options(raw: Any) -> list[str]:
 
 def _table(document: Mapping[str, Any], key: str) -> Mapping[str, Any] | None:
     """``document[key]`` when it is a table, else ``None`` (the tool is not configured)."""
-    if key in document and isinstance(document[key], Mapping):
-        return document[key]
+    if key not in document:
+        return None
+    value = document[key]
+    if isinstance(value, Mapping):
+        return value
     return None
 
 

@@ -35,7 +35,7 @@ from typing import Any
 from shockharness.contracts.catalog import catalog_issues
 from shockharness.errors import ConfigError
 from shockharness.globs import validate_glob
-from shockharness.loosening import loosenings
+from shockharness.loosening import has_key, loosenings, value_at
 from shockharness.roles import CLASSIFIED_ROLES, FILE_ROLES_KEY, ROLE_CONFIG
 from shockharness.rules import registry
 from shockharness.rules.defaults import loosened_modes
@@ -212,6 +212,7 @@ class EffectiveConfig:
         node: Any = self.values
         for key in dotted.split("."):
             node = node[key]
+        assert isinstance(node, Mapping), f"{dotted} is a validated table"
         return node
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -520,6 +521,7 @@ def _section(values: Mapping[str, Any], dotted: str) -> Mapping[str, Any]:
     node: Any = values
     for key in dotted.split("."):
         node = node[key]
+    assert isinstance(node, Mapping), f"{dotted} is a validated table"
     return node
 
 
@@ -982,7 +984,11 @@ def _protect(
     for dotted, value in sorted(_leaves(user_table, "").items()):
         if dotted not in policy_keys:
             continue
-        policy_value = _section(policy_values, dotted)
+        if not has_key(policy_values, dotted):
+            raise ConfigError(
+                f"the policy sets {dotted}, but its merged values lack it", ORIGIN_POLICY
+            )
+        policy_value = value_at(policy_values, dotted)
         if value == policy_value:
             continue
         trial = _deep_merge(policy_values, _nested(dotted, value), {}, ORIGIN_POLICY, "")

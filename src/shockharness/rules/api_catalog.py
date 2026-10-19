@@ -420,7 +420,7 @@ def run_stub003(
     it extends is reported as redundant. Bases are resolved through each file's imports."""
     bases = _class_bases(files, module_edges)
     extended = {base for found in bases.values() for base in found}
-    yes = {
+    yes: set[tuple[str, str | None, str]] = {
         (file.path, p.class_name, p.name)
         for file in files
         for p in file.catalog.constant_predicates

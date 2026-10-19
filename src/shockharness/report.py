@@ -45,7 +45,7 @@ from shockharness.rules.verification import not_applicable_coverage
 from shockharness.version import __version__
 
 STATUS_COMPLETE = "complete"
-HISTORY_NOT_COLLECTED = {
+HISTORY_NOT_COLLECTED: dict[str, Any] = {
     "status": "not_collected",
     "reason": (
         "git history is collected by the CLI (or shockharness.api.with_history); "

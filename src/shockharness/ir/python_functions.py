@@ -145,7 +145,7 @@ def discover_units(module: ast.Module) -> list[UnitInfo]:
         node, scope, parent, class_name = stack.pop()
         child_scope = scope
         child_class = class_name
-        if isinstance(node, UNIT_NODES) and node is not module:
+        if isinstance(node, UNIT_NODES):
             name = scope_name(node)
             child_scope = name if scope == MODULE_SCOPE else f"{scope}.{name}"
             units.append(UnitInfo(node, child_scope, _unit_kind(node, parent), class_name))
@@ -501,9 +501,9 @@ class _UnitCollector:
             # Its body is a unit of its own; defaults are evaluated here.
             for default in reversed(list(node.args.defaults)):
                 stack.append((_T_EXPRESSION, default, parent))
-            for default in reversed(list(node.args.kw_defaults)):
-                if default is not None:
-                    stack.append((_T_EXPRESSION, default, parent))
+            for keyword_default in reversed(list(node.args.kw_defaults)):
+                if keyword_default is not None:
+                    stack.append((_T_EXPRESSION, keyword_default, parent))
             return
         if isinstance(node, ast.BoolOp):
             operators, leaves = _boolean_operators(node)

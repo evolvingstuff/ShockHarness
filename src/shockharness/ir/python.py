@@ -247,6 +247,12 @@ def _comments(source: SourceText) -> tuple[Comment, ...] | ParseFailure:
     return tuple(found)
 
 
+def _number(value: object) -> int | float | complex:
+    """A numeric literal's value: the collector only reaches numeric constants."""
+    assert isinstance(value, int | float | complex), "a numeric literal"
+    return value
+
+
 def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLiteral, ...]:
     literals: list[NumericLiteral] = []
     definitions = _constant_definition_values(module)
@@ -257,7 +263,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
         if folded is not None:
             constant, negated = folded
             assert isinstance(node, ast.expr)
-            value = constant.value
+            value = _number(constant.value)
             if negated:
                 value = -value
             literals.append(
@@ -278,7 +284,7 @@ def _collect_literals(source: SourceText, module: ast.Module) -> tuple[NumericLi
                 NumericLiteral(
                     span=node_span(source, node),
                     raw=_raw(source, node),
-                    value=node.value,
+                    value=_number(node.value),
                     negated=False,
                     in_annotation=in_annotation,
                     scope=scope,

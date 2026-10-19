@@ -435,7 +435,8 @@ class JsAnalysis:
         return self.units[key]
 
     def _build(self, module: JsModule, function: Node | None) -> JsUnit:
-        body, expression = children(module.root), []
+        body: list[Node] = children(module.root)
+        expression: list[Node] = []
         parameters: tuple[str | None, ...] = ()
         local: frozenset[str] = frozenset()  # module level: the module's own tables
         receivers = NO_JS_RECEIVERS

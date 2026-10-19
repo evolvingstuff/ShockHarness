@@ -32,6 +32,8 @@ jobs:
         run: |
           ruff check src tests scripts evals
           ruff format --check src tests scripts evals
+      - name: mypy (strict, src)
+        run: mypy
       - name: Tests
         run: pytest -q -n auto -m "not serial"
       - name: Timing tests (alone)

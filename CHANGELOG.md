@@ -16,6 +16,11 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   - On MetaList it reports nothing, because MetaList configures `[tool.mypy]`. On
     ShockHarness itself it reports 2,226 of 2,226 functions.
   - Cache schema "24".
+- **ShockHarness checks its own annotations:** `mypy --strict` over `src` (`[tool.mypy]`
+  in `pyproject.toml`, `mypy` in the dev extra) runs in CI. Its 29 findings were fixed
+  without `cast` or `# type: ignore`: narrowing, real annotations, and asserts on
+  internal invariants. One of them was `config.section` used to read a scalar, which the
+  policy tier now reads with `value_at`.
 
 ## [0.15.0] - 2026-10-18
 

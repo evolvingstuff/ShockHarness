@@ -371,4 +371,6 @@ def open_cache(root: Path, config: EffectiveConfig) -> FileCache:
 
 
 def cache_settings(config: EffectiveConfig) -> Mapping[str, Any]:
-    return config.values[CACHE_KEY]
+    settings = config.values[CACHE_KEY]
+    assert isinstance(settings, Mapping), "the cache table is validated"
+    return settings

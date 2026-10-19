@@ -141,9 +141,12 @@ def write_bytes(path: Path, data: bytes) -> None:
 
 
 def _string_field(document: dict[str, Any], key: str, origin: str) -> str:
-    if key not in document or not isinstance(document[key], str):
+    if key not in document:
         raise UsageError(f"skills manifest is missing the string field {key!r}", origin)
-    return document[key]
+    value = document[key]
+    if not isinstance(value, str):
+        raise UsageError(f"skills manifest is missing the string field {key!r}", origin)
+    return value
 
 
 def parse_manifest(text: str, origin: str) -> Manifest:
@@ -351,7 +354,7 @@ MATCHER_KEY = "matcher"
 HOOK_UPDATED = "matcher updated"
 HOOK_COMMAND = 'shockharness hook claude-code post-edit --root "$CLAUDE_PROJECT_DIR"'
 COMMAND_KEY = "command"
-JSON_KINDS = {dict: "object", list: "array"}
+JSON_KINDS: dict[type, str] = {dict: "object", list: "array"}
 HOOK_ADDED = "added"
 HOOK_PRESENT = "already present"
 HOOK_COMMAND_UPDATED = "command updated"

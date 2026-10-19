@@ -14,7 +14,7 @@ import functools
 import types
 import typing
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeGuard
 
 from shockharness.constants import CACHE_CONTROL_FIELDS
 from shockharness.ir.model import ControlNode
@@ -89,7 +89,7 @@ def to_plain(value: Any) -> Any:
     raise TypeError(f"cannot encode {type(value).__name__} for the cache")
 
 
-def _is_int(value: Any) -> bool:
+def _is_int(value: Any) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool)
 
 

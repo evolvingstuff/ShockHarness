@@ -712,9 +712,9 @@ class _Collector:
         offset = len(positional) - len(args.defaults)
         for index, default in enumerate(args.defaults):
             defaults.append((positional[offset + index], default))
-        for arg, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
-            if default is not None:
-                defaults.append((arg, default))
+        for arg, keyword_default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+            if keyword_default is not None:
+                defaults.append((arg, keyword_default))
         overload = not isinstance(node, ast.Lambda) and _has_decorator(node, OVERLOAD_DECORATORS)
         owner = "lambda" if isinstance(node, ast.Lambda) else f"{node.name}()"
         for arg, default in defaults:

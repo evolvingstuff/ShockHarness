@@ -29,6 +29,18 @@ STATUS_DISABLED = "disabled"
 COUNTED_CONFIDENCES = frozenset({CONFIDENCE_RESOLVED, CONFIDENCE_PROBABLE})
 
 
+def _import_maps(graph: CallGraph) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """(path -> the analyzed modules importing it, path -> the ones it imports)."""
+    importers: dict[str, set[str]] = {path: set() for path in graph.paths}
+    imported: dict[str, set[str]] = {path: set() for path in graph.paths}
+    for module_edge in graph.module_edges:
+        target = module_edge.target
+        if target is not None and target in importers:
+            importers[target].add(module_edge.source)
+            imported[module_edge.source].add(target)
+    return importers, imported
+
+
 @dataclass(frozen=True)
 class UnitCoupling:
     key: str
@@ -267,19 +279,14 @@ class GraphMetrics:
             CONFIDENCE_EXTERNAL: 0,
             CONFIDENCE_UNRESOLVED: 0,
         }
-        for edge in self.graph.module_edges:
-            module_counts[edge.confidence] += 1
+        for module_edge in self.graph.module_edges:
+            module_counts[module_edge.confidence] += 1
         edge_counts = {CONFIDENCE_RESOLVED: 0, CONFIDENCE_PROBABLE: 0, CONFIDENCE_UNRESOLVED: 0}
         site_counts = {CONFIDENCE_RESOLVED: 0, CONFIDENCE_PROBABLE: 0, CONFIDENCE_UNRESOLVED: 0}
         for edge in self.graph.edges:
             edge_counts[edge.confidence] += 1
             site_counts[edge.confidence] += edge.calls
-        importers: dict[str, set[str]] = {path: set() for path in self.graph.paths}
-        imported: dict[str, set[str]] = {path: set() for path in self.graph.paths}
-        for edge in self.graph.module_edges:
-            if edge.target is not None and edge.target in importers:
-                importers[edge.target].add(edge.source)
-                imported[edge.source].add(edge.target)
+        importers, imported = _import_maps(self.graph)
         cycle_of: dict[str, int | None] = {path: None for path in self.graph.paths}
         for position, cycle in enumerate(self.cycles):
             for member in cycle.modules:

@@ -321,11 +321,16 @@ def _enclosing(node: Node) -> Node | None:
 
 def _declares(scope: Node, element: str) -> bool:
     return any(
-        child.type == Kind.VARIABLE_DECLARATOR
-        and child.child_by_field_name(Field.NAME) is not None
-        and node_text(child.child_by_field_name(Field.NAME)) == element
+        child.type == Kind.VARIABLE_DECLARATOR and _declared_name(child) == element
         for child in _own_nodes(scope)
     )
+
+
+def _declared_name(declarator: Node) -> str | None:
+    name = declarator.child_by_field_name(Field.NAME)
+    if name is None:
+        return None
+    return node_text(name)
 
 
 def _building_scope(node: Node, element: str) -> Node | None:

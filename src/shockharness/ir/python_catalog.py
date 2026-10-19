@@ -304,7 +304,7 @@ def _any_escapes(source: SourceText, annotation: ast.expr) -> list[TypeEscape]:
     return [
         TypeEscape(TYPE_ESCAPE_ANY, _excerpt(annotation), node_span(source, part))
         for part in ast.walk(annotation)
-        if _is_any(part)
+        if isinstance(part, ast.expr) and _is_any(part)
     ]
 
 

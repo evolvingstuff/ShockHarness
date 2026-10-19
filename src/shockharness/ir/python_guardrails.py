@@ -117,6 +117,7 @@ def _scan_finally(
         return
     kind = _exit_kind(node, in_loop)
     if kind is not None:
+        assert isinstance(node, ast.stmt), "an exit is a return, break or continue statement"
         exits.append(FinallyExit(kind, node_span(source, node)))
     for field, value in ast.iter_fields(node):
         # The ``else`` of a loop runs after it, outside it: a break there leaves the block.

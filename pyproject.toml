@@ -41,6 +41,7 @@ dependencies = [
 dev = [
   "pytest>=8",
   "pytest-xdist>=3.6",
+  "mypy>=1.13",
   "hypothesis>=6",
   "ruff>=0.6",
   "build>=1.2",
@@ -71,6 +72,12 @@ markers = [
   "slow: tests that run subprocesses or large inputs",
   "serial: a timing bound that other tests running beside it would break; run with -m serial, never under -n",
 ]
+
+[tool.mypy]
+# The tool's own source, checked strictly in CI (spec 21.1 decision 33: annotations a
+# checker verifies). Tests and fixtures are not checked.
+files = ["src"]
+strict = true
 
 [tool.ruff]
 line-length = 100

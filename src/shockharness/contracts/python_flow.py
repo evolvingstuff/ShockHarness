@@ -13,7 +13,7 @@ contract, a sink, a library) is the caller's :class:`Hooks`.
 """
 
 import ast
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -640,7 +640,7 @@ FSTRING = "fstring"
 CONCAT = "concat"
 FORMAT = "format"
 
-STATEMENTS = {
+STATEMENTS: dict[type[ast.stmt], Callable[..., Env | None]] = {
     ast.Assign: Flow.assign,
     ast.AnnAssign: Flow.annotated,
     ast.AugAssign: Flow.augmented,
@@ -662,7 +662,7 @@ STATEMENTS = {
     ast.ClassDef: Flow.definition,
 }
 
-EXPRESSIONS = {
+EXPRESSIONS: dict[type[ast.expr], Callable[..., PropSet]] = {
     ast.Name: Flow.name,
     ast.Constant: Flow.constant,
     ast.Lambda: Flow.lambda_,
