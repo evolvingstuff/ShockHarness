@@ -5563,3 +5563,12 @@ the whole phase, but any edit recomputed all of it (about 16.6 s on MetaList).
   prose now carries no version, and `docs/releasing.md` says to move pins only.
 * **Not done:** about 7.6 s of a warm run is still per-file cache decoding and the other
   cross-file phases (the call graph, INPUT001 and the rest), which are recomputed.
+
+## Release 0.15.0 (2026-10-18)
+
+On Tom's go-ahead. CI was green on 5ce9bdf (run 39192647728) and on the release commit
+6d126c6 (run 39193073508), 16 of 16 jobs each. Every pin moved from 0.14.0, and the bump's
+diff was checked for lines that are not pins (none). The changelog's `[0.15.0]` section
+says no change makes a passing gate fail: the findings are identical to a full recompute.
+Published by `publish.yml` (run 39193517657, 18 of 18 jobs). PyPI lists 0.15.0 with a
+wheel and an sdist.
