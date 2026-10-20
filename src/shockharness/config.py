@@ -585,6 +585,7 @@ GUARDRAIL_CATALOGS = (
     ("results", "roles"),
     ("results", "python_must_use"),
     ("results", "javascript_must_use"),
+    ("results", "csharp_must_use"),
     ("types", "roles"),
     ("sleep", "roles"),
     ("sleep", "python_sleep_apis"),

@@ -30,6 +30,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   `string.IsNullOrEmpty` ternaries, `GetValueOrDefault`, LINQ `*OrDefault`, `GetMeta`,
   `TryGetValue`/`ContainsKey` ternaries, environment reads, `ProjectSettings.GetSetting`
   and `ConfigFile.GetValue` fallbacks. Cache schema "28".
+- **C# results, Boolean arguments and placeholders, G2 part two** (decision 42).
+  RESULT001 (a new `rules.results.csharp_must_use` of pure calls), BOOL001 and STUB001
+  (`throw new NotImplementedException()`) run on C#.
+  - `rules.boolean_arguments.allowed_callees` adds Godot's `SetShaderParameter`, `Set`,
+    `SetDeferred`, `SetMeta`, `SetValue`, `SetSetting`, `Call`, `CallDeferred`, `Rpc`,
+    `RpcId` and `EmitSignal`, whose first argument names what the Boolean is for. A
+    project that sets its own `allowed_callees` keeps its list.
 
 ### Fixed
 - **A rule's `languages` is now honored for every family.** The per-file phase ran

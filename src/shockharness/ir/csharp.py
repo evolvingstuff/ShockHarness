@@ -27,17 +27,16 @@ from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.csharp_catches import collect_csharp_catches
 from shockharness.ir.csharp_defaults import collect_csharp_defaults
 from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
+from shockharness.ir.csharp_guardrails import collect_csharp_guardrails
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_numbers import parse_csharp_number
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.model import (
     MODULE_SCOPE,
     NO_ANNOTATIONS,
-    NO_ASYNC,
     NO_CATALOG,
     NO_DATAFLOW,
     NO_DOM,
-    NO_GUARDRAILS,
     NO_RECEIVER_FACTS,
     NO_USAGE,
     NO_VERIFICATION,
@@ -162,13 +161,14 @@ def _first_error(root: Node) -> Node | None:
 
 def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
     """The facts of a C# file: numbers and named definitions, comments, function facts
-    (G1), catches and defaults (G2). The other families have no C# facts yet; their rules
-    do not list C# among their languages, so they never run on these files (the report
-    lists them as not applicable)."""
+    (G1); catches, defaults, discarded calls, Boolean arguments and placeholders (G2). The
+    other families have no C# facts yet; their rules do not list C# among their languages,
+    so they never run on these files (the report lists them as not applicable)."""
     root, error = parse_csharp(source.text)
     if error is not None:
         return failed_facts(CSHARP_LANGUAGE, PARSER_NAME, _parse_failure(source, filename, error))
     literals, constants, comments = _number_facts(source, root)
+    guardrails, asynchrony = collect_csharp_guardrails(source, root)
     return ModuleFacts(
         language=CSHARP_LANGUAGE,
         parser=PARSER_NAME,
@@ -182,8 +182,8 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         imports=(),
         bindings=(),
         verification=NO_VERIFICATION,
-        guardrails=NO_GUARDRAILS,
-        asynchrony=NO_ASYNC,
+        guardrails=guardrails,
+        asynchrony=asynchrony,
         catalog=NO_CATALOG,
         dataflow=NO_DATAFLOW,
         sentinels=(),

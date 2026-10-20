@@ -861,8 +861,11 @@ assert safe to rely on. ShockHarness's own CLI refuses to run under `-O`.
 spread) where one of them is a Boolean literal: one finding per literal, at
 `review`. Calls whose last callee segment is in
 `rules.boolean_arguments.allowed_callees` are skipped (default: `get`,
-`getattr`, `setattr`, `setdefault`, `pop`, `next`, which DEF002 already judges);
-each addition is a policy deviation. A single-argument call (`toggle(True)`) is
+`getattr`, `setattr`, `setdefault`, `pop`, `next`, which DEF002 already judges, and,
+since G2, Godot's calls whose first argument names what the Boolean is for:
+`SetShaderParameter`, `Set`, `SetDeferred`, `SetMeta`, `SetValue`, `SetSetting`, `Call`,
+`CallDeferred`, `Rpc`, `RpcId`, `EmitSignal`); each addition is a policy deviation. In C#
+a named argument (`Configure(enabled: true, 2)`) says what it switches and is not reported. A single-argument call (`toggle(True)`) is
 not reported, and neither is an assertion (since 0.9.0): a callee whose last segment
 starts with `assert` (`assertEqual`, `self.assertIs`, `mock.assert_called_with`) or
 whose receiver is `assert` (`assert.equal`, `assert.strictEqual`). There the Boolean

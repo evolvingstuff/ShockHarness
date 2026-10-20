@@ -330,8 +330,14 @@ enabled = true
 severity = "review"
 roles = ["production"]
 # Calls whose last callee segment is listed here are not reported (each addition is a
-# policy deviation); the defaults are the lookups DEF002 already judges.
-allowed_callees = ["get", "getattr", "setattr", "setdefault", "pop", "next"]
+# policy deviation); the defaults are the lookups DEF002 already judges, and (G2) Godot's
+# calls whose first argument names what the Boolean is for: a shader parameter, a property,
+# a method, a signal, a setting (`SetShaderParameter("outline", true)`).
+allowed_callees = [
+  "get", "getattr", "setattr", "setdefault", "pop", "next",
+  "SetShaderParameter", "Set", "SetDeferred", "SetMeta", "SetValue", "SetSetting",
+  "Call", "CallDeferred", "Rpc", "RpcId", "EmitSignal",
+]
 
 [tool.shockharness.rules.module_state]
 enabled = true
@@ -529,6 +535,63 @@ javascript_must_use = [
   ".toReversed/0",
   ".toSpliced",
   ".with/2",
+]
+# C# (G2): pure calls only. Names that are pure on one type and mutate on another
+# (Reverse, Insert, Remove, Append, Add, Sort) are left out; so are Godot's Error returns
+# and a discarded TryParse, which do change something (docs/ideas.md).
+csharp_must_use = [
+  "string.Format",
+  "string.Join",
+  "string.Concat",
+  "Mathf.Abs",
+  "Mathf.Clamp",
+  "Mathf.Lerp",
+  "Mathf.Min",
+  "Mathf.Max",
+  "Mathf.MoveToward",
+  "Mathf.Round",
+  "Mathf.Floor",
+  "Mathf.Ceil",
+  "Math.Abs",
+  "Math.Clamp",
+  "Math.Min",
+  "Math.Max",
+  ".Trim/0-1",
+  ".TrimStart/0-1",
+  ".TrimEnd/0-1",
+  ".ToUpper/0",
+  ".ToLower/0",
+  ".ToUpperInvariant/0",
+  ".ToLowerInvariant/0",
+  ".Replace/2",
+  ".Substring/1-2",
+  ".PadLeft/1-2",
+  ".PadRight/1-2",
+  ".Normalized/0",
+  ".Rotated/1",
+  ".Lerp/2",
+  ".Slerp/2",
+  ".MoveToward/2",
+  ".Clamp/2",
+  ".Snapped/1",
+  ".LimitLength/0-1",
+  ".Abs/0",
+  ".Floor/0",
+  ".Ceil/0",
+  ".Round/0",
+  ".Inverse/0",
+  ".Orthonormalized/0",
+  ".Lightened/1",
+  ".Darkened/1",
+  ".Inverted/0",
+  ".Where/1",
+  ".Select/1",
+  ".OrderBy/1",
+  ".OrderByDescending/1",
+  ".ThenBy/1",
+  ".Distinct/0",
+  ".Skip/1",
+  ".Take/1",
 ]
 
 [tool.shockharness.rules.types]            # TYPE001 (Python and TypeScript)

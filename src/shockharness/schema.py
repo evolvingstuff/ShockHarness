@@ -414,6 +414,7 @@ CONFIG_SCHEMA = TableField(
                         **GUARDRAIL_COMMON,
                         "python_must_use": ListField(PatternField(MUST_USE_ENTRY, MUST_USE)),
                         "javascript_must_use": ListField(PatternField(MUST_USE_ENTRY, MUST_USE)),
+                        "csharp_must_use": ListField(PatternField(MUST_USE_ENTRY, MUST_USE)),
                     },
                     required=(),
                 ),

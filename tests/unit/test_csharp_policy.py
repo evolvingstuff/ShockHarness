@@ -189,3 +189,48 @@ def test_default_shapes_on_csharp(strict_config: EffectiveConfig) -> None:
     assert messages[("DEF003", 8)].startswith('s falls back to "y" when null or empty;')
     assert messages[("DEF006", 13)].startswith("setting display/w falls back to 640;")
     assert "audio/volume" in messages[("DEF006", 16)]
+
+
+GUARDRAILS = "\n".join(
+    [
+        "public partial class Player : CharacterBody2D {",
+        "    public override void _PhysicsProcess(double delta) {",
+        "        Velocity.Normalized();",
+        "        name.Trim();",
+        "        _ = name.Trim();",
+        "        Mathf.Clamp(hp, 0, max);",
+        "        AddChild(node, true);",
+        "        Configure(enabled: true, 2);",
+        "        SetProcess(false);",
+        "        items.Where(i => i.Alive);",
+        "        try { other.Trim(); } catch (System.Exception) { throw; }",
+        "        list.Reverse();",
+        "    }",
+        "    public int Damage() => throw new NotImplementedException();",
+        '    void Later() { throw new System.NotImplementedException("later"); }',
+        "    public override void _Ready() { }",
+        "}",
+        "",
+    ]
+)
+
+
+def test_results_booleans_and_placeholders_on_csharp(strict_config: EffectiveConfig) -> None:
+    result = run(strict_config, GUARDRAILS, "Player.cs")
+    found = [
+        (f.rule_id, f.span.line)
+        for f in result.findings
+        if f.rule_id in ("RESULT001", "BOOL001", "STUB001")
+    ]
+    assert found == [
+        ("RESULT001", 3),
+        ("RESULT001", 4),
+        ("RESULT001", 6),
+        ("BOOL001", 7),
+        ("RESULT001", 10),
+        ("STUB001", 14),
+        ("STUB001", 15),
+    ]
+    confidence = {(f.rule_id, f.span.line): f.confidence for f in result.findings}
+    assert confidence[("RESULT001", 6)] == "exact"  # Mathf.Clamp, by its qualified name
+    assert confidence[("RESULT001", 4)] == "approximate"  # .Trim on an untyped receiver

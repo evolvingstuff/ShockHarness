@@ -6081,3 +6081,77 @@ severity and wording); the boundary-language and registry tests updated.
   (`transparent_rethrow` is off), and the test now says so.
 * The self-gate caught `x if x is not None else y` fallbacks and two literal argument
   counts in the new code, and five complexity warnings; all fixed.
+
+## Milestone G2, part two: C# results, Boolean arguments, placeholders — DONE (2026-10-19)
+
+Spec 21.1 decision 42. With part one this completes G2, except STUB002 and STUB003, which
+read the module graph and move to G3.
+
+### What was built
+
+* **Facts** (`ir/csharp_guardrails.py`): the calls an expression statement throws away
+  (into the async facts' `discarded_calls`, which RESULT001 reads; `_ = F();` is an
+  explicit discard and not recorded), positional Boolean literals of calls with more than
+  one positional argument (named arguments are not positional), and
+  `throw new NotImplementedException()` as a statement or a throw expression. A method of
+  a call's result keeps its name (`<dynamic>.SetDeferred`) instead of becoming
+  `<dynamic>`, so BOOL001's allowed list and RESULT001's method entries can see it.
+* **RESULT001**: `rules.results.csharp_must_use` (the catalog key of each language is now a
+  table, `MUST_USE_KEYS`), pure calls only.
+* **BOOL001**: `allowed_callees` adds Godot's calls whose first argument names the
+  Boolean's target.
+* RESULT001, BOOL001 and STUB001 list C#.
+
+### Decisions (mine; review these)
+
+1. **RESULT001 stays about pure calls.** Its message says the call changes nothing.
+   Godot's `Error` returns (`ResourceSaver.Save`, `ChangeSceneToFile`, `Connect`) and a
+   discarded `TryParse` do change something, and need a rule of their own, recorded in
+   docs/ideas.md.
+2. **Names that are pure on one type and mutate on another are left out** (`Reverse`,
+   `Insert`, `Remove`, `Append`, `Add`, `Sort`): `List<T>.Reverse()` reverses in place,
+   LINQ's `Reverse()` returns.
+3. **BOOL001's allowed list grows in the default**, not per project: on the game and the
+   demos, `SetShaderParameter("name", true)`, `SetDeferred("disabled", true)` and
+   `Rpc("ResetBall", false)` were 11 of 22 findings, and in each the first argument says
+   what the value is for. The Python and JavaScript callees are unaffected (Godot's names
+   are capitalized).
+4. **No empty-body placeholders**: Godot's template writes empty `_Ready` and `_Process`.
+
+### Evidence (2026-10-19, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ shockharness check src tests scripts
+gate: PASS  192 findings
+
+$ pytest -q        # CPython 3.14.7
+1417 passed
+```
+
+No verdict changes for Python, JavaScript or TypeScript, the larger `allowed_callees`
+default included: the committed tool (3f4b619) and this one give identical findings and
+exits on ShockHarness (194, scanning the committed tree) and MetaList (2,208).
+
+**C# measured** (`include = ["**/*.cs"]`; part two's rules):
+
+| code base | BOOL001 | RESULT001 | STUB001 |
+|---|---|---|---|
+| TheLivingLabyrinth (4 files) | 4 | 0 | 0 |
+| godot-demo-projects `mono/` | 7 | 0 | 0 |
+| GameDemo | 0 | 0 | 0 |
+| Sakuga-Engine | 74 | 4 | 11 |
+
+Before the allowed-list change, BOOL001 had 10 findings on the game and 12 on the demos.
+The remaining ones on both were read: `DrawRect(rect, color, false)`,
+`Image.CreateEmpty(w, h, false, format)`, `MoveAndCollide(motion, true)` and a project's
+own `SetStatus(message, false)`, each a switch the call does not name. **RESULT001 found
+a real bug** in Sakuga-Engine: `ConnectionUI.cs` lines 118-120 and 135-137 call
+`playerConnections[i].IPField.Text.Trim();` and throw the trimmed address away, while
+`address` stays `""`. The 11 STUB001 are `SpectatorSession`'s unimplemented members.
+
+New tests: `tests/unit/test_csharp_policy.py::test_results_booleans_and_placeholders_on_csharp`
+(the three rules, an explicit discard, a named and a single Boolean, a call in a `try`,
+an in-place `Reverse()`, an empty override, and exact versus approximate confidence).

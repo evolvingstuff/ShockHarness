@@ -426,7 +426,8 @@ Stated so that a clean report is never read as more than it is.
 * **Opt-in.** The default `include` does not list `**/*.cs`; a project adds it
   (docs/configuration.md).
 * **Partial coverage.** MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 (G1),
-  EXC001-EXC003, EXC005 and DEF001-DEF006 (G2) run on `.cs` files. Every other rule has
+  EXC001-EXC003, EXC005, DEF001-DEF006, RESULT001, BOOL001 and STUB001 (G2) run on `.cs`
+  files. Every other rule has
   no C# facts yet and does not run there: `coverage.rules_not_applicable.csharp` lists
   them, and the text report prints a warning naming them. A C# file is never clean for a
   rule that did not look at it. The Godot project model and dead code follow in G3 (spec
@@ -451,6 +452,15 @@ Stated so that a clean report is never read as more than it is.
   `GetValue(section, key, v)`, read as a `ConfigFile` by its shape (DEF006). The statement
   forms of a membership fallback (`if (m.TryGetValue(k, out var v)) return v; return d;`)
   are not recognized yet.
+* **RESULT001, BOOL001, STUB001.** RESULT001's `csharp_must_use` lists pure calls only;
+  methods are matched by name on an untyped receiver (approximate), so a project method
+  called `Trim` that does work would be reported. Godot's `Error` returns and a discarded
+  `TryParse` change something and are not RESULT001's (docs/ideas.md). An explicit discard
+  (`_ = F();`) is not reported. BOOL001 skips named arguments and Godot's calls whose first
+  argument names the value's target (`SetShaderParameter`, `SetDeferred`, `Call`, `Rpc`,
+  `EmitSignal`, ...). STUB001 reports `throw new NotImplementedException()`; an empty
+  method body is not a placeholder (Godot's script template writes empty overrides).
+  STUB002 and STUB003 need the module graph and wait for G3.
 * **Syntax only**, as for JavaScript: no Roslyn, no .NET at run time, no semantic model.
   Types, overloads and the members Godot's source generators add (`MethodName`,
   `SignalName`, `PropertyName`) are not known; generated files are not on disk.

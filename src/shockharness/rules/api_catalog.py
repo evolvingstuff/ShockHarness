@@ -38,6 +38,8 @@ from shockharness.rules.guardrails import import_aliases, qualified_callee
 from shockharness.rules.imports import ClassKey, imported_names
 from shockharness.rules.registry import (
     BATCH001,
+    CSHARP,
+    JAVASCRIPT,
     PROCESS001,
     PYTHON,
     RESULT001,
@@ -170,6 +172,14 @@ def _process001(
 
 # -- RESULT001 ---------------------------------------------------------------------------
 
+# The catalog key of each language (TypeScript shares JavaScript's; C# since G2).
+MUST_USE_KEYS = {
+    PYTHON: "python_must_use",
+    JAVASCRIPT: "javascript_must_use",
+    TYPESCRIPT: "javascript_must_use",
+    CSHARP: "csharp_must_use",
+}
+
 
 @dataclass(frozen=True)
 class MustUse:
@@ -215,7 +225,7 @@ def _result001(
 ) -> list[Finding]:
     """``permitted``: the property-contracts runtime declarations (requires, produces,
     preserves, preserves_except of the runtime module), statements by design (§10)."""
-    key = "python_must_use" if language == PYTHON else "javascript_must_use"
+    key = MUST_USE_KEYS[language]
     listed = _must_use([str(e) for e in settings[key]])
     entries = {name: entry for name, entry in listed.items() if name not in permitted}
     aliases = import_aliases(facts.imports, language)

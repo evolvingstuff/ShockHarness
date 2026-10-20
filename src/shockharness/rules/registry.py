@@ -23,7 +23,7 @@ JAVASCRIPT_FAMILY = frozenset({JAVASCRIPT, TYPESCRIPT})
 CSHARP = "csharp"
 SUPPORTED_LANGUAGES = (*ALL_LANGUAGES, CSHARP)
 # The rules that run on C#: numbers, unit complexity and suppression comments (G1);
-# exceptions and defaults (G2).
+# exceptions, defaults, RESULT001, BOOL001 and STUB001 (G2).
 WITH_CSHARP = SUPPORTED_LANGUAGES
 # Languages whose rule coverage is partial: the text report names the rules that do not
 # run on them (coverage.rules_not_applicable lists them for every language).
@@ -1257,7 +1257,7 @@ STUB001 = RuleSpec(
     config_section=STUBS_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "Production code that raises NotImplementedError, raises NotImplemented, throws "
         "'not implemented', or is an empty function body ships a stub instead of behavior."
@@ -1435,7 +1435,7 @@ BOOL001 = RuleSpec(
     config_section=BOOLEAN_ARGUMENTS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A True/False literal passed positionally to a call with several arguments does not "
         "say what it switches: analyze(path, cfg, None, False)."
@@ -1761,7 +1761,7 @@ RESULT001 = RuleSpec(
     config_section=RESULTS_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A call that returns a new value and changes nothing is used as a statement: "
         "name.strip(), sorted(items), items.map(f). The line has no effect."
@@ -1772,7 +1772,8 @@ RESULT001 = RuleSpec(
     ),
     guarantees=(
         "A call that is a whole statement whose callee is listed in "
-        "rules.results.python_must_use / javascript_must_use: a qualified function "
+        "rules.results.python_must_use / javascript_must_use / csharp_must_use: a "
+        "qualified function "
         "(sorted, copy.deepcopy, dataclasses.replace; structuredClone) is exact; an entry "
         "starting with '.' names a method on any receiver (.strip, .replace, .lower; .map, "
         ".filter, .concat, .slice, .trim, .toSorted) and is approximate, because the "
