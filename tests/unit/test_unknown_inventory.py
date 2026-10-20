@@ -125,6 +125,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "DUP001/DUP002 are exact on the shapes they compare (identical tokens, or a ratio at "
         "or above the similarity); judged only when every included file was analyzed",
     ),
+    ("rules/import_boundaries.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "IMPORT002 is exact on the resolved import edges and the configured globs and names: "
+        "violation; an import that does not resolve to an analyzed file is not judged",
+    ),
     ("rules/dead_code.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "DEAD001/DEAD002 judge only a run that analyzed every included file; then a function "

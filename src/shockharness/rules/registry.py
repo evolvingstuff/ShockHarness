@@ -3210,6 +3210,61 @@ DUP002 = RuleSpec(
 )
 
 
+# --- Import boundaries (IMPORT002, decision 44) ---------------------------------------------
+# Configured per project (rules.import_boundaries.forbidden); with no entry it reports nothing.
+
+IMPORT_BOUNDARIES_SECTION = "rules.import_boundaries"
+IMPORT_BOUNDARIES_FAMILY = "import_boundaries"
+
+IMPORT002 = RuleSpec(
+    rule_id="IMPORT002",
+    version="1",
+    name="import across a declared boundary",
+    family=IMPORT_BOUNDARIES_FAMILY,
+    config_section=IMPORT_BOUNDARIES_SECTION,
+    default_severity=SEVERITY_ERROR,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A file imports a module that a [[rules.import_boundaries.forbidden]] entry keeps "
+        "it from importing, or a name the entry's allowed_names does not list."
+    ),
+    rationale=(
+        "Some modules must never reach others: MetaList's startup and database migrations "
+        "may not import the backup service, so a migration can never touch a backup. Such a "
+        "boundary lives in nobody's head once the code is written; an agent adding one "
+        "convenient import crosses it without knowing it was there."
+    ),
+    guarantees=(
+        "Every import of an analyzed file, at any depth (a function's lazy import included): "
+        "Python import and from-import, JavaScript and TypeScript import, export-from, "
+        "require and import() with a literal specifier. An entry applies when the importing "
+        "file matches one of its importers globs and the import resolves to an analyzed file "
+        "matching one of its imported globs. With allowed_names empty, any import of the "
+        "module is reported; otherwise each name imported must be listed, and an import of "
+        "the whole module (import m, from pkg import m, import * as m, a bare require, a "
+        "star or side-effect import) is reported. Exact on the resolved import edges."
+    ),
+    limitations=(
+        "Direct imports only: a forbidden module reached through another project module is "
+        "not reported. The imported module must be among the analyzed files (a check of one "
+        "file does not resolve its imports), and computed specifiers "
+        "(importlib.import_module(name), import(expr)) are not followed. TypeScript type-only "
+        "imports are not imports."
+    ),
+    remediation=(
+        "Do not import across the boundary: move what is needed to a module both sides may "
+        "import, or have the caller pass it in. If the boundary itself is wrong, change the "
+        "entry in the configuration, where the change is reviewed."
+    ),
+    noncompliant_example=(
+        "# app/db/migrations.py, under a boundary that forbids app/services/backup_service.py\n"
+        "from app.services.backup_service import restore_backup"
+    ),
+    compliant_example="# app/db/migrations.py imports only the database layer",
+)
+
+
 # --- MAGIC002 (decision 31) ---------------------------------------------------------------
 
 MAGIC_STRINGS_SECTION = "rules.magic_strings"
@@ -3336,6 +3391,7 @@ RULES: tuple[RuleSpec, ...] = (
     DEAD002,
     DUP001,
     DUP002,
+    IMPORT002,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -3396,6 +3452,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     PROPERTY_CONTRACTS_FAMILY: CATEGORY_CONTRACT,
     DEAD_CODE_FAMILY: CATEGORY_STRUCTURAL,
     DUPLICATES_FAMILY: CATEGORY_STRUCTURAL,
+    IMPORT_BOUNDARIES_FAMILY: CATEGORY_STRUCTURAL,
 }
 
 

@@ -193,6 +193,18 @@ BOUNDARY_SCHEMA = TableField(
     required=("path", "language", "reason"),
 )
 
+# IMPORT002 (decision 44): files the importers globs match may not import a file the
+# imported globs match, except the names allowed_names lists (required; [] allows none).
+FORBIDDEN_IMPORT_SCHEMA = TableField(
+    fields={
+        "importers": ListField(StrField(allow_empty=False)),
+        "imported": ListField(StrField(allow_empty=False)),
+        "allowed_names": ListField(StrField(allow_empty=False)),
+        "reason": StrField(allow_empty=False),
+    },
+    required=("importers", "imported", "allowed_names", "reason"),
+)
+
 # An override scopes its rule IDs either by path globs (`paths`) or by file role
 # (`roles`, H1); exactly one of the two, checked in config.py.
 OVERRIDE_SCHEMA = TableField(
@@ -514,6 +526,14 @@ CONFIG_SCHEMA = TableField(
                             },
                             required=(),
                         ),
+                    },
+                    required=(),
+                ),
+                "import_boundaries": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "forbidden": ListField(FORBIDDEN_IMPORT_SCHEMA),
                     },
                     required=(),
                 ),

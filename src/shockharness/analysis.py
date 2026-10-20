@@ -99,6 +99,7 @@ from shockharness.rules.exceptions import (
 )
 from shockharness.rules.floating import FloatingFile, run_dom002
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
+from shockharness.rules.import_boundaries import BoundaryFile, run_import002
 from shockharness.rules.magic_numbers import run_magic001, run_magic004, run_magic005
 from shockharness.rules.property_contracts import property_contract_findings
 from shockharness.rules.registry import (
@@ -431,6 +432,7 @@ SCOPED_RULES = (
     registry.MAGIC003,
     registry.MAGIC002,
     registry.DOM002,
+    registry.IMPORT002,
     *CONTRACT_RULES,
     *DEAD_RULES,
     *DUPLICATE_RULES,
@@ -482,8 +484,11 @@ def _policy_rules(
 
 
 def _opted_in(rule: registry.RuleSpec, config: EffectiveConfig) -> bool:
-    """An opt-in family's rules apply only once the repository turns it on."""
+    """An opt-in family's rules apply only once the repository turns it on; IMPORT002 once
+    it declares a boundary."""
     section = rule.config_section
+    if rule is registry.IMPORT002:
+        return len(config.section(registry.IMPORT_BOUNDARIES_SECTION)["forbidden"]) > 0
     return section is None or not is_opt_in(section) or config.section(section)["enabled"] is True
 
 
@@ -1047,6 +1052,31 @@ def dom_findings(
     return run_dom002(files, graph.module_edges, config.section(registry.DOM_SECTION))
 
 
+def boundary_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """IMPORT002: imports across the boundaries the project declared."""
+    if graph is None:
+        return {}
+    files = [
+        BoundaryFile(
+            path=p.path,
+            imports=p.facts.imports,
+            source=p.source,
+            applies=registry.IMPORT002.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.IMPORT002.languages
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    settings = config.section(registry.IMPORT_BOUNDARIES_SECTION)
+    return run_import002(files, graph.module_edges, settings)
+
+
 def consistency_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -1287,6 +1317,7 @@ GRAPH_RULES = (
     registry.GUARD001,
     registry.STUB003,
     registry.DOM002,
+    registry.IMPORT002,
     *DEAD_RULES,
     registry.VERIFY005,
 )
@@ -1298,6 +1329,7 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
+    boundary_findings,
 )
 
 

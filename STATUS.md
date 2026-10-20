@@ -6278,3 +6278,49 @@ that section to `error`; and `diff`/`gate --base` judge the whole-project rules 
 each revision's own files, so a gate that failed on those findings can now pass. The tag
 `v0.19.0` is on 78ea734. Published by `publish.yml` (run 39371793922, 18 of 18 jobs). PyPI
 lists 0.19.0 with a wheel and an sdist.
+
+## Decision 44: IMPORT002, import boundaries — DONE (2026-10-20)
+
+Tom's go-ahead: "build the import-boundary rule (Python and JavaScript, configured module
+pairs with an allowed-names list, direct imports including lazy ones), test it, check it
+against MetaList's BKP001 pairs, and commit locally."
+
+**The rule.** `rules.import_boundaries` (not opt-in: `enabled = true`, `severity = "error"`,
+`forbidden = []`). An entry names `importers` and `imported` path globs, `allowed_names`
+(required: an omitted key would need a defaulting lookup, and `[]` says "none" explicitly)
+and a `reason`. IMPORT002 is recorded in a file's `rules_applied` only when an entry exists, so per-file
+results do not change for a project without one (the report's "rules applied" line lists
+every implemented rule, so it gains IMPORT002). The facts were already
+there: Python and JavaScript import facts are collected at any depth, and the module graph
+resolves each to a file (`from pkg import mod` gets its own edge to the submodule). A bound
+file's import is reported when its resolved target matches an `imported` glob, unless every
+name it takes is allowed; an import of the whole module (`import m`, `from pkg import m`,
+`import * as m`, a bare `require`, a star or side-effect import, `import()`) takes every
+name. One finding per import, at the first entry it violates.
+
+**Status decision** (the unknown-state inventory): exact on the resolved edges and the
+configured globs and names, so `violation`; an import that does not resolve to an analyzed
+file is not judged. That includes a hook run of one file, whose imports do not resolve: the
+full `check` and the gate catch it.
+
+**Policy.** Lowering the severity is an ordered-setting loosening. An old entry that no new
+entry covers (binding at least its importers, forbidding at least its imported files,
+allowing no other name) is a loosening of `rules.import_boundaries.forbidden`. Turning the
+section off is the generic "is disabled" deviation.
+
+**Measured** on a scratch export of MetaList at 4d4e9847 with BKP001's two pairs
+(`/app/main.py` and `/app/db/migrations.py` may not import
+`/app/services/backup_service.py`; `/app/services/auth_service.py` may import only
+`create_timestamped_backup`): 0 findings, as BKP001. With four imports added (a lazy
+`from app.services.backup_service import restore_backup_to_paths` in migrations, `from
+app.services import backup_service` and `import app.services.backup_service` in main, and
+`list_backups` added to auth's import): IMPORT002 4, BKP001 2. BKP001 only reads
+`from app.services.backup_service import ...`, so whole-module imports slip past it.
+
+Not added: a row in the fix-violations skill's rule table (it is one line under its
+500-line limit; the DEAD, DUP and VERIFY005 rows are not there either).
+
+New tests: `tests/unit/test_import_boundaries.py` (every Python import form including a
+lazy one and a relative one, the message, allowed names against whole-module and star
+imports, unbound files, JavaScript import/require/import()/export-from, not applied
+without an entry, inline suppression, required keys and empty globs, loosenings).

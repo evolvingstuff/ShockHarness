@@ -5,6 +5,18 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **IMPORT002 (error, configured, Python and JavaScript): an import across a declared
+  boundary** (spec 21.1 decision 44). `[[rules.import_boundaries.forbidden]]` entries name
+  the files they bind (`importers` globs), the modules those may not import (`imported`
+  globs), the names they may still take (`allowed_names`, required) and a `reason`. Every
+  import is judged through its resolved edge, lazy imports included, so dotted, relative,
+  submodule and JavaScript path imports of the module are all caught; with allowed names, an
+  import of the whole module is reported. There is no entry by default, so nothing changes
+  until a project declares one. Removing, narrowing or widening an entry is a loosening. On
+  MetaList with its BKP001 pairs: none at 4d4e9847, and all four of four added imports, two
+  of which BKP001 misses.
+
 ## [0.19.0] - 2026-10-19
 
 VERIFY005 (a test's stub the code under test no longer reaches), the `diff` fix for the

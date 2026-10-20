@@ -29,6 +29,9 @@ The sources of looseness, each reported once per key:
 5. **Dead code** (``rules.dead_code``, opt-in): turning it off, and while it is on, an
    entry point added or a role removed. **Duplicated helpers** (``rules.duplicates``,
    opt-in): turning it off, a role removed while it is on, a raised threshold.
+6. **Import boundaries** (``rules.import_boundaries``): an entry of ``forbidden`` that no
+   entry of the new configuration still covers (one binding at least the same importers,
+   forbidding at least the same imported files, allowing no other name).
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -86,6 +89,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.dead_code.dead002_severity": ("error", "warning", "review"),
     "rules.duplicates.severity": ("error", "warning", "review"),
     "rules.duplicates.dup002_severity": ("error", "warning", "review"),
+    "rules.import_boundaries.severity": ("error", "warning", "review"),
     "rules.magic_strings.mode": ("fail", "review"),
 }
 # A higher value reports less.
@@ -456,6 +460,43 @@ def _dead_code(
     return found
 
 
+# -- import boundaries (IMPORT002) ------------------------------------------------------------
+
+IMPORT_BOUNDARIES = "rules.import_boundaries"
+FORBIDDEN_KEY = f"{IMPORT_BOUNDARIES}.forbidden"
+
+
+def _covers(after: Mapping[str, Any], before: Mapping[str, Any]) -> bool:
+    """Whether the new entry still forbids everything the old one did."""
+    return (
+        set(before["importers"]) <= set(after["importers"])
+        and set(before["imported"]) <= set(after["imported"])
+        and set(after["allowed_names"]) <= set(before["allowed_names"])
+    )
+
+
+def _import_boundaries(
+    before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """An entry of ``forbidden`` that no new entry covers: removed, narrowed, or allowing
+    more names. Turning the family off is already a deviation line."""
+    if not has_key(before_values, FORBIDDEN_KEY) or not has_key(after_values, FORBIDDEN_KEY):
+        return []
+    after = value_at(after_values, FORBIDDEN_KEY)
+    found: list[Loosening] = []
+    for entry in value_at(before_values, FORBIDDEN_KEY):
+        if any(_covers(new, entry) for new in after):
+            continue
+        importers = ", ".join(map(repr, entry["importers"]))
+        imported = ", ".join(map(repr, entry["imported"]))
+        message = (
+            f"{FORBIDDEN_KEY} no longer keeps {importers} from importing {imported} as before "
+            f"(removed, narrowed, or allowing more names): {entry['reason']}"
+        )
+        found.append(Loosening(FORBIDDEN_KEY, message))
+    return found
+
+
 def scope_changes(
     before_values: Mapping[str, Any], after_values: Mapping[str, Any]
 ) -> list[Loosening]:
@@ -503,6 +544,7 @@ def loosenings(
     found.extend(_property_contracts(before_values, after_values))
     found.extend(_dead_code(before_values, after_values))
     found.extend(_opt_in_off_or_roles(DUPLICATES, before_values, after_values))
+    found.extend(_import_boundaries(before_values, after_values))
     return found
 
 

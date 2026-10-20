@@ -1575,6 +1575,35 @@ exception types in their copies, one `getNoteElementById` escapes the id and one
 (`_normalize_direction` for two domains). Before the escaper merge (add573e3^) the escapers
 are an 11-copy and a 4-copy DUP001 group and one DUP002 naming `throw` against `return ''`.
 
+### IMPORT002: an import across a declared boundary (error, configured; Python and JavaScript)
+
+Spec 21.1 decision 44, from MetaList, whose startup check (BKP001) keeps its startup and
+database migrations from importing the backup service, so a migration can never touch a
+backup, and lets the authentication service import only `create_timestamped_backup` from it.
+A boundary like that is invisible in the code; an agent adding one convenient import crosses
+it without knowing it was there.
+
+Each `[[rules.import_boundaries.forbidden]]` entry (see `docs/configuration.md`, Import
+boundaries) binds the files its `importers` globs match. Every import in a bound file is
+judged, at any depth, a function's lazy import included: Python `import` and
+`from ... import`, JavaScript and TypeScript `import`, `export ... from`, `require(...)` and
+`import(...)` with a literal specifier. An import that resolves to a file the `imported`
+globs match is reported, unless every name it takes is in `allowed_names`; an import of the
+whole module takes every name. One finding per import, at the import, naming the module and
+the entry's reason.
+
+Not judged: an import that does not resolve to an analyzed file (a check of one file does
+not resolve its imports, so the edit-time hook sees only what that run analyzes), computed
+specifiers (`importlib.import_module(name)`, `import(expr)`), and TypeScript type-only
+imports. Direct imports only: a forbidden module reached through another project module is
+not reported.
+
+**Measured** on MetaList at 4d4e9847 with BKP001's two pairs as entries: no finding. With
+four imports added (a lazy `from ... import` in `app/db/migrations.py`, `from app.services
+import backup_service` and `import app.services.backup_service` in `app/main.py`, and
+`list_backups` added to `auth_service.py`'s import): all four reported. BKP001 reports two
+of them; it does not see an import of the whole module.
+
 ## Registered, not implemented
 
 None since MAGIC002 landed. A rule registered before it is built is listed in

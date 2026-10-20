@@ -104,6 +104,7 @@ IMPLEMENTED = {
     "DEAD002",
     "DUP001",
     "DUP002",
+    "IMPORT002",
     "MAGIC002",
 }
 

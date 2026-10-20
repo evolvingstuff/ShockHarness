@@ -663,8 +663,27 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
 SINK_ENTRY = re.compile(r"[^:\s]+:[0-9]+")
 
 
+IMPORT_BOUNDARY_GLOBS = ("importers", "imported")
+
+
+def _import_boundary_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
+    """IMPORT002: each entry names at least one importer and one imported glob, all valid."""
+    issues: list[ConfigIssue] = []
+    for index, entry in enumerate(section["forbidden"]):
+        for field in IMPORT_BOUNDARY_GLOBS:
+            key = f"rules.import_boundaries.forbidden[{index}].{field}"
+            if len(entry[field]) == 0:
+                issues.append(ConfigIssue(key, "must list at least one path glob"))
+            for g_index, pattern in enumerate(entry[field]):
+                problem = validate_glob(pattern)
+                if problem is not None:
+                    issues.append(ConfigIssue(f"{key}[{g_index}]", problem))
+    return issues
+
+
 def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
-    """ROLE001's support globs, IMPORT001's script globs and H6's sink entries."""
+    """ROLE001's support globs, IMPORT001's script globs, H6's sink entries and IMPORT002's
+    boundaries."""
     issues: list[ConfigIssue] = []
     for section, key in (("role_integrity", "support_files"), ("import_effects", "script_files")):
         for index, pattern in enumerate(rules[section][key]):
@@ -672,6 +691,7 @@ def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
             if problem is not None:
                 issues.append(ConfigIssue(f"rules.{section}.{key}[{index}]", problem))
     issues.extend(_sink_issues(rules["input"]))
+    issues.extend(_import_boundary_issues(rules["import_boundaries"]))
     return issues
 
 

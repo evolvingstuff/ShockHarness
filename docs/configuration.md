@@ -974,6 +974,43 @@ dup002_severity = "review"
 While the family is on, turning it off or removing a role is a VERIFY003 loosening, and so
 is raising `min_statements`, `min_tokens` or `similarity`, or lowering either severity.
 
+## Import boundaries (IMPORT002)
+
+Spec 21.1 decision 44. Modules some files must never import, declared per project: no entry
+by default, so IMPORT002 reports nothing (and is not recorded in a file's `rules_applied`)
+until a project adds one. Every key of an entry is required.
+
+```toml
+[tool.shockharness.rules.import_boundaries]
+enabled = true
+severity = "error"               # "warning" or "review" report without gating
+
+[[tool.shockharness.rules.import_boundaries.forbidden]]
+importers = ["/app/main.py", "/app/db/migrations.py"]    # the files the entry binds (globs)
+imported = ["/app/services/backup_service.py"]           # the files they may not import (globs)
+allowed_names = []               # names they may still import from it; [] allows none
+reason = "a migration can never touch a backup"
+
+[[tool.shockharness.rules.import_boundaries.forbidden]]
+importers = ["/app/services/auth_service.py"]
+imported = ["/app/services/backup_service.py"]
+allowed_names = ["create_timestamped_backup"]
+reason = "authentication may only take a new backup"
+```
+
+Both sides are path globs (see Glob semantics), matched against the importing file and the
+file the import resolves to, so one entry covers `from app.services.backup_service import
+x`, `import app.services.backup_service`, `from app.services import backup_service`, a
+relative import and a JavaScript path alike. With `allowed_names` set, an import of the
+whole module (`import m`, `from pkg import m`, `import * as m`, a bare `require`, a star or
+side-effect import) is reported, since it takes every name; a JavaScript default import is
+the name `default`.
+
+Removing an entry, narrowing its globs or adding an allowed name is a VERIFY003 loosening
+(an entry is kept when some new entry binds at least the same importers, forbids at least
+the same files and allows no other name), and so is lowering the severity. Turning the
+section off is a deviation.
+
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a, P1b and P2,

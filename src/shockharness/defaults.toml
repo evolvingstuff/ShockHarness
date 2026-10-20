@@ -869,3 +869,16 @@ min_tokens = 25
 similarity = 0.85
 severity = "review"            # DUP001
 dup002_severity = "review"
+
+[tool.shockharness.rules.import_boundaries]  # IMPORT002: Python and JavaScript
+# Modules some files must never import, declared per project; none by default, so the rule
+# reports nothing until a project adds an entry. Removing an entry, narrowing its globs or
+# adding an allowed name is a loosening.
+#   [[tool.shockharness.rules.import_boundaries.forbidden]]
+#   importers = ["app/db/migrations.py", "app/main.py"]
+#   imported = ["app/services/backup_service.py"]
+#   allowed_names = []            # required: names the importers may still import from it
+#   reason = "a migration can never touch a backup"
+enabled = true
+severity = "error"
+forbidden = []
