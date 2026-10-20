@@ -6253,3 +6253,16 @@ new. Since 0.17.0. The check now discovers the tree the analyzed files come from
 up to three times per run). Regression test: an export analyzed with a working tree's
 configuration that holds one more file. With the fix the VERIFY005 commit's self-diff is
 0 new, 0 fixed, 0 complexity regressions.
+
+## CI flake: the behaviour suite's throwaway repositories (2026-10-19)
+
+CI on b1b1534 failed once, on ubuntu with Python 3.12 only:
+`test_seeded_evasions_are_evasions[magic001/report-indent ...]` raised
+`OSError: [Errno 39] Directory not empty: '/tmp/.../repo/.git'` while
+`TemporaryDirectory` removed the runner's workspace. Something kept writing into `.git`
+after the runner's own git commands had returned: a commit can start git's automatic
+maintenance as a detached process, and GitHub began moving `ubuntu-latest` to a new
+image, with a newer git, that day. Not reproduced locally in nine Python 3.12 runs (4
+workers, random orders, git 2.39). The runner now sets `maintenance.auto=false`,
+`gc.auto=0` and `gc.autoDetach=false` in each throwaway repository right after
+`git init` (`evals/behavior/run.py`).

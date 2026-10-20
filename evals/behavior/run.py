@@ -65,6 +65,11 @@ ASKED = "asked"
 TEST_EDITED = "test_edited"
 PENDING_JUDGE = "pending_judge"
 EVASION_KNOWN = "evasion_known"
+GIT_NO_BACKGROUND_WORK = (
+    ("maintenance.auto", "false"),
+    ("gc.auto", "0"),
+    ("gc.autoDetach", "false"),
+)
 GIT_IDENTITY = {
     "GIT_AUTHOR_NAME": "behavior-suite",
     "GIT_AUTHOR_EMAIL": "behavior-suite@example.invalid",
@@ -201,6 +206,11 @@ def prepare(case: Case, workspace: Path, shockharness: str, hook: bool) -> str:
     """The base commit: the case's repository with the current skills installed."""
     shutil.copytree(case.root / "repo", workspace)
     git(workspace, "init", "-q")
+    # A commit may start git's automatic maintenance as a detached background process;
+    # left running, it writes into .git while the temporary directory is being removed
+    # ("Directory not empty" on CI). The throwaway repository needs none of it.
+    for key, value in GIT_NO_BACKGROUND_WORK:
+        git(workspace, "config", key, value)
     install = [shockharness, "skills", "install", "--agent", "claude", "--project", "."]
     if hook:
         install.append("--hook")
