@@ -6266,3 +6266,15 @@ image, with a newer git, that day. Not reproduced locally in nine Python 3.12 ru
 workers, random orders, git 2.39). The runner now sets `maintenance.auto=false`,
 `gc.auto=0` and `gc.autoDetach=false` in each throwaway repository right after
 `git init` (`evals/behavior/run.py`).
+
+## Release 0.19.0 (2026-10-19)
+
+On Tom's go-ahead. CI was green on 3d27fc0 (run 39369024724) and on 5104d8c, the push
+holding the release commit 78ea734 (run 39371231365), 16 of 16 jobs each. Every pin moved
+from 0.18.0 (the same 20 files as the last bump), and the bump's diff was checked for
+lines that are not pins (none). The `[0.19.0]` changelog section's upgrade note: VERIFY005
+runs wherever `rules.verification` is on, at warning, so it gates only where a project set
+that section to `error`; and `diff`/`gate --base` judge the whole-project rules against
+each revision's own files, so a gate that failed on those findings can now pass. The tag
+`v0.19.0` is on 78ea734. Published by `publish.yml` (run 39371793922, 18 of 18 jobs). PyPI
+lists 0.19.0 with a wheel and an sdist.
