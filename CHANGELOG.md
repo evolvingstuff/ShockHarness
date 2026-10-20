@@ -5,6 +5,27 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-19
+
+C# for Godot .NET (opt-in, milestones G1 and G2), DUP001 and DUP002 (duplicated helpers),
+`join` compositions in property contracts, and the dead-code false positives MetaList
+found.
+
+**Upgrading from 0.17.0.** One new runtime dependency, `tree-sitter-c-sharp`. C# is
+opt-in: nothing changes for a project that does not add `"**/*.cs"` to its `include`.
+DUP001 and DUP002 are opt-in and `review`. Two changes can alter findings:
+
+- **Property contracts:** a `.join` with no `join` rule in the catalog now carries
+  nothing, like an f-string with no rule, so a finding it reaches changes from unknown
+  to violation. With the default `review` severities nothing gates; a project that set
+  `PROP001` to `error` can see a gate fail where the join reaches a sink, and the fix is
+  a `join` composition rule or a sanitizing producer.
+- **BOOL001:** the default `allowed_callees` adds Godot's setters (below), so a project
+  using the defaults gets fewer BOOL001 findings, never more.
+
+The DEAD001/DEAD002 fixes only remove false positives. The cache schema is "28", so the
+first run after upgrading rebuilds the cache.
+
 ### Added
 - **C# (Godot .NET), milestone G1** (spec 21.1 decision 40, `docs/proposal-godot.md`).
   `.cs` files are parsed with `tree-sitter-c-sharp` (a new runtime dependency, approved
@@ -37,15 +58,6 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     `SetDeferred`, `SetMeta`, `SetValue`, `SetSetting`, `Call`, `CallDeferred`, `Rpc`,
     `RpcId` and `EmitSignal`, whose first argument names what the Boolean is for. A
     project that sets its own `allowed_callees` keeps its list.
-
-### Fixed
-- **A rule's `languages` is now honored for every family.** The per-file phase ran
-  MAGIC001/MAGIC004/MAGIC005, EXC001-EXC003, DEF001-DEF006, the complexity rules and
-  ROLE001 on any file, and the cross-file phases read every file's facts, whatever the
-  rule's languages; this changed nothing while every language had every family. No
-  Python, JavaScript or TypeScript verdict changes.
-
-### Added
 - **DUP001 and DUP002 (review, opt-in, Python and JavaScript): helpers written out in
   several files, and copies that have drifted apart** (spec 21.1 decision 39). DUP001:
   identical function bodies in two or more files, compared with comments, layout and
@@ -60,17 +72,6 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   - On MetaList, outside its browser test scripts: 43 DUP001 and 24 DUP002, among them
     copies that throw different exception types and one that escapes a selector the other
     does not. Cache schema "27"; the function shapes add about 9% to a cold run.
-
-### Fixed
-- **DEAD001/DEAD002 false positives MetaList found** (155 findings, 134 real): methods of
-  an exported instance (`export const S = Object.freeze(new Store())`, then
-  `S.createScope()`); a method called on a call's result (`Guard(\n x\n).check()`); a
-  function another module re-exports; a method of a class whose framework base is a
-  grandparent (`server_bind` under `ThreadingHTTPServer`); the methods of a stream
-  assigned to `sys.stdout`; `[project.scripts]` targets. On MetaList: 154 findings to
-  145, the nine removed all among those false positives, nothing added. Cache schema "26".
-
-### Added
 - **Property contracts: `join` compositions.** `"sep".join(items)` (Python) and
   `[a, b].join(sep)` (JavaScript) compose by the catalog's `join` rules. The parts are a
   non-literal separator and the items: the elements of a list, tuple, set or array
@@ -90,6 +91,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   offers the user, both build from one function, and a test checks that every offered
   value is accepted. From MetaList, where two separately built tag vocabularies drifted
   apart; no static rule can see the drift across an HTTP request.
+
+### Fixed
+- **A rule's `languages` is now honored for every family.** The per-file phase ran
+  MAGIC001/MAGIC004/MAGIC005, EXC001-EXC003, DEF001-DEF006, the complexity rules and
+  ROLE001 on any file, and the cross-file phases read every file's facts, whatever the
+  rule's languages; this changed nothing while every language had every family. No
+  Python, JavaScript or TypeScript verdict changes.
+- **DEAD001/DEAD002 false positives MetaList found** (155 findings, 134 real): methods of
+  an exported instance (`export const S = Object.freeze(new Store())`, then
+  `S.createScope()`); a method called on a call's result (`Guard(\n x\n).check()`); a
+  function another module re-exports; a method of a class whose framework base is a
+  grandparent (`server_bind` under `ThreadingHTTPServer`); the methods of a stream
+  assigned to `sys.stdout`; `[project.scripts]` targets. On MetaList: 154 findings to
+  145, the nine removed all among those false positives, nothing added. Cache schema "26".
 
 ## [0.17.0] - 2026-10-19
 
