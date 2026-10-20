@@ -6238,3 +6238,18 @@ resolved patches, 0 reported; the refactored `namespace_switcher.py` with the ol
 unreached stubs on MetaList are all tripwires. The prototype and the built rule agree.
 Each guard (tripwires, fixtures, helpers) has a test that fails without it. Cache schema
 "30".
+
+## Fixed: whole-project rules in `diff` (2026-10-19)
+
+Found while verifying VERIFY005. Its self-diff showed the four reasoned DUP suppressions
+as new findings, and the base revision as reporting them "silences nothing". `diff`
+exports each revision and analyzes its files with the working tree's configuration, and
+`_whole_project` listed the files of `config.root`, the working tree. With files added
+since the base, the base looked partial, so DEAD001/DEAD002 and DUP001/DUP002 (and
+VERIFY005) silently did not run on it, and everything they found in the head came out
+new. Since 0.17.0. The check now discovers the tree the analyzed files come from
+(`analyze_files` derives it from the discovered files; `analyze_text` uses the root), and
+`complete` computes it once and only when one of those rules applies (it was rediscovered
+up to three times per run). Regression test: an export analyzed with a working tree's
+configuration that holds one more file. With the fix the VERIFY005 commit's self-diff is
+0 new, 0 fixed, 0 complexity regressions.

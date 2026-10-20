@@ -217,3 +217,20 @@ def test_an_exported_instance_and_a_reexport_reach_their_functions(tmp_path: Pat
     # Inside a function both calls resolve to "path::name" external targets, which is how
     # the graph records an exported instance's method and a re-exported function.
     assert dead(tmp_path, files) == []
+
+
+def test_a_revision_export_is_judged_against_its_own_files(tmp_path: Path) -> None:
+    """``diff`` analyzes an exported revision with the working tree's configuration: the
+    whole-project test must discover the export, not the working tree (where a file the
+    revision lacks would make every run look partial)."""
+    from shockharness.analysis import analyze_files
+    from shockharness.discovery import discover
+
+    files = {"app/main.py": "def unused():\n    return 1\n"}
+    work, export = tmp_path / "work", tmp_path / "export"
+    write(work, {**files, "app/added_later.py": "X = 1\n"})
+    write(export, files)
+    config = load_config(work, None)
+    outcome = analyze_files(discover(export, [export], config).files, config, OPTIONS, None)
+    found = [f.rule_id for r in outcome.files for f in r.findings if f.rule_id.startswith("DEAD")]
+    assert found == ["DEAD001"]

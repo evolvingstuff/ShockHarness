@@ -1064,12 +1064,31 @@ def consistency_findings(
     return found
 
 
-def _whole_project(pendings: Sequence[PendingFile], config: EffectiveConfig) -> bool:
-    """Every file the configuration includes was analyzed and parsed: a partial run (a
-    path argument, the edit hook) cannot tell dead code from code called elsewhere."""
+WHOLE_PROJECT_RULES = frozenset(
+    rule.rule_id for rule in (*DEAD_RULES, *DUPLICATE_RULES, registry.VERIFY005)
+)
+
+
+def _whole_project(pendings: Sequence[PendingFile], config: EffectiveConfig, tree: Path) -> bool:
+    """Every file the configuration includes in the analyzed tree was analyzed and parsed:
+    a partial run (a path argument, the edit hook) cannot tell dead code from code called
+    elsewhere. ``tree`` is the tree the files come from: a revision's export in a diff,
+    not the working tree. Only computed when a rule that needs it applies."""
+    if not any(WHOLE_PROJECT_RULES & frozenset(p.rules_applied) for p in pendings):
+        return False
     analyzed = {p.path for p in pendings if not p.failed}
-    every = discover(config.root, [config.root], config).files
+    every = discover(tree, [tree], config).files
     return all(f.relative in analyzed for f in every)
+
+
+def _tree_root(files: Sequence[DiscoveredFile], config: EffectiveConfig) -> Path:
+    """The root the discovered files are relative to (a diff analyzes an exported tree)."""
+    if len(files) == 0:
+        return config.root
+    root = files[0].path
+    for _part in Path(files[0].relative).parts:
+        root = root.parent
+    return root
 
 
 def _dead_files(
@@ -1096,13 +1115,13 @@ def _dead_files(
 
 
 def stale_stub_findings(
-    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None, whole: bool
 ) -> dict[str, list[Finding]]:
     """VERIFY005: test stubs the code under test no longer reaches."""
     rule = registry.VERIFY005.rule_id
     if graph is None or not any(rule in p.rules_applied for p in pendings):
         return {}
-    if not _whole_project(pendings, config):
+    if not whole:
         return {}
     files = [
         StubFile(file, pending.facts.stubs, rule in pending.rules_applied)
@@ -1113,13 +1132,13 @@ def stale_stub_findings(
 
 
 def dead_findings(
-    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None, whole: bool
 ) -> dict[str, list[Finding]]:
     """DEAD001, DEAD002: functions nothing in production reaches, by cluster."""
     ids = frozenset(rule.rule_id for rule in DEAD_RULES)
     if graph is None or not any(ids & set(p.rules_applied) for p in pendings):
         return {}
-    if not _whole_project(pendings, config):
+    if not whole:
         return {}
     files = [file for _pending, file in _dead_files(pendings, ids)]
     runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
@@ -1129,12 +1148,12 @@ def dead_findings(
 
 
 def duplicate_findings(
-    pendings: Sequence[PendingFile], config: EffectiveConfig
+    pendings: Sequence[PendingFile], config: EffectiveConfig, whole: bool
 ) -> dict[str, list[Finding]]:
     """DUP001, DUP002: helpers written out in several files, and copies that drifted."""
     ids = frozenset(rule.rule_id for rule in DUPLICATE_RULES)
     applying = [p for p in pendings if len(ids & frozenset(p.rules_applied)) > 0]
-    if len(applying) == 0 or not _whole_project(pendings, config):
+    if len(applying) == 0 or not whole:
         return {}
     files = [
         ShapeFile(
@@ -1279,8 +1298,6 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
-    dead_findings,
-    stale_stub_findings,
 )
 
 
@@ -1289,7 +1306,10 @@ def complete(
     config: EffectiveConfig,
     options: AnalysisOptions,
     cache: FileCache | None,
+    tree: Path,
 ) -> AnalysisOutcome:
+    """``tree``: the root of the analyzed files, for the rules judged on whole-project
+    runs."""
     outcome = cross_file(pendings, config)
     graph = outcome.call_graph
     if graph is None and any(
@@ -1298,13 +1318,16 @@ def complete(
         graph = build_call_graph(_module_inputs(pendings))
     if graph is not None:
         pendings = _unimported_scripts(pendings, config, graph)
+    whole = _whole_project(pendings, config, tree)
     phases = (
         outcome.graph_findings,
         *(phase(pendings, config, graph) for phase in GRAPH_PHASES),
         contract_findings(pendings, config, cache),
         string_findings(pendings, config),
         type_findings(pendings, config),
-        duplicate_findings(pendings, config),
+        dead_findings(pendings, config, graph, whole),
+        stale_stub_findings(pendings, config, graph, whole),
+        duplicate_findings(pendings, config, whole),
     )
     results: list[FileResult] = []
     for pending in pendings:
@@ -1376,7 +1399,7 @@ def analyze_files(
     """The whole pipeline for a set of discovered files; per-file results come from
     ``cache`` when it is open and the key matches, cross-file work is always recomputed."""
     pendings = [prepare_file(file, config, cache) for file in files]
-    return complete(pendings, config, options, cache)
+    return complete(pendings, config, options, cache, _tree_root(files, config))
 
 
 def analyze_text(
@@ -1387,5 +1410,6 @@ def analyze_text(
     options: AnalysisOptions,
 ) -> FileResult:
     """One in-memory file through the whole pipeline (its graph is the file alone)."""
-    outcome = complete([prepare_text(relative_path, language, text, config)], config, options, None)
+    pending = prepare_text(relative_path, language, text, config)
+    outcome = complete([pending], config, options, None, config.root)
     return outcome.files[0]

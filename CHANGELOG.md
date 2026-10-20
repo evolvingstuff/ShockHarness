@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Fixed
+- **`diff` and `gate --base` judged the whole-project rules against the working tree.**
+  DEAD001, DEAD002, DUP001 and DUP002 (since 0.17.0) asked whether every included file
+  was analyzed by listing the working tree's files, not the exported revision's. In a
+  diff where files were added, the base revision then looked partial, those rules did
+  not run on it, and their findings in the head showed as new. The check now lists the
+  tree the files come from, and runs once per analysis instead of once per rule.
+
 ### Added
 - **VERIFY005 (warning, Python): a stub the code under test no longer reaches** (spec 21.1
   decision 43). A test's `monkeypatch.setattr`, `mock.patch` or `patch.object` of a project
