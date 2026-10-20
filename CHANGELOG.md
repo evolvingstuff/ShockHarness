@@ -5,6 +5,25 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-19
+
+VERIFY005 (a test's stub the code under test no longer reaches), the `diff` fix for the
+whole-project rules, and DUP001/DUP002 leaving parallel implementations alone.
+
+**Upgrading from 0.18.0.** No new dependency. Two changes can alter findings:
+
+- **VERIFY005** is a new rule in the verification family, on wherever
+  `rules.verification` is on, at that section's severity (`warning` by default, which
+  does not gate). A project that set `rules.verification.severity = "error"` can see a
+  gate fail on a stale stub; the fix is to stub what the code now calls, or to remove the
+  stub, or a reasoned inline suppression.
+- **`diff` and `gate --base`** judge DEAD001, DEAD002, DUP001 and DUP002 against each
+  revision's own files, so their findings no longer show as new merely because files
+  were added between the revisions; a gate that failed on those can now pass.
+
+The DUP001/DUP002 change only removes groups. The cache schema is "30", so the first run
+after upgrading rebuilds the cache.
+
 ### Fixed
 - **`diff` and `gate --base` judged the whole-project rules against the working tree.**
   DEAD001, DEAD002, DUP001 and DUP002 (since 0.17.0) asked whether every included file
