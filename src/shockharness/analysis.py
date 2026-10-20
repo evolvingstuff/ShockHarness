@@ -111,6 +111,7 @@ from shockharness.rules.registry import (
 )
 from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.sentinels import run_magic003
+from shockharness.rules.stale_stubs import StubFile, run_stale_stubs
 from shockharness.rules.strings import StringFile, run_magic002
 from shockharness.rules.type_coverage import TypedFile, run_type002
 from shockharness.rules.verification import FileVerification
@@ -362,9 +363,9 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
     """H3: a role-scoped rule applies to the roles its section lists. Like the VERIFY role
     scopes, a rule outside its roles is not applied to the file (and not listed as disabled)."""
     section = rule.config_section
-    if rule is registry.PROP005:
-        # The test bootstrap's enable(...) lives in test code (conftest.py is config by
-        # default), whatever the family's roles say.
+    if rule is registry.PROP005 or rule is registry.VERIFY005:
+        # The test bootstrap's enable(...) and a test's stubs live in test code (conftest.py
+        # is config by default), whatever the family's roles say.
         return role.role in (ROLE_TEST, ROLE_CONFIG)
     if section is None or section not in (
         *GUARDRAIL_SECTIONS,
@@ -410,6 +411,7 @@ def _units(
         complexity["enabled"] is True
         or any(rule in applied for rule in graph_rules)
         or config.section(registry.DEAD_CODE_SECTION)["enabled"] is True
+        or config.section(registry.VERIFICATION_SECTION)["enabled"] is True
     ):
         return measure_units(relative_path, facts.functions, complexity)
     return ()
@@ -432,6 +434,7 @@ SCOPED_RULES = (
     *CONTRACT_RULES,
     *DEAD_RULES,
     *DUPLICATE_RULES,
+    registry.VERIFY005,
 )
 
 
@@ -1069,6 +1072,46 @@ def _whole_project(pendings: Sequence[PendingFile], config: EffectiveConfig) -> 
     return all(f.relative in analyzed for f in every)
 
 
+def _dead_files(
+    pendings: Sequence[PendingFile], ids: frozenset[str]
+) -> list[tuple[PendingFile, DeadFile]]:
+    """Each analyzed Python or JavaScript file as the reachability sees it."""
+    return [
+        (
+            p,
+            DeadFile(
+                path=p.path,
+                tested=p.role in (ROLE_TEST, ROLE_CONFIG),
+                applied=ids & frozenset(p.rules_applied),
+                source=p.source,
+                units=p.units,
+                usage=p.facts.usage,
+                imports=p.facts.imports,
+                classes=p.facts.receivers.classes,
+            ),
+        )
+        for p in pendings
+        if p.facts is not None and p.source is not None and p.language in registry.DEAD001.languages
+    ]
+
+
+def stale_stub_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """VERIFY005: test stubs the code under test no longer reaches."""
+    rule = registry.VERIFY005.rule_id
+    if graph is None or not any(rule in p.rules_applied for p in pendings):
+        return {}
+    if not _whole_project(pendings, config):
+        return {}
+    files = [
+        StubFile(file, pending.facts.stubs, rule in pending.rules_applied)
+        for pending, file in _dead_files(pendings, frozenset())
+        if pending.facts is not None
+    ]
+    return run_stale_stubs(files, graph, config.section(registry.VERIFICATION_SECTION))
+
+
 def dead_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -1078,20 +1121,7 @@ def dead_findings(
         return {}
     if not _whole_project(pendings, config):
         return {}
-    files = [
-        DeadFile(
-            path=p.path,
-            tested=p.role in (ROLE_TEST, ROLE_CONFIG),
-            applied=ids & frozenset(p.rules_applied),
-            source=p.source,
-            units=p.units,
-            usage=p.facts.usage,
-            imports=p.facts.imports,
-            classes=p.facts.receivers.classes,
-        )
-        for p in pendings
-        if p.facts is not None and p.source is not None and p.language in registry.DEAD001.languages
-    ]
+    files = [file for _pending, file in _dead_files(pendings, ids)]
     runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
     libraries = [str(m) for m in runtime if str(m).endswith(RUNTIME_SUFFIXES)]
     settings = config.section(registry.DEAD_CODE_SECTION)
@@ -1239,6 +1269,7 @@ GRAPH_RULES = (
     registry.STUB003,
     registry.DOM002,
     *DEAD_RULES,
+    registry.VERIFY005,
 )
 GRAPH_PHASES = (
     async_findings,
@@ -1249,6 +1280,7 @@ GRAPH_PHASES = (
     stub_findings,
     dom_findings,
     dead_findings,
+    stale_stub_findings,
 )
 
 

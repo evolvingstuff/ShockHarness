@@ -48,7 +48,7 @@ Each rule family enforces one of these. `docs/rules.md` has the rules, and the
 * **The verifier is not negotiable.** A change does not get through by skipping a
   test, weakening an assertion, raising a threshold, widening a suppression or
   loosening the policy file. Each of these is reported at review.
-  (`VERIFY001`-`VERIFY004`, `ROLE001`, `SUPP001`, `SUPP002`)
+  (`VERIFY001`-`VERIFY005`, `ROLE001`, `SUPP001`, `SUPP002`)
 * **Unfinished work says so.** A stub, a mock in production code or a check that
   always passes is reported, never mistaken for an implementation.
   (`STUB001`-`STUB003`)
@@ -123,6 +123,7 @@ Implemented rules:
 | `VERIFY002` | a blanket suppression comment the change adds (`# noqa`, `// eslint-disable`, `@ts-ignore`, ...) | warning |
 | `VERIFY003` | a looser configuration, files dropped from analysis, baseline growth, a weakened ShockHarness workflow job, loosened ruff/flake8/pytest/coverage/ESLint settings; a key that loosens the `--policy` file (also in `check`) | warning |
 | `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
+| `VERIFY005` | a test's stub (`monkeypatch.setattr`, `mock.patch`) of a function the code the test calls no longer reaches, so the test runs the real code | warning |
 | `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body, `throw new Error("not implemented")` in production code (abstract API exempt) | warning |
 | `STUB002` | production code importing a mocking or fake-data library or a module under `tests/`, `fixtures/`, `mocks/` | warning |
 | `ASSERT001` | a Python `assert` that checks external input (a request field, a file, an environment variable); internal invariants are encouraged | warning |

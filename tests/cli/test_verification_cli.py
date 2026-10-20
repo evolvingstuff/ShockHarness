@@ -256,7 +256,11 @@ def test_plain_check_reports_verification_as_not_applicable(
     _code, out, _ = run(["check", str(empty_root), "--root", str(empty_root)], capsys)
     assert "rules needing a base revision (not analyzed in this run" in out
     applied = next(line for line in out.splitlines() if line.startswith("  rules applied:"))
-    assert "VERIFY" not in applied
+    # VERIFY005 (stale stubs) judges one revision; the others need a base.
+    assert [r for r in applied.replace(",", " ").split() if r.startswith("VERIFY")] in (
+        [],
+        ["VERIFY005"],
+    )
 
 
 def test_inline_suppression_of_a_verify_rule_is_supp001(

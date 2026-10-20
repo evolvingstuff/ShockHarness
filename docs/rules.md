@@ -771,6 +771,40 @@ for its own skips, or turn off `fail_on_unknown` or
 `report_narrow_suppressions` for itself. The loosening itself is reported by
 `VERIFY003`, and takes effect once it is on the base branch.
 
+### VERIFY005: a stub the code under test no longer reaches (warning, Python; one revision)
+
+Spec 21.1 decision 43, from MetaList: a refactor of its namespace switcher moved the
+launching to other functions, and three tests kept stubbing `open_or_launch_namespace`,
+which the new code no longer called. They stayed green and launched real processes.
+
+VERIFY005 looks at every patch of project code in test and config files:
+`monkeypatch.setattr(module, "name", stub)`, `monkeypatch.setattr("pkg.mod.name", stub)`,
+`patch("pkg.mod.name")` (`unittest.mock` or pytest-mock, as a call, decorator or context
+manager) and `patch.object(Class, "name")`. The patch is resolved to the functions it
+replaces through the file's imports or the project's module names. The tests that run it
+are the test it is in, the tests that reach the helper it is in, and the tests that take
+the fixture it is in as a parameter. When none of them reaches a replaced function, by the
+same edges as the dead-code rules (calls, same-name fallbacks, value references,
+nesting), the finding sits on the patch.
+
+Not reported: **tripwires**, stubs there to be not called (they raise, call `pytest.fail`,
+have an exception as `side_effect`, or append to a list the test asserts empty); patches
+of code outside the project; patches no test is seen to run. It judges one revision, so a
+plain `check` runs it, and only when the run analyzed every included file. Unlike the
+other VERIFY rules it may be suppressed inline: a stub kept for code reached dynamically
+says so with a reason. Severity `rules.verification.severity`.
+
+Reachability leans toward "reached", so a stale stub whose name another reached function
+shares is missed. Fixtures requested by other fixtures are not followed. A patch of
+`module.name` that the code under test bypasses by importing the name directly is not
+detected yet.
+
+**Measured** on MetaList: at 87cbd073, where code and tests agree, 271 patches resolve to
+project functions and none is reported. With the refactored switcher and the old tests,
+the incident's state, it reports 4: the three `open_or_launch_namespace` stubs and a
+`_restart_running_namespace_process` stub the same refactor stranded. With MetaList's fix,
+none. The 5 unreached tripwires are not reported.
+
 ### EXC004, STUB001, STUB002, ASSERT001, BOOL001, STATE001, IMPORT001: syntax-level guardrails (H3; warning, BOOL001 review)
 
 Milestone H3 of specification section 21. Each rule ships at `warning`

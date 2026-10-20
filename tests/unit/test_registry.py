@@ -60,6 +60,7 @@ IMPLEMENTED = {
     "VERIFY002",
     "VERIFY003",
     "VERIFY004",
+    "VERIFY005",
     "EXC004",
     "STUB001",
     "STUB002",
@@ -131,7 +132,8 @@ def test_verification_rules_need_a_base_revision_and_are_policy_integrity() -> N
             assert rule.config_section == registry.VERIFICATION_SECTION
             # Spec 21.1 decision 9: new rules ship at warning until precision is measured.
             assert rule.default_severity == registry.SEVERITY_WARNING
-            assert registry.needs_base_revision(rule)
+            # VERIFY005 judges one revision (a stale stub), so a plain check runs it.
+            assert registry.needs_base_revision(rule) is (rule is not registry.VERIFY005)
         else:
             assert not registry.needs_base_revision(rule)
 

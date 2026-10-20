@@ -41,6 +41,7 @@ from shockharness.ir.javascript_verification import collect_javascript_verificat
 from shockharness.ir.model import (
     MODULE_SCOPE,
     NO_ANNOTATIONS,
+    NO_STUBS,
     AsyncFacts,
     CatalogFacts,
     Comment,
@@ -50,6 +51,7 @@ from shockharness.ir.model import (
     ImportFact,
     ModuleFacts,
     NumericLiteral,
+    StubFacts,
     UsageFacts,
     failed_facts,
 )
@@ -277,7 +279,7 @@ def _extract_facts(
         return failed_facts(language, parser_name, parse_failure(source, filename, error))
     literals, comments = _literals_and_comments(source, root)
     guardrails, asynchrony, catalog = _policy_facts(source, root)
-    imports, usage, shapes = _module_uses(source, root, filename)
+    imports, usage, shapes, stubs = _module_uses(source, root, filename)
     return ModuleFacts(
         language=language,
         parser=parser_name,
@@ -303,18 +305,19 @@ def _extract_facts(
         annotations=NO_ANNOTATIONS,  # TypeScript is checked by tsc where a tsconfig exists
         usage=usage,
         shapes=shapes,
+        stubs=stubs,
         parse_failure=None,
     )
 
 
 def _module_uses(
     source: SourceText, root: Node, filename: str
-) -> tuple[tuple[ImportFact, ...], UsageFacts, tuple[FunctionShape, ...]]:
-    """The imports, the uses of functions that read them (DEAD001, DEAD002), and the
-    functions' shapes (DUP001, DUP002)."""
+) -> tuple[tuple[ImportFact, ...], UsageFacts, tuple[FunctionShape, ...], StubFacts]:
+    """The imports, the uses of functions that read them (DEAD001, DEAD002), the
+    functions' shapes (DUP001, DUP002), and test stubs (VERIFY005, Python only)."""
     imports = collect_javascript_imports(source, root)
     usage = collect_javascript_usage(source, root, imports)
-    return imports, usage, collect_javascript_shapes(source, root, filename)
+    return imports, usage, collect_javascript_shapes(source, root, filename), NO_STUBS
 
 
 def _literals_and_comments(

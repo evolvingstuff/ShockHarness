@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **VERIFY005 (warning, Python): a stub the code under test no longer reaches** (spec 21.1
+  decision 43). A test's `monkeypatch.setattr`, `mock.patch` or `patch.object` of a project
+  function that none of the tests running it reaches: the test runs the real code it meant
+  to stub out. Tripwires (stubs that raise, fail the test, or record into a list asserted
+  empty) are exempt. It runs in a plain `check`, on whole-project runs, and may be
+  suppressed inline with a reason. On MetaList it reports the four stubs a namespace
+  switcher refactor stranded, and nothing before or after. Cache schema "30".
+
 ### Changed
 - **DUP001 and DUP002 leave parallel implementations alone:** copies whose parameters or
   return are annotated with different types (a function over `ast.AST` and its twin over

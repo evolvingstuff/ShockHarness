@@ -37,6 +37,7 @@ from shockharness.ir.model import (
     NO_DATAFLOW,
     NO_DOM,
     NO_RECEIVER_FACTS,
+    NO_STUBS,
     NO_USAGE,
     NO_VERIFICATION,
     Comment,
@@ -181,6 +182,7 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         annotations=NO_ANNOTATIONS,
         usage=NO_USAGE,
         shapes=(),
+        stubs=NO_STUBS,
         parse_failure=None,
     )
 

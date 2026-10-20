@@ -110,7 +110,7 @@ def _add(table: dict[str, list[str]], key: str, value: str) -> None:
     table[key].append(value)
 
 
-class _Project:
+class Project:
     """The units, their names and the files they are in. ``by_name`` holds every unit of
     a final name; ``in_file`` the same per "path::name"."""
 
@@ -146,7 +146,7 @@ def _module_targets(graph: CallGraph) -> dict[tuple[str, int, int], list[str]]:
     return targets
 
 
-def _imported_targets(project: _Project, graph: CallGraph) -> dict[str, list[tuple[str, str]]]:
+def _imported_targets(project: Project, graph: CallGraph) -> dict[str, list[tuple[str, str]]]:
     """For each "path::local" a bare name may be, the (file, name) its import names."""
     targets = _module_targets(graph)
     found: dict[str, list[tuple[str, str]]] = {}
@@ -173,7 +173,7 @@ def _bind_names(
 
 
 class _Edges:
-    def __init__(self, project: _Project) -> None:
+    def __init__(self, project: Project) -> None:
         self.project = project
         self.out: dict[str, set[str]] = {key: set() for key in project.units}
 
@@ -256,7 +256,7 @@ class _Classes:
     """Inheritance among the project's module-level classes: method families, and the
     classes derived from a class the project does not define."""
 
-    def __init__(self, project: _Project) -> None:
+    def __init__(self, project: Project) -> None:
         self.project = project
         self.parent: dict[tuple[str, str], tuple[str, str]] = {}
         self.defined: dict[str, list[tuple[str, str]]] = {}
@@ -352,7 +352,7 @@ def _matches(key: str, patterns: Sequence[str]) -> bool:
     return any(fnmatch.fnmatchcase(plain, p) for p in patterns)
 
 
-def _handed(project: _Project) -> frozenset[str]:
+def _handed(project: Project) -> frozenset[str]:
     """The classes whose instances some file hands to a library (``sys.stdout = s``)."""
     return frozenset(name for f in project.files.values() for name in f.usage.handed)
 
@@ -362,7 +362,7 @@ def _handed_method(unit: UnitMetrics, handed: frozenset[str]) -> bool:
 
 
 def _registered(
-    project: _Project, classes: _Classes, declared: Mapping[str, str], patterns: Sequence[str]
+    project: Project, classes: _Classes, declared: Mapping[str, str], patterns: Sequence[str]
 ) -> set[str]:
     handed = _handed(project)
     found: set[str] = set()
@@ -381,7 +381,7 @@ def _registered(
     return found
 
 
-def _script_patterns(project: _Project, scripts: Sequence[str]) -> list[str]:
+def _script_patterns(project: Project, scripts: Sequence[str]) -> list[str]:
     """``[project.scripts]`` targets ("module:function") as unit patterns."""
     return [
         f"{path}::{function}"
@@ -390,7 +390,7 @@ def _script_patterns(project: _Project, scripts: Sequence[str]) -> list[str]:
     ]
 
 
-def _declared(project: _Project) -> dict[str, str]:
+def _declared(project: Project) -> dict[str, str]:
     """Each judged function's unit key and what registers it ("" for nothing)."""
     found: dict[str, str] = {}
     for f in project.files.values():
@@ -456,7 +456,7 @@ def _clusters(
     return clusters
 
 
-def _label(project: _Project, key: str, head_path: str) -> str:
+def _label(project: Project, key: str, head_path: str) -> str:
     unit = project.units[key]
     path = project.path_of[key]
     if path == head_path:
@@ -464,7 +464,7 @@ def _label(project: _Project, key: str, head_path: str) -> str:
     return f"{unit.name} ({path})"
 
 
-def _listing(project: _Project, keys: Sequence[str], head_path: str) -> str:
+def _listing(project: Project, keys: Sequence[str], head_path: str) -> str:
     """The head's file first, then the others by path."""
     ordered = sorted(keys, key=lambda k: (project.path_of[k] != head_path, k))
     shown = ", ".join(_label(project, k, head_path) for k in ordered[:LISTED])
@@ -474,7 +474,7 @@ def _listing(project: _Project, keys: Sequence[str], head_path: str) -> str:
     return shown
 
 
-def _message(project: _Project, cluster: _Cluster) -> str:
+def _message(project: Project, cluster: _Cluster) -> str:
     head = project.units[cluster.head]
     path = project.path_of[cluster.head]
     if cluster.tested:
@@ -520,7 +520,7 @@ def _finding(
     )
 
 
-def _graph(project: _Project, graph: CallGraph, declared: Mapping[str, str]) -> _Edges:
+def _graph(project: Project, graph: CallGraph, declared: Mapping[str, str]) -> _Edges:
     edges = _Edges(project)
     edges.calls(graph)
     edges.references(_imported_targets(project, graph))
@@ -528,7 +528,7 @@ def _graph(project: _Project, graph: CallGraph, declared: Mapping[str, str]) -> 
     return edges
 
 
-def _judge(project: _Project, graph: CallGraph, patterns: Sequence[str]) -> list[_Cluster]:
+def _judge(project: Project, graph: CallGraph, patterns: Sequence[str]) -> list[_Cluster]:
     """The dead clusters: what production roots do not reach, by head."""
     declared = _declared(project)
     classes = _Classes(project)
@@ -545,6 +545,19 @@ def _judge(project: _Project, graph: CallGraph, patterns: Sequence[str]) -> list
     return _clusters(out, dead, (tested, called), families)
 
 
+def reachability(
+    files: Sequence[DeadFile], graph: CallGraph
+) -> tuple[Project, Mapping[str, set[str]]]:
+    """The project's units and what each one reaches in one step: call-graph edges,
+    same-name fallbacks, value references and nesting (VERIFY005 follows them too)."""
+    project = Project(files)
+    return project, _graph(project, graph, _declared(project)).out
+
+
+def reach_from(out: Mapping[str, set[str]], start: str) -> set[str]:
+    return _reach(out, [start], set())
+
+
 def run_dead_code(
     files: Sequence[DeadFile],
     graph: CallGraph,
@@ -555,7 +568,7 @@ def run_dead_code(
     """``libraries``: the files installed as libraries (the property-contracts runtime),
     whose functions are there to be called, not judged. ``scripts``: the project's
     ``[project.scripts]`` targets, "module:function"."""
-    project = _Project(files)
+    project = Project(files)
     entry_points = [str(p) for p in settings[SETTING_ENTRY_POINTS]]
     patterns = [
         *entry_points,

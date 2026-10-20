@@ -1112,6 +1112,59 @@ VERIFY004 = RuleSpec(
     compliant_example="def test_total():\n    assert total([1, 2]) == expected_total",
 )
 
+VERIFY005 = RuleSpec(
+    rule_id="VERIFY005",
+    version="1",
+    name="stub the code under test no longer reaches",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A test patches a project function (monkeypatch.setattr, mock.patch, patch.object) "
+        "that nothing the test calls reaches any more: the test runs the real code it meant "
+        "to stub out, or stubs nothing."
+    ),
+    rationale=(
+        "A refactor moves the work to another function and the old stub keeps the test "
+        "green while it runs the real thing: in MetaList, three namespace tests went on "
+        "launching real processes after the switcher stopped calling the function they "
+        "stubbed."
+    ),
+    guarantees=(
+        "Python test and config files. A patch is resolved to the project functions it "
+        "replaces through the file's imports (monkeypatch.setattr(module, 'name'), "
+        "patch.object(Class, 'name')) or the project's module names (patch('pkg.mod.name')). "
+        "The tests that run it are the test it is in, the tests that reach the helper it "
+        "is in, and the tests that take the fixture it is in as a parameter. Reported when "
+        "none of them reaches a replaced function by the dead-code rules' edges (calls, "
+        "same-name fallbacks, value references, nesting). Not reported: tripwires, stubs "
+        "there to be not called (they raise, call pytest.fail, have an exception as "
+        "side_effect, or append to a list the test asserts empty); patches of code outside "
+        "the project; patches no test is seen to run. Judged only when the run analyzed "
+        "every included file."
+    ),
+    limitations=(
+        "Reachability leans toward reached (a call through any object of the same name "
+        "counts), so a stale stub whose name another reached function shares is missed. "
+        "Fixtures that other fixtures request are not followed, and code reached only "
+        "dynamically (getattr with a computed name, an entry the analysis cannot see) makes "
+        "a live stub look stale: suppress it with that reason. A patch of module.name that "
+        "the code under test bypasses by importing the name directly is not detected yet."
+    ),
+    remediation=(
+        "Find what the code under test calls now and stub that, or delete the stub if the "
+        "test means to run the real code. A stub meant to fail the test if the code ever "
+        "calls it should raise or assert, which marks it as a tripwire."
+    ),
+    noncompliant_example=(
+        "monkeypatch.setattr(switcher, 'open_or_launch_namespace', fake)  # no longer called\n"
+        "open_all_namespaces()  # now calls _launch_namespace_process"
+    ),
+    compliant_example="monkeypatch.setattr(switcher, '_launch_namespace_process', fake)",
+)
+
 VERIFY003 = RuleSpec(
     rule_id="VERIFY003",
     version="1",
@@ -3240,6 +3293,7 @@ RULES: tuple[RuleSpec, ...] = (
     VERIFY002,
     VERIFY003,
     VERIFY004,
+    VERIFY005,
     STUB001,
     STUB002,
     ASSERT001,
@@ -3350,8 +3404,9 @@ def category_of(rule_id: str) -> str:
 
 
 def needs_base_revision(rule: RuleSpec) -> bool:
-    """Rules that compare a head revision with a base revision (diff / gate --base)."""
-    return rule.family == VERIFICATION_FAMILY
+    """Rules that compare a head revision with a base revision (diff / gate --base).
+    VERIFY005 judges one revision, and a stub kept on purpose may be suppressed inline."""
+    return rule.family == VERIFICATION_FAMILY and rule is not VERIFY005
 
 
 def base_revision_rules() -> tuple[RuleSpec, ...]:

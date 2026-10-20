@@ -1232,6 +1232,37 @@ class UsageFacts:
 NO_USAGE = UsageFacts(declared=(), references=(), handed=())
 
 
+# --- Test stubs (VERIFY005) ---------------------------------------------------------------
+# A test's patches of project code, and what tells which tests run them.
+
+
+@dataclass(frozen=True)
+class StubPatch:
+    """One patch: ``monkeypatch.setattr(obj, "name", ...)`` (``target`` the object as
+    written, ``attribute`` the name), ``monkeypatch.setattr("a.b.c", ...)``,
+    ``patch("a.b.c")`` (``target`` empty, ``attribute`` the dotted string) or
+    ``patch.object(obj, "name")``. ``holder`` is the start of the function it is in.
+    ``tripwire``: the stub is there to be not called (it raises, fails the test, or
+    records into a list the test asserts empty)."""
+
+    span: Span
+    holder_line: int
+    holder_column: int
+    target: str
+    attribute: str
+    tripwire: bool
+
+
+@dataclass(frozen=True)
+class StubFacts:
+    patches: tuple[StubPatch, ...]
+    fixtures: tuple[tuple[int, int, str], ...]  # (line, column) of a fixture, its name
+    tests: tuple[tuple[int, int, tuple[str, ...]], ...]  # a test function, its parameters
+
+
+NO_STUBS = StubFacts(patches=(), fixtures=(), tests=())
+
+
 # --- Function shapes (DUP001, DUP002) -----------------------------------------------------
 # What a function's body is, independent of layout and of the names it gives its own
 # values, so that copies in different files compare equal.
@@ -1288,6 +1319,7 @@ class ModuleFacts:
     annotations: AnnotationFacts
     usage: UsageFacts
     shapes: tuple[FunctionShape, ...]
+    stubs: StubFacts
     parse_failure: ParseFailure | None
 
 
@@ -1318,5 +1350,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         annotations=NO_ANNOTATIONS,
         usage=NO_USAGE,
         shapes=(),
+        stubs=NO_STUBS,
         parse_failure=failure,
     )

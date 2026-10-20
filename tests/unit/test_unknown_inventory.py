@@ -115,6 +115,11 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "TYPE002 is exact on the counts and the configuration files it reads: violation",
     ),
+    ("rules/stale_stubs.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "VERIFY005 is judged on whole-project runs only, for patches resolved to project "
+        "functions that tests are seen to run: violation (approximate, by name)",
+    ),
     ("rules/duplicates.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "DUP001/DUP002 are exact on the shapes they compare (identical tokens, or a ratio at "

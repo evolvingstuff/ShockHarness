@@ -6207,3 +6207,34 @@ renamed `_first_line_excerpt`, as DUP002's remedy says.
 `.shockharness.toml` turns `rules.duplicates` on. No dead code was left by the merges.
 The Godot session was asked to hold edits while this ran; two of the merged files are
 its C# adapter's.
+
+## Decision 43: VERIFY005, stale stubs — DONE (2026-10-19)
+
+Tom's go-ahead: "build the stale-stub rule (VERIFY005, warning, test roles, whole-project
+runs, tripwire stubs exempt), test it, re-measure on the MetaList snapshots, and commit
+locally."
+
+**What it is.** New Python facts (`ir/python_stubs.py`): each patch of a test file
+(`monkeypatch.setattr` in its object and dotted forms, `patch(...)` as call, decorator or
+context manager, `patch.object`), the function it is in, and whether it is a tripwire;
+the file's fixtures and its test functions' parameters. The rule (`rules/stale_stubs.py`)
+resolves each patch to project functions (imports, module names), finds the tests that
+run it (the holder itself, tests reaching the helper, tests taking the fixture), and
+reports when none reaches a replaced function, using the dead-code rules' reachability
+(now exposed as `dead_code.reachability`). Python only; test and config roles; judged on
+whole-project runs; severity `rules.verification.severity` (warning).
+
+**Choices made here:** VERIFY005 is in the verification family but is not a
+base-revision rule (`needs_base_revision` excludes it): it judges one revision, so plain
+`check` runs it, and it may be suppressed inline, since a stub kept for dynamically
+reached code needs a way to say so (the other VERIFY rules refuse inline suppressions on
+principle, decision 5). Units are measured whenever the verification family is on, as
+the reachability needs every file's.
+
+**Measured on MetaList** (scratch exports): 87cbd073, code and tests consistent, 271
+resolved patches, 0 reported; the refactored `namespace_switcher.py` with the old tests
+(the incident), 4 reported, the three `open_or_launch_namespace` stubs and a
+`_restart_running_namespace_process` stub; with MetaList's uncommitted fix, 0. The 5
+unreached stubs on MetaList are all tripwires. The prototype and the built rule agree.
+Each guard (tripwires, fixtures, helpers) has a test that fails without it. Cache schema
+"30".
