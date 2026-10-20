@@ -1524,6 +1524,11 @@ take part. Python is compared with Python, JavaScript with JavaScript and TypeSc
   so are overrides of one method in classes of one inheritance family (polymorphism is
   meant to differ); DUP001 still reports identical ones.
 
+Copies whose parameters or return are annotated with different types are parallel
+implementations, not one helper: an import cannot replace one with the other (a function
+over Python's `ast.AST` and its twin over a tree-sitter `Node`). Neither rule groups them.
+An unannotated copy groups with any.
+
 Judged only when the run analyzed every included file and none failed to parse. Syntax
 only: bodies that do the same thing differently are not matched.
 

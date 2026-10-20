@@ -44,6 +44,7 @@ from shockharness.ir.model import (
     FlowUnit,
     origin,
 )
+from shockharness.ir.python_dataflow import bind_origins
 from shockharness.source import SourceText
 
 Origins = frozenset[str]
@@ -100,7 +101,7 @@ def _named(node: Node) -> list[Node]:
     return [child for child in node.named_children if child.type != COMMENT]
 
 
-def _excerpt(node: Node) -> str:
+def _first_line_excerpt(node: Node) -> str:
     text = " ".join(node_text(node).split("\n")[0].split())
     if len(text) > EVIDENCE_MAX_CHARS:
         return text[:EVIDENCE_MAX_CHARS] + "..."
@@ -259,7 +260,7 @@ class _Unit:
             alternative = statement.child_by_field_name(Field.ALTERNATIVE)
             if statement.type != Kind.IF_STATEMENT or alternative is not None:
                 break
-            if not _exits(consequence):
+            if not block_exits(consequence):
                 break
             condition = statement.child_by_field_name(Field.CONDITION)
             found.extend(self.holding(condition, when_true=False))
@@ -366,10 +367,7 @@ class _Unit:
     # -- binding ----------------------------------------------------------------------
 
     def bind(self, name: str, origins: Origins) -> None:
-        if self.weak > 0 and name in self.env:
-            self.env[name] = self.env[name] | origins
-        else:
-            self.env[name] = origins
+        bind_origins(self.env, self.weak, name, origins)
 
     def declare(self, pattern: Node, origins: Origins) -> None:
         """``const x = v`` / ``const { a, b = d } = v``: every name the pattern binds."""
@@ -395,7 +393,7 @@ class _Unit:
             self.expr(target.child_by_field_name(Field.OBJECT))
             if target.type == SUBSCRIPT:
                 self.expr(target.child_by_field_name(Field.INDEX))
-            self.store(target, _excerpt(target), origins)
+            self.store(target, _first_line_excerpt(target), origins)
         elif target.type in PATTERNS:
             self.declare(target, origins)
         elif target.type in WRAPPERS:
@@ -483,7 +481,7 @@ class _Unit:
             FlowCall(
                 span=node_span(self.source, node),
                 callee=callee,
-                text=_excerpt(node),
+                text=_first_line_excerpt(node),
                 receiver=_sorted(receiver),
                 arguments=arguments,
                 keywords=(),
@@ -531,11 +529,11 @@ def _if(unit: _Unit, node: Node) -> None:
     unit.guarded(consequence, unit.holding(condition, when_true=True))
     otherwise = unit.holding(condition, when_true=False)
     unit.guarded(alternative, otherwise)
-    if alternative is None and _exits(consequence):
+    if alternative is None and block_exits(consequence):
         unit.guards.extend(otherwise)  # `if (!has(x)) return;` guards the rest
 
 
-def _exits(node: Node | None) -> bool:
+def block_exits(node: Node | None) -> bool:
     """The branch ends by leaving: return, throw, continue or break."""
     if node is None:
         return False
@@ -555,7 +553,7 @@ def _first_argument(call: Node) -> str:
     given = _named(arguments)
     if len(given) == 0:
         return ""
-    return _excerpt(given[0])
+    return _first_line_excerpt(given[0])
 
 
 def _guard(call: Node) -> list[FlowGuard]:

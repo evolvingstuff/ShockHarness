@@ -81,6 +81,7 @@ from shockharness.contracts.report import (
 from shockharness.findings import STATUS_VIOLATION, Finding
 from shockharness.ir.model import Span
 from shockharness.ir.python_catches import node_span
+from shockharness.ir.python_receivers import parameter_names
 from shockharness.rules.defaults import module_names
 from shockharness.rules.property_contracts_javascript import (
     javascript_considered,
@@ -157,14 +158,6 @@ def own_nodes(statements: Sequence[ast.stmt]) -> Iterator[ast.AST]:
         yield node
         if not isinstance(node, SCOPES):
             pending.extend(ast.iter_child_nodes(node))
-
-
-def _parameters(arguments: ast.arguments) -> list[str]:
-    names = [a.arg for a in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]]
-    for extra in (arguments.vararg, arguments.kwarg):
-        if extra is not None:
-            names.append(extra.arg)
-    return names
 
 
 def _bindings(node: ast.AST) -> list[str]:
@@ -338,7 +331,7 @@ def _header(
 ) -> Header:
     """PROP007 for a requires on a parameter elsewhere; a parameter the body rebinds is a
     local after that, and a requires on it is a mid-body check."""
-    parameters = frozenset(_parameters(function.args))
+    parameters = frozenset(parameter_names(function.args))
     requirements, calls = _header_requirements(function.body, parameters, declarations)
     fixed = parameters - stored
     misplaced = tuple(
@@ -378,7 +371,9 @@ class Analysis:
         self.result_deps: dict[tuple[ast.AST, int, tuple[tuple[str, PropSet], ...]], Deps] = {}
         self.computing: set[ast.AST] = set()
 
-    def _sinks(self, sinks: Sequence[CalleeSink]) -> dict[str, list[CalleeSink]]:
+    def _sinks(  # shockharness: ignore[DUP002] reason="each language's own index"
+        self, sinks: Sequence[CalleeSink]
+    ) -> dict[str, list[CalleeSink]]:
         found: dict[str, list[CalleeSink]] = {}
         for sink in sinks:
             if sink.language != PYTHON:
@@ -431,7 +426,7 @@ class Analysis:
         stored = frozenset(name for node in nodes for name in _bindings(node))
         bound = stored
         if function is not None:
-            parameters = tuple(_parameters(function.args))
+            parameters = tuple(parameter_names(function.args))
             bound = stored - _declared_global(nodes)
             local = frozenset(bound | set(parameters))
             receivers = receivers_of(_owner(module.tree, function), function)
@@ -678,7 +673,7 @@ def _parametric(
         return frozenset()
     open_parameters = {
         name
-        for name in _parameters(function.args)
+        for name in parameter_names(function.args)
         if name not in header.requirements or len(header.requirements[name]) == 0
     }
     sources = {

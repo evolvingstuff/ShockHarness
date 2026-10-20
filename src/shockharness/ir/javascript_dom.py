@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from tree_sitter import Node
 
 from shockharness.ir.javascript_catches import TYPE_WRAPPERS, node_span, node_text
+from shockharness.ir.javascript_dataflow import block_exits
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import ElementGuard
 from shockharness.source import SourceText
@@ -73,18 +74,6 @@ def _instanceof(node: Node) -> tuple[Node, str, bool] | None:
     return current, node_text(_unwrap(left)), negated
 
 
-def _exits(node: Node | None) -> bool:
-    if node is None:
-        return False
-    last = node
-    if node.type == Kind.STATEMENT_BLOCK:
-        statements = _named(node)
-        if len(statements) == 0:
-            return False
-        last = statements[len(statements) - 1]
-    return last.type in EXITS
-
-
 def _is_closest_on(node: Node, subject: str) -> bool:
     """``subject.closest(...)``."""
     if node.type != Kind.CALL_EXPRESSION:
@@ -129,7 +118,7 @@ def _guarded_calls(block: list[Node], index: int, negated: bool, subject: str) -
     """The ``.closest`` calls the test at ``block[index]`` guards: after an early exit for
     a negated test, inside the consequence for a positive one."""
     consequence = block[index].child_by_field_name(Field.CONSEQUENCE)
-    if negated and _exits(consequence):
+    if negated and block_exits(consequence):
         return list(_closest_calls(block[index + 1 :], subject))
     if not negated and consequence is not None:
         return list(_closest_calls([consequence], subject))

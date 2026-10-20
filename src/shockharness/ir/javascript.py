@@ -12,9 +12,6 @@ import tree_sitter_javascript
 import tree_sitter_typescript
 from tree_sitter import Language, Node, Parser
 
-from shockharness.constants import (
-    EVIDENCE_MAX_CHARS,
-)
 from shockharness.ir.javascript_async import collect_javascript_async
 from shockharness.ir.javascript_catalog import collect_javascript_catalog
 from shockharness.ir.javascript_catches import (
@@ -53,10 +50,10 @@ from shockharness.ir.model import (
     ImportFact,
     ModuleFacts,
     NumericLiteral,
-    ParseFailure,
     UsageFacts,
     failed_facts,
 )
+from shockharness.ir.tree_sitter_common import first_error, parse_failure
 from shockharness.source import SourceText
 
 _LANGUAGE = Language(tree_sitter_javascript.language())
@@ -247,19 +244,6 @@ def collect_javascript_constants(source: SourceText, root: Node) -> tuple[Consta
     )
 
 
-def _first_error(root: Node) -> Node | None:
-    stack = [root]
-    while len(stack) > 0:
-        node = stack.pop()
-        if node.is_error or node.is_missing:
-            return node
-        if not node.has_error:
-            continue
-        for child in reversed(node.children):
-            stack.append(child)
-    return None
-
-
 TYPESCRIPT_SUFFIXES = (".ts", ".mts", ".cts")
 
 
@@ -288,9 +272,9 @@ def _extract_facts(
 ) -> ModuleFacts:
     tree = parser.parse(source.text.encode("utf-8"))
     root = tree.root_node
-    error = _first_error(root)
+    error = first_error(root)
     if error is not None:
-        return failed_facts(language, parser_name, _parse_failure(source, filename, error))
+        return failed_facts(language, parser_name, parse_failure(source, filename, error))
     literals, comments = _literals_and_comments(source, root)
     guardrails, asynchrony, catalog = _policy_facts(source, root)
     imports, usage, shapes = _module_uses(source, root, filename)
@@ -331,17 +315,6 @@ def _module_uses(
     imports = collect_javascript_imports(source, root)
     usage = collect_javascript_usage(source, root, imports)
     return imports, usage, collect_javascript_shapes(source, root, filename)
-
-
-def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:
-    kind = "missing token" if error.is_missing else "syntax error"
-    first_line = node_text(error).split("\n")[0]
-    if len(first_line) > EVIDENCE_MAX_CHARS:
-        first_line = first_line[:EVIDENCE_MAX_CHARS] + "..."
-    return ParseFailure(
-        span=node_span(source, error),
-        message=f"{kind} near {first_line!r} in {filename}",
-    )
 
 
 def _literals_and_comments(

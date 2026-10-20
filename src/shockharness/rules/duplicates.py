@@ -130,9 +130,11 @@ def _anchor(copies: Sequence[Copy], rule: RuleSpec) -> Copy | None:
 
 
 def _exact_groups(copies: Sequence[Copy]) -> list[list[Copy]]:
-    groups: dict[tuple[str, tuple[str, ...]], list[Copy]] = {}
+    groups: dict[tuple[str, tuple[str, ...], tuple[str, ...]], list[Copy]] = {}
     for copy in copies:
-        key = (_family(copy.file.language), copy.shape.tokens)
+        # Copies over different annotated types (one per AST type, say) are parallel
+        # implementations: an import cannot replace one with the other.
+        key = (_family(copy.file.language), copy.shape.tokens, copy.shape.signature)
         if key not in groups:
             groups[key] = []
         groups[key].append(copy)
@@ -180,10 +182,19 @@ def _versions(copies: Sequence[Copy]) -> dict[tuple[str, ...], list[Copy]]:
     return found
 
 
+def _same_types(first: tuple[str, ...], second: tuple[str, ...]) -> bool:
+    """Two annotated signatures name the same types, or one of them names none."""
+    return len(first) == 0 or len(second) == 0 or first == second
+
+
 def _components(
-    versions: Sequence[tuple[str, ...]], similarity: float
+    versions: Sequence[tuple[str, ...]],
+    signatures: Mapping[tuple[str, ...], tuple[str, ...]],
+    similarity: float,
 ) -> list[list[tuple[str, ...]]]:
-    """Versions linked by similarity, in groups of two or more."""
+    """Versions linked by similarity, in groups of two or more. Versions annotated with
+    different types are parallel implementations (one per AST type, say) and are not
+    linked."""
     parent = {v: v for v in versions}
 
     def find(v: tuple[str, ...]) -> tuple[str, ...]:
@@ -193,7 +204,11 @@ def _components(
 
     for i, first in enumerate(versions):
         for second in versions[i + 1 :]:
-            if find(first) != find(second) and _alike(first, second, similarity):
+            if (
+                find(first) != find(second)
+                and _same_types(signatures[first], signatures[second])
+                and _alike(first, second, similarity)
+            ):
                 parent[find(second)] = find(first)
     groups: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
     for v in versions:
@@ -309,7 +324,8 @@ def _dup002(
     found: list[Finding] = []
     for bucket in _buckets(copies):
         versions = _versions(bucket)
-        for component in _components(sorted(versions), similarity):
+        signatures = {v: copies[0].shape.signature for v, copies in versions.items()}
+        for component in _components(sorted(versions), signatures, similarity):
             finding = _drift(versions, component, families, severity)
             if finding is not None:
                 found.append(finding)

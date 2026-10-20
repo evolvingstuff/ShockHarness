@@ -36,6 +36,7 @@ from shockharness.ir.model import (
     Span,
     TryStatement,
 )
+from shockharness.ir.tree_sitter_common import count_kinds
 from shockharness.source import SourceText
 
 BROAD_TYPES = frozenset({"Exception", "SystemException"})
@@ -150,17 +151,6 @@ def _unwrap(node: Node) -> Node:
 # -- the protected statements -------------------------------------------------------------
 
 
-def _count_operations(node: Node) -> int:
-    count = 0
-    stack = [node]
-    while len(stack) > 0:
-        current = stack.pop()
-        if current.type in OPERATIONS:
-            count += 1
-        stack.extend(current.children)
-    return count
-
-
 def _callee_text(call: Node) -> str:
     if call.type == Kind.OBJECT_CREATION_EXPRESSION:
         constructed = call.child_by_field_name(Field.TYPE)
@@ -185,7 +175,7 @@ def _operation(span: Span, statement: Node, value: Node) -> TryStatement:
     inner = _unwrap(inner)
     if inner.type not in CALLS:
         return TryStatement(span, None, f"statement value is not a call ({inner.type})")
-    extra = _count_operations(statement) - awaited
+    extra = count_kinds(statement, OPERATIONS) - awaited
     if extra != 1:
         return TryStatement(
             span,
@@ -303,7 +293,9 @@ def _passes_inner(creation: Node, name: str | None) -> bool:
     return False
 
 
-def classify_statements(statements: list[Node], name: str | None) -> HandlerBody:
+def classify_statements(  # shockharness: ignore[DUP002] reason="C# helpers classify C# handlers"
+    statements: list[Node], name: str | None
+) -> HandlerBody:
     if len(statements) == 0:
         return HandlerBody(BODY_EMPTY, "handler body is empty; the failure vanishes")
     remaining = [s for s in statements if not is_logging_statement(s)]

@@ -87,6 +87,26 @@ def _declared_names(declarator: Node) -> list[str]:
     return [node_text(x) for x in _walk(bound) if x.type in LOCAL_NAMES]
 
 
+TYPE_FIELD = "type"  # TypeScript: a parameter's type annotation
+RETURN_TYPE_FIELD = "return_type"
+RETURNS = "->"
+
+
+def _signature(node: Node) -> tuple[str, ...]:
+    """TypeScript's parameter and return annotations; empty for JavaScript."""
+    found: list[str] = []
+    parameters = node.child_by_field_name(Field.PARAMETERS)
+    if parameters is not None:
+        for parameter in parameters.named_children:
+            annotation = parameter.child_by_field_name(TYPE_FIELD)
+            if annotation is not None:
+                found.append(node_text(annotation))
+    returned = node.child_by_field_name(RETURN_TYPE_FIELD)
+    if returned is not None:
+        found.extend((RETURNS, node_text(returned)))
+    return tuple(found)
+
+
 def _locals_and_statements(node: Node, nodes: list[Node]) -> tuple[set[str], int]:
     """The parameters and declared locals, and the statement count, in one pass over the
     body's nodes."""
@@ -148,7 +168,14 @@ def collect_javascript_shapes(
         span = node_span(source, node)
         shapes.append(
             FunctionShape(
-                span.line, span.column, span.end_line, name, _owner(node), statements, tokens
+                span.line,
+                span.column,
+                span.end_line,
+                name,
+                _owner(node),
+                statements,
+                tokens,
+                _signature(node),
             )
         )
     shapes.sort(key=lambda s: (s.line, s.column))

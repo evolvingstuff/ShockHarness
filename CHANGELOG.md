@@ -5,6 +5,17 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **DUP001 and DUP002 leave parallel implementations alone:** copies whose parameters or
+  return are annotated with different types (a function over `ast.AST` and its twin over
+  a tree-sitter `Node`) are not grouped, since an import cannot replace one with the
+  other. On MetaList one DUP001 group goes (`_render_report` over two report types). Cache
+  schema "29".
+- **ShockHarness runs DUP001 and DUP002 on itself.** Its 20 groups of copied helpers are
+  merged into one definition each, most of the tree-sitter ones into the new
+  `ir/tree_sitter_common.py` shared by the JavaScript and C# adapters; four copies kept on
+  purpose carry a reasoned suppression.
+
 ## [0.18.0] - 2026-10-19
 
 C# for Godot .NET (opt-in, milestones G1 and G2), DUP001 and DUP002 (duplicated helpers),

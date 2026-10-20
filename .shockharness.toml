@@ -320,3 +320,9 @@ reason = "The eval runner is stdlib-only by design (it scores the analyzer from 
 [tool.shockharness.rules.dead_code]
 enabled = true
 entry_points = ["src/shockharness/contracts/runtime/contracts.py::*"]
+
+# DUP001, DUP002 (decision 39). Parallel implementations for different syntax trees are
+# told apart by their annotated types; the copies kept on purpose carry a reasoned
+# suppression where they are defined.
+[tool.shockharness.rules.duplicates]
+enabled = true

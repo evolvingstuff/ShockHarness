@@ -36,6 +36,7 @@ from shockharness.ir.model import (
     VerificationFacts,
 )
 from shockharness.ir.suppression_directives import javascript_directives
+from shockharness.ir.tree_sitter_common import call_arguments
 from shockharness.source import SourceText
 
 SUITE = "describe"
@@ -79,13 +80,6 @@ EXPONENT = "e"
 
 def _collapse(text: str) -> str:
     return " ".join(text.split())
-
-
-def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name(Field.ARGUMENTS)
-    if arguments is None:
-        return []
-    return [child for child in arguments.named_children if child.type != COMMENT]
 
 
 def _literal_name(node: Node) -> str | None:
@@ -159,7 +153,7 @@ def _expect_argument(node: Node | None) -> Node | None:
     function = node.child_by_field_name(Field.FUNCTION)
     if function is None or function.type != IDENTIFIER or node_text(function) != EXPECT_PREFIX:
         return None
-    arguments = _arguments(node)
+    arguments = call_arguments(node)
     if len(arguments) != 1 or arguments[0].type not in LITERALS:
         return None
     return arguments[0]
@@ -169,7 +163,7 @@ def _is_tautology(call: Node) -> bool:
     function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
         return False
-    arguments = _arguments(call)
+    arguments = call_arguments(call)
     if function.type == IDENTIFIER:
         return (
             node_text(function) == ASSERT
@@ -262,7 +256,7 @@ def collect_javascript_verification(
             callee = _callee(node)
             if callee is not None:
                 base, marker = callee
-                arguments = _arguments(node)
+                arguments = call_arguments(node)
                 name = DYNAMIC_NAME
                 if len(arguments) > 0:
                     literal = _literal_name(arguments[0])

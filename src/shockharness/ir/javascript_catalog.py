@@ -23,7 +23,6 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_guardrails import dotted_callee
 from shockharness.ir.javascript_nodes import Field, Kind
@@ -42,6 +41,7 @@ from shockharness.ir.model import (
     SleepCall,
     TypeEscape,
 )
+from shockharness.ir.tree_sitter_common import call_arguments, excerpt
 from shockharness.source import SourceText
 
 PROCESS_NAMES = frozenset({"exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync"})
@@ -106,20 +106,6 @@ PREDICATE = re.compile(
 EXITS = frozenset({Kind.THROW_STATEMENT, Kind.RETURN_STATEMENT, Kind.BREAK_STATEMENT})
 
 
-def _excerpt(node: Node) -> str:
-    text = " ".join(node_text(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
-
-
-def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name(Field.ARGUMENTS)
-    if arguments is None:
-        return []
-    return [child for child in arguments.named_children if child.type != Kind.COMMENT]
-
-
 def _callee(call: Node) -> str | None:
     function = call.child_by_field_name(Field.FUNCTION)
     if function is None:
@@ -181,14 +167,14 @@ def _shell(arguments: list[Node]) -> bool:
 
 
 def _process(source: SourceText, call: Node, callee: str) -> ProcessCall:
-    arguments = _arguments(call)
+    arguments = call_arguments(call)
     parent = call.parent
     if parent is not None and parent.type == AWAIT:
         parent = parent.parent
     function = _enclosing_function(call)
     return ProcessCall(
         callee=callee,
-        text=_excerpt(call),
+        text=excerpt(call),
         shell=_shell(arguments),
         interpolated=len(arguments) > 0 and _interpolated(arguments[0]),
         check=CHECK_ABSENT,
@@ -237,7 +223,7 @@ def _sleep(source: SourceText, node: Node) -> SleepCall | None:
     else:
         return None
     return SleepCall(
-        callee, _excerpt(node), _enclosing(node, LOOPS) is not None, node_span(source, node)
+        callee, excerpt(node), _enclosing(node, LOOPS) is not None, node_span(source, node)
     )
 
 
@@ -346,7 +332,7 @@ def _retry_loop(source: SourceText, node: Node) -> list[RetryFact]:
 def _batch_loop(source: SourceText, node: Node) -> list[BatchLoop]:
     if node.type not in ITERATING or not any(_swallowing(c) for c in _catches(node)):
         return []
-    return [BatchLoop(_excerpt(node).split("{")[0].strip(), node_span(source, node))]
+    return [BatchLoop(excerpt(node).split("{")[0].strip(), node_span(source, node))]
 
 
 def _type_context(node: Node) -> Node:
@@ -369,18 +355,18 @@ def _type_context(node: Node) -> Node:
 def _type_escape(source: SourceText, node: Node) -> list[TypeEscape]:
     """TypeScript's escapes from the type checker (none exist in JavaScript's grammar)."""
     if node.type == PREDEFINED_TYPE and node_text(node) == ANY:
-        return [TypeEscape(TYPE_ESCAPE_ANY, _excerpt(_type_context(node)), node_span(source, node))]
+        return [TypeEscape(TYPE_ESCAPE_ANY, excerpt(_type_context(node)), node_span(source, node))]
     if node.type == AS_EXPRESSION:
         asserted = node.children[len(node.children) - 1]
         parent = node.parent
         # `as const` asserts nothing; `x as unknown as T` is one assertion, reported once.
         if node_text(asserted) == CONST or (parent is not None and parent.type == AS_EXPRESSION):
             return []
-        return [TypeEscape(TYPE_ESCAPE_CAST, _excerpt(node), node_span(source, node))]
+        return [TypeEscape(TYPE_ESCAPE_CAST, excerpt(node), node_span(source, node))]
     if node.type == TYPE_ASSERTION:
-        return [TypeEscape(TYPE_ESCAPE_CAST, _excerpt(node), node_span(source, node))]
+        return [TypeEscape(TYPE_ESCAPE_CAST, excerpt(node), node_span(source, node))]
     if node.type == NON_NULL:
-        return [TypeEscape(TYPE_ESCAPE_NON_NULL, _excerpt(node), node_span(source, node))]
+        return [TypeEscape(TYPE_ESCAPE_NON_NULL, excerpt(node), node_span(source, node))]
     return []
 
 

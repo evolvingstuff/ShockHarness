@@ -3084,7 +3084,9 @@ DUPLICATES_GUARANTEES = (
 DUPLICATES_LIMITATIONS = (
     "Syntax only: two bodies that do the same thing differently are not matched, and two "
     "identical bodies calling different functions of the same name are. Drift is looked for "
-    "only among functions whose names match once leading underscores and case are set aside."
+    "only among functions whose names match once leading underscores and case are set aside. "
+    "Copies annotated with different parameter or return types are not grouped: they are "
+    "parallel implementations (one per AST type, say), which an import cannot merge."
 )
 
 DUP001 = RuleSpec(

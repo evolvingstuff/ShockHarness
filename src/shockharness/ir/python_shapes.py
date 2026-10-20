@@ -28,6 +28,27 @@ def _body(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
     return body
 
 
+RECEIVERS = frozenset({"self", "cls"})
+RETURNS = "->"
+
+
+def _signature(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, ...]:
+    """The annotations of the parameters (the receiver aside) and of the return."""
+    arguments = function.args
+    parameters = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
+    for extra in (arguments.vararg, arguments.kwarg):
+        if extra is not None:
+            parameters.append(extra)
+    found = [
+        ast.unparse(p.annotation)
+        for p in parameters
+        if p.annotation is not None and p.arg not in RECEIVERS
+    ]
+    if function.returns is not None:
+        found.extend((RETURNS, ast.unparse(function.returns)))
+    return tuple(found)
+
+
 def _locals_and_statements(
     function: ast.FunctionDef | ast.AsyncFunctionDef, body: list[ast.stmt]
 ) -> tuple[set[str], int]:
@@ -116,7 +137,14 @@ def collect_python_shapes(
             owner = owners[id(node)]
         shapes.append(
             FunctionShape(
-                span.line, span.column, span.end_line, node.name, owner, statements, tokens
+                span.line,
+                span.column,
+                span.end_line,
+                node.name,
+                owner,
+                statements,
+                tokens,
+                _signature(node),
             )
         )
     shapes.sort(key=lambda s: (s.line, s.column))

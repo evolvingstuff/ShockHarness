@@ -6167,3 +6167,43 @@ no catalog rule changing from unknown to violation (it can fail a gate only wher
 project set PROP001 to `error`), and BOOL001's wider default `allowed_callees`. Published
 by `publish.yml` (run 39350388650, 18 of 18 jobs). PyPI lists 0.18.0 with a wheel and an
 sdist.
+
+## Duplicated helpers merged in ShockHarness itself, DUP001/DUP002 on here (2026-10-19)
+
+Tom's go-ahead: "merge ShockHarness's own duplicated helpers, turn the duplicate checks
+on for this repo, verify and commit locally."
+
+**What the rules found here first:** 20 DUP001 groups and 19 DUP002. Most DUP002 were
+not one helper drifted but parallel implementations for different syntax trees: the
+Python adapter over `ast.AST` and the JavaScript one over tree-sitter `Node`
+(`_excerpt`, `_own_nodes`, the two property-contract checkers' `assigned`,
+`_declaration_findings`, `method`, `_ancestors`, `_overriding`). An import cannot merge
+those. **The rule change:** a function shape now records its annotated parameter and
+return types, and neither rule groups copies whose types differ (an unannotated copy
+groups with any). That left 17 DUP001 and 10 DUP002. On MetaList it removes one DUP001
+group (`_render_report` over two report types) and nothing else. Cache schema "29".
+
+**Merged** (one definition each, the others import it):
+* the tree-sitter helpers the JavaScript and C# adapters both had, in a new
+  `ir/tree_sitter_common.py`: `parse_failure`, `collapsed_text`, `excerpt`,
+  `first_line`, `unwrap_parentheses`, `call_arguments`, `first_error`, and, with the
+  grammar's kinds passed in, `count_kinds`, `root_identifier`, `unit_span`. `node_span`
+  and `node_text` moved there too (re-exported by `javascript_catches`, which the
+  adapters import them from);
+* the control-tree `Builder`, `new_builder` and `freeze_builders` (C# now uses the
+  JavaScript adapter's);
+* `block_exits` (JavaScript dataflow and DOM), `bind_origins` (both dataflows);
+* Python: `excerpt` and `is_pass` and `dotted_name` in `python_catches` (three
+  `_excerpt`, `_is_filler`, three `_dotted`), `last_segment` in `python_defaults`,
+  `parameter_names` from `python_receivers`, `config_anchor` from `boundary_usage`.
+
+**Kept on purpose, with a reasoned suppression:** `tail` in `evals/run_evals.py` (the
+eval runner is stdlib-only and cannot import the upgrade-check script), C#'s
+`classify_statements` and `discover_units` (built on C#'s own helpers and kinds), and
+the Python property-contract checker's `_sinks` (each language resolves sinks through
+its own index). `javascript_dataflow._excerpt`, which keeps only the first line, is
+renamed `_first_line_excerpt`, as DUP002's remedy says.
+
+`.shockharness.toml` turns `rules.duplicates` on. No dead code was left by the merges.
+The Godot session was asked to hold edits while this ran; two of the merged files are
+its C# adapter's.

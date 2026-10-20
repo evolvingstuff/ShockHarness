@@ -22,6 +22,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.model import (
     ANONYMOUS_SCOPE,
     BODY_EMPTY,
@@ -220,6 +221,14 @@ def bound_name(alias: ast.alias) -> str:
     if alias.asname is not None:
         return alias.asname
     return alias.name
+
+
+def excerpt(node: ast.AST) -> str:
+    """The node's source on one line, cut to the evidence length and marked as cut."""
+    text = " ".join(ast.unparse(node).split())
+    if len(text) > EVIDENCE_MAX_CHARS:
+        return text[:EVIDENCE_MAX_CHARS] + "..."
+    return text
 
 
 def dotted_name(expr: ast.expr) -> str | None:

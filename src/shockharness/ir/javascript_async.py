@@ -16,12 +16,13 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS, LISTENER_ARGUMENTS
+from shockharness.constants import LISTENER_ARGUMENTS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_functions import string_value
 from shockharness.ir.javascript_guardrails import dotted_callee
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import AsyncFacts, DiscardedCall, RejectionHandler, SettledBatch
+from shockharness.ir.tree_sitter_common import excerpt
 from shockharness.source import SourceText
 
 FUNCTIONS = frozenset(
@@ -67,13 +68,6 @@ REJECTION_PROPERTIES = frozenset(
 # Calls on the event that only silence it.
 SILENCERS = frozenset({"preventDefault", "stopPropagation", "stopImmediatePropagation"})
 INSPECTION = re.compile(r"\.status\b|\.reason\b|[\"'`]rejected[\"'`]")
-
-
-def _excerpt(node: Node) -> str:
-    text = " ".join(node_text(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
 
 
 def _is_async(function: Node | None) -> bool:
@@ -170,7 +164,7 @@ def _discarded(source: SourceText, call: Node) -> DiscardedCall | None:
         return None
     return DiscardedCall(
         callee=_callee(call),
-        text=_excerpt(statement),
+        text=excerpt(statement),
         void=void,
         in_async=_is_async(_enclosing_function(call)),
         bound_by=None,
@@ -186,7 +180,7 @@ def _settled(source: SourceText, call: Node) -> SettledBatch | None:
     consumer = _consumer(call)
     return SettledBatch(
         callee=ALL_SETTLED,
-        text=_excerpt(call),
+        text=excerpt(call),
         discarded=consumer is not None and consumer.type == STATEMENT,
         inspected=_inspected(consumer, _enclosing_function(call), _inspection_text(call)),
         cancellation_wait=False,

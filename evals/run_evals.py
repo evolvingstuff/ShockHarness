@@ -94,7 +94,9 @@ def count_suppressions(directory: Path) -> int:
     return total
 
 
-def tail(text: str) -> str:
+def tail(  # shockharness: ignore[DUP001] reason="stdlib-only eval runner: cannot import it"
+    text: str,
+) -> str:
     lines = [line for line in text.strip().splitlines() if line.strip() != ""]
     if len(lines) == 0:
         return "(no output)"

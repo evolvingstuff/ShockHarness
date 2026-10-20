@@ -220,7 +220,7 @@ def _is_none(expr: ast.expr | None) -> bool:
     return expr is None or (isinstance(expr, ast.Constant) and expr.value is None)
 
 
-def _decorator_name(decorator: ast.expr) -> str | None:
+def last_segment(decorator: ast.expr) -> str | None:
     target = decorator.func if isinstance(decorator, ast.Call) else decorator
     if isinstance(target, ast.Name):
         return target.id
@@ -232,7 +232,7 @@ def _decorator_name(decorator: ast.expr) -> str | None:
 def _has_decorator(
     node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef, names: frozenset[str]
 ) -> bool:
-    return any(_decorator_name(d) in names for d in node.decorator_list)
+    return any(last_segment(d) in names for d in node.decorator_list)
 
 
 def _env_names(module: ast.Module) -> _EnvNames:
@@ -756,7 +756,7 @@ class _Collector:
                 continue
             name = stmt.target.id
             value = stmt.value
-            if isinstance(value, ast.Call) and _decorator_name(value.func) in field_functions:
+            if isinstance(value, ast.Call) and last_segment(value.func) in field_functions:
                 self._field_call(value, node, name, scope, label)
                 continue
             if isinstance(value, ast.Constant) and value.value is Ellipsis:
@@ -778,7 +778,7 @@ class _Collector:
     ) -> None:
         """``field(...)`` / ``Field(...)``: ``default=``, ``default_factory=``, or (pydantic)
         a positional default; ``...`` and no default are not defaults."""
-        function = _decorator_name(value.func)
+        function = last_segment(value.func)
         keywords = {k.arg: k.value for k in value.keywords if k.arg is not None}
         default: ast.expr | None = None
         if "default" in keywords:

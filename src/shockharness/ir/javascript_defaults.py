@@ -30,7 +30,7 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS, LOOKUP_WITH_FALLBACK_ARITY
+from shockharness.constants import LOOKUP_WITH_FALLBACK_ARITY
 from shockharness.ir.javascript_catches import (
     FIELD_DEFINITIONS,
     TYPE_WRAPPERS,
@@ -79,6 +79,7 @@ from shockharness.ir.model import (
     MODULE_SCOPE,
     DefaultFact,
 )
+from shockharness.ir.tree_sitter_common import collapsed_text as _text
 from shockharness.source import SourceText
 
 UPPER_CASE_NAME = re.compile(r"_*[A-Z][A-Z0-9_]*")
@@ -99,13 +100,6 @@ HAS_OWN_METHODS = frozenset({"hasOwnProperty", "hasOwn"})
 VALUE_TYPES = frozenset(
     {Kind.IDENTIFIER, Kind.MEMBER_EXPRESSION, Kind.SUBSCRIPT_EXPRESSION, Kind.CALL_EXPRESSION}
 )
-
-
-def _text(node: Node) -> str:
-    collapsed = " ".join(node_text(node).split())
-    if len(collapsed) > EVIDENCE_MAX_CHARS:
-        return collapsed[: EVIDENCE_MAX_CHARS - len(ELLIPSIS_TEXT)] + ELLIPSIS_TEXT
-    return collapsed
 
 
 def _same(a: Node, b: Node) -> bool:

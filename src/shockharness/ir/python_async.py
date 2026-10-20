@@ -18,9 +18,9 @@ scopes):
 
 import ast
 
-from shockharness.constants import EVIDENCE_MAX_CHARS, ISINSTANCE_ARGUMENTS
+from shockharness.constants import ISINSTANCE_ARGUMENTS
 from shockharness.ir.model import AsyncFacts, DiscardedCall, SettledBatch
-from shockharness.ir.python_catches import dotted_name, node_span
+from shockharness.ir.python_catches import dotted_name, excerpt, node_span
 from shockharness.source import SourceText
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -31,13 +31,6 @@ FAILURE_TYPE_MARKERS = ("Exception", "Error")
 DYNAMIC = "<dynamic>"
 STR_TYPE = "str"
 BYTES_TYPE = "bytes"
-
-
-def _excerpt(node: ast.AST) -> str:
-    text = " ".join(ast.unparse(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
 
 
 CANCEL = "cancel"
@@ -184,7 +177,7 @@ class _Scope:
             found.append(
                 DiscardedCall(
                     callee=callee,
-                    text=_excerpt(node),
+                    text=excerpt(node),
                     void=False,
                     in_async=self.in_async,
                     bound_by=bound_by,
@@ -213,7 +206,7 @@ class _Scope:
             found.append(
                 SettledBatch(
                     callee=callee,
-                    text=_excerpt(node),
+                    text=excerpt(node),
                     discarded=isinstance(usage, ast.Expr),
                     inspected=inspected,
                     cancellation_wait=self.cancellation_wait(node),

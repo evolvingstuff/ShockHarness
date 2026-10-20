@@ -11,7 +11,7 @@ from shockharness.ir.model import (
     SENTINEL_RETURN,
     SentinelUse,
 )
-from shockharness.ir.python_catches import node_span
+from shockharness.ir.python_catches import dotted_name, node_span
 from shockharness.source import SourceText
 
 # An UPPER_SNAKE_CASE target is the name MAGIC003 asks for (NO_SELECTION = -1).
@@ -49,18 +49,6 @@ def _text(source: SourceText, node: ast.expr) -> str:
     return text[:EVIDENCE_MAX_CHARS]
 
 
-def _dotted(node: ast.expr) -> str | None:
-    parts: list[str] = []
-    current = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if not isinstance(current, ast.Name):
-        return None
-    parts.append(current.id)
-    return ".".join(reversed(parts))
-
-
 def _named(target: ast.expr) -> bool:
     """A constant definition (or a field named like one): the value already has a name."""
     name = target.id if isinstance(target, ast.Name) else None
@@ -87,7 +75,7 @@ class _Collector:
                 self.add(value, SENTINEL_ASSIGN, _text(self.source, target))
 
     def call(self, node: ast.Call) -> None:
-        callee = _dotted(node.func)
+        callee = dotted_name(node.func)
         if callee is None:
             return
         for argument in node.args:

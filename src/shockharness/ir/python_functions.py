@@ -57,7 +57,13 @@ from shockharness.ir.model import (
     ModuleBinding,
     Span,
 )
-from shockharness.ir.python_catches import SCOPE_NODES, bound_name, node_span, scope_name
+from shockharness.ir.python_catches import (
+    SCOPE_NODES,
+    bound_name,
+    dotted_name,
+    node_span,
+    scope_name,
+)
 from shockharness.source import SourceText
 
 UNIT_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
@@ -167,19 +173,6 @@ def _unit_span_key(node: ast.AST) -> tuple[int, int]:
 def _is_elif(source: SourceText, node: ast.If) -> bool:
     line = source.line_text(node.lineno).encode("utf-8")
     return line[node.col_offset :].startswith(ELIF_KEYWORD)
-
-
-def _dotted(expr: ast.expr) -> str | None:
-    parts: list[str] = []
-    current = expr
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if not isinstance(current, ast.Name):
-        return None
-    parts.append(current.id)
-    parts.reverse()
-    return ".".join(parts)
 
 
 def _root_name(expr: ast.expr) -> str | None:
@@ -616,7 +609,7 @@ class _UnitCollector:
         if isinstance(func, ast.Name):
             self.calls.append(CallSite(span, func.id, CALL_NAME, receiver_self=False))
             return
-        dotted = _dotted(func)
+        dotted = dotted_name(func)
         if dotted is not None:
             root = dotted.split(".")[0]
             receiver = root in RECEIVER_NAMES and self.unit.kind == UNIT_METHOD
@@ -812,7 +805,7 @@ def _is_mutable_value(value: ast.expr | None) -> bool:
     if isinstance(value, MUTABLE_DISPLAYS):
         return True
     if isinstance(value, ast.Call):
-        dotted = _dotted(value.func)
+        dotted = dotted_name(value.func)
         return dotted is not None and dotted in MUTABLE_CONSTRUCTORS
     return False
 

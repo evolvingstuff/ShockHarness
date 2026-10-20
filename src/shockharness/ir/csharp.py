@@ -23,7 +23,6 @@ from importlib import metadata
 import tree_sitter_c_sharp
 from tree_sitter import Language, Node, Parser
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.csharp_catches import collect_csharp_catches
 from shockharness.ir.csharp_defaults import collect_csharp_defaults
 from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
@@ -44,9 +43,9 @@ from shockharness.ir.model import (
     ConstantDefinition,
     ModuleFacts,
     NumericLiteral,
-    ParseFailure,
     failed_facts,
 )
+from shockharness.ir.tree_sitter_common import first_error, parse_failure
 from shockharness.source import SourceText
 
 _PARSER = Parser(Language(tree_sitter_c_sharp.language()))
@@ -137,26 +136,14 @@ def parse_csharp(text: str) -> tuple[Node, Node | None]:
     """The tree of a C# source after the two rewrites, and its first error node."""
     prepared = keep_first_branches(text)
     root = _parse(prepared)
-    error = _first_error(root)
+    error = first_error(root)
     if error is None:
         return root, None
     retried = _parse(blank_lambda_modifiers(prepared))
-    retried_error = _first_error(retried)
+    retried_error = first_error(retried)
     if retried_error is None:
         return retried, None
     return root, error
-
-
-def _first_error(root: Node) -> Node | None:
-    stack = [root]
-    while len(stack) > 0:
-        node = stack.pop()
-        if node.is_error or node.is_missing:
-            return node
-        if not node.has_error:
-            continue
-        stack.extend(reversed(node.children))
-    return None
 
 
 def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
@@ -166,7 +153,7 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
     so they never run on these files (the report lists them as not applicable)."""
     root, error = parse_csharp(source.text)
     if error is not None:
-        return failed_facts(CSHARP_LANGUAGE, PARSER_NAME, _parse_failure(source, filename, error))
+        return failed_facts(CSHARP_LANGUAGE, PARSER_NAME, parse_failure(source, filename, error))
     literals, constants, comments = _number_facts(source, root)
     guardrails, asynchrony = collect_csharp_guardrails(source, root)
     return ModuleFacts(
@@ -210,17 +197,6 @@ def _number_facts(
         for name, _value in definitions
     )
     return literals, constants, comments
-
-
-def _parse_failure(source: SourceText, filename: str, error: Node) -> ParseFailure:
-    kind = "missing token" if error.is_missing else "syntax error"
-    first_line = node_text(error).split("\n")[0]
-    if len(first_line) > EVIDENCE_MAX_CHARS:
-        first_line = first_line[:EVIDENCE_MAX_CHARS] + "..."
-    return ParseFailure(
-        span=node_span(source, error),
-        message=f"{kind} near {first_line!r} in {filename}",
-    )
 
 
 # -- literals ---------------------------------------------------------------------------

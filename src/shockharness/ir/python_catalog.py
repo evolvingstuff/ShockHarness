@@ -23,7 +23,6 @@ Syntax only, per function scope (nested functions, lambdas and classes are their
 import ast
 import re
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.model import (
     CHECK_ABSENT,
     CHECK_FALSE,
@@ -42,7 +41,7 @@ from shockharness.ir.model import (
     TypeEscape,
 )
 from shockharness.ir.python_async import scope_nodes
-from shockharness.ir.python_catches import dotted_name, is_logging_statement, node_span
+from shockharness.ir.python_catches import dotted_name, excerpt, is_logging_statement, node_span
 from shockharness.source import SourceText
 
 PROCESS_NAMES = frozenset(
@@ -74,13 +73,6 @@ FORMAT = "format"
 PREDICATE = re.compile(
     r"^(is|has|can|should)_|^(check|validate|verify|authori[sz]e|authenticate|allow)"
 )
-
-
-def _excerpt(node: ast.AST) -> str:
-    text = " ".join(ast.unparse(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
 
 
 def _last(callee: str) -> str:
@@ -209,7 +201,7 @@ class _Scope:
             if last == SLEEP:
                 sleeps.append(
                     SleepCall(
-                        callee, _excerpt(node), self._in_loop(node), node_span(self.source, node)
+                        callee, excerpt(node), self._in_loop(node), node_span(self.source, node)
                     )
                 )
             elif last in PROCESS_NAMES:
@@ -217,7 +209,7 @@ class _Scope:
                 processes.append(
                     ProcessCall(
                         callee=callee,
-                        text=_excerpt(node),
+                        text=excerpt(node),
                         shell=_is_true(_keyword(node, "shell")),
                         interpolated=command is not None and _interpolated(command),
                         check=_check(node),
@@ -274,7 +266,7 @@ def _decorator_retries(
         if unbounded:
             found.append(
                 RetryFact(
-                    RETRY_DECORATOR, callee, f"@{_excerpt(decorator)}", node_span(source, decorator)
+                    RETRY_DECORATOR, callee, f"@{excerpt(decorator)}", node_span(source, decorator)
                 )
             )
     return found
@@ -302,7 +294,7 @@ def _is_any(part: ast.AST) -> bool:
 
 def _any_escapes(source: SourceText, annotation: ast.expr) -> list[TypeEscape]:
     return [
-        TypeEscape(TYPE_ESCAPE_ANY, _excerpt(annotation), node_span(source, part))
+        TypeEscape(TYPE_ESCAPE_ANY, excerpt(annotation), node_span(source, part))
         for part in ast.walk(annotation)
         if isinstance(part, ast.expr) and _is_any(part)
     ]
@@ -316,7 +308,7 @@ def _type_escapes(source: SourceText, module: ast.Module) -> list[TypeEscape]:
         if isinstance(node, ast.Call):
             callee = dotted_name(node.func)
             if callee in (CAST, f"{TYPING}.{CAST}"):
-                found.append(TypeEscape(TYPE_ESCAPE_CAST, _excerpt(node), node_span(source, node)))
+                found.append(TypeEscape(TYPE_ESCAPE_CAST, excerpt(node), node_span(source, node)))
     return found
 
 

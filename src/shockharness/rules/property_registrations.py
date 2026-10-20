@@ -33,6 +33,7 @@ from shockharness.findings import CONFIDENCE_EXACT, STATUS_VIOLATION, Finding
 from shockharness.ir.javascript_functions import string_value
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import MODULE_SCOPE, Span
+from shockharness.rules.boundary_usage import config_anchor
 from shockharness.rules.policy_integrity import FIRST_LINE, USER_TIERS, fingerprinted, read_text
 from shockharness.rules.registry import PROP005
 
@@ -107,13 +108,6 @@ def _line(text: str | None) -> int:
     return FIRST_LINE
 
 
-def _anchor(root: Path, config: EffectiveConfig) -> str:
-    source = Path(config.source.path).resolve()
-    if source.is_relative_to(root.resolve()):
-        return source.relative_to(root.resolve()).as_posix()
-    return source.name
-
-
 def predicate_findings(root: Path, config: EffectiveConfig) -> tuple[Finding, ...]:
     settings = config.section(SECTION_PATH)
     if settings["enabled"] is not True or settings["runtime_mode_required"] != VERIFY:
@@ -131,7 +125,7 @@ def predicate_findings(root: Path, config: EffectiveConfig) -> tuple[Finding, ..
             rule_id=PROP005.rule_id,
             rule_version=PROP005.version,
             severity=str(settings["severities"][PROP005.rule_id]),
-            path=_anchor(root, config),
+            path=config_anchor(root, config),
             span=Span(line, FIRST_LINE, line, FIRST_LINE),
             message=(
                 f"runtime_mode_required is verify, but {module} registers no predicate for "

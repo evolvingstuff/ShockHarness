@@ -23,7 +23,6 @@ Syntax only:
 
 import ast
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.model import (
     EXIT_BREAK,
     EXIT_CONTINUE,
@@ -39,7 +38,8 @@ from shockharness.ir.model import (
     ImportTimeCall,
     Placeholder,
 )
-from shockharness.ir.python_catches import dotted_name, node_span
+from shockharness.ir.python_catches import dotted_name, excerpt, is_pass, node_span
+from shockharness.ir.python_defaults import last_segment
 from shockharness.ir.python_publications import collect_python_publications
 from shockharness.source import SourceText
 
@@ -56,25 +56,8 @@ SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
-def _excerpt(node: ast.AST) -> str:
-    text = " ".join(ast.unparse(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
-
-
-def _last_segment(expr: ast.expr) -> str | None:
-    """The final name of ``x``, ``a.b.x`` or ``a.b.x(...)``."""
-    target = expr.func if isinstance(expr, ast.Call) else expr
-    if isinstance(target, ast.Name):
-        return target.id
-    if isinstance(target, ast.Attribute):
-        return target.attr
-    return None
-
-
 def _is_type_checking(test: ast.expr) -> bool:
-    return _last_segment(test) == TYPE_CHECKING and not isinstance(test, ast.Call)
+    return last_segment(test) == TYPE_CHECKING and not isinstance(test, ast.Call)
 
 
 def _is_main_guard(test: ast.expr) -> bool:
@@ -133,16 +116,16 @@ def _scan_finally(
 
 def _is_abstract_class(node: ast.ClassDef) -> bool:
     for base in node.bases:
-        if _last_segment(base) in ABSTRACT_BASES:
+        if last_segment(base) in ABSTRACT_BASES:
             return True
     for keyword in node.keywords:
-        if keyword.arg == "metaclass" and _last_segment(keyword.value) in ABSTRACT_METACLASSES:
+        if keyword.arg == "metaclass" and last_segment(keyword.value) in ABSTRACT_METACLASSES:
             return True
     return False
 
 
 def _is_abstract_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    return any(_last_segment(d) in ABSTRACT_DECORATORS for d in node.decorator_list)
+    return any(last_segment(d) in ABSTRACT_DECORATORS for d in node.decorator_list)
 
 
 def _is_docstring(statement: ast.stmt) -> bool:
@@ -153,24 +136,14 @@ def _is_docstring(statement: ast.stmt) -> bool:
     )
 
 
-def _is_filler(statement: ast.stmt) -> bool:
-    if isinstance(statement, ast.Pass):
-        return True
-    return (
-        isinstance(statement, ast.Expr)
-        and isinstance(statement.value, ast.Constant)
-        and statement.value.value is Ellipsis
-    )
-
-
 def _body_is_empty(body: list[ast.stmt]) -> bool:
-    return all(_is_filler(s) or _is_docstring(s) for s in body) and any(_is_filler(s) for s in body)
+    return all(is_pass(s) or _is_docstring(s) for s in body) and any(is_pass(s) for s in body)
 
 
 def _raised_name(node: ast.Raise) -> str | None:
     if node.exc is None:
         return None
-    return _last_segment(node.exc)
+    return last_segment(node.exc)
 
 
 def _qualified(scope: str, name: str) -> str:
@@ -217,7 +190,7 @@ class _Placeholders:
             self.found.append(
                 Placeholder(
                     PLACEHOLDER_EMPTY_BODY,
-                    f"def {node.name}(...): {_excerpt(node.body[len(node.body) - 1])}",
+                    f"def {node.name}(...): {excerpt(node.body[len(node.body) - 1])}",
                     inner,
                     node_span(self.source, node),
                 )
@@ -232,9 +205,7 @@ class _Placeholders:
         elif name == NOT_IMPLEMENTED_CONSTANT:
             kind = PLACEHOLDER_NOT_IMPLEMENTED_CONSTANT
         if kind is not None:
-            self.found.append(
-                Placeholder(kind, _excerpt(node), scope, node_span(self.source, node))
-            )
+            self.found.append(Placeholder(kind, excerpt(node), scope, node_span(self.source, node)))
 
 
 # -- asserts ------------------------------------------------------------------------------
@@ -266,7 +237,7 @@ def _asserts(source: SourceText, module: ast.Module) -> list[AssertFact]:
             stack.extend(node.orelse)
             continue
         if isinstance(node, ast.Assert):
-            found.append(AssertFact(_excerpt(node), _narrows(node.test), node_span(source, node)))
+            found.append(AssertFact(excerpt(node), _narrows(node.test), node_span(source, node)))
         stack.extend(ast.iter_child_nodes(node))
     return found
 
@@ -291,7 +262,7 @@ def _boolean_arguments(source: SourceText, module: ast.Module) -> list[BooleanAr
         for position, arg in enumerate(node.args):
             if _is_boolean(arg):
                 found.append(
-                    BooleanArgument(callee, position, _excerpt(node), node_span(source, arg))
+                    BooleanArgument(callee, position, excerpt(node), node_span(source, arg))
                 )
     return found
 
@@ -322,7 +293,7 @@ def _import_time_calls(source: SourceText, module: ast.Module) -> list[ImportTim
         if isinstance(node, ast.Call):
             callee = dotted_name(node.func)
             if callee is not None:
-                found.append(ImportTimeCall(callee, _excerpt(node), node_span(source, node)))
+                found.append(ImportTimeCall(callee, excerpt(node), node_span(source, node)))
         stack.extend(ast.iter_child_nodes(node))
     return found
 

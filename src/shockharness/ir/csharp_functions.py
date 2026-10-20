@@ -14,9 +14,9 @@ from dataclasses import dataclass
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS, FIRST_COLUMN, FIRST_LINE
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.javascript_catches import node_span, node_text
+from shockharness.ir.javascript_functions import Builder, freeze_builders, new_builder
 from shockharness.ir.lines import logical_line_count
 from shockharness.ir.model import (
     ANONYMOUS_SCOPE,
@@ -57,8 +57,16 @@ from shockharness.ir.model import (
     Span,
 )
 from shockharness.ir.python_functions import count_runs, nested_line_exclusions
+from shockharness.ir.tree_sitter_common import (
+    first_line,
+    root_identifier,
+    unit_span,
+    unwrap_parentheses,
+)
 from shockharness.source import SourceText
 
+# The member and element access kinds an access chain is made of.
+MEMBER_CHAINS = (Kind.MEMBER_ACCESS_EXPRESSION, "element_access_expression")
 TYPE_DECLARATIONS = frozenset(
     {
         Kind.CLASS_DECLARATION,
@@ -108,21 +116,6 @@ DISCARD = "_"
 
 _T_STATEMENT = "statement"
 _T_EXPRESSION = "expression"
-
-
-@dataclass
-class _Builder:
-    kind: str
-    label: str
-    children: list["_Builder"]
-    operators: int
-    sequences: int
-    labeled: bool
-    frozen: ControlNode | None
-
-
-def _builder(kind: str, label: str) -> _Builder:
-    return _Builder(kind, label, [], 0, 0, labeled=False, frozen=None)
 
 
 @dataclass(frozen=True)
@@ -218,7 +211,9 @@ def _unit_kind(node: Node, class_name: str | None) -> str:
     return UNIT_METHOD if class_name is not None else UNIT_FUNCTION
 
 
-def discover_units(root: Node) -> list[UnitInfo]:
+def discover_units(  # shockharness: ignore[DUP002] reason="C#'s own type and member kinds"
+    root: Node,
+) -> list[UnitInfo]:
     units: list[UnitInfo] = [UnitInfo(root, MODULE_SCOPE, UNIT_MODULE, None)]
     stack: list[tuple[Node, str, str | None]] = [(root, MODULE_SCOPE, None)]
     while len(stack) > 0:
@@ -235,13 +230,6 @@ def discover_units(root: Node) -> list[UnitInfo]:
             stack.append((child, child_scope, child_class))
     units.sort(key=lambda u: (u.node.start_byte, -u.node.end_byte))
     return units
-
-
-def _excerpt(node: Node) -> str:
-    first = node_text(node).split("\n")[0].strip()
-    if len(first) > EVIDENCE_MAX_CHARS:
-        return first[:EVIDENCE_MAX_CHARS]
-    return first
 
 
 def _simple_name(node: Node) -> str | None:
@@ -279,26 +267,6 @@ def dotted_name(node: Node) -> str | None:
     return ".".join(parts)
 
 
-def _root_identifier(node: Node) -> str | None:
-    current = node
-    while current.type in (Kind.MEMBER_ACCESS_EXPRESSION, "element_access_expression"):
-        inner = current.child_by_field_name(Field.EXPRESSION)
-        if inner is None:
-            return None
-        current = inner
-    return node_text(current) if current.type == Kind.IDENTIFIER else None
-
-
-def _unwrap(node: Node) -> Node:
-    current = node
-    while current.type == Kind.PARENTHESIZED_EXPRESSION:
-        inner = [c for c in current.named_children if c.type != Kind.COMMENT]
-        if len(inner) != 1:
-            return current
-        current = inner[0]
-    return current
-
-
 def _flatten(root: Node) -> tuple[list[str], list[Node]]:
     """Operators of a ``&&``/``||``/``??`` chain or an ``and``/``or`` pattern chain in
     source order, and its leaves."""
@@ -310,7 +278,7 @@ def _flatten(root: Node) -> tuple[list[str], list[Node]]:
         if isinstance(item, str):
             operators.append(item)
             continue
-        node = _unwrap(item)
+        node = unwrap_parentheses(item)
         operator = _chain_operator(node)
         left = node.child_by_field_name(Field.LEFT)
         right = node.child_by_field_name(Field.RIGHT)
@@ -364,7 +332,7 @@ def designated_names(node: Node) -> list[str]:
     return [name for name in names if name != DISCARD]
 
 
-_Handler = Callable[[list[tuple[str, Node, _Builder]], Node, _Builder], None]
+_Handler = Callable[[list[tuple[str, Node, Builder]], Node, Builder], None]
 # Statements that run nothing: namespace names, using directives, attributes.
 SKIPPED_STATEMENTS = frozenset(
     {
@@ -406,8 +374,8 @@ class _UnitCollector:
     def __init__(self, source: SourceText, unit: UnitInfo) -> None:
         self.source = source
         self.unit = unit
-        self.root = _builder(CK_BLOCK, "")
-        self.builders: list[_Builder] = [self.root]
+        self.root = new_builder(CK_BLOCK, "")
+        self.builders: list[Builder] = [self.root]
         self.calls: list[CallSite] = []
         self.locals: set[str] = set()
         self.assign_candidates: list[str] = []
@@ -417,20 +385,20 @@ class _UnitCollector:
         self.own_name = _own_name(unit.node) if unit.node.type in FUNCTION_TYPES else None
         self.handlers = self._statement_handlers()
 
-    def _new(self, kind: str, label: str, parent: _Builder) -> _Builder:
-        builder = _builder(kind, label)
+    def _new(self, kind: str, label: str, parent: Builder) -> Builder:
+        builder = new_builder(kind, label)
         parent.children.append(builder)
         self.builders.append(builder)
         return builder
 
     def _push_statements(
-        self, stack: list[tuple[str, Node, _Builder]], statements: Sequence[Node], parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], statements: Sequence[Node], parent: Builder
     ) -> None:
         for statement in reversed(statements):
             stack.append((_T_STATEMENT, statement, parent))
 
     def _push_block(
-        self, stack: list[tuple[str, Node, _Builder]], body: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], body: Node, parent: Builder
     ) -> None:
         if body.type == Kind.BLOCK:
             self._push_statements(
@@ -440,13 +408,13 @@ class _UnitCollector:
             stack.append((_T_STATEMENT, body, parent))
 
     def _expr(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node | None, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node | None, parent: Builder
     ) -> None:
         if node is not None:
             stack.append((_T_EXPRESSION, node, parent))
 
     def _expr_children(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         for child in reversed(node.named_children):
             if child.type != Kind.COMMENT:
@@ -455,7 +423,7 @@ class _UnitCollector:
     # -- statements -------------------------------------------------------------------
 
     def _statement(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         kind = node.type
         if kind in SKIPPED_STATEMENTS:
@@ -495,42 +463,38 @@ class _UnitCollector:
         return handlers
 
     def _if_statement(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         self._if(stack, node, parent, CK_IF)
 
-    def _labeled(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
-    ) -> None:
+    def _labeled(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         """``label: statement``: the label is not a statement of its own."""
         self.statements -= 1
         inner = [c for c in node.named_children if c.type != Kind.IDENTIFIER]
         self._push_statements(stack, inner, parent)
 
-    def _goto(
-        self, _stack: list[tuple[str, Node, _Builder]], _node: Node, parent: _Builder
-    ) -> None:
+    def _goto(self, _stack: list[tuple[str, Node, Builder]], _node: Node, parent: Builder) -> None:
         jump = self._new(CK_JUMP, "", parent)
         jump.labeled = True
 
-    def _yield(self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder) -> None:
+    def _yield(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         self.yields = True
         self._expr_children(stack, node, self._new(CK_EXPR, "", parent))
 
     def _declarations(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         for child in node.named_children:
             if child.type == Kind.VARIABLE_DECLARATION:
                 self._declaration(stack, child, parent)
 
     def _enum_member(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         self._expr(stack, node.child_by_field_name(Field.VALUE), self._new(CK_EXPR, "", parent))
 
     def _declared(
-        self, _stack: list[tuple[str, Node, _Builder]], node: Node, _parent: _Builder
+        self, _stack: list[tuple[str, Node, Builder]], node: Node, _parent: Builder
     ) -> None:
         """A delegate or event declaration binds its name and runs nothing."""
         name = node.child_by_field_name(Field.NAME)
@@ -538,7 +502,7 @@ class _UnitCollector:
             self.locals.add(node_text(name))
 
     def _namespace(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         """``namespace N { ... }``: its members are statements of the enclosing unit."""
         self.statements -= 1
@@ -546,9 +510,7 @@ class _UnitCollector:
         if body is not None:
             self._push_statements(stack, _members(body), parent)
 
-    def _member(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
-    ) -> None:
+    def _member(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         """A nested type, function or property: its name is bound here; a property's
         initializer and the parameter defaults of a nested function are evaluated here."""
         if node.type == Kind.LOCAL_FUNCTION_STATEMENT or node.type in TYPE_DECLARATIONS:
@@ -564,7 +526,7 @@ class _UnitCollector:
         self._parameter_defaults(stack, node, expression)
 
     def _parameter_defaults(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         parameters = node.child_by_field_name(Field.PARAMETERS)
         if parameters is None or parameters.type != Kind.PARAMETER_LIST:
@@ -575,7 +537,7 @@ class _UnitCollector:
                 self._expr(stack, default, parent)
 
     def _declaration(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         expression = self._new(CK_EXPR, "", parent)
         for declarator in reversed(node.named_children):
@@ -592,7 +554,7 @@ class _UnitCollector:
                     self._expr(stack, child, expression)
 
     def _wrapping(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         expression = self._new(CK_EXPR, "", parent)
         body = _body_of(node)
@@ -607,7 +569,7 @@ class _UnitCollector:
                 self._expr(stack, child, expression)
 
     def _if(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder, kind: str
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder, kind: str
     ) -> None:
         builder = self._new(kind, "", parent)
         condition = self._new(CK_EXPR, "", builder)
@@ -624,7 +586,7 @@ class _UnitCollector:
         if consequence is not None:
             self._push_block(stack, consequence, then_block)
 
-    def _loop(self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder) -> None:
+    def _loop(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         label = LOOP_FOR
         if node.type == Kind.WHILE_STATEMENT:
             label = LOOP_WHILE
@@ -654,10 +616,10 @@ class _UnitCollector:
             self._expr(stack, node.child_by_field_name(Field.UPDATE), condition)
         self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
 
-    def _try(self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder) -> None:
+    def _try(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         builder = self._new(CK_TRY, "", parent)
         body = self._new(CK_BLOCK, "", builder)
-        handlers: list[tuple[Node, _Builder]] = []
+        handlers: list[tuple[Node, Builder]] = []
         for clause in node.named_children:
             if clause.type == Kind.CATCH_CLAUSE:
                 handlers.append((clause, self._new(CK_HANDLER, "", builder)))
@@ -674,7 +636,7 @@ class _UnitCollector:
             self._push_block(stack, try_body, body)
 
     def _catch(
-        self, stack: list[tuple[str, Node, _Builder]], clause: Node, handler: _Builder
+        self, stack: list[tuple[str, Node, Builder]], clause: Node, handler: Builder
     ) -> None:
         for child in clause.named_children:
             if child.type == Kind.CATCH_DECLARATION:
@@ -688,14 +650,12 @@ class _UnitCollector:
             if child.type == Kind.CATCH_FILTER_CLAUSE:
                 self._expr_children(stack, child, self._new(CK_EXPR, "", handler))
 
-    def _switch(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
-    ) -> None:
+    def _switch(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         builder = self._new(CK_SWITCH, "", parent)
         subject = self._new(CK_EXPR, "", builder)
         body = node.child_by_field_name(Field.BODY)
         sections = _named_of_type(body, Kind.SWITCH_SECTION)
-        work: list[tuple[list[Node], list[Node], _Builder, _Builder]] = []
+        work: list[tuple[list[Node], list[Node], Builder, Builder]] = []
         for section in sections:
             labels, statements = _section_parts(section)
             label = CASE_DEFAULT if _is_default_section(section) else ""
@@ -709,16 +669,14 @@ class _UnitCollector:
                 self._pattern(stack, label_node, guard)
         self._expr(stack, node.child_by_field_name(Field.VALUE), subject)
 
-    def _pattern(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
-    ) -> None:
+    def _pattern(self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder) -> None:
         self.locals.update(designated_names(node))
         self._expr(stack, node, parent)
 
     # -- expressions ------------------------------------------------------------------
 
     def _expression(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         kind = node.type
         if kind == Kind.COMMENT:
@@ -726,7 +684,7 @@ class _UnitCollector:
         if kind in FUNCTION_TYPES:
             self._parameter_defaults(stack, node, parent)
             return
-        if _chain_operator(_unwrap(node)) is not None:
+        if _chain_operator(unwrap_parentheses(node)) is not None:
             operators, leaves = _flatten(node)
             parent.operators += len(operators)
             parent.sequences += count_runs(operators)
@@ -743,7 +701,7 @@ class _UnitCollector:
         self._expr_children(stack, node, parent)
 
     def _conditional(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         conditional = self._new(CK_CONDITIONAL, "", parent)
         condition = self._new(CK_EXPR, "", conditional)
@@ -753,7 +711,7 @@ class _UnitCollector:
         self._expr(stack, node.child_by_field_name(Field.CONSEQUENCE), then_part)
         self._expr(stack, node.child_by_field_name(Field.CONDITION), condition)
 
-    def _record(self, node: Node, parent: _Builder) -> None:
+    def _record(self, node: Node, parent: Builder) -> None:
         """What an expression adds besides its children: writes, calls, bound names."""
         kind = node.type
         if kind == Kind.ASSIGNMENT_EXPRESSION:
@@ -772,13 +730,13 @@ class _UnitCollector:
             self.locals.update(designated_names(node))
 
     def _switch_expression(
-        self, stack: list[tuple[str, Node, _Builder]], node: Node, parent: _Builder
+        self, stack: list[tuple[str, Node, Builder]], node: Node, parent: Builder
     ) -> None:
         """``x switch { pattern when c => value, _ => other }``: a switch whose arms are
         cases; the discard arm is the default."""
         builder = self._new(CK_SWITCH, "", parent)
         subject = self._new(CK_EXPR, "", builder)
-        arms: list[tuple[list[Node], _Builder, _Builder]] = []
+        arms: list[tuple[list[Node], Builder, Builder]] = []
         for arm in _named_of_type(node, Kind.SWITCH_EXPRESSION_ARM):
             parts = [c for c in arm.named_children if c.type != Kind.COMMENT]
             label = CASE_DEFAULT if any(node_text(p) == DISCARD for p in parts[:1]) else ""
@@ -792,10 +750,10 @@ class _UnitCollector:
 
     def _arm(
         self,
-        stack: list[tuple[str, Node, _Builder]],
+        stack: list[tuple[str, Node, Builder]],
         parts: list[Node],
-        guard: _Builder,
-        value: _Builder,
+        guard: Builder,
+        value: Builder,
     ) -> None:
         """One switch-expression arm: its pattern and ``when`` clause, then its value."""
         if len(parts) == 0:
@@ -808,7 +766,7 @@ class _UnitCollector:
             else:
                 self._pattern(stack, part, guard)
 
-    def _assignment(self, node: Node, parent: _Builder) -> None:
+    def _assignment(self, node: Node, parent: Builder) -> None:
         operator = node.child_by_field_name(Field.OPERATOR)
         if operator is not None and node_text(operator) == LOGICAL_ASSIGNMENT:
             parent.operators += 1
@@ -828,15 +786,15 @@ class _UnitCollector:
             if kind == WRITE_ASSIGN:
                 self.assign_candidates.append(node_text(target))
             return
-        root = _root_identifier(target)
+        root = root_identifier(target, MEMBER_CHAINS, Field.EXPRESSION)
         if root is not None:
             self.mutate_candidates.append(root)
 
-    def _call(self, node: Node, parent: _Builder) -> None:
+    def _call(self, node: Node, parent: Builder) -> None:
         span = node_span(self.source, node)
         function = node.child_by_field_name(Field.FUNCTION)
         if function is not None:
-            callee = _unwrap(function)
+            callee = unwrap_parentheses(function)
             simple = _simple_name(callee)
             if simple is not None:
                 self.calls.append(CallSite(span, simple, CALL_NAME, receiver_self=False))
@@ -846,14 +804,14 @@ class _UnitCollector:
                 self._member_call(callee, span, parent)
         self._arguments(node.child_by_field_name(Field.ARGUMENTS))
 
-    def _member_call(self, callee: Node, span: Span, parent: _Builder) -> None:
+    def _member_call(self, callee: Node, span: Span, parent: Builder) -> None:
         dotted = (
             _conditional_dotted(callee)
             if callee.type == Kind.CONDITIONAL_ACCESS_EXPRESSION
             else dotted_name(callee)
         )
         if dotted is None:
-            self.calls.append(CallSite(span, _excerpt(callee), CALL_DYNAMIC, receiver_self=False))
+            self.calls.append(CallSite(span, first_line(callee), CALL_DYNAMIC, receiver_self=False))
             return
         receiver = dotted.split(".")[0] == RECEIVER
         self.calls.append(CallSite(span, dotted, CALL_ATTRIBUTE, receiver))
@@ -865,7 +823,7 @@ class _UnitCollector:
         constructed = node.child_by_field_name(Field.TYPE)
         name = None if constructed is None else _type_text(constructed)
         if name is None:
-            self.calls.append(CallSite(span, _excerpt(node), CALL_DYNAMIC, receiver_self=False))
+            self.calls.append(CallSite(span, first_line(node), CALL_DYNAMIC, receiver_self=False))
         else:
             self.calls.append(CallSite(span, name, CALL_NEW, receiver_self=False))
         self._arguments(node.child_by_field_name(Field.ARGUMENTS))
@@ -891,7 +849,7 @@ class _UnitCollector:
 
     # -- driver -----------------------------------------------------------------------
 
-    def _seed(self, stack: list[tuple[str, Node, _Builder]]) -> None:
+    def _seed(self, stack: list[tuple[str, Node, Builder]]) -> None:
         """Push the unit's own body: parameters bind locals; a type's body is its members."""
         node = self.unit.node
         if node.type == Kind.ACCESSOR_DECLARATION:
@@ -926,7 +884,7 @@ class _UnitCollector:
             if name is not None:
                 self.locals.add(node_text(name))
 
-    def _body(self, stack: list[tuple[str, Node, _Builder]], body: Node | None) -> None:
+    def _body(self, stack: list[tuple[str, Node, Builder]], body: Node | None) -> None:
         if body is None:
             return
         if body.type == Kind.BLOCK:
@@ -942,7 +900,7 @@ class _UnitCollector:
         self._expr(stack, expression, self._new(CK_EXPR, "", self.root))
 
     def run(self) -> None:
-        stack: list[tuple[str, Node, _Builder]] = []
+        stack: list[tuple[str, Node, Builder]] = []
         self._seed(stack)
         while len(stack) > 0:
             task, payload, parent = stack.pop()
@@ -952,20 +910,7 @@ class _UnitCollector:
                 self._expression(stack, payload, parent)
 
     def freeze(self) -> ControlNode:
-        for builder in reversed(self.builders):
-            children = tuple(c.frozen for c in builder.children if c.frozen is not None)
-            if builder.kind in _STATEMENT_BLOCKS:
-                children = tuple(c for c in children if not _trivial_expr(c))
-            builder.frozen = ControlNode(
-                builder.kind,
-                children,
-                builder.operators,
-                builder.sequences,
-                builder.label,
-                builder.labeled,
-            )
-        assert self.root.frozen is not None
-        return self.root.frozen
+        return freeze_builders(self.builders, self.root)
 
     def writes(self) -> tuple[tuple[str, str], ...]:
         found: set[tuple[str, str]] = set()
@@ -976,13 +921,6 @@ class _UnitCollector:
             if name not in self.locals:
                 found.add((name, WRITE_MUTATE))
         return tuple(sorted(found))
-
-
-_STATEMENT_BLOCKS = frozenset({CK_BLOCK, CK_HANDLER, CK_FINALLY})
-
-
-def _trivial_expr(node: ControlNode) -> bool:
-    return node.kind == CK_EXPR and node.operators == 0 and len(node.children) == 0
 
 
 def _conditional_dotted(node: Node) -> str | None:
@@ -1068,18 +1006,11 @@ def _parameter_count(node: Node) -> int:
     return sum(1 for c in parameters.named_children if c.type == Kind.PARAMETER)
 
 
-def _unit_span(source: SourceText, node: Node) -> Span:
-    if node.type == Kind.COMPILATION_UNIT:
-        last_line = max(source.line_count, FIRST_LINE)
-        return Span(FIRST_LINE, FIRST_COLUMN, last_line, len(source.line_text(last_line)) + 1)
-    return node_span(source, node)
-
-
 def collect_csharp_functions(
     source: SourceText, root: Node, comments: Sequence[Comment]
 ) -> tuple[FunctionFact, ...]:
     units = discover_units(root)
-    spans = [_unit_span(source, unit.node) for unit in units]
+    spans = [unit_span(source, unit.node, Kind.COMPILATION_UNIT) for unit in units]
     facts: list[FunctionFact] = []
     for index, unit in enumerate(units):
         collector = _UnitCollector(source, unit)

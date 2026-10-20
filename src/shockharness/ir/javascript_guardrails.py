@@ -22,7 +22,6 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_dom import collect_element_guards
 from shockharness.ir.javascript_nodes import Field, Kind
@@ -38,6 +37,7 @@ from shockharness.ir.model import (
     ImportTimeCall,
     Placeholder,
 )
+from shockharness.ir.tree_sitter_common import call_arguments, excerpt
 from shockharness.source import SourceText
 
 SCOPES = frozenset(
@@ -84,13 +84,6 @@ NOT_IMPLEMENTED = re.compile(
 TODO_MARKER = re.compile(r"^\s*TODO\b")
 
 
-def _excerpt(node: Node) -> str:
-    text = " ".join(node_text(node).split())
-    if len(text) > EVIDENCE_MAX_CHARS:
-        return text[:EVIDENCE_MAX_CHARS] + "..."
-    return text
-
-
 def dotted_callee(node: Node) -> str | None:
     """``a.b.c`` for identifiers and non-computed member chains, else None."""
     if node.type == IDENTIFIER:
@@ -105,13 +98,6 @@ def dotted_callee(node: Node) -> str | None:
     if base is None:
         return None
     return f"{base}.{node_text(prop)}"
-
-
-def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name(Field.ARGUMENTS)
-    if arguments is None:
-        return []
-    return [child for child in arguments.named_children if child.type != COMMENT]
 
 
 # -- finally exits ------------------------------------------------------------------------
@@ -175,7 +161,7 @@ def _not_implemented(throw: Node) -> bool:
     constructor = created[0].child_by_field_name(Field.CONSTRUCTOR)
     if constructor is None or not node_text(constructor).endswith(ERROR_SUFFIX):
         return False
-    arguments = _arguments(created[0])
+    arguments = call_arguments(created[0])
     if len(arguments) == 0:
         return False
     message = _string_value(arguments[0])
@@ -223,7 +209,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
         elif node.type == THROW and _not_implemented(node):
             placeholders.append(
                 Placeholder(
-                    PLACEHOLDER_NOT_IMPLEMENTED, _excerpt(node), scope, node_span(source, node)
+                    PLACEHOLDER_NOT_IMPLEMENTED, excerpt(node), scope, node_span(source, node)
                 )
             )
         elif node.type == CALL:
@@ -244,7 +230,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
 
 
 def _booleans(source: SourceText, call: Node) -> list[BooleanArgument]:
-    arguments = _arguments(call)
+    arguments = call_arguments(call)
     function = call.child_by_field_name(Field.FUNCTION)
     if len(arguments) <= 1 or function is None:
         return []
@@ -254,7 +240,7 @@ def _booleans(source: SourceText, call: Node) -> list[BooleanArgument]:
     if callee is None:
         return []
     return [
-        BooleanArgument(callee, position, _excerpt(call), node_span(source, argument))
+        BooleanArgument(callee, position, excerpt(call), node_span(source, argument))
         for position, argument in enumerate(arguments)
         if argument.type in BOOLEANS
     ]
@@ -273,6 +259,6 @@ def _import_time(source: SourceText, root: Node) -> list[ImportTimeCall]:
             if function is not None:
                 callee = dotted_callee(function)
             if callee is not None:
-                found.append(ImportTimeCall(callee, _excerpt(node), node_span(source, node)))
+                found.append(ImportTimeCall(callee, excerpt(node), node_span(source, node)))
         stack.extend(node.children)
     return found

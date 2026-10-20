@@ -17,7 +17,6 @@ DEF005's literal returns come from the catch facts, as in the other languages.
 
 from tree_sitter import Node
 
-from shockharness.constants import EVIDENCE_MAX_CHARS
 from shockharness.ir.csharp_catches import is_literal_like
 from shockharness.ir.csharp_functions import scope_for
 from shockharness.ir.csharp_nodes import Field, Kind
@@ -51,6 +50,8 @@ from shockharness.ir.model import (
     MODULE_SCOPE,
     DefaultFact,
 )
+from shockharness.ir.tree_sitter_common import collapsed_text as _text
+from shockharness.ir.tree_sitter_common import unwrap_parentheses as _unwrap
 from shockharness.source import SourceText
 
 ELLIPSIS_TEXT = "..."
@@ -107,28 +108,11 @@ COMPARISONS = frozenset({"==", "!=", "<", ">", "<=", ">=", "&&", "||"})
 INHERITING_PARENTS = frozenset({Kind.PARENTHESIZED_EXPRESSION, Kind.AWAIT_EXPRESSION})
 
 
-def _text(node: Node) -> str:
-    collapsed = " ".join(node_text(node).split())
-    if len(collapsed) > EVIDENCE_MAX_CHARS:
-        return collapsed[: EVIDENCE_MAX_CHARS - len(ELLIPSIS_TEXT)] + ELLIPSIS_TEXT
-    return collapsed
-
-
 def _operator(node: Node) -> str:
     operator = node.child_by_field_name(Field.OPERATOR)
     if operator is None:
         return ""
     return node_text(operator)
-
-
-def _unwrap(node: Node) -> Node:
-    current = node
-    while current.type == Kind.PARENTHESIZED_EXPRESSION:
-        inner = [c for c in current.named_children if c.type != Kind.COMMENT]
-        if len(inner) != 1:
-            return current
-        current = inner[0]
-    return current
 
 
 def is_constant_shaped(node: Node | None) -> bool:

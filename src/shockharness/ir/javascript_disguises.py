@@ -18,6 +18,7 @@ from shockharness.ir.model import (
     Disguise,
 )
 from shockharness.ir.python_disguises import NUMBER, SPACE, TEXT_LIMIT, numbers_in
+from shockharness.ir.tree_sitter_common import call_arguments
 from shockharness.source import SourceText
 
 LENGTH = "length"
@@ -34,13 +35,6 @@ def _shown(node: Node) -> str:
     if len(text) > TEXT_LIMIT:
         return text[:TEXT_LIMIT] + "..."
     return text
-
-
-def _arguments(call: Node) -> list[Node]:
-    arguments = call.child_by_field_name(Field.ARGUMENTS)
-    if arguments is None:
-        return []
-    return [c for c in arguments.named_children if c.type != Kind.COMMENT]
 
 
 def _literal_text(node: Node) -> str | None:
@@ -71,7 +65,7 @@ def _call(call: Node, spaces: dict[str, int]) -> tuple[str, tuple[int | float, .
     if function is None:
         return None
     callee = dotted_name(function)
-    arguments = _arguments(call)
+    arguments = call_arguments(call)
     if callee is None or len(arguments) == 0:
         return None
     text = _literal_text(arguments[0])

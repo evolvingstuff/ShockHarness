@@ -26,7 +26,7 @@ from shockharness.ir.model import (
     FlowUnit,
     origin,
 )
-from shockharness.ir.python_catches import node_span
+from shockharness.ir.python_catches import dotted_name, node_span
 from shockharness.ir.python_functions import (
     FUNCTION_NODES,
     RECEIVER_NAMES,
@@ -156,19 +156,6 @@ def _bound_receiver(info: UnitInfo, parameters: list[str]) -> bool:
     return not any(isinstance(d, ast.Name) and d.id == STATICMETHOD for d in node.decorator_list)
 
 
-def _dotted(node: ast.expr) -> str | None:
-    """``a.b.c`` for an attribute chain rooted at a name, the name itself for a name."""
-    parts: list[str] = []
-    current = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if not isinstance(current, ast.Name):
-        return None
-    parts.append(current.id)
-    return ".".join(reversed(parts))
-
-
 def _chain(node: ast.expr) -> tuple[str, str] | None:
     """(root name, dotted text) of a pure read chain: attributes and string-literal
     subscripts over a name (``os.environ["HOME"]`` -> ``os.environ.HOME``)."""
@@ -199,6 +186,15 @@ def _excerpt(source: SourceText, node: ast.expr) -> str:
     if len(first) > EVIDENCE_MAX_CHARS:
         return first[:EVIDENCE_MAX_CHARS] + "..."
     return first
+
+
+def bind_origins(env: dict[str, Origins], weak: int, name: str, origins: Origins) -> None:
+    """Bind a name: inside a weak region (a branch that may not run) the new origins join
+    the old ones; elsewhere they replace them."""
+    if weak > 0 and name in env:
+        env[name] = env[name] | origins
+    else:
+        env[name] = origins
 
 
 def _sorted(origins: Origins) -> tuple[str, ...]:
@@ -310,7 +306,7 @@ class _Unit:
                 # not b` false means both a and b are true).
                 stack.extend((value, truth) for value in node.values)
             elif isinstance(node, ast.Call) and truth and len(node.args) > 0:
-                dotted = _dotted(node.func)
+                dotted = dotted_name(node.func)
                 if dotted is not None:
                     found.append(FlowGuard(dotted, _excerpt(self.source, node.args[0])))
         return found
@@ -342,10 +338,7 @@ class _Unit:
     # -- binding ----------------------------------------------------------------------
 
     def bind(self, name: str, origins: Origins) -> None:
-        if self.weak > 0 and name in self.env:
-            self.env[name] = self.env[name] | origins
-        else:
-            self.env[name] = origins
+        bind_origins(self.env, self.weak, name, origins)
 
     def assign(self, target: ast.expr, origins: Origins) -> None:
         if isinstance(target, ast.Name):
@@ -424,7 +417,7 @@ class _Unit:
         elif not isinstance(node.func, ast.Name):
             self.expr(node.func)
         callee = DYNAMIC
-        dotted = _dotted(node.func)
+        dotted = dotted_name(node.func)
         if dotted is not None:
             callee = dotted
         elif isinstance(node.func, ast.Attribute):

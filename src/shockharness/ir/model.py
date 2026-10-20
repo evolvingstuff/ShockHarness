@@ -1256,6 +1256,10 @@ class FunctionShape:
     owner: str  # the class a method is defined in; "" for a function
     statements: int
     tokens: tuple[str, ...]
+    # The annotated types of its parameters (the receiver aside) and of its return, as
+    # written; empty when nothing is annotated. Versions that take different types are
+    # parallel implementations, not one helper drifted.
+    signature: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -116,8 +116,9 @@ ELAPSED_DECIMALS: Final[int] = 3
 # "22": JavaScript receiver facts (R2); "23": disguised numbers (MAGIC005); "24":
 # annotation coverage (TYPE002); "25": uses of functions (DEAD001, DEAD002);
 # "26": methods named on call results, classes handed to a library (DEAD001, DEAD002);
-# "27": function shapes (DUP001, DUP002).
-CACHE_SCHEMA_VERSION: Final[str] = "28"
+# "27": function shapes (DUP001, DUP002); "28": C# exceptions and defaults (decision 41);
+# "29": the annotated signature of a function shape (DUP002).
+CACHE_SCHEMA_VERSION: Final[str] = "29"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

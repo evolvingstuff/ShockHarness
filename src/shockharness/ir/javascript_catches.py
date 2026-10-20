@@ -26,7 +26,6 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import FIRST_LINE
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     ANONYMOUS_SCOPE,
@@ -49,6 +48,9 @@ from shockharness.ir.model import (
     Span,
     TryStatement,
 )
+from shockharness.ir.tree_sitter_common import count_kinds
+from shockharness.ir.tree_sitter_common import node_span as node_span
+from shockharness.ir.tree_sitter_common import node_text as node_text
 from shockharness.source import SourceText
 
 NAMED_SCOPE_TYPES = frozenset(
@@ -117,17 +119,6 @@ LOGGING_EXACT = frozenset({"process.stderr.write", "process.stdout.write", "log"
 REJECTION_HANDLER_ARGS = {"catch": 0, "then": 1}
 
 
-def node_span(source: SourceText, node: Node) -> Span:
-    start_line = node.start_point.row + FIRST_LINE
-    end_line = node.end_point.row + FIRST_LINE
-    return Span(
-        line=start_line,
-        column=source.column_from_byte_offset(start_line, node.start_point.column),
-        end_line=end_line,
-        end_column=source.column_from_byte_offset(end_line, node.end_point.column),
-    )
-
-
 # TypeScript wraps each parameter (`x: T = v`, `x?: T`, `private x = v`) in one of these,
 # with the binding in `pattern` and the default in `value`.
 TYPED_PARAMETERS = frozenset({Kind.REQUIRED_PARAMETER, Kind.OPTIONAL_PARAMETER})
@@ -152,12 +143,6 @@ def is_this_parameter(parameter: Node) -> bool:
     """TypeScript's ``this: T`` declares the receiver's type; it is not a parameter."""
     binding, _default = parameter_parts(parameter)
     return binding.type == THIS_PARAMETER
-
-
-def node_text(node: Node) -> str:
-    if node.text is None:
-        return ""
-    return node.text.decode("utf-8", errors="replace")
 
 
 def scope_for(node: Node, scope: str) -> str:
@@ -233,17 +218,6 @@ def _unwrap_await(node: Node) -> tuple[Node, bool]:
     return node, False
 
 
-def _count_operations(node: Node) -> int:
-    count = 0
-    stack = [node]
-    while len(stack) > 0:
-        current = stack.pop()
-        if current.type in OPERATION_TYPES:
-            count += 1
-        stack.extend(current.children)
-    return count
-
-
 def _callee_text(call: Node) -> str:
     if call.type == Kind.NEW_EXPRESSION:
         constructor = call.child_by_field_name(Field.CONSTRUCTOR)
@@ -269,7 +243,7 @@ def _attribute_operation(span: Span, statement: Node, value: Node) -> TryStateme
     inner, awaited = _unwrap_await(unwrap_parens(_unwrap_assignment(value)))
     if inner.type not in (Kind.CALL_EXPRESSION, Kind.NEW_EXPRESSION):
         return TryStatement(span, None, f"statement value is not a call ({inner.type})")
-    extra = _count_operations(statement) - (1 if awaited else 0)
+    extra = count_kinds(statement, OPERATION_TYPES) - (1 if awaited else 0)
     if extra != 1:
         return TryStatement(
             span,
@@ -565,7 +539,7 @@ def _receiver_statement(source: SourceText, receiver: Node) -> TryStatement:
         return TryStatement(
             span, None, f"rejection source ({inner.type}) is not a call; it cannot be attributed"
         )
-    count = _count_operations(inner)
+    count = count_kinds(inner, OPERATION_TYPES)
     if count != 1:
         return TryStatement(
             span, None, f"promise chain performs {count} operations before the rejection handler"

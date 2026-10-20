@@ -124,3 +124,28 @@ def test_relaxing_it_is_a_loosening(tmp_path: Path) -> None:
     assert any("rules.duplicates.min_tokens raised from 10 to 40" in m for m in messages)
     assert any("rules.duplicates.similarity raised from 0.85 to 0.95" in m for m in messages)
     assert any("rules.duplicates.roles no longer lists 'production'" in m for m in messages)
+
+
+def test_versions_over_different_annotated_types_are_parallel_not_drift(tmp_path: Path) -> None:
+    body = (
+        "    text = ' '.join(render(node).split())\n"
+        "    if len(text) > LIMIT:\n"
+        "        return text[:LIMIT] + '...'\n"
+        "    return text\n"
+    )
+    typed = {
+        "app/py_side.py": "def excerpt(node: ast.AST) -> str:\n" + body,
+        "app/js_side.py": "def excerpt(node: Node) -> str:\n" + body.replace("+ '...'", ""),
+        "app/same_a.py": "def tag(node: Node) -> str:\n" + body.replace("LIMIT", "WIDTH"),
+        "app/same_b.py": "def tag(node: Node) -> str:\n"
+        + body.replace("LIMIT", "WIDTH").replace("+ '...'", ""),
+    }
+    result = found(tmp_path, typed)
+    # Same types and alike: drift. Different types: parallel implementations, nothing.
+    assert [(rule, path) for rule, path, _ in result] == [("DUP002", "app/same_a.py")]
+    # Identical bodies over different types are not one copy group either.
+    copies = {
+        "app/a.py": "def excerpt(node: ast.AST) -> str:\n" + body,
+        "app/b.py": "def excerpt(node: Node) -> str:\n" + body,
+    }
+    assert found(tmp_path / "copies", copies) == []

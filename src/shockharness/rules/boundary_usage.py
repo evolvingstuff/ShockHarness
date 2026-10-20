@@ -69,7 +69,7 @@ def _boundary_lines(text: str | None, boundaries: Sequence[Boundary]) -> dict[in
     return found
 
 
-def _anchor(root: Path, config: EffectiveConfig) -> str:
+def config_anchor(root: Path, config: EffectiveConfig) -> str:
     source = Path(config.source.path).resolve()
     if source.is_relative_to(root.resolve()):
         return source.relative_to(root.resolve()).as_posix()
@@ -128,7 +128,7 @@ def unused_boundary_findings(
     every = discover(root, [root], config).files
     text, _error = read_text(Path(config.source.path))
     lines = _boundary_lines(text, boundaries)
-    path = _anchor(root, config)
+    path = config_anchor(root, config)
     severity = section_severity(settings, EXC005.default_severity)
     findings: list[Finding] = []
     for boundary in boundaries:
