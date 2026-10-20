@@ -6155,3 +6155,15 @@ a real bug** in Sakuga-Engine: `ConnectionUI.cs` lines 118-120 and 135-137 call
 New tests: `tests/unit/test_csharp_policy.py::test_results_booleans_and_placeholders_on_csharp`
 (the three rules, an explicit discard, a named and a single Boolean, a call in a `try`,
 an in-place `Reverse()`, an empty override, and exact versus approximate confidence).
+
+## Release 0.18.0 (2026-10-19)
+
+On Tom's go-ahead. CI was green on 6cb4bfd (run 39349263412) and on the release commit
+b99c4b8 (run 39349790032), 16 of 16 jobs each. Every pin moved from 0.17.0, and the
+bump's diff was checked for lines that are not pins (none). The changelog's `[Unreleased]`
+section, written in several pieces during the day, was merged into one `[0.18.0]` section
+with one upgrade note: the new `tree-sitter-c-sharp` dependency, C# opt-in, a `.join` with
+no catalog rule changing from unknown to violation (it can fail a gate only where a
+project set PROP001 to `error`), and BOOL001's wider default `allowed_callees`. Published
+by `publish.yml` (run 39350388650, 18 of 18 jobs). PyPI lists 0.18.0 with a wheel and an
+sdist.
