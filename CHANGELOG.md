@@ -5,6 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-21
+
+IMPORT002 (imports across boundaries a project declares) and DOM003 (selections saved as
+text positions and found again through text nodes only).
+
+**Upgrading from 0.19.0.** No new dependency, and nothing can fail a gate that passed:
+
+- **DOM003** is on by default for JavaScript and TypeScript in the production role, at
+  `review`, which never gates. A project with a web editor may see new review findings;
+  `rules.dom.dom003_severity` sets their severity.
+- **IMPORT002** reports nothing until a project adds a
+  `[[rules.import_boundaries.forbidden]]` entry.
+
+The text report's "rules applied" line lists both new rules. The cache schema is "31", so
+the first run after upgrading rebuilds the cache.
+
 ### Added
 - **DOM003 (review, JavaScript and TypeScript): a selection saved as text positions and
   found again through text nodes only** (spec 21.1 decision 45). A position taken with a
@@ -12,9 +28,9 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   (a `SHOW_TEXT` walker, or a walk testing `nodeType`) loses any point next to an image or
   other non-text node. Encoders and decoders are found across files, through imports,
   wrappers, locals and object properties; a point tested to be a text node is exempt.
-  Severity `rules.dom.dom003_severity`. On MetaList it reports the two calls of the
-  right-click-on-images bug before its fix and three after; on medium-editor, three
-  calls of its export/import selection pair. Cache schema "31".
+  Severity `rules.dom.dom003_severity`. On MetaList it reports five calls before its
+  right-click-on-images fix (the bug's two among them) and three after; on medium-editor,
+  three calls of its export/import selection pair. Cache schema "31".
 - **IMPORT002 (error, configured, Python and JavaScript): an import across a declared
   boundary** (spec 21.1 decision 44). `[[rules.import_boundaries.forbidden]]` entries name
   the files they bind (`importers` globs), the modules those may not import (`imported`
@@ -22,7 +38,8 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   import is judged through its resolved edge, lazy imports included, so dotted, relative,
   submodule and JavaScript path imports of the module are all caught; with allowed names, an
   import of the whole module is reported. There is no entry by default, so nothing changes
-  until a project declares one. Removing, narrowing or widening an entry is a loosening. On
+  until a project declares one. Removing an entry, narrowing its globs or allowing more
+  names is a loosening. On
   MetaList with its BKP001 pairs: none at 4d4e9847, and all four of four added imports, two
   of which BKP001 misses.
 
