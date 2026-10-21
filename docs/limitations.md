@@ -426,8 +426,9 @@ Stated so that a clean report is never read as more than it is.
 * **Opt-in.** The default `include` does not list `**/*.cs`; a project adds it
   (docs/configuration.md).
 * **Partial coverage.** MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 (G1),
-  EXC001-EXC003, EXC005, DEF001-DEF006, RESULT001, BOOL001 and STUB001 (G2) run on `.cs`
-  files. Every other rule has
+  EXC001-EXC003, EXC005, DEF001-DEF006, RESULT001, BOOL001 and STUB001 (G2), CPLX005,
+  DEAD001, DEAD002, MAGIC002-MAGIC005, ASYNC001, STATE001, IMPORT001, PROCESS001, STUB002
+  and STUB003 (G3) run on `.cs` files. Every other rule has
   no C# facts yet and does not run there: `coverage.rules_not_applicable.csharp` lists
   them, and the text report prints a warning naming them. A C# file is never clean for a
   rule that did not look at it. The Godot project model and dead code follow in G3 (spec
@@ -495,6 +496,21 @@ Stated so that a clean report is never read as more than it is.
   attached, nodes, editor connections, animation method tracks), `res://` and `uid://`
   references both. Values are scanned, never evaluated. A file that cannot be read stops
   the C# dead-code judgment rather than guessing.
+* **G3's per-file families.** STATE001's module state is a `static` field that is
+  neither `readonly` nor `const` (a static `Instance` singleton written in `_Ready` is
+  one; list deliberate ones under `rules.module_state.allowed`); IMPORT001's import time
+  is static initialization (static field initializers, static constructors), against
+  `rules.import_effects.csharp_operations`; ASYNC001 reports a dropped `Task` from a
+  project `async` method (through the call graph) or from
+  `rules.async_lifecycle.csharp_task_apis` (`Task.Run` included, so ASYNC002's spawned
+  task is covered there); PROCESS001 reads `Process.Start` and Godot's `OS.Execute`
+  family (`rules.processes.csharp_process_apis`); STUB002 reads `using` directives
+  (mock libraries such as `Moq`, or a namespace with a test segment); STUB003's base
+  classes are found by simple name across the project; MAGIC003 exempts
+  `rules.sentinels.csharp_index_callees`. ASYNC003 has no C# form (`Task.WhenAll` throws);
+  ASSERT001 needs C# input-flow facts and ASSERT002 is about Python's `-O` switch (C#
+  release builds always strip `Debug.Assert`); STATE002 is not ported (Godot scripts run
+  on the main thread; measure first).
 * `addons/` (Godot plugins) is analyzed like the project's own code; add
   `"addons/**"` to `exclude` to leave third-party plugins out.
 

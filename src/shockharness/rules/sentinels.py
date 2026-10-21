@@ -23,11 +23,20 @@ from shockharness.ir.model import (
     SentinelUse,
 )
 from shockharness.rules.guardrails import import_aliases, qualified_callee
-from shockharness.rules.registry import MAGIC003, PYTHON
+from shockharness.rules.registry import CSHARP, JAVASCRIPT, MAGIC003, PYTHON, TYPESCRIPT
 from shockharness.source import SourceText
 
 KEYWORD_SEPARATOR = "="
 METHOD_PREFIX = "."
+
+
+# Each language's callees whose arguments are indexes or counts.
+INDEX_CALLEE_KEYS = {
+    PYTHON: "python_index_callees",
+    JAVASCRIPT: "javascript_index_callees",
+    TYPESCRIPT: "javascript_index_callees",
+    CSHARP: "csharp_index_callees",
+}
 
 
 def _exempt(callee: str, aliases: Mapping[str, str], index_callees: frozenset[str]) -> bool:
@@ -85,8 +94,7 @@ def run_magic003(
     """MAGIC003 for one file; ``magic`` is rules.magic_numbers (a value MAGIC001 already
     reports is not reported twice)."""
     checked = _checked(settings, magic)
-    prefix = "python" if language == PYTHON else "javascript"
-    index_callees = frozenset(str(c) for c in settings[f"{prefix}_index_callees"])
+    index_callees = frozenset(str(c) for c in settings[INDEX_CALLEE_KEYS[language]])
     standard_targets = frozenset(str(t) for t in settings["standard_targets"])
     directions = _directions(facts)
     aliases = import_aliases(facts.imports, language)

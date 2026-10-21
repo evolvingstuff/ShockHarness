@@ -17,6 +17,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
     engine callbacks while their script is in use, scene connections, method names in
     strings and `MethodName.X`, `[Rpc]`, autoloads. A Godot script nothing uses is one
     finding for its class. Cache schema "32".
+- **The per-file families on C#, milestone G3 part two** (decision 47): MAGIC002-MAGIC005,
+  ASYNC001 (a dropped `Task`), STATE001 (static mutable fields), IMPORT001 (static
+  initialization), PROCESS001 (`Process.Start`, `OS.Execute`), STUB002 (`using Moq;` in
+  production code) and STUB003 run on C#. New catalogs: `csharp_task_apis`,
+  `csharp_operations`, `csharp_process_apis`, `csharp_index_callees`; `mock_modules` adds
+  `Moq`, `NSubstitute`, `FakeItEasy` and `Bogus`.
 
 ## [0.20.0] - 2026-10-21
 

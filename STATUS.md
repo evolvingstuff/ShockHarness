@@ -6483,3 +6483,69 @@ tracks, `res://`/`uid://` autoloads and a nested project; an unreadable scene),
 `tests/unit/test_csharp_graph.py` (4: resolution through the type index, `type` edges and
 partial siblings; a C# cycle; dead code with every Godot root and a dead script; an
 unreadable scene stopping the judgment).
+
+## Milestone G3, part two: the per-file families on C# — DONE (2026-10-21)
+
+Spec 21.1 decision 47. With part one (88e927a) this completes G3.
+
+### What was built
+
+* **Facts** (`ir/csharp_strings.py`, `ir/csharp_policy.py`): string uses (MAGIC002),
+  sentinels (MAGIC003), disguised numbers (MAGIC005: whitespace `.Length`, numeric
+  `Parse`/`Convert.To*` of a literal, numbers inside a literal given to a JSON or Variant
+  parser), `static` mutable fields as module bindings (STATE001), static-initialization
+  calls (IMPORT001), process calls (PROCESS001), always-yes checks and class
+  declarations (STUB003), and `using` directives as imports (STUB002). The call graph
+  takes no module edges from `using` (a namespace is not a file).
+* **Rules**: MAGIC002-MAGIC005, ASYNC001, STATE001, IMPORT001, PROCESS001, STUB002 and
+  STUB003 list C#. Per-language tables replace the two-way catalog keys
+  (`ASYNC_API_KEYS`, `OPERATION_KEYS`, `PROCESS_API_KEYS`, `INDEX_CALLEE_KEYS`) and give C#
+  its words ("static field", "when the type is first used (static initialization)",
+  "Task"). STUB003 resolves a C# base by simple name across the project. `OS.Execute`
+  and `Process.Start` are exit-status APIs (an `ExitCode` read is the check).
+* **Catalogs**: `csharp_task_apis`, `csharp_operations`, `csharp_process_apis`,
+  `csharp_index_callees`; `mock_modules` adds `Moq`, `NSubstitute`, `FakeItEasy`, `Bogus`.
+* Found by the self-gate on the way: a copy of `_arguments` (now
+  `csharp_defaults.argument_values`) and of the JavaScript collector's `_converted`
+  (now the public `converted_number`), and positional Booleans in the new code.
+
+### Decisions (mine; review these)
+
+1. **Not ported, with reasons**: ASYNC003 (`Task.WhenAll` throws; nothing turns failures
+   into values), ASSERT001 (needs C# input-flow facts, the dataflow milestone), ASSERT002
+   (it is about Python's `-O`; C# release builds always strip `Debug.Assert`, so
+   "relied on" needs another definition), STATE002 (a cross-thread publication rule;
+   Godot scripts run on the main thread, so measure first). ASYNC002's spawned task is
+   ASYNC001's `Task.Run` entry.
+2. **A static `Instance` singleton is STATE001** (a warning, as for any module global);
+   a deliberate one goes in `rules.module_state.allowed`.
+3. **`ResourceLoader.Load` and `GD.Load` are import-time operations** in
+   `csharp_operations`: a static field that loads a resource runs before the scene does.
+
+### Evidence (2026-10-21, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts
+gate: PASS  195 findings
+
+$ pytest -q        # CPython 3.14.7
+1451 passed
+```
+
+No verdict changes for Python, JavaScript or TypeScript: identical findings and exits on
+ShockHarness (201, scanning the committed tree) and on a MetaList snapshot (2,243).
+
+**C# measured** (`include = ["**/*.cs"]`): TheLivingLabyrinth: MAGIC002 2 (render-layer
+names `"wash"` and `"pencil"` written out and compared in 3-4 files), MAGIC003 3
+(`_focus = -1`, "nothing focused"). Godot demos: MAGIC003 3, IMPORT001 4 (textures and
+scenes loaded in static field initializers). GameDemo: none. Sakuga-Engine: MAGIC003 89
+(mostly `-1` as "no device", "no move", "no animation"), STATE001 4 (two static
+`Instance` singletons, a static RNG, a library's static scratch list). Every finding on
+the game and the demos was read; all are the shape they name.
+
+New tests: `tests/unit/test_csharp_rules.py` (3: every family on one script, with the
+index-callee exemption, an explicit discard and C#'s wording; a base-class hook default
+that is not STUB003 and a redundant override that is; a repeated compared string).

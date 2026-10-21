@@ -23,7 +23,8 @@ JAVASCRIPT_FAMILY = frozenset({JAVASCRIPT, TYPESCRIPT})
 CSHARP = "csharp"
 SUPPORTED_LANGUAGES = (*ALL_LANGUAGES, CSHARP)
 # The rules that run on C#: numbers, unit complexity and suppression comments (G1);
-# exceptions, defaults, RESULT001, BOOL001 and STUB001 (G2).
+# exceptions, defaults, RESULT001, BOOL001 and STUB001 (G2); dead code, CPLX005 and the
+# per-file families of G3 part two.
 WITH_CSHARP = SUPPORTED_LANGUAGES
 # Languages whose rule coverage is partial: the text report names the rules that do not
 # run on them (coverage.rules_not_applicable lists them for every language).
@@ -1358,7 +1359,7 @@ STUB002 = RuleSpec(
     config_section=STUBS_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "Production code imports a mocking or fake-data library, or a module under tests/, "
         "fixtures/ or mocks/: test behavior wired into the shipped program."
@@ -1526,7 +1527,7 @@ STATE001 = RuleSpec(
     config_section=MODULE_STATE_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A module-level mutable binding (a container, a let/var, a name named by global) that "
         "functions assign or mutate is shared state with no owner."
@@ -1569,7 +1570,7 @@ IMPORT001 = RuleSpec(
     config_section=IMPORT_EFFECTS_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A process, network request, socket, thread or destructive file operation started "
         "when the module is imported, before any caller asked for it."
@@ -1618,7 +1619,7 @@ ASYNC001 = RuleSpec(
     config_section=ASYNC_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A coroutine or Promise is created and thrown away: the work may never run (Python) "
         "or finish after the caller has reported success, and its failure is never observed."
@@ -1769,7 +1770,7 @@ PROCESS001 = RuleSpec(
     config_section=PROCESSES_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A shell command built from data (an injection waiting for the right value), or a "
         "process API that returns its exit status with nothing checking it (a failed "
@@ -2056,7 +2057,7 @@ STUB003 = RuleSpec(
     config_section="rules.stubs",
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A function named as a check (is_admin, can_edit, validate_token) whose whole body "
         "returns True: a success-shaped placeholder."
@@ -2360,7 +2361,7 @@ MAGIC003 = RuleSpec(
     config_section=SENTINELS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A -1 (by default) that stands for a value: assigned, returned, passed, or a dict / "
         "object entry (selected_index = -1, exitCode: -1), where it often encodes a meaning of "
@@ -2412,7 +2413,7 @@ MAGIC004 = RuleSpec(
     config_section="rules.magic_numbers",
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A module-level named constant whose name is only number words or digits (TWO = 2, "
         "ONE_HUNDRED = 100, VALUE_100 = 100): the name restates the value."
@@ -2456,7 +2457,7 @@ MAGIC005 = RuleSpec(
     config_section="rules.magic_numbers",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A number MAGIC001 would report, written so that it does not see it: the length of a "
         'literal written for its length (len("  "), len(("a", "b")), [a, b].length), a string '
@@ -3336,7 +3337,7 @@ MAGIC002 = RuleSpec(
     config_section=MAGIC_STRINGS_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "The same string literal (a status, an endpoint, a header, an error code) is written "
         "out at several places across files: one decision copied around, which a rename or "

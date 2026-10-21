@@ -148,6 +148,10 @@ javascript_index_callees = [
   ".slice", ".at", ".splice", ".substr", ".substring", ".charAt", ".charCodeAt",
   ".codePointAt", ".indexOf", ".lastIndexOf", ".includes", ".subarray",
 ]
+csharp_index_callees = [
+  ".Substring", ".ElementAt", ".Insert", ".RemoveAt", ".IndexOf", ".LastIndexOf",
+  ".GetRange", ".Skip", ".Take", "Mathf.Wrap", "Mathf.PosMod",
+]
 # Names (the last part of an assigned name, or an entry's key) whose -1 a platform
 # standard defines: HTML's tabIndex = -1 is "focusable, not in the Tab order". Adding one
 # is a deviation. A -1 passed to a callee that the same file also passes 1 (move(-1),
@@ -290,6 +294,10 @@ mock_modules = [
   "@faker-js/faker",
   "msw",
   "nock",
+  "Moq",
+  "NSubstitute",
+  "FakeItEasy",
+  "Bogus",
 ]
 
 [tool.shockharness.rules.assertions]       # ASSERT001, ASSERT002 (decision 28)
@@ -415,6 +423,14 @@ javascript_operations = [
   "fetch",
   "setInterval",
 ]
+# C# (G3): what runs during static initialization (static field initializers and static
+# constructors), C#'s import time.
+csharp_operations = [
+  "File.ReadAllText", "File.ReadAllBytes", "File.ReadAllLines", "File.WriteAllText",
+  "File.WriteAllBytes", "File.Delete", "File.Copy", "File.Move", "Directory.CreateDirectory",
+  "Directory.Delete", "Process.Start", "OS.Execute", "OS.CreateProcess", "Environment.Exit",
+  "ResourceLoader.Load", "GD.Load", "FileAccess.Open", "DirAccess.Open", "HttpClient.GetAsync",
+]
 
 # H4 async lifecycle (ASYNC001-ASYNC003): discarded coroutines and Promises, tasks started
 # without an owner, settled batches whose failures nobody checks. `severity` and `roles`
@@ -451,6 +467,13 @@ javascript_promise_apis = [
   "fs/promises.copyFile",
   "timers/promises.setTimeout",
 ]
+# C# (G3): calls that return a Task that must be awaited or handled. A discarded call
+# to a project method declared async is found through the call graph.
+csharp_task_apis = [
+  "Task.Run", "Task.Delay", "Task.WhenAll", "Task.WhenAny",
+  "File.ReadAllTextAsync", "File.WriteAllTextAsync", "File.ReadAllBytesAsync",
+  "File.WriteAllBytesAsync", "File.ReadAllLinesAsync", "File.AppendAllTextAsync",
+]
 # ASYNC002: context managers whose bound name owns the tasks it creates (`async with
 # asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
 supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
@@ -480,6 +503,7 @@ javascript_process_apis = [
   "child_process.spawn",
   "child_process.spawnSync",
 ]
+csharp_process_apis = ["Process.Start", "OS.Execute", "OS.CreateProcess", "OS.ExecuteWithPipe"]
 
 [tool.shockharness.rules.results]          # RESULT001
 enabled = true

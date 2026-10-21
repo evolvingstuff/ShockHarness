@@ -32,15 +32,18 @@ from shockharness.rules.registry import (
     ASSERT001,
     ASSERT002,
     BOOL001,
+    CSHARP,
     DOM001,
     EXC004,
     IMPORT001,
+    JAVASCRIPT,
     JAVASCRIPT_FAMILY,
     PYTHON,
     STATE001,
     STATE002,
     STUB001,
     STUB002,
+    TYPESCRIPT,
     RuleSpec,
 )
 from shockharness.rules.severity import section_severity
@@ -178,6 +181,9 @@ def _within(module: str, prefix: str, separator: str) -> bool:
 
 
 def _module_segments(fact: ImportFact, language: str) -> list[str]:
+    if language == CSHARP:
+        # A namespace (``MyGame.Tests``): its segments, compared like the listed ones.
+        return [s.lower() for s in fact.module.split(".") if s != ""]
     if language == PYTHON:
         segments = [s for s in fact.module.split(".") if s != ""]
         if fact.module == "":
@@ -190,7 +196,7 @@ def _module_segments(fact: ImportFact, language: str) -> list[str]:
 
 def _mock_module(fact: ImportFact, language: str, mocks: Sequence[str]) -> tuple[str, str] | None:
     """(the imported module as matched, the listed mock module), if one matches."""
-    separator = "." if language == PYTHON else "/"
+    separator = "." if language in (PYTHON, CSHARP) else "/"
     candidates = [fact.module]
     if language == PYTHON and fact.kind == IMPORT_NAMES and fact.module != "":
         candidates.extend(f"{fact.module}.{name}" for name, _local in fact.names)
@@ -303,7 +309,7 @@ def _declared(path: str, name: str, allowed: Sequence[Mapping[str, Any]]) -> boo
 
 
 def _state001(
-    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
+    facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
     writers = _writers(facts)
     declared_global: set[str] = set()
@@ -325,7 +331,8 @@ def _state001(
                 str(settings["severity"]),
                 path,
                 binding.span,
-                f"module-level {binding.name} is mutable shared state: written by {units}",
+                f"{STATE_NOUNS[language]} {binding.name} is mutable shared state: "
+                f"written by {units}",
                 source,
                 None,
                 CONFIDENCE_APPROXIMATE,
@@ -405,11 +412,33 @@ def qualified_callee(callee: str, aliases: Mapping[str, str]) -> str:
     return f"{aliases[head]}.{rest}"
 
 
+# How each language names its module state and its import time (C#: static fields, and
+# the static initialization of a type).
+STATE_NOUNS = {
+    PYTHON: "module-level",
+    JAVASCRIPT: "module-level",
+    TYPESCRIPT: "module-level",
+    CSHARP: "static field",
+}
+IMPORT_TIMES = {
+    PYTHON: "when the module is imported",
+    JAVASCRIPT: "when the module is imported",
+    TYPESCRIPT: "when the module is imported",
+    CSHARP: "when the type is first used (static initialization)",
+}
+# Each language's catalog of operations that must not run at import (C#: static init).
+OPERATION_KEYS = {
+    PYTHON: "python_operations",
+    JAVASCRIPT: "javascript_operations",
+    TYPESCRIPT: "javascript_operations",
+    CSHARP: "csharp_operations",
+}
+
+
 def _import001(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
-    key = "python_operations" if language == PYTHON else "javascript_operations"
-    operations = {str(o) for o in settings[key]}
+    operations = {str(o) for o in settings[OPERATION_KEYS[language]]}
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for call in facts.guardrails.import_time_calls:
@@ -422,7 +451,7 @@ def _import001(
                 str(settings["severity"]),
                 path,
                 call.span,
-                f"{qualified} runs when the module is imported: {call.text}",
+                f"{qualified} runs {IMPORT_TIMES[language]}: {call.text}",
                 source,
                 None,
                 CONFIDENCE_EXACT,
@@ -446,7 +475,7 @@ def run_guardrail_rules(
         (STUB001, lambda: _stub001(facts, source, path, rules["stubs"])),
         (STUB002, lambda: _stub002(facts, source, path, language, rules["stubs"])),
         (BOOL001, lambda: _bool001(facts, source, path, rules["boolean_arguments"])),
-        (STATE001, lambda: _state001(facts, source, path, rules["module_state"])),
+        (STATE001, lambda: _state001(facts, source, path, language, rules["module_state"])),
         (STATE002, lambda: _state002(facts, source, path, rules["module_state"])),
         (IMPORT001, lambda: _import001(facts, source, path, language, rules["import_effects"])),
         (DOM001, lambda: _dom001(facts, source, path, rules["dom"])),

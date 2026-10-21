@@ -67,9 +67,18 @@ SHELL_APIS = frozenset(
 )
 # Process APIs whose exit status is returned rather than raised.
 STATUS_APIS = frozenset(
-    {"subprocess.run", "subprocess.call", "os.system", "child_process.spawnSync"}
+    {
+        "subprocess.run",
+        "subprocess.call",
+        "os.system",
+        "child_process.spawnSync",
+        "Process.Start",
+        "OS.Execute",
+    }
 )
-PYTHON_RETURNCODE_APIS = frozenset({"subprocess.run", "subprocess.call"})
+# APIs whose result carries the status as a field the caller must read: ``returncode``,
+# and C#'s ``Process.ExitCode`` (G3).
+PYTHON_RETURNCODE_APIS = frozenset({"subprocess.run", "subprocess.call", "Process.Start"})
 METHOD_PREFIX = "."
 PROMISE_SLEEP = "Promise"
 TIMERS_SET_TIMEOUT = "timers/promises.setTimeout"
@@ -142,8 +151,7 @@ def _status_ignored(call: ProcessCall, qualified: str) -> bool:
 def _process001(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
-    key = "python_process_apis" if language == PYTHON else "javascript_process_apis"
-    apis = {str(a) for a in settings[key]}
+    apis = {str(a) for a in settings[PROCESS_API_KEYS[language]]}
     aliases = import_aliases(facts.imports, language)
     severity = str(settings["severity"])
     found: list[Finding] = []
@@ -172,6 +180,13 @@ def _process001(
 
 # -- RESULT001 ---------------------------------------------------------------------------
 
+# Each language's catalog of process APIs (TypeScript shares JavaScript's; C# since G3).
+PROCESS_API_KEYS = {
+    PYTHON: "python_process_apis",
+    JAVASCRIPT: "javascript_process_apis",
+    TYPESCRIPT: "javascript_process_apis",
+    CSHARP: "csharp_process_apis",
+}
 # The catalog key of each language (TypeScript shares JavaScript's; C# since G2).
 MUST_USE_KEYS = {
     PYTHON: "python_must_use",
@@ -388,6 +403,7 @@ class PredicateFile:
     imports: tuple[ImportFact, ...]
     source: SourceText
     applies: bool
+    language: str
 
 
 def _resolve_base(
@@ -415,11 +431,25 @@ def _class_bases(
     defined = {(file.path, c.name) for file in files for c in file.catalog.classes}
     imported = imported_names([(f.path, f.imports) for f in files], module_edges)
     bases: dict[ClassKey, list[ClassKey]] = {}
+    by_name: dict[str, list[ClassKey]] = {}
+    for key in sorted(defined):
+        if key[1] not in by_name:
+            by_name[key[1]] = []
+        by_name[key[1]].append(key)
     for file in files:
         for declared in file.catalog.classes:
             resolved = [_resolve_base(file.path, b, defined, imported) for b in declared.bases]
+            if file.language == CSHARP:
+                # C# imports namespaces: a base is any project class of that simple name.
+                resolved = [found for b in declared.bases for found in _named(by_name, b)]
             bases[(file.path, declared.name)] = [r for r in resolved if r is not None]
     return bases
+
+
+def _named(by_name: Mapping[str, list[ClassKey]], base: str) -> list[ClassKey]:
+    if base not in by_name:
+        return []
+    return list(by_name[base])
 
 
 def run_stub003(

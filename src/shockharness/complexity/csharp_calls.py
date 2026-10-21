@@ -185,13 +185,13 @@ class CSharpResolver:
         nested = f"{unit.name}.{name}"
         if nested in self.index.units:
             return _found(
-                self.index.units[nested], None, "local function of the calling unit", True
+                self.index.units[nested], None, "local function of the calling unit", exact=True
             )
         cls = self.enclosing_class(unit)
         if cls is None:
             return NOT_FOUND
         units, owner = self.index.method(cls, name)
-        return _found(units, owner, "method of the enclosing class or a project base", True)
+        return _found(units, owner, "method of the enclosing class or a project base", exact=True)
 
     def _new(self, written: str) -> CSharpResolution:
         candidates = self.index.class_named(written)
@@ -199,12 +199,12 @@ class CSharpResolver:
             constructor = f"{cls}.{_final(cls)}"
             if constructor in self.index.units:
                 return _found(
-                    self.index.units[constructor], cls, "constructor", len(candidates) == 1
+                    self.index.units[constructor], cls, "constructor", exact=len(candidates) == 1
                 )
         for cls in candidates:
             if cls in self.index.units:
                 return _found(
-                    self.index.units[cls], cls, "class without a declared constructor", False
+                    self.index.units[cls], cls, "class without a declared constructor", exact=False
                 )
         return CSharpResolution(None, None, UNRESOLVED, "not a project class")
 
@@ -222,7 +222,9 @@ class CSharpResolver:
                 return NOT_FOUND
             cls = member_class
         units, owner = self.index.method(cls, method)
-        return _found(units, owner, f"method of {cls}, the receiver's stated type", root != BASE)
+        return _found(
+            units, owner, f"method of {cls}, the receiver's stated type", exact=root != BASE
+        )
 
     def _member_class(self, cls: str, member: str) -> str | None:
         """The project class of field or property ``member`` of ``cls``."""

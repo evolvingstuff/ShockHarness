@@ -48,7 +48,7 @@ def _literal_text(node: Node) -> str | None:
     return None
 
 
-def _converted(text: str) -> int | float | None:
+def converted_number(text: str) -> int | float | None:
     stripped = text.strip()
     if NUMBER.fullmatch(stripped) is None:
         return None
@@ -109,7 +109,7 @@ def _module_spaces(root: Node) -> dict[str, int]:
 def _of_text(callee: str, text: str) -> tuple[str, tuple[int | float, ...]] | None:
     """``Number("3000")`` and the like, or ``JSON.parse`` of a literal text."""
     if callee in CONVERSIONS:
-        value = _converted(text)
+        value = converted_number(text)
         if value is not None:
             return DISGUISE_CONVERSION, (value,)
     if callee == PARSE:
@@ -146,7 +146,7 @@ def _unary(node: Node) -> tuple[str, tuple[int | float, ...]] | None:
     text = _literal_text(argument)
     if text is None:
         return None
-    value = _converted(text)
+    value = converted_number(text)
     if value is None:
         return None
     return DISGUISE_CONVERSION, (value,)

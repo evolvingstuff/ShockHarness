@@ -143,7 +143,7 @@ def _callee(call: Node) -> tuple[str, str, Node | None]:
     return written, written.split("<", 1)[0], None
 
 
-def _arguments(call: Node) -> list[Node]:
+def argument_values(call: Node) -> list[Node]:
     """The argument expressions of an invocation, in order."""
     arguments = call.child_by_field_name(Field.ARGUMENTS)
     if arguments is None:
@@ -317,7 +317,7 @@ class _Collector:
         call = _unwrap(test.named_children[0]) if negated and test.named_child_count == 1 else test
         if call.type != Kind.INVOCATION_EXPRESSION or _callee(call)[0] not in EMPTINESS_TESTS:
             return
-        arguments = _arguments(call)
+        arguments = argument_values(call)
         if len(arguments) != 1:
             return
         kept, fallback = (consequence, alternative) if negated else (alternative, consequence)
@@ -343,7 +343,7 @@ class _Collector:
         if test.type != Kind.INVOCATION_EXPRESSION:
             return
         _written, method, receiver = _callee(test)
-        arguments = _arguments(test)
+        arguments = argument_values(test)
         if method not in (TRY_GET_VALUE, CONTAINS_KEY) or receiver is None or len(arguments) == 0:
             return
         self._add(
@@ -361,7 +361,7 @@ class _Collector:
 
     def _call(self, call: Node, scope: str, context: str) -> None:
         written, method, receiver = _callee(call)
-        arguments = _arguments(call)
+        arguments = argument_values(call)
         if written in ENVIRONMENT_READS or written == GODOT_ENVIRONMENT:
             self._environment_read(call, scope, context, written, arguments)
         elif written == GODOT_SETTING or (
@@ -517,7 +517,7 @@ def _environment_variable(node: Node) -> str | None:
     if node.type != Kind.INVOCATION_EXPRESSION:
         return None
     written, _method, _receiver = _callee(node)
-    arguments = _arguments(node)
+    arguments = argument_values(node)
     if (written in ENVIRONMENT_READS or written == GODOT_ENVIRONMENT) and len(arguments) == 1:
         return _string_value(arguments[0])
     return None

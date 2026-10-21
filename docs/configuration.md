@@ -780,6 +780,8 @@ roles = ["production", "test"]
 python_must_use = ["sorted", "copy.deepcopy", ".strip", ".replace", ...]
 javascript_must_use = ["structuredClone", ".map", ".filter", ".trim", ...]
 csharp_must_use = ["Mathf.Clamp", ".Trim", ".Normalized", ".Where", ...]   # C# since G2
+# C# since G3: rules.async_lifecycle.csharp_task_apis, rules.import_effects.csharp_operations,
+# rules.processes.csharp_process_apis, rules.sentinels.csharp_index_callees
 
 [tool.shockharness.rules.types]       # TYPE001, review; Python and TypeScript
 report_any = true                     # Any / any

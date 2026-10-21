@@ -36,10 +36,27 @@ from shockharness.ir.model import (
     Span,
 )
 from shockharness.rules.guardrails import import_aliases, qualified_callee
-from shockharness.rules.registry import ASYNC001, ASYNC002, ASYNC003, PYTHON, RuleSpec
+from shockharness.rules.registry import (
+    ASYNC001,
+    ASYNC002,
+    ASYNC003,
+    CSHARP,
+    JAVASCRIPT,
+    PYTHON,
+    TYPESCRIPT,
+    RuleSpec,
+)
 from shockharness.source import SourceText
 
 ASYNC_RULES = (ASYNC001, ASYNC002, ASYNC003)
+# Each language's catalog of APIs that return an awaitable, and the awaitable's name.
+ASYNC_API_KEYS = {
+    PYTHON: "python_coroutine_apis",
+    JAVASCRIPT: "javascript_promise_apis",
+    TYPESCRIPT: "javascript_promise_apis",
+    CSHARP: "csharp_task_apis",
+}
+ASYNC_KINDS = {PYTHON: "coroutine", JAVASCRIPT: "Promise", TYPESCRIPT: "Promise", CSHARP: "Task"}
 SPAWNERS = frozenset({"create_task", "ensure_future"})
 
 
@@ -113,10 +130,9 @@ def _async001(
     rejections_reported: bool,
 ) -> list[Finding]:
     severity = str(settings["severity"])
-    key = "python_coroutine_apis" if language == PYTHON else "javascript_promise_apis"
-    apis = {str(a) for a in settings[key]}
+    apis = {str(a) for a in settings[ASYNC_API_KEYS[language]]}
     aliases = import_aliases(facts.imports, language)
-    kind = "coroutine" if language == PYTHON else "Promise"
+    kind = ASYNC_KINDS[language]
     found: list[Finding] = []
     for call in facts.asynchrony.discarded_calls:
         if call.void and rejections_reported:

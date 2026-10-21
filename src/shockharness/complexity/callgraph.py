@@ -1074,6 +1074,14 @@ def _type_edge(
     )
 
 
+def _file_imports(module: ModuleInput) -> tuple[ImportFact, ...]:
+    """The imports that name files: a C# ``using`` names a namespace (G3: C# files depend
+    on each other through type edges instead)."""
+    if module.language == CSHARP:
+        return ()
+    return module.imports
+
+
 def _csharp_resolver(modules: Sequence[ModuleInput]) -> CSharpResolver:
     return CSharpResolver(
         CSharpIndex(
@@ -1126,7 +1134,9 @@ def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
     module_edges: list[ModuleEdge] = []
     per_module_edges: dict[str, list[ModuleEdge]] = {}
     for module in ordered:
-        edges = [e for fact in module.imports for e in resolve_module_edges(index, module, fact)]
+        edges = [
+            e for fact in _file_imports(module) for e in resolve_module_edges(index, module, fact)
+        ]
         per_module_edges[module.path] = edges
         module_edges.extend(edges)
     scopes = {m.path: _scope_for(m, per_module_edges[m.path]) for m in ordered}

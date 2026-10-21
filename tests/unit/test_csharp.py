@@ -410,7 +410,7 @@ def test_rules_without_csharp_facts_do_not_run_and_are_listed(
         empty_root,
         make_config(OPT_IN),
         {
-            "Player.cs": "class P { async Task F() { } void M() { F(); } }\n",
+            "Player.cs": "class P { void M() { } }\n",
             "tools/geometry.py": "def area(w, h):\n    return w * h\n",
         },
     )
@@ -418,10 +418,10 @@ def test_rules_without_csharp_facts_do_not_run_and_are_listed(
     assert by_path["Player.cs"].findings == ()
     applied = set(by_path["Player.cs"].rules_applied)
     assert {"MAGIC001", "CPLX001", "SUPP001"} <= applied
-    assert "EXC001" in applied and "ASYNC001" not in applied
+    assert "EXC001" in applied and "INPUT001" not in applied
     assert outcome.coverage["languages"]["csharp"]["files"] == 1
     not_applicable = outcome.coverage["rules_not_applicable"]
-    assert "ASYNC001" in not_applicable["csharp"]
+    assert "INPUT001" in not_applicable["csharp"]
     assert "MAGIC001" not in not_applicable["csharp"] and "EXC001" not in not_applicable["csharp"]
     assert "DOM001" in not_applicable["python"] and "EXC001" not in not_applicable["python"]
     assert sorted(not_applicable) == ["csharp", "python"]

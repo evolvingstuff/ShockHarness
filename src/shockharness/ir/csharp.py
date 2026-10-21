@@ -29,13 +29,14 @@ from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
 from shockharness.ir.csharp_guardrails import collect_csharp_guardrails
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_numbers import parse_csharp_number
+from shockharness.ir.csharp_policy import collect_csharp_policy
 from shockharness.ir.csharp_receivers import collect_csharp_receivers
+from shockharness.ir.csharp_strings import collect_csharp_strings
 from shockharness.ir.csharp_usage import collect_csharp_usage
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.model import (
     MODULE_SCOPE,
     NO_ANNOTATIONS,
-    NO_CATALOG,
     NO_DATAFLOW,
     NO_DOM,
     NO_STUBS,
@@ -156,7 +157,9 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
     if error is not None:
         return failed_facts(CSHARP_LANGUAGE, PARSER_NAME, parse_failure(source, filename, error))
     literals, constants, comments = _number_facts(source, root)
-    guardrails, asynchrony = collect_csharp_guardrails(source, root)
+    booleans, asynchrony = collect_csharp_guardrails(source, root)
+    bindings, guardrails, catalog, imports = collect_csharp_policy(source, root, booleans)
+    strings, sentinels, disguises = collect_csharp_strings(source, root)
     return ModuleFacts(
         language=CSHARP_LANGUAGE,
         parser=PARSER_NAME,
@@ -167,18 +170,18 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         managers=(),  # C# has no exception-capturing using idiom
         defaults=collect_csharp_defaults(source, root),
         functions=collect_csharp_functions(source, root, comments),
-        imports=(),
-        bindings=(),
+        imports=imports,
+        bindings=bindings,
         verification=NO_VERIFICATION,
         guardrails=guardrails,
         asynchrony=asynchrony,
-        catalog=NO_CATALOG,
+        catalog=catalog,
         dataflow=NO_DATAFLOW,
-        sentinels=(),
-        strings=(),
+        sentinels=sentinels,
+        strings=strings,
         dom=NO_DOM,
         receivers=collect_csharp_receivers(root),
-        disguises=(),
+        disguises=disguises,
         annotations=NO_ANNOTATIONS,
         usage=collect_csharp_usage(source, root),
         shapes=(),
