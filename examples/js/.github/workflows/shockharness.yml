@@ -13,11 +13,11 @@ jobs:
     # Pin the workflow to a release tag or a full commit SHA; the ref pins the workflow
     # only. The analyzer version is the input below and is the pin Dependabot does not
     # touch: bump it on purpose.
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.20.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.21.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.20.0"
+      shockharness-version: "0.21.0"
       config: .shockharness.toml
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}

@@ -5,6 +5,22 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-21
+
+C# for Godot .NET, third milestone: ShockHarness reads Godot's project and scene files,
+resolves C# calls across files, finds dead code and unused scripts, and runs more of the
+existing checks on C#.
+
+**Upgrading from 0.20.0.** No new dependency. Nothing changes for a project that does not
+add `"**/*.cs"` to its `include`. A project that does gets new findings, all warning or
+review by default, so a gate that passed still passes unless the project raised one of
+those sections to `error`: CPLX005 fan-out and file cycles, MAGIC002-MAGIC005, ASYNC001,
+STATE001, IMPORT001, PROCESS001, STUB002 and STUB003, and, where `rules.dead_code` is on,
+DEAD001/DEAD002. The new catalog keys (`csharp_task_apis`, `csharp_operations`,
+`csharp_process_apis`, `csharp_index_callees`) are additions; `mock_modules` gains C#
+mocking libraries, which only C# imports can match. The cache schema is "32", so the
+first run after upgrading rebuilds the cache.
+
 ### Added
 - **Godot projects and the C# call graph, milestone G3 part one** (decision 46).
   - ShockHarness reads a Godot project's `project.godot`, `.tscn` and `.tres` files
