@@ -6559,3 +6559,16 @@ constant now. Self-diff after the fix: one new finding (the expected VERIFY003 w
 the reader's one-file boundary), one fixed (CPLX002 on `build_call_graph`), 0 complexity
 regressions. `mypy`: no issues in 157 source files.
 
+
+## Release 0.21.0 (2026-10-21)
+
+On Tom's go-ahead. CI was green on 48ec895 (run 39677274002) and on the release commit
+1e76c25 (run 39681918916), 16 of 16 jobs each. Every pin moved from 0.20.0 (the same 20
+files), and the bump's diff was checked for lines that are not pins (none). Before
+pushing the Godot session's three commits I re-verified them: the first hand-over failed
+strict mypy in `rules/dead_code.py` and added a MAGIC002 finding, both fixed in 48ec895.
+The `[0.21.0]` upgrade note: nothing changes without `"**/*.cs"` in `include`; with it, the
+new C# findings are all warning or review by default; the configuration changes since
+0.20.0 are additions only; cache schema "32". The tag `v0.21.0` is on 1e76c25. Published by
+`publish.yml` (run 39682660011, 18 of 18 jobs). PyPI lists 0.21.0 with a wheel and an
+sdist.
