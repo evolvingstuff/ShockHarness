@@ -30,6 +30,7 @@ from tree_sitter import Node
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_functions import dotted_name, string_value
 from shockharness.ir.javascript_nodes import Field, Kind
+from shockharness.ir.javascript_positions import collect_javascript_positions
 from shockharness.ir.model import (
     ContainerFill,
     DomFacts,
@@ -551,4 +552,5 @@ def collect_javascript_floating(source: SourceText, root: Node) -> DomFacts:
         fills=tuple(sorted(fills, key=lambda f: f.span)),
         selector_lists=tuple(sorted(lists, key=lambda s: s.span)),
         constants=tuple(_constants(root)),
+        positions=collect_javascript_positions(source, root),
     )

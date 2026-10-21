@@ -375,6 +375,7 @@ CONFIG_SCHEMA = TableField(
                         **GUARDRAIL_COMMON,
                         "classes": ListField(StrField(allow_empty=False)),
                         "dom002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "dom003_severity": EnumField(VERIFICATION_SEVERITIES),
                         "press_exclusions": ListField(PatternField(PRESS_EXCLUSION, EXCLUSION)),
                     },
                     required=(),

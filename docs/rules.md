@@ -1321,6 +1321,50 @@ not seen, and a constant imported from another module is not followed.
 * Before the length check was narrowed to whitespace, it reported 24 MetaList and 13
   corpus prefix lengths, every one of them legitimate.
 
+### DOM003: a selection saved as text positions and found again through text nodes only (review; JavaScript and TypeScript)
+
+Spec 21.1 decision 45, from MetaList: Paste Reference Into Note remembered the selection
+made before a right-click as text positions (`range.toString().length` from the note's
+start), and later found the points again by walking the note's text nodes. A selection of
+images has no text, so right-clicking selected images threw. Any point next to an image, a
+mention chip, a widget or an empty block has no text position of its own: the round trip
+moves it to the nearest text or finds nothing. It is a common web-editor mistake, not a
+MetaList one; medium-editor's `exportSelection` / `importSelection` (the widely copied
+Stack Overflow answer) carry hand patches for it (`startsWithImage`,
+`trailingImageCount`, `emptyBlocksIndex`).
+
+Judged across files, to a fixpoint:
+
+* an **encoder** is a named function (a declaration, a variable, an object key, an assigned
+  property) that returns a range's or selection's `toString().length` (the range from
+  `createRange`, `getRangeAt`, `cloneRange`, `getSelection` or `new Range`), or an
+  encoder's result, directly, through locals and `+` / `-`, or as a value of a returned
+  object;
+* a **decoder** walks text nodes only (a `createTreeWalker` or `createNodeIterator` with
+  `SHOW_TEXT`, or a walk that tests `nodeType` against a text node and reads lengths) and
+  counts with a parameter or one of its properties, or passes a parameter on to a
+  decoder's position.
+
+A call of a decoder whose position argument holds an encoder's result, directly, through a
+local, or through a property the file stores one under (`state.saved = {from:
+offsetOf(...)}`, then `pointAt(root, state.saved.from)`), is reported at the call. Names
+resolve in the file, then through its imports; `obj.name(...)` matches a function of that
+name anywhere, which is approximate. A point measured inside `if (x.nodeType ===
+Node.TEXT_NODE)` has a text position and is not reported.
+
+Not known: whether the content can hold anything but text. A round trip over a text-only
+element is reported too and takes a suppression with that reason. Positions counted
+another way (`textContent.length`) are not seen.
+
+**Measured:** MetaList before its fix (727bb171^) 5 findings, after it (727bb171) 3: the
+incident's two go. Of the three left, `restoreEditingFocus` twice (a caret whose node a
+redraw replaced comes back by text position, so beside an image it lands beside the
+nearest text) and one scroll anchor that takes a text position on purpose; a second such
+anchor is exempt by its text-node test. medium-editor: 3 (`restoreSelection`,
+`createLink`, and `handleDrop`, whose selected drop target may be an image). Trix, Quill,
+Editor.js, Tribute, Pell, Squire and Slate (2,157 files): none; they keep selections in a
+document model or by node, the remedy.
+
 ### DOM001: a delegated handler that drops SVG targets (warning)
 
 A delegated click handler that narrows `event.target` to `HTMLElement` before

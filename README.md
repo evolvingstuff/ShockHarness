@@ -101,6 +101,7 @@ Implemented rules:
 | `DUP001` | opt-in: the same function body written out in two or more files | review |
 | `DUP002` | opt-in: copies of one helper that have drifted apart, with the first line where they differ | review |
 | `IMPORT002` | configured: an import a declared boundary forbids (startup must not import the backup service), or a name it does not allow | error |
+| `DOM003` | a selection or caret saved as text positions (`range.toString().length`) and found again by walking text nodes only, which loses points next to images | review |
 | `DOM001` | a delegated handler that tests `event.target instanceof HTMLElement` before `.closest(...)`, dropping clicks on SVG icons | warning |
 | `MAGIC003` | a `-1` standing for a value (assigned, returned, passed, a dict entry): name what it means | review |
 | `MAGIC004` | a named constant whose name only spells a number (`TWO = 2`) | review |

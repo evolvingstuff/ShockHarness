@@ -324,6 +324,9 @@ classes = ["HTMLElement"]
 # Empty: DOM002 reports nothing (most handlers only close their own widget).
 press_exclusions = []
 dom002_severity = "review"
+# DOM003 (decision 45): a selection saved as text positions and found again by walking text
+# nodes only; review, since whether the content can hold images is not known.
+dom003_severity = "review"
 
 [tool.shockharness.rules.boolean_arguments]
 enabled = true

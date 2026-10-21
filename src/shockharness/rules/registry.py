@@ -3024,6 +3024,64 @@ DOM002 = RuleSpec(
 )
 
 
+DOM003 = RuleSpec(
+    rule_id="DOM003",
+    version="1",
+    name="selection saved as text positions and found again through text nodes only",
+    family="dom",
+    config_section=DOM_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(JAVASCRIPT, TYPESCRIPT),
+    summary=(
+        "A selection or caret is saved as text positions (a range's toString().length) and "
+        "later found again by walking text nodes only. A point next to an image, a mention "
+        "chip, a widget or an empty block has no text position of its own, so the round "
+        "trip moves it to the nearest text or finds nothing."
+    ),
+    rationale=(
+        "Counting characters is the easy way to remember where the user was across a "
+        "redraw, and it works while the content is only text. MetaList's Paste Reference "
+        "Into Note saved the selection that way, and right-clicking selected images threw: "
+        "a selection of images has no text. medium-editor carries hand patches for the same "
+        "blind spot (startsWithImage, trailingImageCount, emptyBlocksIndex)."
+    ),
+    guarantees=(
+        "Across files, to a fixpoint: an encoder is a named function that returns a range's "
+        "or selection's toString().length (the range from createRange, getRangeAt, "
+        "cloneRange, getSelection or new Range), or an encoder's result, directly or in an "
+        "object. A decoder is a named function that walks a createTreeWalker or "
+        "createNodeIterator with SHOW_TEXT, or tests nodeType against a text node and reads "
+        "lengths, and counts with a parameter (or one of its properties); or one that passes "
+        "a parameter to a decoder's position. Reported at a call of a decoder whose position "
+        "argument holds an encoder's result, through locals, + and -, or a property the file "
+        "stores one under. Functions are resolved in the file and through its imports; "
+        "obj.name(...) is matched to a function of that name anywhere (approximate). A point "
+        "measured inside if (x.nodeType === Node.TEXT_NODE) is exact and not reported."
+    ),
+    limitations=(
+        "Whether the content can hold anything but text is not known: a round trip over a "
+        "text-only element is reported too and takes a suppression with that reason. "
+        "Positions counted another way (textContent.length, innerText) and walks written "
+        "without a nodeType test are not seen, nor values kept in module state other than "
+        "an object property, or through more than one call level of parameters."
+    ),
+    remediation=(
+        "Keep the point as a node and offset while the node lives, or as the path of child "
+        "indexes from the root (it survives a redraw that rebuilds the same structure), and "
+        "test clicks with range.isPointInRange; a document model keeps selections in its own "
+        "positions. If the content is text only, suppress with that reason."
+    ),
+    noncompliant_example=(
+        "const saved = { start: textOffsetOf(root, range.startContainer, range.startOffset) };\n"
+        "// ... after a redraw\n"
+        "const point = textPositionToNodePoint(root, saved.start);  // walks SHOW_TEXT"
+    ),
+    compliant_example=(
+        "const saved = { start: nodePath(root, range.startContainer), offset: range.startOffset };"
+    ),
+)
+
 # --- Dead code (DEAD001, DEAD002) ---------------------------------------------------------
 # Opt-in (rules.dead_code.enabled): a project-wide reachability judgment, made only when the
 # run analyzed every file the configuration includes.
@@ -3387,6 +3445,7 @@ RULES: tuple[RuleSpec, ...] = (
     PROP008,
     DOM001,
     DOM002,
+    DOM003,
     DEAD001,
     DEAD002,
     DUP001,

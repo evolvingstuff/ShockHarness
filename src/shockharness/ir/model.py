@@ -1084,15 +1084,82 @@ class StringConstant:
     values: tuple[str, ...]
 
 
+# --- Text positions (DOM003) ---------------------------------------------------------------
+# What a function's values hold, for the cross-file judgment of selections saved as text
+# positions and found again through text nodes only (ir/javascript_positions.py).
+
+POSITION_DIRECT = "direct"  # <range>.toString().length: a point's text position
+POSITION_CALL = "call"  # the result of a call (``name``; ``member`` for obj.name(...))
+POSITION_PARAMETER = "parameter"  # the function's parameter at ``index``
+POSITION_PROPERTY = "property"  # obj.name
+
+
+@dataclass(frozen=True)
+class PositionSource:
+    """One thing a value may hold. ``guarded``: a call whose point is tested as a text
+    node around it (``if (n.nodeType === Node.TEXT_NODE)``), so its position is exact."""
+
+    kind: str
+    name: str
+    index: int
+    member: bool
+    guarded: bool
+
+
+@dataclass(frozen=True)
+class PositionCall:
+    """A call in a function, with what each argument may hold."""
+
+    span: Span
+    callee: str
+    member: bool
+    arguments: tuple[tuple[PositionSource, ...], ...]
+
+
+@dataclass(frozen=True)
+class PositionFunction:
+    """A named function: what it returns, whether it walks text nodes only (a SHOW_TEXT
+    walker or iterator, or a hand-written walk testing nodeType against text and reading
+    lengths), the parameters it counts with there (compared or added, in order), and its
+    calls that pass something on."""
+
+    name: str
+    span: Span
+    returns: tuple[PositionSource, ...]
+    walks_text: bool
+    counted_parameters: tuple[int, ...]
+    calls: tuple[PositionCall, ...]
+
+
+@dataclass(frozen=True)
+class PositionStore:
+    """``{name: value}`` or ``obj.name = value`` in a function: what the property holds."""
+
+    name: str
+    sources: tuple[PositionSource, ...]
+
+
+@dataclass(frozen=True)
+class TextPositionFacts:
+    functions: tuple[PositionFunction, ...]
+    stores: tuple[PositionStore, ...]
+
+
+NO_TEXT_POSITIONS = TextPositionFacts(functions=(), stores=())
+
+
 @dataclass(frozen=True)
 class DomFacts:
     floating: tuple[FloatingElement, ...]
     fills: tuple[ContainerFill, ...]
     selector_lists: tuple[SelectorList, ...]
     constants: tuple[StringConstant, ...]
+    positions: TextPositionFacts
 
 
-NO_DOM = DomFacts(floating=(), fills=(), selector_lists=(), constants=())
+NO_DOM = DomFacts(
+    floating=(), fills=(), selector_lists=(), constants=(), positions=NO_TEXT_POSITIONS
+)
 
 
 # --- String facts (MAGIC002) -------------------------------------------------------------

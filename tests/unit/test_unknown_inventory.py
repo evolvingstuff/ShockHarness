@@ -125,6 +125,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "DUP001/DUP002 are exact on the shapes they compare (identical tokens, or a ratio at "
         "or above the similarity); judged only when every included file was analyzed",
     ),
+    ("rules/text_positions.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "DOM003 reports a round trip it traced from an encoder to a decoder: violation "
+        "(approximate: obj.name(...) is matched by name, and whether the content can hold "
+        "anything but text is not known)",
+    ),
     ("rules/import_boundaries.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "IMPORT002 is exact on the resolved import edges and the configured globs and names: "

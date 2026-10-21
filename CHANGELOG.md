@@ -6,6 +6,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **DOM003 (review, JavaScript and TypeScript): a selection saved as text positions and
+  found again through text nodes only** (spec 21.1 decision 45). A position taken with a
+  range's `toString().length` and later passed to a function that walks text nodes back
+  (a `SHOW_TEXT` walker, or a walk testing `nodeType`) loses any point next to an image or
+  other non-text node. Encoders and decoders are found across files, through imports,
+  wrappers, locals and object properties; a point tested to be a text node is exempt.
+  Severity `rules.dom.dom003_severity`. On MetaList it reports the two calls of the
+  right-click-on-images bug before its fix and three after; on medium-editor, three
+  calls of its export/import selection pair. Cache schema "31".
 - **IMPORT002 (error, configured, Python and JavaScript): an import across a declared
   boundary** (spec 21.1 decision 44). `[[rules.import_boundaries.forbidden]]` entries name
   the files they bind (`importers` globs), the modules those may not import (`imported`

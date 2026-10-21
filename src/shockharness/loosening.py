@@ -85,6 +85,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.sentinels.severity": ("error", "warning", "review"),
     "rules.dom.severity": ("error", "warning", "review"),
     "rules.dom.dom002_severity": ("error", "warning", "review"),
+    "rules.dom.dom003_severity": ("error", "warning", "review"),
     "rules.dead_code.severity": ("error", "warning", "review"),
     "rules.dead_code.dead002_severity": ("error", "warning", "review"),
     "rules.duplicates.severity": ("error", "warning", "review"),

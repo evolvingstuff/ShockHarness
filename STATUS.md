@@ -6324,3 +6324,51 @@ New tests: `tests/unit/test_import_boundaries.py` (every Python import form incl
 lazy one and a relative one, the message, allowed names against whole-module and star
 imports, unbound files, JavaScript import/require/import()/export-from, not applied
 without an entry, inline suppression, required keys and empty globs, loosenings).
+
+## Decision 45: DOM003, text positions — DONE (2026-10-21)
+
+Tom's go-ahead: "Build the text-position round-trip rule from the widened prototype
+(review, JavaScript and TypeScript, exempting points guarded as text nodes), test it,
+re-measure on MetaList and medium-editor, and commit locally."
+
+**How it got here.** The idea came from MetaList's right-click-on-images bug (fixed in its
+727bb171). Tom generalized it (a position measured in one view of a value, used on a fuller
+one); a per-function prototype of that found 3 in about 2,400 files, so the general form is
+deferred (docs/ideas.md). The narrow form needed cross-file summaries: a first prototype
+found MetaList's incident and nothing in eight open-source editors, then missed
+medium-editor's copy of the pattern (object-literal methods, assignment, a hand-written
+walk); the widened prototype is what this commit builds.
+
+**Facts** (`ir/javascript_positions.py`, carried in `DomFacts.positions`, so Python and
+C# need nothing): per named function, the sources its returns may hold (a direct
+`toString().length` of a range, a call, a parameter, a property), whether it walks text
+nodes only and the parameters it counts with there, the calls whose arguments hold
+something, and the properties it stores. `held` uses an explicit stack (the deep-source
+tests nest sums thousands deep). A call is `guarded` when it sits in the consequence of an
+`if` testing one of its arguments to be a text node.
+
+**Rule** (`rules/text_positions.py`): call targets precomputed once (the file's function,
+else its import binding; `obj.name(...)` every function of that name), then encoders and
+decoders to a fixpoint, then round trips in the files DOM003 applies to. Severity
+`rules.dom.dom003_severity` (`review`), an ordered-setting loosening when lowered.
+
+**Status decision** (the unknown-state inventory): `violation`, approximate: member calls
+match by name, and whether the content can hold anything but text is not known.
+
+**Measured** with the tool (`--no-cache`):
+
+| | DOM003 |
+|---|---|
+| MetaList 727bb171^ (its own config) | 5: the incident's 2 (`pasteReferenceHereRange`), `restoreEditingFocus` 2, `textAnchorAt` 1 |
+| MetaList 727bb171 | 3: the incident's 2 are gone |
+| medium-editor d113a74 | 3: `restoreSelection`, `createLink`, `handleDrop` |
+
+`captureClickAnchor`, a false alarm in the prototype, is exempt by its
+`nodeType === Node.TEXT_NODE` test. `textAnchorAt` (a scroll anchor that takes a text
+position on purpose) is the one false alarm left on MetaList. Cache schema "31".
+
+Not added: a row in the fix-violations skill's rule table (one line under its limit).
+
+New tests: `tests/unit/test_text_positions.py` (a wrapper and a property across an import,
+TypeScript, the text-node guard, medium-editor's shape with a member call, a decoder given
+other numbers, a reasoned suppression, the severity setting and its loosening).

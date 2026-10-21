@@ -909,7 +909,7 @@ Raising a threshold, removing a role or a kind, and adding a message callee or
 an allowed value are policy deviations; `mode = "fail"` back to `"review"` is a
 loosening `VERIFY003` reports in a diff.
 
-## Delegated handlers and floating controls (DOM001, DOM002)
+## Delegated handlers, floating controls and text positions (DOM001, DOM002, DOM003)
 
 ```toml
 [tool.shockharness.rules.dom]
@@ -921,7 +921,12 @@ classes = ["HTMLElement"]
 # outside, as "path:function"; empty (the default) reports nothing.
 press_exclusions = ["app/static/js/events/mouse-events.js:isOutsideEditExclusion"]
 dom002_severity = "review"
+dom003_severity = "review"        # DOM003: selections saved as text positions
 ```
+
+DOM003 has no other setting: it applies to the section's roles, at `dom003_severity`
+(`review`, since whether the content can hold anything but text is not known). Lowering it
+is a VERIFY003 loosening.
 
 An entry that is not `path:function` is a configuration error; one whose
 function is not found in an analyzed file is an `unknown` DOM002 finding.

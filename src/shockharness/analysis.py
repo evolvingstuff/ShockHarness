@@ -114,6 +114,7 @@ from shockharness.rules.role_integrity import RoleFile, run_role_integrity
 from shockharness.rules.sentinels import run_magic003
 from shockharness.rules.stale_stubs import StubFile, run_stale_stubs
 from shockharness.rules.strings import StringFile, run_magic002
+from shockharness.rules.text_positions import PositionFile, run_dom003
 from shockharness.rules.type_coverage import TypedFile, run_type002
 from shockharness.rules.verification import FileVerification
 from shockharness.source import SourceText
@@ -432,6 +433,7 @@ SCOPED_RULES = (
     registry.MAGIC003,
     registry.MAGIC002,
     registry.DOM002,
+    registry.DOM003,
     registry.IMPORT002,
     *CONTRACT_RULES,
     *DEAD_RULES,
@@ -1052,6 +1054,31 @@ def dom_findings(
     return run_dom002(files, graph.module_edges, config.section(registry.DOM_SECTION))
 
 
+def position_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """DOM003: selections saved as text positions and found again through text nodes."""
+    if graph is None:
+        return {}
+    files = [
+        PositionFile(
+            path=p.path,
+            positions=p.facts.dom.positions,
+            imports=p.facts.imports,
+            source=p.source,
+            applies=registry.DOM003.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed
+        and p.facts is not None
+        and p.source is not None
+        and p.language in registry.DOM003.languages
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    return run_dom003(files, graph.module_edges, config.section(registry.DOM_SECTION))
+
+
 def boundary_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -1317,6 +1344,7 @@ GRAPH_RULES = (
     registry.GUARD001,
     registry.STUB003,
     registry.DOM002,
+    registry.DOM003,
     registry.IMPORT002,
     *DEAD_RULES,
     registry.VERIFY005,
@@ -1329,6 +1357,7 @@ GRAPH_PHASES = (
     consistency_findings,
     stub_findings,
     dom_findings,
+    position_findings,
     boundary_findings,
 )
 
