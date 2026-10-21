@@ -34,7 +34,7 @@ from shockharness.complexity.callgraph import (
 )
 from shockharness.complexity.metrics import UnitMetrics
 from shockharness.findings import CONFIDENCE_APPROXIMATE, STATUS_VIOLATION, Finding
-from shockharness.godot_project import GodotProject
+from shockharness.godot_project import GodotProject, SceneNode
 from shockharness.ir.csharp_usage import OVERRIDE
 from shockharness.ir.model import (
     UNIT_CLASS,
@@ -149,7 +149,7 @@ def godot_use(projects: Sequence[GodotProject]) -> GodotUse:
     return GodotUse(frozenset(classes), frozenset(connected), frozenset(named), complete)
 
 
-def _root_script(nodes: Sequence[Any]) -> str | None:
+def _root_script(nodes: Sequence[SceneNode]) -> str | None:
     for node in nodes:
         if node.path == ".":
             return node.script
@@ -157,7 +157,7 @@ def _root_script(nodes: Sequence[Any]) -> str | None:
 
 
 def _node_script(
-    nodes: Mapping[str, Any], target: str, roots: Mapping[str, str | None]
+    nodes: Mapping[str, SceneNode], target: str, roots: Mapping[str, str | None]
 ) -> str | None:
     """The script on the node a connection calls: its own, or the root script of the
     scene it instances."""

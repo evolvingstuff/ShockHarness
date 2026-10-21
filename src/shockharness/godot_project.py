@@ -25,6 +25,8 @@ from shockharness.globs import GlobSet
 PROJECT_FILE = "project.godot"
 RESOURCE_SUFFIXES = (".tscn", ".tres")
 RES_PREFIX = "res://"
+EXT_RESOURCE = "ext_resource"
+PATH_KEY = "path"  # an ext_resource's file
 UID_PREFIX = "uid://"
 UID_SUFFIX = ".uid"  # Godot 4.4+: the uid of a script or other file, in a file beside it
 AUTOLOAD_SINGLETON = "*"
@@ -278,9 +280,9 @@ def _external(
     by_id: dict[str, str] = {}
     scripts: list[str] = []
     for section in sections:
-        if section.tag != "ext_resource" or "path" not in section.attributes:
+        if section.tag != EXT_RESOURCE or PATH_KEY not in section.attributes:
             continue
-        path = _project_path(directory, section.attributes["path"])
+        path = _project_path(directory, section.attributes[PATH_KEY])
         if path is None or "id" not in section.attributes:
             continue
         uid = _optional(section.attributes, "uid")

@@ -6549,3 +6549,13 @@ the game and the demos was read; all are the shape they name.
 New tests: `tests/unit/test_csharp_rules.py` (3: every family on one script, with the
 index-callee exemption, an explicit discard and C#'s wording; a base-class hook default
 that is not STUB003 and a redundant override that is; a repeated compared string).
+
+**Follow-up (the commit after d66305e, from the lead session's verification).** I had not run mypy
+(`mypy`, strict on `src`, as CI runs it) before handing G3 over: `rules/dead_code.py`
+returned `Any` from two Godot helpers typed `Sequence[Any]`/`Mapping[str, Any]`; they take
+the reader's `SceneNode` now. The self-diff against aef5248 also showed a MAGIC002 review
+finding, the string `"path"` compared in a second file by the scene reader; it is a named
+constant now. Self-diff after the fix: one new finding (the expected VERIFY003 warning for
+the reader's one-file boundary), one fixed (CPLX002 on `build_call_graph`), 0 complexity
+regressions. `mypy`: no issues in 157 source files.
+
