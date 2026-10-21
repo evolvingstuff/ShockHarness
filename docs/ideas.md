@@ -119,5 +119,5 @@ worth it yet), **declined** (with the reason).
 
 | Idea | Source | Status | Notes / next step |
 |---|---|---|---|
-| Release 0.8.0: DOM001, MAGIC002, DOM002, both feedback rounds, the hook | Tom agreed | open | After the behavior suite's first round, or sooner if Tom wants |
+| Release 0.8.0: DOM001, MAGIC002, DOM002, both feedback rounds, the hook | Tom agreed | **done** (1f06164, tag v0.8.0, 2026-10-17) | Released before the behavior suite's first round; published and verified from PyPI (514be9d, STATUS "Release 0.8.0") |
 | The agent's own evasions are recorded, not hidden | Fable's brief | **done** | `len(("event", "handler"))` (fixed in 3f90b26), and two self-granted deviations reported to Tom: the CPLX006 override for the names module (9efe284) and the hook's JSON boundary (4583bee) |
