@@ -6372,3 +6372,16 @@ Not added: a row in the fix-violations skill's rule table (one line under its li
 New tests: `tests/unit/test_text_positions.py` (a wrapper and a property across an import,
 TypeScript, the text-node guard, medium-editor's shape with a member call, a decoder given
 other numbers, a reasoned suppression, the severity setting and its loosening).
+
+## Release 0.20.0 (2026-10-21)
+
+On Tom's go-ahead. CI was green on c80d63c (run 39650600546) and on the release commit
+09a8563 (run 39652837993), 16 of 16 jobs each. Every pin moved from 0.19.0 (the same 20
+files as the last bump), and the bump's diff was checked for lines that are not pins
+(none). The `[0.20.0]` changelog section's upgrade note: nothing can fail a gate that
+passed, since DOM003 is `review` and IMPORT002 reports nothing until a project declares a
+boundary; the "rules applied" line lists both; cache schema "31". Two `[Unreleased]` lines
+were corrected on the way: DOM003's MetaList count (five before the fix, the bug's two among
+them, not two) and IMPORT002's loosening (widening an entry's globs is not one). The tag
+`v0.20.0` is on 09a8563. Published by `publish.yml` (run 39655075469, 18 of 18 jobs). PyPI
+lists 0.20.0 with a wheel and an sdist.
