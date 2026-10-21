@@ -133,7 +133,7 @@ def _accessor_keyword(node: Node) -> str:
     return ""
 
 
-def _is_unit(node: Node) -> bool:
+def is_unit(node: Node) -> bool:
     if node.type in TYPE_DECLARATIONS or node.type in FUNCTION_TYPES:
         return True
     if node.type == Kind.ACCESSOR_DECLARATION:
@@ -223,7 +223,7 @@ def discover_units(  # shockharness: ignore[DUP002] reason="C#'s own type and me
         if node.type in TYPE_DECLARATIONS:
             units.append(UnitInfo(node, child_scope, UNIT_CLASS, class_name))
             child_class = child_scope
-        elif _is_unit(node):
+        elif is_unit(node):
             units.append(UnitInfo(node, child_scope, _unit_kind(node, class_name), class_name))
             child_class = None
         for child in reversed(node.children):

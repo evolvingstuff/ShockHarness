@@ -5,6 +5,19 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **Godot projects and the C# call graph, milestone G3 part one** (decision 46).
+  - ShockHarness reads a Godot project's `project.godot`, `.tscn` and `.tres` files
+    (scripts attached to nodes, editor signal connections, animation method tracks,
+    autoloads), with the standard library.
+  - C# calls resolve through a project-wide type index (`partial` classes merged, typed
+    receivers, `this`/`base`, static calls, constructors); CPLX005 reports C# fan-out and
+    file cycles.
+  - DEAD001 and DEAD002 run on C# (opt-in, as for every language) with Godot's roots:
+    engine callbacks while their script is in use, scene connections, method names in
+    strings and `MethodName.X`, `[Rpc]`, autoloads. A Godot script nothing uses is one
+    finding for its class. Cache schema "32".
+
 ## [0.20.0] - 2026-10-21
 
 IMPORT002 (imports across boundaries a project declares) and DOM003 (selections saved as

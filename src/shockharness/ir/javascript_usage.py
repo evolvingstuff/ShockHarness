@@ -164,7 +164,9 @@ class _Collector:
             node, unit, callee = self.stack.pop()
             self._visit(node, unit, callee)
         references = sorted(self.references, key=lambda r: (r.line, r.column, r.name, r.member))
-        return UsageFacts(declared=tuple(self.declared), references=tuple(references), handed=())
+        return UsageFacts(
+            declared=tuple(self.declared), references=tuple(references), handed=(), types=()
+        )
 
 
 def collect_javascript_usage(

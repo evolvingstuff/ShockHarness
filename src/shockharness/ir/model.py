@@ -1294,9 +1294,13 @@ class UsageFacts:
     # attribute of an imported module (``sys.stdout = stream``): the library calls their
     # methods. Names as written; the rule keeps the project's classes.
     handed: tuple[str, ...]
+    # C# (G3): the type names the file mentions outside their own declarations (``new T``,
+    # ``GetNode<T>``, ``T x``, ``is T``, ``typeof(T)``, a base list), simple names. A Godot
+    # script whose class no file names, no scene attaches and no autoload loads is dead.
+    types: tuple[str, ...]
 
 
-NO_USAGE = UsageFacts(declared=(), references=(), handed=())
+NO_USAGE = UsageFacts(declared=(), references=(), handed=(), types=())
 
 
 # --- Test stubs (VERIFY005) ---------------------------------------------------------------

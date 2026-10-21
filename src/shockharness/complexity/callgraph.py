@@ -28,6 +28,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from shockharness.complexity.csharp_calls import (
+    RESOLVED,
+    CSharpIndex,
+    CSharpModule,
+    CSharpResolution,
+    CSharpResolver,
+)
 from shockharness.complexity.metrics import UnitMetrics
 from shockharness.ir.model import (
     BINDING_CLASS,
@@ -518,8 +525,6 @@ def _builtins_for(language: str) -> frozenset[str]:
         return PYTHON_BUILTINS
     if language in JAVASCRIPT_FAMILY:
         return JAVASCRIPT_GLOBALS
-    if language == CSHARP:
-        return frozenset()  # G1: a C# call of an unknown name stays unresolved
     raise ValueError(f"no built-in names for language {language!r}")
 
 
@@ -1019,6 +1024,68 @@ def _classify(
     )
 
 
+# C# (G3): a file that calls into a class another file declares depends on that file.
+IMPORT_TYPE = "type"
+
+
+def _classify_csharp(
+    resolver: CSharpResolver, unit: UnitMetrics, call: CallSite
+) -> tuple[_Resolution, str, CSharpResolution] | None:
+    """(resolution, edge kind, what the C# resolver found) for one C# call site."""
+    found = resolver.resolve(unit, call)
+    kind = EDGE_CALL
+    if call.shape == CALL_NEW:
+        kind = EDGE_NEW
+    elif call.shape == CALL_ARGUMENT:
+        kind = EDGE_ARGUMENT
+    if found.unit is None:
+        if kind == EDGE_ARGUMENT:
+            return None  # a value passed, not a method group
+        target = Target(TARGET_UNRESOLVED, call.callee)
+        return _Resolution(target, CONFIDENCE_UNRESOLVED, found.reason), kind, found
+    confidence = CONFIDENCE_RESOLVED if found.confidence == RESOLVED else CONFIDENCE_PROBABLE
+    reason = found.reason
+    if kind == EDGE_ARGUMENT:
+        confidence = CONFIDENCE_PROBABLE
+        reason = "method passed as a value (a delegate); whether it is called is not known"
+    return _Resolution(Target(TARGET_UNIT, found.unit), confidence, reason), kind, found
+
+
+def _type_edge(
+    resolver: CSharpResolver, path: str, unit: UnitMetrics, call: CallSite, found: CSharpResolution
+) -> ModuleEdge | None:
+    """The dependency of ``path`` on the file of the class a call resolved into, unless
+    that is the calling class itself (its ``partial`` files are one class)."""
+    if found.unit is None or found.owner is None:
+        return None
+    target_path, _separator, _name = found.unit.partition("::")
+    if target_path == path or found.owner == resolver.enclosing_class(unit):
+        return None
+    return ModuleEdge(
+        path,
+        found.owner,
+        0,
+        IMPORT_TYPE,
+        "",
+        target_path,
+        CONFIDENCE_RESOLVED,
+        call.span,
+        f"calls into {found.owner}",
+    )
+
+
+def _csharp_resolver(modules: Sequence[ModuleInput]) -> CSharpResolver:
+    return CSharpResolver(
+        CSharpIndex(
+            [
+                CSharpModule(m.path, m.units, m.receivers.classes, m.receivers.constructed)
+                for m in modules
+                if m.language == CSHARP
+            ]
+        )
+    )
+
+
 @dataclass(frozen=True)
 class SiteResolution:
     """Where one call site (path, call span) resolved to (H4, ASYNC001)."""
@@ -1063,41 +1130,72 @@ def build_call_graph(modules: Sequence[ModuleInput]) -> CallGraph:
         per_module_edges[module.path] = edges
         module_edges.extend(edges)
     scopes = {m.path: _scope_for(m, per_module_edges[m.path]) for m in ordered}
-    resolver = _Resolver(ordered, scopes)
-    aggregated: dict[tuple[str, str, str, str, str], tuple[int, Span, str]] = {}
-    sites: dict[tuple[str, Span], SiteResolution] = {}
-    unit_keys: list[str] = []
+    sites = _Sites(_Resolver(ordered, scopes), _csharp_resolver(ordered))
     for module in ordered:
         for unit in module.units:
-            unit_keys.append(unit.key)
-            for call in unit.fact.calls:
-                classified = _classify(resolver, module.path, unit, call)
-                if classified is None:
-                    continue
-                resolution, edge_kind = classified
-                if edge_kind != EDGE_ARGUMENT:
-                    sites[(module.path, call.span)] = SiteResolution(
-                        resolution.target, resolution.confidence
-                    )
-                key = (
-                    unit.key,
-                    resolution.target.kind,
-                    resolution.target.identifier,
-                    resolution.confidence,
-                    edge_kind,
-                )
-                if key in aggregated:
-                    count, first, reason = aggregated[key]
-                    aggregated[key] = (count + 1, min(first, call.span), reason)
-                else:
-                    aggregated[key] = (1, call.span, resolution.reason)
+            sites.unit(module, unit)
     return CallGraph(
-        edges=_edges(aggregated),
-        module_edges=tuple(module_edges),
-        unit_keys=tuple(unit_keys),
+        edges=_edges(sites.aggregated),
+        module_edges=tuple([*module_edges, *sites.type_edges()]),
+        unit_keys=tuple(sites.unit_keys),
         paths=tuple(m.path for m in ordered),
-        sites=sites,
+        sites=sites.sites,
     )
+
+
+class _Sites:
+    """Every call site classified, aggregated into edges per (source, target, kind)."""
+
+    def __init__(self, resolver: _Resolver, csharp: CSharpResolver) -> None:
+        self.resolver = resolver
+        self.csharp = csharp
+        self.aggregated: dict[tuple[str, str, str, str, str], tuple[int, Span, str]] = {}
+        self.sites: dict[tuple[str, Span], SiteResolution] = {}
+        self.unit_keys: list[str] = []
+        self.types: dict[tuple[str, str], ModuleEdge] = {}
+
+    def unit(self, module: ModuleInput, unit: UnitMetrics) -> None:
+        self.unit_keys.append(unit.key)
+        for call in unit.fact.calls:
+            classified = self._classify(module, unit, call)
+            if classified is not None:
+                self._record(module.path, unit, call, classified)
+
+    def _classify(
+        self, module: ModuleInput, unit: UnitMetrics, call: CallSite
+    ) -> tuple[_Resolution, str] | None:
+        if module.language != CSHARP:
+            return _classify(self.resolver, module.path, unit, call)
+        classified = _classify_csharp(self.csharp, unit, call)
+        if classified is None:
+            return None
+        resolution, kind, found = classified
+        edge = _type_edge(self.csharp, module.path, unit, call, found)
+        if edge is not None and (edge.source, str(edge.target)) not in self.types:
+            self.types[(edge.source, str(edge.target))] = edge
+        return resolution, kind
+
+    def _record(
+        self, path: str, unit: UnitMetrics, call: CallSite, classified: tuple[_Resolution, str]
+    ) -> None:
+        resolution, edge_kind = classified
+        if edge_kind != EDGE_ARGUMENT:
+            self.sites[(path, call.span)] = SiteResolution(resolution.target, resolution.confidence)
+        key = (
+            unit.key,
+            resolution.target.kind,
+            resolution.target.identifier,
+            resolution.confidence,
+            edge_kind,
+        )
+        if key in self.aggregated:
+            count, first, reason = self.aggregated[key]
+            self.aggregated[key] = (count + 1, min(first, call.span), reason)
+        else:
+            self.aggregated[key] = (1, call.span, resolution.reason)
+
+    def type_edges(self) -> list[ModuleEdge]:
+        return [self.types[key] for key in sorted(self.types)]
 
 
 __all__ = [

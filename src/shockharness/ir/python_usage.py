@@ -256,7 +256,7 @@ class _Collector:
         references = sorted(self.references, key=lambda r: (r.line, r.column, r.name, r.member))
         handed = tuple(sorted(self.scan.handed()))
         return UsageFacts(
-            declared=tuple(self.declared), references=tuple(references), handed=handed
+            declared=tuple(self.declared), references=tuple(references), handed=handed, types=()
         )
 
 

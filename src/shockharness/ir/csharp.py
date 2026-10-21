@@ -29,6 +29,8 @@ from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
 from shockharness.ir.csharp_guardrails import collect_csharp_guardrails
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_numbers import parse_csharp_number
+from shockharness.ir.csharp_receivers import collect_csharp_receivers
+from shockharness.ir.csharp_usage import collect_csharp_usage
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -36,9 +38,7 @@ from shockharness.ir.model import (
     NO_CATALOG,
     NO_DATAFLOW,
     NO_DOM,
-    NO_RECEIVER_FACTS,
     NO_STUBS,
-    NO_USAGE,
     NO_VERIFICATION,
     Comment,
     ConstantDefinition,
@@ -177,10 +177,10 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         sentinels=(),
         strings=(),
         dom=NO_DOM,
-        receivers=NO_RECEIVER_FACTS,
+        receivers=collect_csharp_receivers(root),
         disguises=(),
         annotations=NO_ANNOTATIONS,
-        usage=NO_USAGE,
+        usage=collect_csharp_usage(source, root),
         shapes=(),
         stubs=NO_STUBS,
         parse_failure=None,

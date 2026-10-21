@@ -54,6 +54,7 @@ from shockharness.discovery import DiscoveredFile, DiscoveryResult, discover
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
 from shockharness.globs import compile_globset
+from shockharness.godot_project import load_godot_projects
 from shockharness.ir.csharp import extract_csharp_facts
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
 from shockharness.ir.model import (
@@ -84,7 +85,7 @@ from shockharness.rules.dataflow import (
     run_input001,
     run_input002,
 )
-from shockharness.rules.dead_code import DeadFile, run_dead_code
+from shockharness.rules.dead_code import NO_GODOT, DeadFile, godot_use, run_dead_code
 from shockharness.rules.defaults import (
     DEFAULT_RULES,
     EntryExits,
@@ -1164,6 +1165,7 @@ def _dead_files(
                 usage=p.facts.usage,
                 imports=p.facts.imports,
                 classes=p.facts.receivers.classes,
+                language=p.language,
             ),
         )
         for p in pendings
@@ -1201,7 +1203,11 @@ def dead_findings(
     runtime = config.section(registry.PROPERTY_CONTRACTS_SECTION)["runtime_module"]
     libraries = [str(m) for m in runtime if str(m).endswith(RUNTIME_SUFFIXES)]
     settings = config.section(registry.DEAD_CODE_SECTION)
-    return run_dead_code(files, graph, settings, libraries, config.entry_points)
+    godot = NO_GODOT
+    if any(f.language == registry.CSHARP for f in files):
+        exclude = compile_globset(list(config.values["exclude"]))
+        godot = godot_use(load_godot_projects(config.root, exclude))
+    return run_dead_code(files, graph, settings, libraries, config.entry_points, godot)
 
 
 def duplicate_findings(

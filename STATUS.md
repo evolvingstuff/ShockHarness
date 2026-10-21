@@ -6385,3 +6385,101 @@ were corrected on the way: DOM003's MetaList count (five before the fix, the bug
 them, not two) and IMPORT002's loosening (widening an entry's globs is not one). The tag
 `v0.20.0` is on 09a8563. Published by `publish.yml` (run 39655075469, 18 of 18 jobs). PyPI
 lists 0.20.0 with a wheel and an sdist.
+
+## Milestone G3, part one: Godot project files, the C# call graph, dead code — DONE (2026-10-21)
+
+Spec 21.1 decision 46, on Tom's go-ahead for G3 ("the Godot project and scene reader, the
+C# type index and call graph, dead code with Godot roots and dead scripts, and the other
+checks extended to C#"). Part two (the other checks) follows.
+
+### What was built
+
+* **The Godot project model** (`godot_project.py`, standard library only): a parser for
+  Godot's text resource format (section headers of `key=value` pairs, `key = value`
+  properties whose Variant values may span lines; a string- and bracket-aware scanner,
+  never an evaluator), and per `project.godot`: the main scene, autoloads, input actions,
+  and every `.tscn`/`.tres` under it (scripts attached, nodes by path with their script,
+  instanced scene and groups, editor connections, animation method tracks). `res://` and
+  `uid://` references both resolve (`uid` from resource headers, `ext_resource`s and the
+  `.uid` files beside scripts). The `exclude` globs apply, so `.godot/` is skipped. A file
+  that cannot be read is a problem (a one-file boundary in `.shockharness.toml`).
+* **C# receiver facts** (`ir/csharp_receivers.py`): classes with their bases and methods,
+  and every name whose type the syntax states (parameters, locals, `var x = new T()`,
+  `GetNode<T>()`, casts, fields and properties).
+* **The C# call graph** (`complexity/csharp_calls.py`, used by `build_call_graph` for C#
+  modules): a project-wide type index, `partial` declarations merged by name; calls
+  resolve to the enclosing class and its project bases, `this.`, `base.`, statics, typed
+  receivers and constructors. A call into another file's class adds a `type` module edge
+  (a class's own partial files excepted), so CPLX005 reports C# fan-out and cycles; its
+  message says "call into" and labels the language C#.
+* **C# usage facts** (`ir/csharp_usage.py`; `UsageFacts.types`, cache schema "32"): the
+  methods the dead-code rules judge and what registers them, method names used as
+  values or in strings to Godot's string-named calls, and the capitalized names a file
+  uses outside a declaration.
+* **DEAD001/DEAD002 on C#** (`rules/dead_code.py`): no blanket root for classes with an
+  outside base; `override`s reached from their class while it derives from an outside
+  class; editor connections (per script, else by name), animation tracks, `[Rpc]`,
+  constructors and the other registered kinds as roots; a class derived from an outside
+  class that no scene attaches, no autoload loads and no file names is a dead script,
+  one finding listing its methods. `partial` declarations share bases and families.
+
+### Decisions (mine; review these)
+
+1. **No catalog of Godot classes.** "Derives from an engine class" is "derives from a
+   class the project does not define", as for Python and JavaScript; the dead-script
+   message says "an engine or library type".
+2. **Loose toward alive, as before**: method names in values and strings match every
+   method of that name; a capitalized identifier keeps a class of that name alive.
+3. **A connection to a node whose script is unknown roots the method by name.** The
+   script is found on the node, or on the root of the scene the node instances.
+4. **An unreadable scene or project file stops the C# judgment**, never guesses.
+5. **C# `type` module edges come from resolved calls**, not every type mention, so a
+   file that only declares a field of another class's type adds no edge.
+6. **Scene and project files are read on every run, not cached**: about a second on the
+   largest corpus project (382 resource files).
+
+### Evidence (2026-10-21, macOS)
+
+```text
+$ ruff check src tests scripts evals && ruff format --check src tests scripts evals
+All checks passed!
+
+$ rm -rf .shockharness-cache; shockharness check src tests scripts
+gate: PASS  198 findings
+
+$ pytest -q        # CPython 3.14.7
+1448 passed
+```
+
+No verdict changes for Python, JavaScript or TypeScript: the committed tool (aef5248)
+and this one give identical findings and exits on ShockHarness (198, scanning the
+committed tree) and on a snapshot of MetaList (2,243; MetaList itself was being edited
+during the first two runs).
+
+**C# measured** (`include = ["**/*.cs"]`, dead code on):
+
+| code base | call sites | resolved | probable | cycles | DEAD001/002 |
+|---|---|---|---|---|---|
+| TheLivingLabyrinth (now 23 `.cs` files) | 1,847 | 455 | 20 | 0 | 0 |
+| godot-demo-projects `mono/` | 687 | 68 | 54 | 0 | 7 |
+| GameDemo | 3,080 | 404 | 387 | 0 | 49 |
+| Sakuga-Engine | 3,741 | 1,878 | 420 | 4 | 118 |
+
+Most unresolved sites are library calls (Godot, `GD`, LINQ, `Mathf`), which have no
+project target. Every finding on the game and the demos was read. The game has none (its
+first run reported `LookTest._Process`, an override in a `partial` file that does not
+repeat the base; partial declarations are merged now). The demos' seven are unused public
+API in the `node25d` addon and the billing wrapper. GameDemo's 49 are mostly
+Chickensoft's convention-called `OnReady`/`OnExitTree`, which a third-party source
+generator calls; a project declares them in `entry_points`. Sakuga-Engine's 118 are 94
+in its vendored LiteNetLib (unused public API) and 24 in its own code, among them one
+real dead script, `FOV_Correction` (nothing anywhere names it). A first run also called
+`PreserveAttribute` dead: it is used as `[Preserve]`, and attribute names now count as
+mentions of `XAttribute`.
+
+New tests: `tests/unit/test_godot_project.py` (3: the format with multi-line values and
+strings holding separators; a project with scenes, connections, instances, groups,
+tracks, `res://`/`uid://` autoloads and a nested project; an unreadable scene),
+`tests/unit/test_csharp_graph.py` (4: resolution through the type index, `type` edges and
+partial siblings; a C# cycle; dead code with every Godot root and a dead script; an
+unreadable scene stopping the judgment).

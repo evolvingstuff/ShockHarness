@@ -34,6 +34,8 @@ from shockharness.complexity.callgraph import (
 )
 from shockharness.complexity.metrics import UnitMetrics
 from shockharness.findings import CONFIDENCE_APPROXIMATE, STATUS_VIOLATION, Finding
+from shockharness.godot_project import GodotProject
+from shockharness.ir.csharp_usage import OVERRIDE
 from shockharness.ir.model import (
     UNIT_CLASS,
     UNIT_MODULE,
@@ -42,7 +44,7 @@ from shockharness.ir.model import (
     UsageFacts,
 )
 from shockharness.rules.defaults import script_functions
-from shockharness.rules.registry import DEAD001, DEAD002, RuleSpec
+from shockharness.rules.registry import CSHARP, DEAD001, DEAD002, RuleSpec
 from shockharness.source import SourceText
 
 SETTING_ENTRY_POINTS = "entry_points"
@@ -93,6 +95,80 @@ class DeadFile:
     usage: UsageFacts
     imports: tuple[ImportFact, ...]
     classes: tuple[ReceiverClass, ...]
+    language: str
+
+
+# -- Godot (G3) -----------------------------------------------------------------------------
+
+CSHARP_SUFFIX = ".cs"
+# What registers a C# class without a code reference: the editor instantiates it.
+EDITOR_CLASSES = frozenset({"[GlobalClass]", "[Tool]"})
+
+
+@dataclass(frozen=True)
+class GodotUse:
+    """What a Godot project's scene and project files say calls or loads C# code: the
+    classes of the scripts scenes attach and autoloads load (a script is named like its
+    class), the (class, method) pairs editor connections call, and the method names
+    connections to an unknown script and animation tracks call. ``complete`` is false
+    when a scene or project file could not be read: then no C# is judged."""
+
+    classes: frozenset[str]
+    connected: frozenset[tuple[str, str]]
+    named: frozenset[str]
+    complete: bool
+
+
+NO_GODOT = GodotUse(frozenset(), frozenset(), frozenset(), complete=True)
+
+
+def _stem(path: str) -> str:
+    _directory, _slash, name = path.rpartition("/")
+    return name.removesuffix(CSHARP_SUFFIX)
+
+
+def godot_use(projects: Sequence[GodotProject]) -> GodotUse:
+    classes: set[str] = set()
+    connected: set[tuple[str, str]] = set()
+    named: set[str] = set()
+    for project in projects:
+        roots = {scene.path: _root_script(scene.nodes) for scene in project.scenes}
+        scripts = [s for scene in project.scenes for s in scene.scripts]
+        scripts.extend(path for _name, path in project.autoloads)
+        classes.update(_stem(s) for s in scripts if s.endswith(CSHARP_SUFFIX))
+        for scene in project.scenes:
+            named.update(scene.track_methods)
+            nodes = {node.path: node for node in scene.nodes}
+            for connection in scene.connections:
+                script = _node_script(nodes, connection.target, roots)
+                if script is None or not script.endswith(CSHARP_SUFFIX):
+                    named.add(connection.method)
+                else:
+                    connected.add((_stem(script), connection.method))
+    complete = all(len(project.problems) == 0 for project in projects)
+    return GodotUse(frozenset(classes), frozenset(connected), frozenset(named), complete)
+
+
+def _root_script(nodes: Sequence[Any]) -> str | None:
+    for node in nodes:
+        if node.path == ".":
+            return node.script
+    return None
+
+
+def _node_script(
+    nodes: Mapping[str, Any], target: str, roots: Mapping[str, str | None]
+) -> str | None:
+    """The script on the node a connection calls: its own, or the root script of the
+    scene it instances."""
+    if target not in nodes:
+        return None
+    node = nodes[target]
+    if node.script is not None:
+        return node.script
+    if node.instance is not None and node.instance in roots:
+        return roots[node.instance]
+    return None
 
 
 def final_name(dotted: str) -> str:
@@ -102,6 +178,12 @@ def final_name(dotted: str) -> str:
 
 def short_name(unit: UnitMetrics) -> str:
     return final_name(unit.name)
+
+
+def _add_node(table: dict[str, list[tuple[str, str]]], key: str, value: tuple[str, str]) -> None:
+    if key not in table:
+        table[key] = []
+    table[key].append(value)
 
 
 def _add(table: dict[str, list[str]], key: str, value: str) -> None:
@@ -273,6 +355,22 @@ class _Classes:
         for f in project.files.values():
             for cls in f.classes:
                 self._link(f.path, cls)
+        self._merge_partials()
+
+    def _merge_partials(self) -> None:
+        """C#'s ``partial`` declarations of a class are one class: one family, and derived
+        from an engine class when any declaration says so (only one has to name the base)."""
+        declarations: dict[str, list[tuple[str, str]]] = {}
+        for f in self.project.files.values():
+            if f.language == CSHARP:
+                for cls in f.classes:
+                    _add_node(declarations, cls.name, (f.path, cls.name))
+        for nodes in declarations.values():
+            external = [self.external[n] for n in nodes if n in self.external]
+            for node in nodes:
+                self.parent[self._find(node)] = self._find(nodes[0])
+                if len(external) > 0 and node not in self.external:
+                    self.external[node] = external[0]
 
     def _find(self, node: tuple[str, str]) -> tuple[str, str]:
         while self.parent[node] != node:
@@ -312,6 +410,11 @@ class _Classes:
             return False
         node = (self.project.path_of[unit.key], unit.fact.class_name)
         return node not in self.parent or self._derives_externally(node, set())
+
+    def framework_class(self, path: str, name: str) -> bool:
+        """The class at ``path`` derives from a class the project does not define."""
+        node = (path, name)
+        return node in self.parent and self._derives_externally(node, set())
 
     def _derives_externally(self, node: tuple[str, str], seen: set[tuple[str, str]]) -> bool:
         """The class or a project ancestor has a base the project does not define."""
@@ -361,14 +464,26 @@ def _handed_method(unit: UnitMetrics, handed: frozenset[str]) -> bool:
     return unit.fact.class_name is not None and final_name(unit.fact.class_name) in handed
 
 
+def _csharp(project: Project, key: str) -> bool:
+    return project.files[project.path_of[key]].language == CSHARP
+
+
 def _registered(
-    project: Project, classes: _Classes, declared: Mapping[str, str], patterns: Sequence[str]
+    project: Project,
+    classes: _Classes,
+    declared: Mapping[str, str],
+    patterns: Sequence[str],
+    godot: GodotUse,
 ) -> set[str]:
     handed = _handed(project)
     found: set[str] = set()
     for key, reason in declared.items():
         unit = project.units[key]
         name = short_name(unit)
+        if _csharp(project, key):
+            if _csharp_registered(project, key, reason, godot) or _matches(key, patterns):
+                found.add(key)
+            continue
         if (
             reason != ""
             or DUNDER.match(name) is not None
@@ -378,6 +493,65 @@ def _registered(
             or _matches(key, patterns)
         ):
             found.add(key)
+    return found
+
+
+def _csharp_registered(project: Project, key: str, reason: str, godot: GodotUse) -> bool:
+    """A C# method something registers, or one a scene connection or an animation track
+    names. An ``override`` is not one: its class reaches it (see ``_script_edges``)."""
+    unit = project.units[key]
+    if unit.kind == UNIT_CLASS:
+        return reason in EDITOR_CLASSES
+    if reason not in ("", OVERRIDE):
+        return True
+    name = short_name(unit)
+    owner = unit.fact.class_name
+    if owner is not None and (final_name(owner), name) in godot.connected:
+        return True
+    return name in godot.named
+
+
+def _scripts_in_use(project: Project, classes: _Classes, godot: GodotUse) -> set[str]:
+    """The C# class units that are not roots: Godot scripts (classes derived from an
+    engine class) that no scene attaches, no autoload loads and no file names."""
+    mentioned = {t for f in project.files.values() for t in f.usage.types}
+    unused: set[str] = set()
+    for key, unit in project.units.items():
+        if unit.kind != UNIT_CLASS or not _csharp(project, key):
+            continue
+        name = final_name(unit.name)
+        if not classes.framework_class(project.path_of[key], unit.name):
+            continue
+        if name in godot.classes or name in mentioned:
+            continue
+        unused.add(key)
+    return unused
+
+
+def _script_edges(edges: _Edges, project: Project, classes: _Classes) -> None:
+    """A C# class reaches its ``override`` methods when it derives from an engine class:
+    the engine calls them while an instance of the class exists."""
+    class_units: dict[str, list[str]] = {}
+    for key, unit in project.units.items():
+        if unit.kind == UNIT_CLASS and _csharp(project, key):
+            _add(class_units, unit.name, key)
+    for unit in _overrides(project):
+        owner = unit.fact.class_name
+        if owner is not None and owner in class_units and classes.framework_method(unit):
+            for holder in class_units[owner]:
+                edges.add(holder, [unit.key])
+
+
+def _overrides(project: Project) -> list[UnitMetrics]:
+    """The C# methods declared ``override``."""
+    found: list[UnitMetrics] = []
+    for f in project.files.values():
+        if f.language != CSHARP:
+            continue
+        for function in f.usage.declared:
+            at = (f.path, function.line, function.column)
+            if function.registered == OVERRIDE and at in project.at:
+                found.append(project.units[project.at[at]])
     return found
 
 
@@ -477,11 +651,19 @@ def _listing(project: Project, keys: Sequence[str], head_path: str) -> str:
 def _message(project: Project, cluster: _Cluster) -> str:
     head = project.units[cluster.head]
     path = project.path_of[cluster.head]
-    if cluster.tested:
+    if head.kind == UNIT_CLASS:
+        message = (
+            f"{head.name} derives from a class outside the project (an engine or library "
+            "type), but no scene attaches its script, no autoload loads it and no code names it"
+        )
+        if cluster.tested:
+            message += " outside the tests"
+    elif cluster.tested:
         opening = f"{head.name} is called only by tests: no production code calls or names it"
+        message = f"{opening}, and nothing registers it (decorator, __all__, entry point)"
     else:
         opening = f"{head.name}: no production code calls or names it"
-    message = f"{opening}, and nothing registers it (decorator, __all__, entry point)"
+        message = f"{opening}, and nothing registers it (decorator, __all__, entry point)"
     if len(cluster.members) > 0:
         lines = sum(project.units[k].fact.logical_lines for k in (cluster.head, *cluster.members))
         message += (
@@ -528,20 +710,31 @@ def _graph(project: Project, graph: CallGraph, declared: Mapping[str, str]) -> _
     return edges
 
 
-def _judge(project: Project, graph: CallGraph, patterns: Sequence[str]) -> list[_Cluster]:
+def _judge(
+    project: Project, graph: CallGraph, patterns: Sequence[str], godot: GodotUse
+) -> list[_Cluster]:
     """The dead clusters: what production roots do not reach, by head."""
     declared = _declared(project)
     classes = _Classes(project)
-    out = _graph(project, graph, declared).out
-    registered = _registered(project, classes, declared, patterns)
+    edges = _graph(project, graph, declared)
+    _script_edges(edges, project, classes)
+    out = edges.out
+    registered = _registered(project, classes, declared, patterns, godot)
+    unused_scripts = _scripts_in_use(project, classes, godot)
     tests = [k for k in project.units if project.files[project.path_of[k]].tested]
     production = set(project.units) - set(tests)
-    roots = [k for k in production if project.units[k].kind in CONTAINERS or k in registered]
+    roots = [
+        k
+        for k in production
+        if (project.units[k].kind in CONTAINERS and k not in unused_scripts) or k in registered
+    ]
     families = classes.families()
     live = _alive(out, roots, families)
     tested = _alive(out, tests, families)
     called = {target for key in tests for target in out[key]}
     dead = {k for k in declared if k not in live and k in production}
+    if not godot.complete:
+        dead = {k for k in dead if not _csharp(project, k)}
     return _clusters(out, dead, (tested, called), families)
 
 
@@ -564,6 +757,7 @@ def run_dead_code(
     settings: Mapping[str, Any],
     libraries: Sequence[str],
     scripts: Sequence[str],
+    godot: GodotUse,
 ) -> dict[str, list[Finding]]:
     """``libraries``: the files installed as libraries (the property-contracts runtime),
     whose functions are there to be called, not judged. ``scripts``: the project's
@@ -576,7 +770,7 @@ def run_dead_code(
         *_script_patterns(project, scripts),
     ]
     found: dict[str, list[Finding]] = {}
-    for cluster in _judge(project, graph, patterns):
+    for cluster in _judge(project, graph, patterns, godot):
         rule, severity_key = DEAD001, SETTING_SEVERITY
         if cluster.tested:
             rule, severity_key = DEAD002, SETTING_DEAD002_SEVERITY

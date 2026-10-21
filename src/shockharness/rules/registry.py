@@ -857,7 +857,7 @@ CPLX005 = RuleSpec(
     config_section="complexity",
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "Modules import each other in a cycle, or a unit calls more than fan_out_warn distinct "
         "targets."
@@ -3120,7 +3120,7 @@ DEAD001 = RuleSpec(
     config_section=DEAD_CODE_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A function or method that no production code calls or names and nothing registers, "
         "reported once with everything reachable only through it: a dead cluster."
@@ -3155,7 +3155,7 @@ DEAD002 = RuleSpec(
     config_section=DEAD_CODE_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A production function that only tests call or name: dead in production, kept "
         "alive by its tests, reported with everything reachable only through it."

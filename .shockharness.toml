@@ -50,6 +50,12 @@ exception = "UnicodeDecodeError"
 reason = "Config file bytes are external input; non-UTF-8 becomes a ConfigError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/godot_project.py"
+language = "python"
+exceptions = ["OSError", "UnicodeDecodeError"]
+reason = "Reading a Godot project's scene and resource files; an unreadable one is recorded as a problem, and the dead-code rules then do not judge C# (G3)"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/contracts/catalog.py"
 language = "python"
 exceptions = ["OSError", "UnicodeDecodeError"]

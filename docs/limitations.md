@@ -482,8 +482,19 @@ Stated so that a clean report is never read as more than it is.
 * **Units** are named within the file, without the namespace (`Player._Ready`,
   `Player.Health.set`). `partial` declarations of one class in several files are separate
   classes until G3's type index merges them.
-* **The call graph** reads C# units but resolves only same-file names; a C# call of any
-  other name is unresolved.
+* **The call graph** (G3) resolves C# calls by the types the syntax states, through a
+  project-wide index of classes (`partial` declarations merged): the enclosing class and
+  its project bases, `this.`, `base.`, `Type.Static()`, a parameter, local, field or
+  property of a stated type (`Player p`, `var p = GetNode<Player>(...)`, `new Player()`,
+  a cast), and `new T()`. Two classes of one simple name in different namespaces make a
+  call probable. Generic parameters, extension methods, `dynamic` and library calls stay
+  unresolved. A file that calls into another file's class depends on it (a `type` module
+  edge, the input of CPLX005's cycles); a class's own `partial` files do not.
+* **Godot project files** (G3) are read with the standard library: `project.godot` (main
+  scene, autoloads, input actions) and every `.tscn` and `.tres` under it (scripts
+  attached, nodes, editor connections, animation method tracks), `res://` and `uid://`
+  references both. Values are scanned, never evaluated. A file that cannot be read stops
+  the C# dead-code judgment rather than guessing.
 * `addons/` (Godot plugins) is analyzed like the project's own code; add
   `"addons/**"` to `exclude` to leave third-party plugins out.
 

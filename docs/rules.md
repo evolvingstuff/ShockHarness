@@ -1569,6 +1569,22 @@ HTML page, a template or an excluded file calls. Those go in `entry_points`. Arr
 functions and function expressions are judged only when bound to a declared name or a
 class field, and object-literal methods only when the object is bound to a name.
 
+**C# and Godot (G3, decision 46).** The framework root above does not apply to C#: every
+Godot script derives from an engine class, so it would make every method a root. C#
+roots are what the code and the project files say: an `override` is reached from its
+class while the class is alive (the engine calls `_Ready` or `_Process` on an instance);
+constructors, finalizers, operators, explicit interface implementations, `[Rpc]`
+methods, test methods and a static `Main` are registered; a method an editor connection
+calls (`[connection ... method="OnButtonPressed"]`, on the script attached to the target
+node, or by name when that script is not known) or an animation method track names is a
+root; a method name used as a value (`Hit += OnHit`, `Callable.From(OnHit)`,
+`nameof(OnHit)`, `MethodName.OnHit`) or in a string to `Call`, `CallDeferred`, `Rpc`,
+`RpcId`, `CallGroup` or `new Callable(obj, "M")` keeps every method of that name alive. A
+class derived from a class outside the project is a **dead script** when no scene
+attaches it, no autoload loads it, no file names its class and it is not `[GlobalClass]`
+or `[Tool]`: one finding for the class, listing its methods. `partial` declarations are
+one class. When a scene or project file cannot be read, no C# is judged.
+
 **Measured** on MetaList at e60e88dc: 154 findings (111 DEAD001, 43 DEAD002), the
 `build_note_tree` cluster among them (20 functions, 375 logical lines, `highlight_search_terms`
 named as still tested). Of two random samples of 30 heads, 26 and 24 were dead; the false

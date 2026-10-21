@@ -28,6 +28,7 @@ from shockharness.rules.registry import (
     CPLX004,
     CPLX005,
     CPLX006,
+    CSHARP,
     JAVASCRIPT,
     PYTHON,
     TYPESCRIPT,
@@ -230,12 +231,34 @@ CYCLE_NOTES: Mapping[str, str] = {
     TYPESCRIPT: (
         "an ES-module cycle is usually resolved at call time, so it ranks after Python cycles"
     ),
+    CSHARP: (
+        "C# files that call into each other's classes (a class's partial files are one); "
+        "nothing fails at load time, so it ranks after Python cycles"
+    ),
 }
 LANGUAGE_LABELS: Mapping[str, str] = {
     PYTHON: "Python",
     JAVASCRIPT: "JavaScript",
     TYPESCRIPT: "TypeScript",
+    CSHARP: "C#",
 }
+# How an edge of each language enters a cycle: an import, or (C#) a call into a class.
+CYCLE_EDGES: Mapping[str, str] = {
+    PYTHON: "import of",
+    JAVASCRIPT: "import of",
+    TYPESCRIPT: "import of",
+    CSHARP: "call into",
+}
+
+
+def _cycle_message(cycle: Cycle, edge: ModuleEdge, language: str) -> str:
+    return (
+        f"{CYCLE_MESSAGE_PREFIX}{len(cycle.modules)} {LANGUAGE_LABELS[language]} "
+        f"module(s): {cycle_members_text(cycle.modules)} (one finding per cycle, anchored "
+        f"on {edge.source}, whose {CYCLE_EDGES[language]} {edge.target} enters it; "
+        f"{CYCLE_NOTES[language]}; resolved edges only; every member is listed in "
+        "metrics.graph.cycles)"
+    )
 
 
 def is_cycle_finding(finding: Finding) -> bool:
@@ -309,10 +332,7 @@ def run_graph_rules(
             CPLX005,
             edge.source,
             edge.span,
-            f"{CYCLE_MESSAGE_PREFIX}{len(cycle.modules)} {LANGUAGE_LABELS[language]} "
-            f"module(s): {cycle_members_text(cycle.modules)} (one finding per cycle, anchored "
-            f"on {edge.source}, whose import of {edge.target} enters it; {CYCLE_NOTES[language]}; "
-            "resolved edges only; every member is listed in metrics.graph.cycles)",
+            _cycle_message(cycle, edge, language),
             source,
             MODULE_SCOPE,
         )
