@@ -6788,3 +6788,17 @@ mentioned only in the copied section; all the IDs the skills mention are registe
 `docs/releasing.md`: the version pin now lives in the README and one skill, so a release
 bump touches 15 files instead of 20 (pre-commit-review keeps two sample report lines
 that name the version). `docs/skills.md`: eight skills, the new row.
+
+## Release 0.23.0 (2026-10-22)
+
+On Tom's go-ahead. CI was green on 0e414a5 (run 39750664969) and on the release commit
+3620237 (run 39752388866), 16 of 16 jobs each. Every pin moved from 0.22.0 (20 files), and
+the bump's diff was checked for lines that are not pins (none). The Godot session's
+`[Unreleased]` entries had put a `### Fixed` heading above VERIFY006 and EXC006; the
+`[0.23.0]` section puts them back under Added, with the fourth C# milestone, SLEEP001
+version 2 under Changed and the VERIFY languages fix under Fixed. Upgrade note: nothing can
+fail a gate that passed unless a severity was raised to `error`; the C# changes apply only
+with `"**/*.cs"` included; new configuration keys are additions; cache schema "36". The
+tag `v0.23.0` is on 3620237. Published by `publish.yml` (run 39753193484, 18 of 18 jobs).
+PyPI lists 0.23.0 with a wheel and an sdist. The adopt-shockharness skill split (58e7ca9)
+came after the release commit and is not in 0.23.0.
