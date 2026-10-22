@@ -5,6 +5,28 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-22
+
+C# for Godot .NET, fourth milestone (Godot names the project does not define, C#
+suppressions and build settings, C# test frameworks), VERIFY006 (a test file deleted
+while its code remains), EXC006 (an error class derived from `SystemExit`), and SLEEP001
+leaving zero-delay yields alone.
+
+**Upgrading from 0.22.0.** No new dependency, and nothing can fail a gate that passed
+unless a project raised a severity to `error`:
+
+- **Python and JavaScript projects:** EXC006 (warning) is new for Python; VERIFY006
+  (warning) reports deleted test files in `diff` and `gate --base`; SLEEP001 reports fewer
+  findings (no zero delays).
+- **C# projects** (those with `"**/*.cs"` in `include`): GODOT001, GODOT003 and GODOT005
+  are warnings and GODOT002 and GODOT004 review, on whole-project runs; TYPE002 can report
+  a `.csproj` with nullable reference types off (review); VERIFY001-VERIFY004 now read C#
+  tests, and VERIFY003 compares `.csproj`, `Directory.Build.props` and `.editorconfig`
+  in a diff (warning). New configuration keys are additions
+  (`[tool.shockharness.rules.godot_names]`, `rules.sleep.csharp_sleep_apis`).
+
+The cache schema is "36", so the first run after upgrading rebuilds the cache.
+
 ### Added
 - **GODOT001-GODOT005 (C#, Godot projects): names the project does not define** (spec
   21.1 decision 51, milestone G4). Input actions not in `project.godot`'s Input Map
@@ -24,11 +46,6 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   GoDotTest cases, assertions, tautologies and skip attributes feed VERIFY001, VERIFY004
   and ROLE001; SLEEP001 reads `rules.sleep.csharp_sleep_apis` (`Thread.Sleep`,
   `Task.Delay`, `OS.DelayMsec`, `OS.DelayUsec`, `AwaitMillis`).
-
-### Fixed
-- **The VERIFY001-VERIFY004 comparison honours each rule's languages**, as the per-file
-  and cross-file phases do since G1. No verdict changed: C# had no verification facts
-  before G4.
 - **VERIFY006 (warning, needs a base revision): a test file deleted while its code
   remains** (spec 21.1 decision 50). In `diff` and `gate --base`, a test file of the base
   that the head neither has nor renamed is reported when every project module it imported
@@ -47,6 +64,11 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   `setTimeout(resolve, 0)` and `setTimeout(resolve)` yield to the event loop; they do not
   wait for anything. On MetaList 4 of its 75 SLEEP001 findings go, among them
   `tagging_run.py`'s deliberate yield; nothing else changes. Cache schema "34".
+
+### Fixed
+- **The VERIFY001-VERIFY004 comparison honours each rule's languages**, as the per-file
+  and cross-file phases do since G1. No verdict changed: C# had no verification facts
+  before G4.
 
 ## [0.22.0] - 2026-10-21
 
