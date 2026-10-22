@@ -5,6 +5,20 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **Import boundaries for named modules, and "only these files may import it"
+  (IMPORT002).** A `[[rules.import_boundaries.forbidden]]` entry can now name packages and
+  standard-library modules (`modules = ["httpx", "cryptography.hazmat"]`), each with
+  everything below it (`from cryptography import hazmat` included). A JavaScript package
+  covers its paths, a scoped package is one name, and `node:fs` is `fs`. An entry can also
+  exempt files with `allowed_importers`, so "only `app/services/public_http.py` may import
+  `httpx`" is one entry. `imported` is now optional; one of `imported` and `modules` is
+  required. A module named by name is judged from the importing file alone, so the
+  edit-time hook sees it too. Dropping a module or exempting another file is a VERIFY003
+  loosening. Existing entries mean what they meant. From MetaList's policy note; on
+  MetaList, four entries shaped like it found the same 31 import sites a line count does.
+  ShockHarness's own configuration now keeps `subprocess` in `history/git.py`.
+
 ## [0.25.0] - 2026-10-22
 
 The skills now reach an agent through the commands it runs: `init` installs them, and

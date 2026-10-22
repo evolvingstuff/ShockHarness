@@ -3436,7 +3436,8 @@ IMPORT002 = RuleSpec(
     languages=ALL_LANGUAGES,
     summary=(
         "A file imports a module that a [[rules.import_boundaries.forbidden]] entry keeps "
-        "it from importing, or a name the entry's allowed_names does not list."
+        "it from importing (a project file by path, or a package or standard-library module "
+        "by name), or a name the entry's allowed_names does not list."
     ),
     rationale=(
         "Some modules must never reach others: MetaList's startup and database migrations "
@@ -3448,16 +3449,21 @@ IMPORT002 = RuleSpec(
         "Every import of an analyzed file, at any depth (a function's lazy import included): "
         "Python import and from-import, JavaScript and TypeScript import, export-from, "
         "require and import() with a literal specifier. An entry applies when the importing "
-        "file matches one of its importers globs and the import resolves to an analyzed file "
-        "matching one of its imported globs. With allowed_names empty, any import of the "
+        "file matches one of its importers globs and none of its allowed_importers globs, "
+        "and the import resolves to an analyzed file matching one of its imported globs, or "
+        "names a module listed in modules or one below it (cryptography.hazmat covers "
+        "cryptography.hazmat.primitives and from cryptography import hazmat; a JavaScript "
+        "package covers its paths; node: is ignored). With allowed_names empty, any import of the "
         "module is reported; otherwise each name imported must be listed, and an import of "
         "the whole module (import m, from pkg import m, import * as m, a bare require, a "
         "star or side-effect import) is reported. Exact on the resolved import edges."
     ),
     limitations=(
-        "Direct imports only: a forbidden module reached through another project module is "
-        "not reported. The imported module must be among the analyzed files (a check of one "
-        "file does not resolve its imports), and computed specifiers "
+        "Direct imports only: a forbidden module reached through another project module, or "
+        "a name an allowed importer re-exports, is not reported. A project file named by path "
+        "must be among the analyzed files (a check of one file does not resolve its imports "
+        "to other files; a module named by name needs no other file), uses below the module "
+        "(os.urandom, os.environ) are not imports, and computed specifiers "
         "(importlib.import_module(name), import(expr)) are not followed. TypeScript type-only "
         "imports are not imports."
     ),

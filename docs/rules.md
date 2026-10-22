@@ -1733,25 +1733,52 @@ A boundary like that is invisible in the code; an agent adding one convenient im
 it without knowing it was there.
 
 Each `[[rules.import_boundaries.forbidden]]` entry (see `docs/configuration.md`, Import
-boundaries) binds the files its `importers` globs match. Every import in a bound file is
-judged, at any depth, a function's lazy import included: Python `import` and
+boundaries) binds the files its `importers` globs match, less those its `allowed_importers`
+globs match, so "only these files may import it" is one entry. Every import in a bound file
+is judged, at any depth, a function's lazy import included: Python `import` and
 `from ... import`, JavaScript and TypeScript `import`, `export ... from`, `require(...)` and
-`import(...)` with a literal specifier. An import that resolves to a file the `imported`
-globs match is reported, unless every name it takes is in `allowed_names`; an import of the
-whole module takes every name. One finding per import, at the import, naming the module and
-the entry's reason.
+`import(...)` with a literal specifier. What it forbids is named two ways:
 
-Not judged: an import that does not resolve to an analyzed file (a check of one file does
-not resolve its imports, so the edit-time hook sees only what that run analyzes), computed
-specifiers (`importlib.import_module(name)`, `import(expr)`), and TypeScript type-only
-imports. Direct imports only: a forbidden module reached through another project module is
-not reported.
+* **Project files by path** (`imported` globs): an import that resolves to a matching
+  analyzed file.
+* **Other modules by name** (`modules`): an import of a package or a standard-library
+  module, or of anything below it. `cryptography.hazmat` covers
+  `cryptography.hazmat.primitives` and `from cryptography import hazmat`, but not
+  `import cryptography`. A JavaScript package covers its paths (`fs` covers
+  `fs/promises`), a scoped package is a whole name (`@anthropic-ai/sdk`), and `node:` is
+  ignored. An import that resolves to a project file is never matched by name.
+
+Either way, an import is reported unless every name it takes is in `allowed_names`; an
+import of the whole module takes every name. One finding per import, at the import, naming
+the module, who may import it when `allowed_importers` lists anyone, and the entry's reason.
+
+Not judged: an import of a project file that is not analyzed in the same run (a check of
+one file does not resolve its imports to other files, so the edit-time hook sees a path
+boundary only when the imported file is in that run; a named module needs no other file),
+computed specifiers (`importlib.import_module(name)`, `import(expr)`), and TypeScript
+type-only imports. Direct imports only: a forbidden module reached through another project
+module, or a name re-exported by an allowed importer, is not reported. Uses below the module
+(`os.urandom`, `os.environ`, a global like `crypto.subtle`) are not imports.
 
 **Measured** on MetaList at 4d4e9847 with BKP001's two pairs as entries: no finding. With
 four imports added (a lazy `from ... import` in `app/db/migrations.py`, `from app.services
 import backup_service` and `import app.services.backup_service` in `app/main.py`, and
 `list_backups` added to `auth_service.py`'s import): all four reported. BKP001 reports two
 of them; it does not see an import of the whole module.
+
+**Measured, modules by name** (2026-10-22) on MetaList at fc27362d, read-only on an exported
+copy, with four entries shaped like its policy note's sections 3.2-3.5 (`app/**` and
+`main.py` bound):
+* provider SDKs (`openai`, `anthropic`) except in `app/services/agent/openai_inference.py`:
+  0 findings, since the one adapter is the only importer;
+* `cryptography.hazmat`, `argon2` and `nacl` except in `app/services/encryption.py`: 5
+  findings in 2 files (`app/security/authenticated_logging.py`, `app/server_runtime.py`);
+* seven network modules except in `app/services/public_http.py`: 14 findings in 12 files;
+* `subprocess` anywhere: 12 findings in 12 files.
+
+A line-by-line count of the same import statements found the same 31 sites, none more and
+none fewer. On ShockHarness itself, `subprocess` outside `src/shockharness/history/git.py`:
+no finding, and a probe file importing it was reported.
 
 ### GODOT001-GODOT005: Godot names the project does not define (C#; warning, GODOT002 and GODOT004 review)
 

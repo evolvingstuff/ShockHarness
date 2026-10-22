@@ -1,6 +1,7 @@
 # Proposal: import boundaries for named modules, and "only these files may import it"
 
-Status: **proposed** (2026-10-22), waiting for Tom's go-ahead. Nothing is built.
+Status: **built** (2026-10-22, on Tom's go-ahead), as proposed; spec 21.1 decision 44 is
+amended. The measurement is in `docs/rules.md` under IMPORT002.
 Extends IMPORT002 (spec 21.1 decision 44). Source: MetaList's policy note (2026-10-22,
 passed on by Fable), sections 3.2, 3.4, 3.5 and 3.7.
 

@@ -198,12 +198,17 @@ BOUNDARY_SCHEMA = TableField(
 FORBIDDEN_IMPORT_SCHEMA = TableField(
     fields={
         "importers": ListField(StrField(allow_empty=False)),
+        "allowed_importers": ListField(StrField(allow_empty=False)),
         "imported": ListField(StrField(allow_empty=False)),
+        "modules": ListField(StrField(allow_empty=False)),
         "allowed_names": ListField(StrField(allow_empty=False)),
         "reason": StrField(allow_empty=False),
     },
-    required=("importers", "imported", "allowed_names", "reason"),
+    required=("importers", "allowed_names", "reason"),
 )
+# The lists a forbidden-import entry may leave out; an absent one lists nothing. At least
+# one of imported and modules must list something (checked in config.py).
+FORBIDDEN_IMPORT_OPTIONAL = ("allowed_importers", "imported", "modules")
 
 # An override scopes its rule IDs either by path globs (`paths`) or by file role
 # (`roles`, H1); exactly one of the two, checked in config.py.
@@ -648,6 +653,13 @@ def validate_shape(raw: Any) -> list[ConfigIssue]:
     issues: list[ConfigIssue] = []
     CONFIG_SCHEMA.check(raw, "", issues)
     return issues
+
+
+def forbidden_import_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """A validated ``[[rules.import_boundaries.forbidden]]`` entry with every optional list
+    present: one the entry leaves out lists nothing (allowed_importers: no file is exempt;
+    imported or modules: that side names nothing)."""
+    return {**{key: [] for key in FORBIDDEN_IMPORT_OPTIONAL}, **entry}
 
 
 def boundary_exceptions(boundary: Mapping[str, Any]) -> tuple[str, ...]:

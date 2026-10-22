@@ -1009,7 +1009,9 @@ like the H3 tables.
 
 Spec 21.1 decision 44. Modules some files must never import, declared per project: no entry
 by default, so IMPORT002 reports nothing (and is not recorded in a file's `rules_applied`)
-until a project adds one. Every key of an entry is required.
+until a project adds one. `importers`, `allowed_names` and `reason` are required; an entry
+names what it forbids with `imported` (project files, by path), `modules` (other modules, by
+name) or both, and may exempt files with `allowed_importers`.
 
 ```toml
 [tool.shockharness.rules.import_boundaries]
@@ -1027,7 +1029,22 @@ importers = ["/app/services/auth_service.py"]
 imported = ["/app/services/backup_service.py"]
 allowed_names = ["create_timestamped_backup"]
 reason = "authentication may only take a new backup"
+
+[[tool.shockharness.rules.import_boundaries.forbidden]]
+importers = ["/app/**"]
+allowed_importers = ["/app/services/public_http.py"]   # bound files exempt from the entry (globs)
+modules = ["httpx", "urllib.request", "http.client", "socket"]  # other modules, by name
+allowed_names = []
+reason = "network calls go through public_http"
 ```
+
+`modules` names a module as code imports it and covers everything below it: Python
+`cryptography.hazmat` matches `cryptography.hazmat.primitives` and `from cryptography import
+hazmat`, not `import cryptography`; a JavaScript package matches its paths (`fs` matches
+`fs/promises`), a scoped package is one name (`@anthropic-ai/sdk`), and `node:fs` and `fs`
+are the same. Only imports that do not resolve to an analyzed file are matched by name; a
+project file is named by its path under `imported`. A relative specifier (`./x`, `.errors`)
+is a configuration error.
 
 Both sides are path globs (see Glob semantics), matched against the importing file and the
 file the import resolves to, so one entry covers `from app.services.backup_service import
@@ -1037,9 +1054,10 @@ whole module (`import m`, `from pkg import m`, `import * as m`, a bare `require`
 side-effect import) is reported, since it takes every name; a JavaScript default import is
 the name `default`.
 
-Removing an entry, narrowing its globs or adding an allowed name is a VERIFY003 loosening
-(an entry is kept when some new entry binds at least the same importers, forbids at least
-the same files and allows no other name), and so is lowering the severity. Turning the
+Removing an entry, narrowing its globs, dropping a module, exempting another file or adding
+an allowed name is a VERIFY003 loosening (an entry is kept when some new entry binds at
+least the same importers, exempts no other file, forbids at least the same files and
+modules and allows no other name), and so is lowering the severity. Turning the
 section off is a deviation.
 
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)

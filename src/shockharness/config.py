@@ -46,6 +46,7 @@ from shockharness.schema import (
     SECTION_SEVERITIES,
     ConfigIssue,
     boundary_exceptions,
+    forbidden_import_entry,
     validate_shape,
 )
 
@@ -670,21 +671,46 @@ def _guardrail_deviations(rules: Mapping[str, Any], strict: Mapping[str, Any]) -
 SINK_ENTRY = re.compile(r"[^:\s]+:[0-9]+")
 
 
-IMPORT_BOUNDARY_GLOBS = ("importers", "imported")
+IMPORT_BOUNDARY_GLOBS = ("importers", "allowed_importers", "imported")
+# A module named by an import boundary: as code imports it, never a relative specifier.
+IMPORT_BOUNDARY_MODULE = re.compile(r"[^\s./][^\s]*")
+
+
+def _import_boundary_entry_issues(index: int, entry: Mapping[str, Any]) -> list[ConfigIssue]:
+    prefix = f"rules.import_boundaries.forbidden[{index}]"
+    issues: list[ConfigIssue] = []
+    if len(entry["importers"]) == 0:
+        issues.append(ConfigIssue(f"{prefix}.importers", "must list at least one path glob"))
+    if len(entry["imported"]) == 0 and len(entry["modules"]) == 0:
+        issues.append(
+            ConfigIssue(
+                prefix, "must name what is forbidden: imported (path globs) or modules (names)"
+            )
+        )
+    for field in IMPORT_BOUNDARY_GLOBS:
+        for g_index, pattern in enumerate(entry[field]):
+            problem = validate_glob(pattern)
+            if problem is not None:
+                issues.append(ConfigIssue(f"{prefix}.{field}[{g_index}]", problem))
+    for m_index, name in enumerate(entry["modules"]):
+        if IMPORT_BOUNDARY_MODULE.fullmatch(name) is None or name.endswith((".", "/")):
+            issues.append(
+                ConfigIssue(
+                    f"{prefix}.modules[{m_index}]",
+                    f"{name!r} is not a module name as code imports it (httpx, "
+                    "cryptography.hazmat, @anthropic-ai/sdk, node:fs); a project file is "
+                    "named by its path under imported",
+                )
+            )
+    return issues
 
 
 def _import_boundary_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
-    """IMPORT002: each entry names at least one importer and one imported glob, all valid."""
+    """IMPORT002: each entry binds at least one importer and names something it forbids
+    (imported globs or module names); every glob is valid and every module is a name."""
     issues: list[ConfigIssue] = []
     for index, entry in enumerate(section["forbidden"]):
-        for field in IMPORT_BOUNDARY_GLOBS:
-            key = f"rules.import_boundaries.forbidden[{index}].{field}"
-            if len(entry[field]) == 0:
-                issues.append(ConfigIssue(key, "must list at least one path glob"))
-            for g_index, pattern in enumerate(entry[field]):
-                problem = validate_glob(pattern)
-                if problem is not None:
-                    issues.append(ConfigIssue(f"{key}[{g_index}]", problem))
+        issues.extend(_import_boundary_entry_issues(index, forbidden_import_entry(entry)))
     return issues
 
 

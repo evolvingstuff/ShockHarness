@@ -339,6 +339,16 @@ entry_points = ["src/shockharness/contracts/runtime/contracts.py::*"]
 [tool.shockharness.rules.duplicates]
 enabled = true
 
+# IMPORT002: the analyzer runs one external program, git, from one module, the one whose
+# catch boundaries (subprocess.CalledProcessError, OSError) say how its failures are
+# turned into results. A second module running processes would need its own boundaries.
+[[tool.shockharness.rules.import_boundaries.forbidden]]
+importers = ["src/**"]
+allowed_importers = ["src/shockharness/history/git.py"]
+modules = ["subprocess"]
+allowed_names = []
+reason = "external programs run only through shockharness.history.git"
+
 # This repository ships the skills (src/shockharness/skills) rather than installing them,
 # so `check` does not suggest `skills install` here.
 [tool.shockharness.skills]

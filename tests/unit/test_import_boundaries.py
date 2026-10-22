@@ -199,3 +199,159 @@ def test_removing_narrowing_or_allowing_more_is_a_loosening(tmp_path: Path) -> N
     assert keys(widened) == []
     split = _entry('"app/main.py"', "") + _entry('"app/db/*.py", "app/main.py"', "")
     assert keys(split) == []
+
+
+# ------------------------------------------------- modules by name, allowed importers
+
+TABLE = "[[tool.shockharness.rules.import_boundaries.forbidden]]\n"
+OUTBOUND = (
+    TABLE + 'importers = ["app/**"]\n'
+    'allowed_importers = ["app/net/outbound.py"]\n'
+    'modules = ["httpx", "cryptography.hazmat", "urllib.request"]\n'
+    "allowed_names = []\n"
+    'reason = "one outbound chokepoint"\n'
+)
+VIEWS = (
+    "import httpx\n"
+    "from httpx import Client\n"
+    "import httpx.transports\n"
+    "from cryptography import hazmat\n"
+    "from cryptography.hazmat.primitives import hashes\n"
+    "import cryptography\n"
+    "import urllib.parse\n"
+    "from urllib import request\n"
+    "import httpxlike\n"
+    "def fetch():\n"
+    "    import httpx\n"
+    "    return httpx\n"
+)
+
+
+def test_python_modules_are_matched_by_name_with_their_submodules(tmp_path: Path) -> None:
+    files = {"app/__init__.py": "", "app/views.py": VIEWS, "app/net/outbound.py": "import httpx\n"}
+    reported = found(tmp_path, files, HEADER + OUTBOUND)
+    assert [line.split(" ")[0] for line in reported] == [
+        f"app/views.py:{n}" for n in (1, 11, 2, 3, 4, 5, 8)
+    ]
+    assert reported[0] == (
+        "app/views.py:1 error imports httpx, which only app/net/outbound.py may import: "
+        "one outbound chokepoint"
+    )
+    assert "imports cryptography.hazmat, which only" in reported[4]
+    assert "imports urllib.request, which only" in reported[6]
+
+
+def test_one_file_alone_is_judged_by_name(tmp_path: Path) -> None:
+    write(tmp_path, {"app/__init__.py": "", "app/views.py": VIEWS}, HEADER + OUTBOUND)
+    config = load_config(tmp_path, None)
+    report = analyze_paths([tmp_path / "app" / "views.py"], tmp_path, config, OPTIONS)
+    assert len([f for f in report.findings if f.rule_id == "IMPORT002"]) == 7
+
+
+def test_allowed_names_apply_to_a_named_module(tmp_path: Path) -> None:
+    config = (
+        HEADER + TABLE + 'importers = ["app/**"]\nmodules = ["hashlib"]\n'
+        'allowed_names = ["sha256"]\nreason = "key derivation stays in app/crypto"\n'
+    )
+    code = "from hashlib import sha256\nfrom hashlib import scrypt\nimport hashlib\n"
+    assert found(tmp_path, {"app/__init__.py": "", "app/keys.py": code}, config) == [
+        "app/keys.py:2 error imports scrypt from hashlib; only sha256 may be imported from it "
+        "here: key derivation stays in app/crypto",
+        "app/keys.py:3 error imports all of hashlib; only sha256 may be imported from it here: "
+        "key derivation stays in app/crypto",
+    ]
+
+
+def test_javascript_packages_scopes_and_node_builtins(tmp_path: Path) -> None:
+    config = (
+        HEADER + TABLE + 'importers = ["web/**"]\nallowed_importers = ["web/net/**"]\n'
+        'modules = ["openai", "@anthropic-ai/sdk", "fs"]\nallowed_names = []\n'
+        'reason = "providers are reached through web/net"\n'
+    )
+    page = (
+        "import OpenAI from 'openai';\n"
+        "import { Messages } from '@anthropic-ai/sdk/resources';\n"
+        "import fs from 'node:fs';\n"
+        "import { readFile } from 'fs/promises';\n"
+        "const sdk = require('@anthropic-ai/sdk');\n"
+        "export async function later() { return import('openai'); }\n"
+        "import other from 'openaiish';\n"
+        "import near from '@anthropic-ai/other';\n"
+    )
+    files = {"web/page.js": page, "web/net/client.js": "import OpenAI from 'openai';\n"}
+    reported = found(tmp_path, files, config)
+    assert [line.split(" ")[0] for line in reported] == [f"web/page.js:{n}" for n in range(1, 7)]
+    assert "imports fs, which only web/net/** may import" in reported[2]
+
+
+def test_allowed_importers_exempt_files_from_a_path_boundary(tmp_path: Path) -> None:
+    config = (
+        HEADER + TABLE + 'importers = ["app/**"]\n'
+        'allowed_importers = ["app/ai/outbound.py", "app/ai/providers/**"]\n'
+        'imported = ["app/ai/providers/**"]\nallowed_names = []\n'
+        'reason = "adapters are reached only through app/ai/outbound.py"\n'
+    )
+    files = {
+        "app/__init__.py": "",
+        "app/ai/__init__.py": "",
+        "app/ai/providers/__init__.py": "",
+        "app/ai/providers/base.py": "class Provider:\n    pass\n",
+        "app/ai/providers/openai_adapter.py": "from app.ai.providers.base import Provider\n",
+        "app/ai/outbound.py": "from app.ai.providers.openai_adapter import Provider\n",
+        "app/views.py": "from app.ai.providers.base import Provider\n",
+    }
+    assert found(tmp_path, files, config) == [
+        "app/views.py:1 error imports app/ai/providers/base.py, which only app/ai/outbound.py, "
+        "app/ai/providers/** may import: adapters are reached only through app/ai/outbound.py"
+    ]
+
+
+def test_an_entry_names_what_it_forbids_and_modules_are_names(tmp_path: Path) -> None:
+    neither = TABLE + 'importers = ["app/a.py"]\nallowed_names = []\nreason = "r"\n'
+    assert "forbidden[0]: must name what is forbidden" in _invalid(tmp_path, neither)
+    for bad in ("./client.js", ".errors", "httpx.", "two words"):
+        entry = (
+            TABLE + f'importers = ["app/a.py"]\nmodules = ["{bad}"]\n'
+            'allowed_names = []\nreason = "r"\n'
+        )
+        assert "forbidden[0].modules[0]" in _invalid(tmp_path, entry)
+
+
+def _module_entry(modules: str, allowed_importers: str) -> str:
+    return (
+        TABLE + 'importers = ["app/**"]\n'
+        f"allowed_importers = [{allowed_importers}]\n"
+        f"modules = [{modules}]\nallowed_names = []\n"
+        'reason = "one outbound chokepoint"\n'
+    )
+
+
+def test_dropping_a_module_or_exempting_a_file_is_a_loosening(tmp_path: Path) -> None:
+    def keys(after_entries: str) -> list[str]:
+        config = tmp_path / ".shockharness.toml"
+        before_entry = _module_entry('"httpx", "requests"', '"app/net/outbound.py"')
+        config.write_text(HEADER + before_entry, encoding="utf-8")
+        before = load_config(tmp_path, None)
+        config.write_text(HEADER + after_entries, encoding="utf-8")
+        after = load_config(tmp_path, None)
+        found = loosenings(before.values, before.deviations, after.values, after.deviations)
+        return [item.key for item in found]
+
+    loosened = ["rules.import_boundaries.forbidden"]
+    assert keys(_module_entry('"httpx"', '"app/net/outbound.py"')) == loosened
+    exempting = _module_entry('"httpx", "requests"', '"app/net/outbound.py", "app/views.py"')
+    assert keys(exempting) == loosened
+    assert keys(_module_entry('"httpx", "requests", "aiohttp"', '"app/net/outbound.py"')) == []
+    assert keys(_module_entry('"httpx", "requests"', "")) == []
+
+
+def test_an_old_entry_without_the_new_keys_is_covered_by_one_with_them(tmp_path: Path) -> None:
+    config = tmp_path / ".shockharness.toml"
+    config.write_text(HEADER + _entry('"app/main.py"', ""), encoding="utf-8")
+    before = load_config(tmp_path, None)
+    widened = _entry('"app/main.py"', "").replace(
+        "allowed_names", 'modules = ["httpx"]\nallowed_names'
+    )
+    config.write_text(HEADER + widened, encoding="utf-8")
+    after = load_config(tmp_path, None)
+    assert loosenings(before.values, before.deviations, after.values, after.deviations) == []

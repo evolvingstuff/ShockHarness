@@ -6883,3 +6883,37 @@ f21694c (run 39792556753), 16 of 16 jobs each. The pin moved in the same 15 file
 repository whose agent has no skills installed now gets a `skills:` line from `check`
 with the install command. The tag `v0.25.0` is on f21694c. Published by `publish.yml`
 (run 39794228848, 18 of 18 jobs). PyPI lists 0.25.0 with a wheel and an sdist.
+
+## IMPORT002: modules by name, and allowed importers (2026-10-22)
+
+On Tom's go-ahead, built as `docs/proposal-import-boundaries-modules.md` proposed (from
+MetaList's policy note). A `forbidden` entry may name `modules` (matched with everything
+below them on imports that do not resolve to an analyzed file: Python dotted names and
+`from pkg import submodule`; JavaScript packages and their paths, scoped names whole,
+`node:` stripped) and `allowed_importers` (globs taken out of the bound files). `imported`
+is optional, and one of `imported` and `modules` is required. Module names are validated
+(no relative specifier, no whitespace, no trailing separator). Absent optional lists are
+filled in one place, `schema.forbidden_import_entry`, which the rule, the configuration
+check and the loosening check share. The loosening check grew two clauses (no module
+dropped, no importer newly exempt). Spec decision 44 is amended.
+
+Our own configuration gained the first real entry: only `src/shockharness/history/git.py`
+may import `subprocess`. No finding today; a probe file importing it was reported.
+
+Measured on MetaList3 at fc27362d, read-only: its committed tree was exported with
+`git archive` into the scratchpad, and four entries were added to the copy's
+configuration. Results:
+* provider SDKs outside the one adapter: 0;
+* `cryptography.hazmat`/`argon2`/`nacl` outside `app/services/encryption.py`: 5 findings
+  in 2 files;
+* seven network modules outside `app/services/public_http.py`: 14 in 12 files;
+* `subprocess` anywhere: 12 in 12 files.
+
+A line-by-line count of the same import statements gives the same 31 sites. Also seen:
+MetaList3 has already merged 0.25.0 and installed the Claude Code skills (`.claude/skills`).
+
+New tests in `tests/unit/test_import_boundaries.py` (8): Python names with submodules,
+`from` submodules, lazy imports and near-miss names; one file judged alone; `allowed_names`
+on a module; JavaScript packages, scoped packages, `node:` and dynamic `import()`;
+`allowed_importers` on a path boundary; configuration errors; the loosening clauses; an old
+entry covered by a new one with the keys.

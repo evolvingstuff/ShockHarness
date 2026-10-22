@@ -1108,6 +1108,7 @@ def boundary_findings(
             imports=p.facts.imports,
             source=p.source,
             applies=registry.IMPORT002.rule_id in p.rules_applied,
+            language=p.language,
         )
         for p in pendings
         if not p.failed

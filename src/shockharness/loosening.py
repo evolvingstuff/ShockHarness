@@ -31,7 +31,8 @@ The sources of looseness, each reported once per key:
    opt-in): turning it off, a role removed while it is on, a raised threshold.
 6. **Import boundaries** (``rules.import_boundaries``): an entry of ``forbidden`` that no
    entry of the new configuration still covers (one binding at least the same importers,
-   forbidding at least the same imported files, allowing no other name).
+   exempting no other file, forbidding at least the same imported files and modules,
+   allowing no other name).
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -42,6 +43,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+
+from shockharness.schema import forbidden_import_entry
 
 INDEX = re.compile(r"\[\d+\]")
 LEADING_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
@@ -471,11 +474,17 @@ IMPORT_BOUNDARIES = "rules.import_boundaries"
 FORBIDDEN_KEY = f"{IMPORT_BOUNDARIES}.forbidden"
 
 
-def _covers(after: Mapping[str, Any], before: Mapping[str, Any]) -> bool:
-    """Whether the new entry still forbids everything the old one did."""
+def _covers(new: Mapping[str, Any], old: Mapping[str, Any]) -> bool:
+    """Whether the new entry still forbids everything the old one did: the same importers
+    or more, no file newly exempt, the same files and modules or more, no name newly
+    allowed."""
+    after = forbidden_import_entry(new)
+    before = forbidden_import_entry(old)
     return (
         set(before["importers"]) <= set(after["importers"])
+        and set(after["allowed_importers"]) <= set(before["allowed_importers"])
         and set(before["imported"]) <= set(after["imported"])
+        and set(before["modules"]) <= set(after["modules"])
         and set(after["allowed_names"]) <= set(before["allowed_names"])
     )
 
@@ -492,11 +501,13 @@ def _import_boundaries(
     for entry in value_at(before_values, FORBIDDEN_KEY):
         if any(_covers(new, entry) for new in after):
             continue
-        importers = ", ".join(map(repr, entry["importers"]))
-        imported = ", ".join(map(repr, entry["imported"]))
+        full = forbidden_import_entry(entry)
+        importers = ", ".join(map(repr, full["importers"]))
+        imported = ", ".join(map(repr, [*full["imported"], *full["modules"]]))
         message = (
             f"{FORBIDDEN_KEY} no longer keeps {importers} from importing {imported} as before "
-            f"(removed, narrowed, or allowing more names): {entry['reason']}"
+            f"(removed, narrowed, exempting more files, or allowing more names): "
+            f"{entry['reason']}"
         )
         found.append(Loosening(FORBIDDEN_KEY, message))
     return found
