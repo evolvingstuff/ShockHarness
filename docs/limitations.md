@@ -421,18 +421,20 @@ Stated so that a clean report is never read as more than it is.
 * Declaration files (`**/*.d.ts`) are excluded by default; listing one
   explicitly analyzes it like any TypeScript file.
 
-## C# (Godot .NET, milestones G1 and G2)
+## C# (Godot .NET, milestones G1 to G4)
 
 * **Opt-in.** The default `include` does not list `**/*.cs`; a project adds it
   (docs/configuration.md).
 * **Partial coverage.** MAGIC001, CPLX001-CPLX004, CPLX006, SUPP001 and SUPP002 (G1),
   EXC001-EXC003, EXC005, DEF001-DEF006, RESULT001, BOOL001 and STUB001 (G2), CPLX005,
   DEAD001, DEAD002, MAGIC002-MAGIC005, ASYNC001, STATE001, IMPORT001, PROCESS001, STUB002
-  and STUB003 (G3) run on `.cs` files. Every other rule has
-  no C# facts yet and does not run there: `coverage.rules_not_applicable.csharp` lists
+  and STUB003 (G3), GODOT001-GODOT005, TYPE001, TYPE002, VERIFY001-VERIFY004, ROLE001 and
+  SLEEP001 (G4) run on `.cs` files. Every other rule has
+  no C# facts and does not run there: `coverage.rules_not_applicable.csharp` lists
   them, and the text report prints a warning naming them. A C# file is never clean for a
-  rule that did not look at it. The Godot project model and dead code follow in G3 (spec
-  21.2).
+  rule that did not look at it. **VERIFY006 sees no C# targets:** it judges a deleted test
+  file by the project modules it imported, and a C# `using` names a namespace, not a file,
+  so a deleted C# test file is never reported.
 * **Catch types are names as written**, at approximate confidence: `using` directives,
   global usings and the SDK's implicit usings are not resolved, so a boundary's
   `System.IO.IOException` matches a catch of `IOException` by its last segments, and a
@@ -461,7 +463,6 @@ Stated so that a clean report is never read as more than it is.
   argument names the value's target (`SetShaderParameter`, `SetDeferred`, `Call`, `Rpc`,
   `EmitSignal`, ...). STUB001 reports `throw new NotImplementedException()`; an empty
   method body is not a placeholder (Godot's script template writes empty overrides).
-  STUB002 and STUB003 need the module graph and wait for G3.
 * **Syntax only**, as for JavaScript: no Roslyn, no .NET at run time, no semantic model.
   Types, overloads and the members Godot's source generators add (`MethodName`,
   `SignalName`, `PropertyName`) are not known; generated files are not on disk.
@@ -511,6 +512,48 @@ Stated so that a clean report is never read as more than it is.
   ASSERT001 needs C# input-flow facts and ASSERT002 is about Python's `-O` switch (C#
   release builds always strip `Debug.Assert`); STATE002 is not ported (Godot scripts run
   on the main thread; measure first).
+* **Godot names (G4, GODOT001-GODOT005).** Only string literals are names; a name in a
+  variable, a constant or built at run time is not seen, and neither is what GDScript
+  defines or adds except through the scene and project files. Judged only on a
+  whole-project run whose `project.godot`, scenes and resources could all be read, and
+  only for C# files under a `project.godot`. Node paths (GODOT002) are resolved from the
+  node a scene attaches the class's script to (a script named after its class), through
+  `..`, `%Unique` names, `/root/<autoload>` and one level of instanced scene; a node added
+  by code is not in the scene file, which is why GODOT002 is a review. Lowercase
+  snake_case signals and connection methods are the engine's and are not judged.
+* **Suppressions and type escapes (G4).** VERIFY002 and TYPE001 read `#pragma warning
+  disable` (a region until its restore, narrow when it names codes), `#nullable disable`,
+  `[SuppressMessage]`/`[UnconditionalSuppressMessage]` (an `[assembly: ...]` one, as in
+  `GlobalSuppressions.cs`, has file scope although it covers the project), and
+  `// ReSharper disable`. TYPE001 reports `dynamic` where a type is written, the
+  null-forgiving `x!` (not `null!` or `default!`, the late-initialization idiom, as
+  TypeScript's definite assignment is not reported), `#nullable disable`, and a pragma
+  that names a nullable warning (CS86xx, CS87xx, an approximate range) or no code. A C#
+  cast is checked at run time and is not an escape; a Variant conversion is not either.
+* **The .NET build settings (G4).** TYPE002 and VERIFY003 read every `*.csproj`,
+  `Directory.Build.props` and `.editorconfig` of the tree (not under `bin/`, `obj/` or
+  `.godot/`) with the standard library. MSBuild is not evaluated: a property is read as
+  written in any `PropertyGroup`, whatever its `Condition`; imports, `$(...)` references
+  and SDK defaults are not followed. TYPE002 reports a project whose `<Nullable>` is not
+  `enable` or `warnings` (in it or the nearest `Directory.Build.props` above it); files
+  that turn it on themselves (`#nullable enable`) are not counted, and nullable warnings
+  that are not errors are not reported, as a Python checker that CI does not run is not.
+  VERIFY003 reports `Nullable`, `TreatWarningsAsErrors`,
+  `CodeAnalysisTreatWarningsAsErrors`, `EnableNETAnalyzers` or `EnforceCodeStyleInBuild`
+  turned off or removed, a code removed from `WarningsAsErrors` or added to `NoWarn`, a
+  lower `AnalysisMode` or `AnalysisLevel` mode, and an `.editorconfig` analyzer severity
+  turned down or removed. A settings file that moved is compared as deleted and added.
+* **Test frameworks (G4).** A test case is a method with `[Test]`, `[TestCase]`,
+  `[TestCaseSource]`, `[Fact]`, `[Theory]`, `[TestMethod]` or `[DataTestMethod]` (NUnit,
+  xUnit, MSTest, gdUnit4, GoDotTest); an assertion is a call whose method or leftmost
+  receiver is named `*Assert*`, `Should*` or `Verify*` (a helper named so counts, as
+  `assert*` helpers do in Python); a fluent chain on `AssertThat(...)` counts twice. Skip
+  markers: `[Ignore]`, `[Explicit]`, `[IgnoreUntil]`, xUnit's `Skip = "..."`. A test
+  that is a plain method run by the game itself (no attribute) is not a test case, so a
+  test-role file of such methods is ROLE001's empty test file. SLEEP001 reads
+  `rules.sleep.csharp_sleep_apis` (`Thread.Sleep`, `Task.Delay`, Godot's `OS.DelayMsec`
+  and `OS.DelayUsec`, gdUnit4's `AwaitMillis`), matched by last segments; a zero or
+  missing delay is a yield; `GetTree().CreateTimer` is a game timer and not listed.
 * `addons/` (Godot plugins) is analyzed like the project's own code; add
   `"addons/**"` to `exclude` to leave third-party plugins out.
 

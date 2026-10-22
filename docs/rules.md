@@ -626,7 +626,7 @@ early return, a catch or a default; the graph records the delegation and the
 numbers stay advisory either way. The `refactor-complexity` skill walks
 through it.
 
-### VERIFY001-VERIFY004, VERIFY006: verification integrity (warning, Python and JavaScript; need a base revision)
+### VERIFY001-VERIFY004, VERIFY006: verification integrity (warning, Python, JavaScript and C#; need a base revision)
 
 These rules ask what a change did to its **own verification**. They compare a
 head revision with a base revision, so they run only under
@@ -1117,7 +1117,7 @@ BaseModal.shouldCloseOnClickOutside, which already answers yes: remove the
 override`). Classes are matched by the last name of each base (approximate).
 Severity `rules.stubs.stub003_severity` (`review` by default).
 
-### TYPE002: Python annotations that nothing checks (review)
+### TYPE002: Python annotations that nothing checks (review; C# below)
 
 Spec 21.1 decision 33. An annotation is a claim, and without a type checker nothing
 verifies it: a wrong one reads as true to the next reader and to an agent. TYPE002
@@ -1142,6 +1142,42 @@ cached per file, and a checker configured elsewhere is not part of that file's k
 
 **Measured:** MetaList configures `[tool.mypy]` (since the backlog's measurement) and gets
 no finding. ShockHarness itself gets one: 2,226 of 2,226 functions annotated, no checker.
+
+### C# in the verification, type and test rules (G4)
+
+Spec 21.1 decisions 52 and 53. On `.cs` files (see docs/limitations.md, C#):
+
+* **VERIFY002** compares C#'s suppressions between revisions: `#pragma warning disable`
+  (blanket without codes), `#nullable disable` (blanket), `[SuppressMessage(..., "CA1822")]`
+  (narrow; file scope as `[assembly: ...]`), `// ReSharper disable`.
+* **VERIFY001** reads `[Ignore]`, `[Explicit]`, `[IgnoreUntil]` and xUnit's
+  `[Fact(Skip = "...")]`; **VERIFY004** and **ROLE001** read test cases of NUnit, xUnit,
+  MSTest, gdUnit4 and GoDotTest (`[Test]`, `[TestCase]`, `[Fact]`, `[Theory]`,
+  `[TestMethod]`), their assertions (`Assert.*`, `AssertThat`, `Should*`, `Verify*`) and
+  tautologies (`Assert.True(true)`, `Assert.Equal(x, x)`, `true.ShouldBeTrue()`).
+* **VERIFY003** compares every `*.csproj`, `Directory.Build.props` and `.editorconfig`:
+  `Nullable`, `TreatWarningsAsErrors` and the analyzer switches turned off, codes removed
+  from `WarningsAsErrors` or added to `NoWarn`, a lower `AnalysisMode`/`AnalysisLevel`,
+  an analyzer severity turned down or removed.
+* **TYPE001** reports `dynamic`, the null-forgiving `x!` (not `null!`/`default!`, the
+  late-initialization idiom), `#nullable disable` and a `#pragma warning disable` of a
+  nullable warning or of every warning.
+* **TYPE002** reports each `*.csproj` whose nullable reference types are off (`<Nullable>`
+  not `enable` or `warnings` in it or the nearest `Directory.Build.props`), at line 1 of its
+  first C# file: the compiler then checks no null.
+* **SLEEP001** reads `rules.sleep.csharp_sleep_apis`: `Thread.Sleep`, `Task.Delay`,
+  `OS.DelayMsec`, `OS.DelayUsec`, `AwaitMillis`; a zero or missing delay is a yield.
+
+**Measured** on the corpus (godot-demo-projects, GameDemo, Sakuga-Engine) and
+TheLivingLabyrinth. TYPE001: 8 findings, every one a real unchecked claim
+(`JsonSerializer.Deserialize<T>(...)!` and the like); before `null!`/`default!` were
+left out there were 117, 109 of them the late-initialization idiom. TYPE002: 9 projects
+with nullable off (Godot's template does not turn it on); the game has it on. SLEEP001:
+one, a frame-pacing `Thread.Sleep` in a loop in Sakuga-Engine's netcode. Test cases:
+GameDemo's 61 GoDotTest files hold 279 cases, 6 of them smoke tests with no assertion.
+ROLE001: 5 of the game's `*.Tests.cs` files hold its own in-game checks (plain methods,
+no test framework), so the `**/*Tests.cs` default classifies them as tests although they
+hold no test case.
 
 ### ROLE001: is code classified as a test really a test? (warning; review for empty test files)
 

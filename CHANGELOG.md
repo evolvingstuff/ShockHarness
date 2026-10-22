@@ -6,6 +6,29 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **GODOT001-GODOT005 (C#, Godot projects): names the project does not define** (spec
+  21.1 decision 51, milestone G4). Input actions not in `project.godot`'s Input Map
+  (GODOT001), `GetNode` paths missing from the scenes that attach the script (GODOT002,
+  review), editor connections to a method the target class does not define (GODOT003),
+  groups nothing adds to (GODOT004, review), and string signal names the class does not
+  declare (GODOT005). Whole-project runs only, when every scene and project file could be
+  read; `[tool.shockharness.rules.godot_names]`. Cache schema "36".
+- **C# suppressions, type escapes and build settings** (decision 52). VERIFY002 and
+  TYPE001 read `#pragma warning disable`, `#nullable disable`, `[SuppressMessage]` and
+  `// ReSharper disable`; TYPE001 reports `dynamic` and the null-forgiving `x!` (not the
+  `null!`/`default!` late-initialization idiom); TYPE002 reports a `*.csproj` whose
+  nullable reference types are off; VERIFY003 compares `*.csproj`,
+  `Directory.Build.props` and `.editorconfig` (Nullable, TreatWarningsAsErrors,
+  WarningsAsErrors, NoWarn, AnalysisMode/Level, analyzer severities).
+- **C# test frameworks and sleeps** (decision 53). NUnit, xUnit, MSTest, gdUnit4 and
+  GoDotTest cases, assertions, tautologies and skip attributes feed VERIFY001, VERIFY004
+  and ROLE001; SLEEP001 reads `rules.sleep.csharp_sleep_apis` (`Thread.Sleep`,
+  `Task.Delay`, `OS.DelayMsec`, `OS.DelayUsec`, `AwaitMillis`).
+
+### Fixed
+- **The VERIFY001-VERIFY004 comparison honours each rule's languages**, as the per-file
+  and cross-file phases do since G1. No verdict changed: C# had no verification facts
+  before G4.
 - **VERIFY006 (warning, needs a base revision): a test file deleted while its code
   remains** (spec 21.1 decision 50). In `diff` and `gate --base`, a test file of the base
   that the head neither has nor renamed is reported when every project module it imported

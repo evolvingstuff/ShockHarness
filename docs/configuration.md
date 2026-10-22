@@ -785,17 +785,19 @@ csharp_must_use = ["Mathf.Clamp", ".Trim", ".Normalized", ".Where", ...]   # C# 
 # C# since G3: rules.async_lifecycle.csharp_task_apis, rules.import_effects.csharp_operations,
 # rules.processes.csharp_process_apis, rules.sentinels.csharp_index_callees
 
-[tool.shockharness.rules.types]       # TYPE001, review; Python and TypeScript
-report_any = true                     # Any / any
+[tool.shockharness.rules.types]       # TYPE001, review; Python, TypeScript and C# (G4)
+report_any = true                     # Any / any / dynamic
 report_cast = true                    # cast(...); x as T, <T>x (not as const)
-report_non_null = true                # x! (TypeScript)
-report_type_ignore = true             # # type: ignore; @ts-ignore, @ts-expect-error, @ts-nocheck
+report_non_null = true                # x! (TypeScript, C#; not C#'s null! or default!)
+report_type_ignore = true             # # type: ignore; @ts-ignore, @ts-expect-error, @ts-nocheck;
+                                      # #nullable disable, #pragma warning disable CS86xx
 annotated_share = 0.5                 # TYPE002: this share of production functions annotated...
 min_annotated_functions = 20          # ...and at least this many, with no type checker configured
-type002_severity = "review"           # TYPE002's severity
+type002_severity = "review"           # TYPE002's severity (C#: a .csproj with Nullable off)
 
 [tool.shockharness.rules.sleep]       # SLEEP001, review
 python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
+csharp_sleep_apis = ["Thread.Sleep", "Task.Delay", "OS.DelayMsec", "OS.DelayUsec", "AwaitMillis"]
 
 [tool.shockharness.rules.retry]       # RETRY001
 retry_decorators = ["tenacity.retry", "retrying.retry", "backoff.on_exception", "backoff.on_predicate"]
@@ -982,6 +984,23 @@ dup002_severity = "review"
 
 While the family is on, turning it off or removing a role is a VERIFY003 loosening, and so
 is raising `min_statements`, `min_tokens` or `similarity`, or lowering either severity.
+
+## Godot names (GODOT001-GODOT005)
+
+Spec 21.1 decision 51; C# only, and only for files under a `project.godot`. On by
+default: C# itself is opt-in (`include` must list `**/*.cs`).
+
+```toml
+[tool.shockharness.rules.godot_names]
+enabled = true
+severity = "warning"           # GODOT001 (input actions), GODOT003 (connections), GODOT005 (signals)
+roles = ["production"]
+godot002_severity = "review"   # node paths: a node added at run time is not in the scene file
+godot004_severity = "review"   # groups: a group a GDScript or an addon adds is not seen
+```
+
+Switching the section off, removing a role or lowering a severity is a policy deviation,
+like the H3 tables.
 
 ## Import boundaries (IMPORT002)
 

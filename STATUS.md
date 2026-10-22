@@ -6706,3 +6706,62 @@ dead-code commit, three test files deleted): the two whose modules stayed
 went with it. New tests: four in `tests/unit/test_verification_rules.py` (deleted with the
 code kept or gone, renamed, unchanged; no project imports; JavaScript; failed rename
 detection), and the VERIFY lists in the CLI, registry and report tests.
+
+## Milestone G4: Godot names, C# suppressions and build settings, C# tests — DONE (2026-10-22)
+
+Tom's go-ahead ("Do all of those"), in three commits and this one; spec 21.1 decisions 51
+to 53, 21.2 row G4.
+
+**Decision 51, GODOT001-GODOT005 (38f8089).** `ir/csharp_godot.py` records the names a C#
+script writes as string literals (`ModuleFacts.godot`, `GodotNameUse`; cache schema "36"):
+input action reads and `InputMap.AddAction`, `GetNode` paths and string signal names on
+the object itself (no receiver or `this`), group reads and `AddToGroup`, and `[Signal]`
+delegates. `godot_project.py` adds `global_groups` and `SceneNode.unique`. The cross-file
+phase `godot_findings` (`rules/godot_names.py`) runs on whole-project runs only, per
+project, and judges nothing when a project or scene file could not be read. New section
+`rules.godot_names` (on, roles production, severity warning, `godot002_severity` and
+`godot004_severity` review), registered as a guardrail section for deviations and
+VERIFY003. Self-gate fixes on the way: two `rpartition(...)[2]` (MAGIC001) became
+helpers, a `range(..., -1)` became `reversed(range(...))`, a `m[k] if k in m else v`
+(DEF002) became a total severity map, `connections` was split for CPLX002.
+
+**Decision 52, C# suppressions, type escapes, build settings (b2dbaf6).**
+`ir/csharp_verification.py` (suppressions), `csharp_directives` for ReSharper comments,
+TYPE001's C# kinds in `ir/csharp_policy.py`, TYPE002's C# half in
+`rules/type_coverage.py`, and `rules/dotnet_settings.py` (regular expressions, not an XML
+parser, so no new exception boundary) feeding `tool_configs` and VERIFY003's snapshot.
+`null!`/`default!` were left out of TYPE001 after measuring: 109 of the first 117 corpus
+findings were that idiom; the 8 left are real (`JsonSerializer.Deserialize<T>(...)!` and
+the like, 6 of them in TheLivingLabyrinth). TYPE002 does not report nullable warnings that
+are not errors (docs/ideas.md row).
+
+**Decision 53, C# tests and sleeps (1c11d6b).** Test cases, assertions, tautologies and
+skip markers in `ir/csharp_verification.py`; `zero_delay` filled for C# sleeps;
+`rules.sleep.csharp_sleep_apis`. Found on the way: `compare_revisions` applied the VERIFY
+rules without checking their `languages` (harmless before: C# had no verification facts);
+fixed in `_applied_rules`. VERIFY001-VERIFY004, ROLE001 and SLEEP001 now list C#; VERIFY006
+does not (docs/limitations.md says why).
+
+**Measured** on godot-demo-projects, GameDemo, Sakuga-Engine (424 C# files) and
+TheLivingLabyrinth: GODOT 1 finding (review, a node added at run time) from 90 action reads,
+67 node paths, 29 declared signals; TYPE001 8; TYPE002 9 projects with nullable off (the
+game has it on); SLEEP001 1 (a frame-pacing sleep); GameDemo's GoDotTest suite 279 cases;
+ROLE001 5 on the game, whose `*.Tests.cs` files are in-game checks without a test framework
+(docs/ideas.md row, for the game's agent).
+
+New tests: `tests/unit/test_godot_names.py` (7), `test_csharp_checks.py` (9),
+`test_csharp_tests.py` (4); the rule lists in the registry, report, inventory and
+TypeScript tests.
+
+```text
+$ ruff check src tests && ruff format --check src tests
+All checks passed!
+250 files already formatted
+$ mypy
+Success: no issues found in 162 source files
+$ pytest -q -n auto
+1483 passed in 41.73s
+$ shockharness check .
+shockharness 0.22.0: 257 file(s), 257 analyzed, 0 failed; 197 finding(s), 8 suppressed
+gate: PASS (exit 0)
+```
