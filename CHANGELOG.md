@@ -6,6 +6,11 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **The `async-lifecycle` skill: positions measured across an await.** After awaiting
+  something that changes the page, do not animate to a position measured once; place at
+  once, or scroll to the element and re-measure it each frame. Skill wording rather than a
+  rule: a prototype found MetaList's find-in-list scroll bug, but its other sites were the
+  same shape with no failure (`docs/ideas.md`).
 - **Import boundaries for named modules, and "only these files may import it"
   (IMPORT002).** A `[[rules.import_boundaries.forbidden]]` entry can now name packages and
   standard-library modules (`modules = ["httpx", "cryptography.hazmat"]`), each with
