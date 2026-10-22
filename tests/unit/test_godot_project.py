@@ -123,9 +123,9 @@ def test_a_project_reads_scenes_scripts_connections_tracks_and_uids(tmp_path: Pa
     main = scenes["game/scenes/Main.tscn"]
     assert main.scripts == ("game/Main.cs",)
     assert main.nodes == (
-        SceneNode(".", "game/Main.cs", None, ()),
-        SceneNode("Player", None, "game/scenes/Player.tscn", ("actors", "player")),
-        SceneNode("Player/Score", None, None, ()),
+        SceneNode(".", "game/Main.cs", None, (), unique=False),
+        SceneNode("Player", None, "game/scenes/Player.tscn", ("actors", "player"), unique=False),
+        SceneNode("Player/Score", None, None, (), unique=False),
     )
     assert main.connections == (
         SceneConnection("Hit", "Player", ".", "GameOver", 14),

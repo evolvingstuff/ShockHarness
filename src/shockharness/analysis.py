@@ -100,6 +100,7 @@ from shockharness.rules.exceptions import (
     run_exception_rules,
 )
 from shockharness.rules.floating import FloatingFile, run_dom002
+from shockharness.rules.godot_names import GodotFile, run_godot_names
 from shockharness.rules.guardrails import GUARDRAIL_RULES, run_guardrail_rules
 from shockharness.rules.import_boundaries import BoundaryFile, run_import002
 from shockharness.rules.magic_numbers import run_magic001, run_magic004, run_magic005
@@ -380,6 +381,7 @@ def _in_scope(rule: registry.RuleSpec, role: FileRole, config: EffectiveConfig) 
         registry.PROPERTY_CONTRACTS_SECTION,
         registry.DEAD_CODE_SECTION,
         registry.DUPLICATES_SECTION,
+        registry.GODOT_NAMES_SECTION,
     ):
         return True
     return role.role in config.section(section)["roles"]
@@ -423,6 +425,13 @@ def _units(
 
 DEAD_RULES = (registry.DEAD001, registry.DEAD002)
 DUPLICATE_RULES = (registry.DUP001, registry.DUP002)
+GODOT_RULES = (
+    registry.GODOT001,
+    registry.GODOT002,
+    registry.GODOT003,
+    registry.GODOT004,
+    registry.GODOT005,
+)
 # A runtime module given as a project path, not a module name (rules.property_contracts).
 RUNTIME_SUFFIXES = (".py", ".js", ".mjs", ".cjs", ".ts")
 # The rules recorded as applied by role and scope; most find in the cross-file phase.
@@ -440,6 +449,7 @@ SCOPED_RULES = (
     *CONTRACT_RULES,
     *DEAD_RULES,
     *DUPLICATE_RULES,
+    *GODOT_RULES,
     registry.VERIFY005,
 )
 
@@ -1129,7 +1139,7 @@ def consistency_findings(
 
 
 WHOLE_PROJECT_RULES = frozenset(
-    rule.rule_id for rule in (*DEAD_RULES, *DUPLICATE_RULES, registry.VERIFY005)
+    rule.rule_id for rule in (*DEAD_RULES, *DUPLICATE_RULES, *GODOT_RULES, registry.VERIFY005)
 )
 
 
@@ -1237,6 +1247,30 @@ def duplicate_findings(
         if p.facts is not None and p.source is not None
     ]
     return run_duplicates(files, config.section(registry.DUPLICATES_SECTION))
+
+
+def godot_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, whole: bool, tree: Path
+) -> Mapping[str, list[Finding]]:
+    """GODOT001-GODOT005: names the Godot project under ``tree`` does not define."""
+    ids = frozenset(rule.rule_id for rule in GODOT_RULES)
+    if not whole or not any(ids & frozenset(p.rules_applied) for p in pendings):
+        return {}
+    files = [
+        GodotFile(
+            p.path,
+            ids & frozenset(p.rules_applied),
+            p.source,
+            p.facts.godot,
+            p.facts.receivers.classes,
+            p.facts.catalog.classes,
+        )
+        for p in pendings
+        if p.facts is not None and p.source is not None and p.language == registry.CSHARP
+    ]
+    exclude = compile_globset(list(config.values["exclude"]))
+    projects = load_godot_projects(tree, exclude)
+    return run_godot_names(files, projects, config.section(registry.GODOT_NAMES_SECTION))
 
 
 def contract_findings(
@@ -1401,6 +1435,7 @@ def complete(
         dead_findings(pendings, config, graph, whole),
         stale_stub_findings(pendings, config, graph, whole),
         duplicate_findings(pendings, config, whole),
+        godot_findings(pendings, config, whole, tree),
     )
     results: list[FileResult] = []
     for pending in pendings:

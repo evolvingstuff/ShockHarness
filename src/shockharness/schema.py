@@ -555,6 +555,14 @@ CONFIG_SCHEMA = TableField(
                     },
                     required=(),
                 ),
+                "godot_names": TableField(
+                    fields={
+                        **GUARDRAIL_COMMON,
+                        "godot002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "godot004_severity": EnumField(VERIFICATION_SEVERITIES),
+                    },
+                    required=(),
+                ),
                 "dead_code": TableField(
                     fields={
                         "enabled": BoolField(),

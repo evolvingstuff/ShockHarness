@@ -3521,6 +3521,214 @@ MAGIC002 = RuleSpec(
 )
 
 
+# --- Godot names (GODOT001-GODOT005, decision 51) -----------------------------------------
+# C# only, judged against the files of the Godot project a script belongs to, on a
+# whole-project run whose project and scene files could all be read.
+
+GODOT_NAMES_SECTION = "rules.godot_names"
+GODOT_NAMES_FAMILY = "godot_names"
+GODOT_GUARANTEES_COMMON = (
+    "Only names written as string literals in a C# file under a project.godot are judged, "
+    "and only when the run analyzed every included file and read every project.godot, "
+    "scene (.tscn) and resource (.tres) file of the project. "
+)
+GODOT_LIMITATIONS_COMMON = (
+    "A name built at run time, or read from a variable or a constant, is not seen. "
+    "GDScript files are not analyzed: what they define or add counts only through the "
+    "scene and project files."
+)
+GODOT_REMEDIATION_COMMON = (
+    "Use the generated names where Godot has them (SignalName.X, MethodName.X), and keep "
+    "the other names in one class of constants."
+)
+
+GODOT001 = RuleSpec(
+    rule_id="GODOT001",
+    version="1",
+    name="undefined input action",
+    family=GODOT_NAMES_FAMILY,
+    config_section=GODOT_NAMES_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(CSHARP,),
+    summary=(
+        'An input action read by name (Input.IsActionPressed("jump")) that the project\'s '
+        "Input Map does not define and no code adds: Input reads it as never pressed."
+    ),
+    rationale=(
+        "A misspelled or renamed action fails silently: Godot logs an error when the line "
+        "runs, and the control simply does nothing. The project file says which actions "
+        "exist, so the mismatch is visible before the game runs."
+    ),
+    guarantees=GODOT_GUARANTEES_COMMON
+    + (
+        "Reads: IsActionPressed, IsActionJustPressed, IsActionJustReleased, "
+        "IsActionReleased, GetActionStrength, GetActionRawStrength, ActionPress, "
+        "ActionRelease, IsAction, and every string argument of GetAxis and GetVector, on any "
+        "receiver. Defined: the [input] section of project.godot, Godot's own ui_* actions, "
+        'and InputMap.AddAction("name") anywhere in the project\'s C#.'
+    ),
+    limitations=GODOT_LIMITATIONS_COMMON + " An action a GDScript adds at run time is reported.",
+    remediation=(
+        "Add the action in Project Settings > Input Map, or correct the name. "
+        + GODOT_REMEDIATION_COMMON
+    ),
+    noncompliant_example='if (Input.IsActionJustPressed("jupm")) Jump();',
+    compliant_example=(
+        'if (Input.IsActionJustPressed(Actions.Jump)) Jump();  // "jump" is in [input]'
+    ),
+)
+
+GODOT002 = RuleSpec(
+    rule_id="GODOT002",
+    version="1",
+    name="node path missing from the scene",
+    family=GODOT_NAMES_FAMILY,
+    config_section=GODOT_NAMES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(CSHARP,),
+    summary=(
+        'GetNode("Path") on the script\'s own node names a node that does not exist in a '
+        "scene the script is attached to: GetNode fails there unless the node is added at "
+        "run time."
+    ),
+    rationale=(
+        "Renaming or moving a node in the editor does not update the strings that name it; "
+        "the script fails only when that scene runs that line. The scene file shows the "
+        "tree the path is resolved in."
+    ),
+    guarantees=GODOT_GUARANTEES_COMMON
+    + (
+        "GetNode and GetNode<T> with no receiver or a this receiver, against every scene "
+        "that attaches the class's script (a script named after the class), from the node "
+        "it is attached to: . and .. followed, %Name resolved to a node with Access as "
+        "Unique Name, /root/Name to an autoload, and one level into an instanced scene. "
+        "A path that leaves the scene's root, another absolute path, or a script no scene "
+        "attaches is not judged."
+    ),
+    limitations=GODOT_LIMITATIONS_COMMON
+    + (
+        " Nodes added by code (AddChild) are not in the scene file, which is why this is "
+        "a review; GetNodeOrNull is not judged, since it says the node may be missing."
+    ),
+    remediation=(
+        "Correct the path, or get the node through an [Export] property the editor "
+        "assigns, which follows renames. A node added at run time is better reached "
+        "through the reference kept when it was added."
+    ),
+    noncompliant_example='var score = GetNode<Label>("HUD/Score");  // the node is HUD/ScoreLabel',
+    compliant_example="[Export] public Label Score { get; set; }",
+)
+
+GODOT003 = RuleSpec(
+    rule_id="GODOT003",
+    version="1",
+    name="scene connection to a missing method",
+    family=GODOT_NAMES_FAMILY,
+    config_section=GODOT_NAMES_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(CSHARP,),
+    summary=(
+        'A signal connection saved in a scene ([connection ... method="OnHit"]) targets '
+        "a node whose C# class does not define that method: the connection fails when the "
+        "scene loads."
+    ),
+    rationale=(
+        "Connections made in the editor are stored by method name. Renaming the method in "
+        "C# leaves the scene pointing at a name that no longer exists, and nothing fails "
+        "until the scene is loaded."
+    ),
+    guarantees=GODOT_GUARANTEES_COMMON
+    + (
+        "Every [connection] of every scene whose target node has a C# script named after a "
+        "project class: the method must be defined by that class, its partial "
+        "declarations, or a project base class. Reported at the class's declaration. "
+        "Lowercase snake_case methods (engine methods such as queue_free) are not judged."
+    ),
+    limitations=GODOT_LIMITATIONS_COMMON
+    + " A method of an engine base class written in PascalCase is reported.",
+    remediation=(
+        "Reconnect the signal in the editor to the method's current name, or restore the method."
+    ),
+    noncompliant_example=(
+        '[connection signal="body_entered" from="Hitbox" to="." method="OnHit"]\n'
+        "// Player.cs defines OnBodyEntered, not OnHit"
+    ),
+    compliant_example="private void OnHit(Node2D body) { ... }",
+)
+
+GODOT004 = RuleSpec(
+    rule_id="GODOT004",
+    version="1",
+    name="group nothing adds to",
+    family=GODOT_NAMES_FAMILY,
+    config_section=GODOT_NAMES_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(CSHARP,),
+    summary=(
+        'A group read by name (GetTree().GetNodesInGroup("enemies"), IsInGroup, '
+        "CallGroup) that nothing adds a node to: the read finds nothing."
+    ),
+    rationale=(
+        "Groups are matched by string. A typo in either the read or the add makes the read "
+        "empty, and an empty group looks like a level with no enemies, not like a bug."
+    ),
+    guarantees=GODOT_GUARANTEES_COMMON
+    + (
+        "Reads: GetNodesInGroup, GetFirstNodeInGroup, IsInGroup, CallGroup, CallGroupFlags "
+        "(its second argument), NotifyGroup, SetGroup. Added: AddToGroup in the project's "
+        "C#, groups=[...] on a node in any scene, and project.godot's [global_group]."
+    ),
+    limitations=GODOT_LIMITATIONS_COMMON
+    + " A group added by a GDScript or an addon is reported, which is why this is a review.",
+    remediation="Correct the name, or add the nodes to the group. " + GODOT_REMEDIATION_COMMON,
+    noncompliant_example=(
+        'foreach (var e in GetTree().GetNodesInGroup("enemy")) ...  // added as "enemies"'
+    ),
+    compliant_example="foreach (var e in GetTree().GetNodesInGroup(Groups.Enemies)) ...",
+)
+
+GODOT005 = RuleSpec(
+    rule_id="GODOT005",
+    version="1",
+    name="undeclared signal name",
+    family=GODOT_NAMES_FAMILY,
+    config_section=GODOT_NAMES_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(CSHARP,),
+    summary=(
+        'A signal named as a string on the object itself (EmitSignal("Hit"), '
+        'Connect("Hit", ...)) that the class does not declare: Godot reports an error '
+        "when the line runs and nothing is emitted or connected."
+    ),
+    rationale=(
+        "Godot's C# generator writes SignalName.X for every [Signal] delegate so the "
+        "compiler checks the name; a string skips that check, and a renamed signal leaves "
+        "the string behind."
+    ),
+    guarantees=GODOT_GUARANTEES_COMMON
+    + (
+        "EmitSignal, Connect, Disconnect and IsConnected with no receiver or a this "
+        "receiver, whose first argument is a string: the class, its partial declarations "
+        "or a project base must declare [Signal] delegate ... <Name>EventHandler. Lowercase "
+        "snake_case names (engine signals such as body_entered) are not judged."
+    ),
+    limitations=GODOT_LIMITATIONS_COMMON
+    + " A PascalCase signal declared by a GDScript base is reported.",
+    remediation=(
+        "Use SignalName.X, which the compiler checks, and declare the signal if it is missing."
+    ),
+    noncompliant_example=(
+        'EmitSignal("Died");  // declared as [Signal] delegate void DeathEventHandler()'
+    ),
+    compliant_example="EmitSignal(SignalName.Death);",
+)
+
+
 RULES: tuple[RuleSpec, ...] = (
     MAGIC001,
     MAGIC002,
@@ -3594,6 +3802,11 @@ RULES: tuple[RuleSpec, ...] = (
     DUP001,
     DUP002,
     IMPORT002,
+    GODOT001,
+    GODOT002,
+    GODOT003,
+    GODOT004,
+    GODOT005,
 )
 
 RULES_BY_ID: dict[str, RuleSpec] = {rule.rule_id: rule for rule in RULES}
@@ -3655,6 +3868,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     DEAD_CODE_FAMILY: CATEGORY_STRUCTURAL,
     DUPLICATES_FAMILY: CATEGORY_STRUCTURAL,
     IMPORT_BOUNDARIES_FAMILY: CATEGORY_STRUCTURAL,
+    GODOT_NAMES_FAMILY: CATEGORY_CONTRACT,
 }
 
 

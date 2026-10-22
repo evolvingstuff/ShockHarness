@@ -306,6 +306,7 @@ def _extract_facts(
         usage=usage,
         shapes=shapes,
         stubs=stubs,
+        godot=(),  # Godot names are C#'s (G4)
         parse_failure=None,
     )
 

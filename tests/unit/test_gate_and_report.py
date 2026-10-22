@@ -183,6 +183,11 @@ IMPLEMENTED_IN_ORDER = (
     "DUP001",
     "DUP002",
     "IMPORT002",
+    "GODOT001",
+    "GODOT002",
+    "GODOT003",
+    "GODOT004",
+    "GODOT005",
 )
 
 

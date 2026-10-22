@@ -1717,6 +1717,43 @@ import backup_service` and `import app.services.backup_service` in `app/main.py`
 `list_backups` added to `auth_service.py`'s import): all four reported. BKP001 reports two
 of them; it does not see an import of the whole module.
 
+### GODOT001-GODOT005: Godot names the project does not define (C#; warning, GODOT002 and GODOT004 review)
+
+Spec 21.1 decision 51, milestone G4 of [proposal-godot.md](proposal-godot.md). Godot
+matches input actions, node paths, groups, signals and the methods of editor connections
+by string. A misspelled or renamed one fails only when that line runs, and only in the
+log: an action that is never pressed, a `GetNode` that returns null, a group that is
+empty, a signal that is not emitted. The project's own files say which names exist, so
+each mismatch is visible before the game runs.
+
+| Rule | Reads | Defined by |
+|---|---|---|
+| GODOT001 | `Input.IsActionPressed("jump")` and the other action reads, every string argument of `GetAxis`/`GetVector` | `project.godot` `[input]`, Godot's `ui_*` actions, `InputMap.AddAction("name")` anywhere in the project |
+| GODOT002 (review) | `GetNode("Path")` / `GetNode<T>("Path")` on the script's own node | the scenes that attach the class's script, from the node it is attached to: `.` and `..`, `%Unique` names, `/root/<autoload>`, one level into an instanced scene |
+| GODOT003 | each `[connection ... method="X"]` whose target node has a C# script | the class, its `partial` files and project base classes; reported at the class declaration |
+| GODOT004 (review) | `GetNodesInGroup`, `GetFirstNodeInGroup`, `IsInGroup`, `CallGroup`, `CallGroupFlags` (second argument), `NotifyGroup`, `SetGroup` | `AddToGroup` in the project's C#, `groups=[...]` in any scene, `[global_group]` |
+| GODOT005 | `EmitSignal("X")`, `Connect`, `Disconnect`, `IsConnected` on the object itself | `[Signal] delegate void XEventHandler` in the class, its partials or project bases |
+
+Judged only on a whole-project run whose `project.godot`, scene and resource files could
+all be read (an unreadable one leaves every C# file unjudged, as for the dead-code
+rules), and only for the C# files under a `project.godot`. Only string literals are
+names: a name in a variable or a constant, or built at run time, is not seen. Lowercase
+snake_case signals and connection methods (`body_entered`, `queue_free`) are the
+engine's and are not judged. GDScript is not analyzed: what it defines or adds counts
+only through the scene and project files, which is why GODOT004 is a review. GODOT002 is
+a review because a node added by code is not in the scene file; `GetNodeOrNull` is not
+judged, since it says the node may be missing.
+
+Settings in `[tool.shockharness.rules.godot_names]`: `enabled`, `roles`, `severity`
+(GODOT001, GODOT003, GODOT005), `godot002_severity`, `godot004_severity`.
+
+**Measured** on the corpus clones (godot-demo-projects, GameDemo, Sakuga-Engine;
+424 C# files): 90 action reads, 67 node paths, 1 group read and 29 declared signals
+collected (every string signal use in the corpus goes through `SignalName.X`, so there
+were none to judge). One finding: GODOT002 on `GetNode("/root/Pong")` in
+`mono/multiplayer_pong`, a node the lobby adds to the tree at run time, which the review
+severity is for. TheLivingLabyrinth: no Godot names yet, no finding.
+
 ## Registered, not implemented
 
 None since MAGIC002 landed. A rule registered before it is built is listed in

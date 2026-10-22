@@ -136,6 +136,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "IMPORT002 is exact on the resolved import edges and the configured globs and names: "
         "violation; an import that does not resolve to an analyzed file is not judged",
     ),
+    ("rules/godot_names.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "GODOT001-GODOT005 judge only a whole-project run that read every project and scene "
+        "file; then a name the project's files do not define is a violation (approximate: "
+        "what GDScript, addons or run-time code add is not seen)",
+    ),
     ("rules/dead_code.py", "_finding"): (
         frozenset({FINDING_CONSTRUCTOR}),
         "DEAD001/DEAD002 judge only a run that analyzed every included file; then a function "

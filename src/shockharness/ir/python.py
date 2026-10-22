@@ -344,5 +344,6 @@ def extract_python_facts(source: SourceText, filename: str) -> ModuleFacts:
         usage=collect_python_usage(source, parsed),
         shapes=collect_python_shapes(source, parsed, filename),
         stubs=collect_python_stubs(source, parsed),
+        godot=(),  # Godot names are C#'s (G4)
         parse_failure=None,
     )

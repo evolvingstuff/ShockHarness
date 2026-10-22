@@ -26,6 +26,7 @@ from tree_sitter import Language, Node, Parser
 from shockharness.ir.csharp_catches import collect_csharp_catches
 from shockharness.ir.csharp_defaults import collect_csharp_defaults
 from shockharness.ir.csharp_functions import collect_csharp_functions, scope_for
+from shockharness.ir.csharp_godot import collect_csharp_godot
 from shockharness.ir.csharp_guardrails import collect_csharp_guardrails
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_numbers import parse_csharp_number
@@ -186,6 +187,7 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         usage=collect_csharp_usage(source, root),
         shapes=(),
         stubs=NO_STUBS,
+        godot=collect_csharp_godot(source, root),
         parse_failure=None,
     )
 

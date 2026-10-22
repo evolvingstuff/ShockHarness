@@ -900,6 +900,18 @@ similarity = 0.85
 severity = "review"            # DUP001
 dup002_severity = "review"
 
+[tool.shockharness.rules.godot_names]        # GODOT001-GODOT005 (decision 51), C# only
+# Names a C# script writes as strings (input actions, node paths, groups, signals) and the
+# methods scene connections name, checked against the Godot project's files. Judged only on
+# a whole-project run whose project.godot, scenes and resources could all be read.
+enabled = true
+severity = "warning"           # GODOT001, GODOT003, GODOT005
+roles = ["production"]
+# GODOT002 (node paths): a node added at run time is not in the scene file.
+godot002_severity = "review"
+# GODOT004 (groups): a group a GDScript or an addon adds is not seen.
+godot004_severity = "review"
+
 [tool.shockharness.rules.import_boundaries]  # IMPORT002: Python and JavaScript
 # Modules some files must never import, declared per project; none by default, so the rule
 # reports nothing until a project adds an entry. Removing an entry, narrowing its globs or

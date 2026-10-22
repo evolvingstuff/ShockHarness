@@ -92,6 +92,9 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.duplicates.severity": ("error", "warning", "review"),
     "rules.duplicates.dup002_severity": ("error", "warning", "review"),
     "rules.import_boundaries.severity": ("error", "warning", "review"),
+    "rules.godot_names.severity": ("error", "warning", "review"),
+    "rules.godot_names.godot002_severity": ("error", "warning", "review"),
+    "rules.godot_names.godot004_severity": ("error", "warning", "review"),
     "rules.magic_strings.mode": ("fail", "review"),
 }
 # A higher value reports less.

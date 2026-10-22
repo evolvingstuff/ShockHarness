@@ -48,6 +48,9 @@ APPLICATION = "application"
 MAIN_SCENE = "run/main_scene"
 AUTOLOAD = "autoload"
 INPUT = "input"
+GLOBAL_GROUP = "global_group"  # Godot 4.3+: groups the project declares for every scene
+UNIQUE_NAME = "unique_name_in_owner"
+TRUE = "true"
 
 
 # -- the text resource format --------------------------------------------------------------
@@ -200,6 +203,7 @@ class SceneNode:
     script: str | None
     instance: str | None
     groups: tuple[str, ...]
+    unique: bool  # unique_name_in_owner: reachable as %Name from the scene's scripts
 
 
 @dataclass(frozen=True)
@@ -238,6 +242,7 @@ class GodotProject:
     main_scene: str | None
     autoloads: tuple[tuple[str, str], ...]  # (name, project file path)
     input_actions: tuple[str, ...]
+    global_groups: tuple[str, ...]
     scenes: tuple[GodotScene, ...]
     problems: tuple[str, ...]
 
@@ -328,6 +333,7 @@ def read_scene(path: str, text: str, directory: str) -> GodotScene:
                     script=_referenced(_optional(section.properties, "script"), external),
                     instance=_referenced(_optional(section.attributes, "instance"), external),
                     groups=_groups(_optional(section.attributes, "groups")),
+                    unique=_optional(section.properties, UNIQUE_NAME) == TRUE,
                 )
             )
         elif section.tag == "connection" and _complete(section.attributes):
@@ -355,8 +361,8 @@ def _complete(attributes: Mapping[str, str]) -> bool:
 def _settings(
     sections: Sequence[ResourceSection],
 ) -> tuple[str | None, list[tuple[str, str]], list[str]]:
-    """The main scene, the autoloads (name, reference) and the input action names of a
-    ``project.godot``, references as written (``res://...`` or ``uid://...``)."""
+    """The main scene, the autoloads (name, reference), and the names the ``[input]`` and
+    ``[global_group]`` sections declare (``input/jump``), references as written."""
     main_scene: str | None = None
     autoloads: list[tuple[str, str]] = []
     actions: list[str] = []
@@ -368,9 +374,15 @@ def _settings(
                 (name, value.removeprefix(AUTOLOAD_SINGLETON))
                 for name, value in section.properties.items()
             )
-        elif section.tag == INPUT:
-            actions.extend(section.properties)
+        elif section.tag in (INPUT, GLOBAL_GROUP):
+            actions.extend(f"{section.tag}/{name}" for name in section.properties)
     return main_scene, autoloads, actions
+
+
+def _named(names: Sequence[str], tag: str) -> tuple[str, ...]:
+    """The names a section of ``project.godot`` declares (``input/jump`` -> ``jump``)."""
+    prefix = tag + PATH_SEPARATOR
+    return tuple(n.removeprefix(prefix) for n in names if n.startswith(prefix))
 
 
 def _resolve(reference: str | None, directory: str, uids: Mapping[str, str]) -> str | None:
@@ -480,7 +492,8 @@ def _project(
         directory,
         _resolve(main_scene, directory, uids),
         tuple((name, path) for name, path in resolved if path is not None),
-        tuple(actions),
+        _named(actions, INPUT),
+        _named(actions, GLOBAL_GROUP),
         tuple(scenes),
         tuple(problems),
     )

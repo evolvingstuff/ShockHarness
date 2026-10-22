@@ -1394,6 +1394,32 @@ class FunctionShape:
     signature: tuple[str, ...]
 
 
+# --- Godot names (GODOT001-GODOT005, milestone G4) -----------------------------------------
+# The names a C# script uses that Godot defines elsewhere: in project.godot, a scene, or a
+# [Signal] declaration. The rules (rules/godot_names.py) read them against the project files.
+
+GODOT_ACTION = "action"  # Input.IsActionPressed("jump"), @event.IsAction("jump")
+GODOT_ACTION_ADDED = "action_added"  # InputMap.AddAction("jump")
+GODOT_NODE_PATH = "node_path"  # GetNode<Label>("HUD/Score"), GetNode("%Health")
+GODOT_GROUP_READ = "group_read"  # GetNodesInGroup("enemies"), IsInGroup, CallGroup
+GODOT_GROUP_ADDED = "group_added"  # AddToGroup("enemies")
+GODOT_SIGNAL_USE = "signal_use"  # EmitSignal("Hit"), Connect("Hit", ...) on this object
+GODOT_SIGNAL_DECLARED = "signal_declared"  # [Signal] delegate void HitEventHandler(...)
+
+
+@dataclass(frozen=True)
+class GodotNameUse:
+    """One Godot name as written. ``owner``: the class the code is in (``None`` outside
+    one); ``on_self``: the call is on the script's own object (no receiver, or ``this``),
+    which node paths and signal names need."""
+
+    kind: str
+    name: str
+    owner: str | None
+    on_self: bool
+    span: Span
+
+
 @dataclass(frozen=True)
 class ModuleFacts:
     language: str
@@ -1421,6 +1447,7 @@ class ModuleFacts:
     usage: UsageFacts
     shapes: tuple[FunctionShape, ...]
     stubs: StubFacts
+    godot: tuple["GodotNameUse", ...]
     parse_failure: ParseFailure | None
 
 
@@ -1452,5 +1479,6 @@ def failed_facts(language: str, parser: str, failure: ParseFailure) -> ModuleFac
         usage=NO_USAGE,
         shapes=(),
         stubs=NO_STUBS,
+        godot=(),
         parse_failure=failure,
     )

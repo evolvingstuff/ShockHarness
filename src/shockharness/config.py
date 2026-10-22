@@ -564,6 +564,7 @@ GUARDRAIL_RULES = {
     "sentinels": "MAGIC003",
     "dom": "DOM001",
     "magic_strings": "MAGIC002",
+    "godot_names": "GODOT001, GODOT003, GODOT005",
 }
 GUARDRAIL_CATALOGS = (
     ("stubs", "roles"),
@@ -591,6 +592,7 @@ GUARDRAIL_CATALOGS = (
     ("results", "csharp_must_use"),
     ("types", "roles"),
     ("sleep", "roles"),
+    ("godot_names", "roles"),
     ("sleep", "python_sleep_apis"),
     ("retry", "roles"),
     ("retry", "retry_decorators"),
