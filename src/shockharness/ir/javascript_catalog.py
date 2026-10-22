@@ -223,8 +223,40 @@ def _sleep(source: SourceText, node: Node) -> SleepCall | None:
     else:
         return None
     return SleepCall(
-        callee, excerpt(node), _enclosing(node, LOOPS) is not None, node_span(source, node)
+        callee,
+        excerpt(node),
+        _enclosing(node, LOOPS) is not None,
+        _zero_delay(node),
+        node_span(source, node),
     )
+
+
+ZERO = "0"
+TIMER_DELAY = 1  # setTimeout(callback, delay): the delay's position
+PROMISES_DELAY = 0  # timers/promises setTimeout(delay, value)
+
+
+def _timer_calls(node: Node) -> list[Node]:
+    """The ``setTimeout(...)`` calls in a sleep: the node itself, or inside the Promise."""
+    found: list[Node] = []
+    stack = [node]
+    while len(stack) > 0:
+        current = stack.pop()
+        stack.extend(current.named_children)
+        if current.type == CALL and _callee(current) == SET_TIMEOUT:
+            found.append(current)
+    return found
+
+
+def _zero_delay(node: Node) -> bool:
+    """A delay that is ``0`` or left out: ``setTimeout(resolve)``, ``setTimeout(r, 0)``,
+    an awaited ``setTimeout(0)`` from timers/promises."""
+    position = PROMISES_DELAY if node.type == CALL else TIMER_DELAY
+    timers = _timer_calls(node)
+    if len(timers) != 1:
+        return False
+    arguments = call_arguments(timers[0])
+    return len(arguments) <= position or node_text(arguments[position]) == ZERO
 
 
 def _catches(loop: Node) -> list[Node]:

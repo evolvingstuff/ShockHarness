@@ -6664,3 +6664,14 @@ STATE003 at review; the call-graph fix can change what the graph-reading rules r
 warning or review by default (property contracts and IMPORT002 do not read it); cache
 schema "33". The tag `v0.22.0` is on a82a696. Published by `publish.yml` (run 39733256610,
 18 of 18 jobs). PyPI lists 0.22.0 with a wheel and an sdist.
+
+## SLEEP001 version 2: a zero delay is a yield (2026-10-21)
+
+Tom's go-ahead ("Do all of those", for the four proposals). `SleepCall` gains `zero_delay`:
+Python, a first argument or `delay` / `seconds` / `secs` keyword that is a numeric literal
+0 (`False` is not); JavaScript, a `setTimeout` inside the sleep whose delay argument is `0`
+or missing (the second argument in a `new Promise`, the first for an awaited
+timers/promises `setTimeout`). SLEEP001 skips them. Version 2; cache schema "34". On
+MetaList 0e6b708a with its own configuration, 75 SLEEP001 to 71: `tagging_run.py:469`
+(`await asyncio.sleep(0)`) and three `setTimeout(resolve, 0)` in browser scripts.
+New test: `test_api_catalog.py::test_sleep001_lets_a_zero_delay_yield_pass`.

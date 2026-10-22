@@ -828,11 +828,13 @@ class ProcessCall:
 class SleepCall:
     """``time.sleep`` / ``asyncio.sleep`` (any callee whose last segment is ``sleep``), or
     a JavaScript ``new Promise((r) => setTimeout(r, ...))``. ``in_loop`` when inside a
-    loop of the same function (polling)."""
+    loop of the same function (polling); ``zero_delay`` when the delay is a literal zero or
+    left out (a yield to the event loop, not a wait)."""
 
     callee: str
     text: str
     in_loop: bool
+    zero_delay: bool
     span: Span
 
 

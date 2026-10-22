@@ -5,6 +5,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **SLEEP001 (version 2) leaves a zero delay alone.** `await asyncio.sleep(0)`,
+  `setTimeout(resolve, 0)` and `setTimeout(resolve)` yield to the event loop; they do not
+  wait for anything. On MetaList 4 of its 75 SLEEP001 findings go, among them
+  `tagging_run.py`'s deliberate yield; nothing else changes. Cache schema "34".
+
 ## [0.22.0] - 2026-10-21
 
 STATE003 (state read outside the lock that guards its writes), and a call-graph fix for

@@ -325,6 +325,8 @@ def _sleep001(
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for sleep in facts.catalog.sleeps:
+        if sleep.zero_delay:
+            continue  # a yield to the event loop, not a wait
         qualified = qualified_callee(sleep.callee, aliases)
         if language == PYTHON and qualified not in apis:
             continue

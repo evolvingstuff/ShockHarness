@@ -1931,7 +1931,7 @@ TYPE002 = RuleSpec(
 
 SLEEP001 = RuleSpec(
     rule_id="SLEEP001",
-    version="1",
+    version="2",
     name="fixed sleep instead of a condition",
     family="sleep",
     config_section=SLEEP_SECTION,
@@ -1949,8 +1949,10 @@ SLEEP001 = RuleSpec(
     guarantees=(
         "Python: calls resolved to rules.sleep.python_sleep_apis (time.sleep, asyncio.sleep, "
         "trio.sleep, anyio.sleep); JavaScript: new Promise((r) => setTimeout(r, ...)) and an "
-        "awaited timers/promises setTimeout. The message says whether it is in a loop. "
-        "Approximate: a sleep may be legitimate pacing or rate limiting, hence review."
+        "awaited timers/promises setTimeout. The message says whether it is in a loop. A delay "
+        "that is a literal 0 or left out (await asyncio.sleep(0), setTimeout(resolve)) is a "
+        "yield to the event loop, not a wait, and is not reported (version 2). Approximate: a "
+        "sleep may be legitimate pacing or rate limiting, hence review."
     ),
     limitations=(
         "Intent is not inferred. Rate limiting and backoff written as a sleep are reported "

@@ -191,6 +191,29 @@ def test_sleep001(strict_config: EffectiveConfig) -> None:
     assert [r[0] for r in rows(run(strict_config, "src/a.js", js), "SLEEP001")] == [3]
 
 
+def test_sleep001_lets_a_zero_delay_yield_pass(strict_config: EffectiveConfig) -> None:
+    # MetaList's tagging run awaits asyncio.sleep(0) to let other tasks run; a zero (or
+    # missing) delay yields to the event loop, it does not wait for anything.
+    py = (
+        "import time\nimport asyncio\n\n\n"
+        "async def f():\n"
+        "    await asyncio.sleep(0)\n"
+        "    await asyncio.sleep(0.0)\n"
+        "    time.sleep(delay=0)\n"
+        "    await asyncio.sleep(False)\n"  # 9: not a number of seconds
+        "    await asyncio.sleep(0.01)\n"  # 10
+    )
+    assert [r[0] for r in rows(run(strict_config, "src/a.py", py), "SLEEP001")] == [9, 10]
+    js = (
+        "export async function f() {\n"
+        "  await new Promise((resolve) => setTimeout(resolve, 0));\n"
+        "  await new Promise((resolve) => setTimeout(resolve));\n"
+        "  await new Promise((resolve) => setTimeout(resolve, 10));\n"  # 4
+        "}\n"
+    )
+    assert [r[0] for r in rows(run(strict_config, "src/a.js", js), "SLEEP001")] == [4]
+
+
 def test_retry001(strict_config: EffectiveConfig) -> None:
     py = (
         "import backoff\nimport tenacity\nfrom tenacity import retry, stop_after_attempt\n\n\n"

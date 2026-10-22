@@ -87,6 +87,18 @@ def _keyword(call: ast.Call, name: str) -> ast.expr | None:
     return None
 
 
+SLEEP_DELAY_KEYWORDS = ("delay", "seconds", "secs")
+
+
+def _zero_delay(call: ast.Call) -> bool:
+    """``sleep(0)`` / ``sleep(0.0)`` / ``sleep(delay=0)``: a yield, not a wait."""
+    delays = [*call.args[:1], *(k.value for k in call.keywords if k.arg in SLEEP_DELAY_KEYWORDS)]
+    return any(
+        isinstance(d, ast.Constant) and not isinstance(d.value, bool) and d.value == 0
+        for d in delays
+    )
+
+
 def _is_true(expr: ast.expr | None) -> bool:
     return isinstance(expr, ast.Constant) and expr.value is True
 
@@ -201,7 +213,11 @@ class _Scope:
             if last == SLEEP:
                 sleeps.append(
                     SleepCall(
-                        callee, excerpt(node), self._in_loop(node), node_span(self.source, node)
+                        callee,
+                        excerpt(node),
+                        self._in_loop(node),
+                        _zero_delay(node),
+                        node_span(self.source, node),
                     )
                 )
             elif last in PROCESS_NAMES:

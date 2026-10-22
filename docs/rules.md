@@ -1032,7 +1032,7 @@ where the pattern is often deliberate.
 | `PROCESS001` | a shell command built from data; a process API whose exit status is returned and never checked | warning | Python, JavaScript | `rules.processes` (production) |
 | `RESULT001` | a must-use call used as a statement: `name.strip()`, `sorted(items)`, `items.map(f)` | warning | Python, JavaScript | `rules.results` (production, test) |
 | `TYPE001` | `Any` in annotations, `cast(...)`, `# type: ignore`; TypeScript `any`, `x as T` / `<T>x`, `x!`, `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck` | review | Python, TypeScript | `rules.types` (production) |
-| `SLEEP001` | a fixed sleep (`time.sleep`, `asyncio.sleep`, `new Promise((r) => setTimeout(r, ...))`), said to be polling inside a loop | review | Python, JavaScript | `rules.sleep` (production) |
+| `SLEEP001` | a fixed sleep (`time.sleep`, `asyncio.sleep`, `new Promise((r) => setTimeout(r, ...))`), said to be polling inside a loop; a zero or missing delay is a yield, not a wait, and is not reported | review | Python, JavaScript | `rules.sleep` (production) |
 | `RETRY001` | an endless retry loop whose handler never gives up; `@tenacity.retry` / `@backoff.on_exception` without a stop | warning | Python, JavaScript (loops) | `rules.retry` (production) |
 | `BATCH001` | a loop whose per-item handler only passes, continues or logs | warning | Python, JavaScript | `rules.batches` (production) |
 | `STUB003` | a function named as a check whose body only returns `True` | review | Python, JavaScript | `rules.stubs` (`stub003_severity`) |
