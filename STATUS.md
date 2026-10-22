@@ -6617,3 +6617,38 @@ numbers as the scratch prototype.
 New tests: `tests/unit/test_state003.py` (a module global and a class, the exemptions:
 constructor, held lock, `*_locked`, only-called-under-lock, logging; the message; a
 reasoned suppression; severity, roles and language).
+
+## Fixed: VERIFY005 and function-local imports, reported by MetaList (2026-10-21)
+
+MetaList's report against 0.21.0: `connect_to_ai` imports `OpenAIInferenceAdapter` inside
+its body, tests patch the module attribute, and VERIFY005 called all 8 such stubs (in 5
+tests) stale although each runs on every call. Reproduced at MetaList 0e6b708a (8
+findings) and narrowed by bisection to the import itself: with it at module level the
+finding goes.
+
+**Cause** (the call graph, not VERIFY005): `resolve_name` treats a name the function binds
+as a local of unknown value, and a function-local `from m import n` binds `n`, so the call
+was unresolved. The file's import table already held the import (imports are collected at
+any depth); the locals check came first.
+
+**Fix** (`complexity/callgraph.py`): each unit gets the table of the imports written in its
+own body (an import belongs to the innermost unit around it); a local bound by one of them
+resolves like a module-level import, for a call (`n(...)`) and an attribute root
+(`import m` then `m.f(...)`, probable). A parameter of the same name stays unresolved.
+
+**Measured**, every finding on MetaList 0e6b708a before and after: the 8 VERIFY005 go;
+three appear, all from module bodies whose own imports now resolve: DEAD001 on
+`app/db/engine.py::enable_read_guard` (truly dead: `main.py` imports the one in
+`app/db/session.py`, and a same-name fallback from the unresolved module-level call had
+kept both alive) and CPLX005 fan-out on the module bodies of `app/main.py` (71 targets) and
+`scripts/browser-smoke.mjs` (65). Nothing else changes.
+
+New tests: `test_callgraph.py::test_a_function_local_import_resolves_like_a_module_import`
+and `test_stale_stubs.py::test_a_patch_of_a_name_the_code_imports_inside_a_function`, the
+latter in the shape of MetaList's route (it fails on 0.21.0's code; a shorter chain did
+not, because the dead-code rules' same-name fallback reached the class anyway).
+
+**Status decision** (the unknown-state inventory): `_Resolver._import_call` and
+`_Resolver._local_name`, split out of `resolve_name` to keep its paths where they were, keep
+its decisions (a whole-module import is not callable; a local no own import binds is of
+unknown value: unresolved edges, no finding).

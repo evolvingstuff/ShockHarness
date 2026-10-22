@@ -14,6 +14,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
   MetaList it reports the two reads of its encrypted-log race before the fix and not
   after, and the same race still present in a sibling class. Cache schema "33".
 
+### Fixed
+- **A name a function imports inside its body is now resolved** in the call graph
+  (Python and JavaScript), like a module-level import: `from m import n` in a function
+  binds `n` as a local, and a call of it was left unresolved. VERIFY005 then reported a
+  patch of `m.n` as stale although the code reaches it on every call: MetaList reported
+  8 such stubs in 5 tests against 0.21.0, all gone. Because the module body's own imports
+  now resolve its calls too, the dead-code rules see one more truly dead function on
+  MetaList (a same-name fallback had kept it alive), and two module bodies there count
+  more resolved calls toward CPLX005 fan-out.
+
 ## [0.21.0] - 2026-10-21
 
 C# for Godot .NET, third milestone: ShockHarness reads Godot's project and scene files,

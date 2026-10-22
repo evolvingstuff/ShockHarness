@@ -281,6 +281,15 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({"CONFIDENCE_UNRESOLVED"}),
         "graph edge confidence; no finding",
     ),
+    ("complexity/callgraph.py", "_Resolver._local_name"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence (a parameter or local the unit's own imports do not bind); "
+        "no finding",
+    ),
+    ("complexity/callgraph.py", "_Resolver._import_call"): (
+        frozenset({"CONFIDENCE_UNRESOLVED"}),
+        "graph edge confidence (a whole-module import is not callable); no finding",
+    ),
     ("complexity/callgraph.py", "_classify_csharp"): (
         frozenset({"CONFIDENCE_UNRESOLVED"}),
         "graph edge confidence (C#, G3); no finding",

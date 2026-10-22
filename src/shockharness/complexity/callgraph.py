@@ -451,6 +451,7 @@ class _Scope:
     objects: Mapping[str, ReceiverObject]  # module-level object literals (JavaScript)
     units_at: Mapping[tuple[int, int], str]  # where each unit starts -> its key
     object_of: Mapping[str, str]  # an object literal's method unit -> the object's name
+    local_imports: Mapping[str, Mapping[str, _ImportBinding]]  # unit key -> its own imports
 
 
 def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
@@ -475,12 +476,35 @@ def _scope_for(module: ModuleInput, edges: Sequence[ModuleEdge]) -> _Scope:
         frozenset(variables),
         edge_map,
         **_receiver_tables(module),
+        local_imports=_local_imports(module),
     )
 
 
-def _import_table(module: ModuleInput) -> dict[str, _ImportBinding]:
-    imports: dict[str, _ImportBinding] = {}
+def _contains(outer: Span, inner: Span) -> bool:
+    start = (outer.line, outer.column) <= (inner.line, inner.column)
+    return start and (inner.end_line, inner.end_column) <= (outer.end_line, outer.end_column)
+
+
+def _local_imports(module: ModuleInput) -> dict[str, dict[str, _ImportBinding]]:
+    """Each unit's own imports: those written in its body (a function-local ``from m import
+    n`` binds ``n`` as a local, read from ``m`` each time the import runs). An import
+    belongs to the innermost unit around it."""
+    by_unit: dict[str, list[ImportFact]] = {u.key: [] for u in module.units}
     for fact in module.imports:
+        around = [u for u in module.units if _contains(u.fact.span, fact.span)]
+        if len(around) > 0:
+            innermost = min(around, key=lambda u: u.fact.span.end_line - u.fact.span.line)
+            by_unit[innermost.key].append(fact)
+    return {key: _bindings(facts) for key, facts in by_unit.items()}
+
+
+def _import_table(module: ModuleInput) -> dict[str, _ImportBinding]:
+    return _bindings(module.imports)
+
+
+def _bindings(facts: Sequence[ImportFact]) -> dict[str, _ImportBinding]:
+    imports: dict[str, _ImportBinding] = {}
+    for fact in facts:
         if fact.kind in (IMPORT_REEXPORT, IMPORT_DYNAMIC):
             continue
         for imported, local in fact.names:
@@ -602,6 +626,28 @@ class _Resolver:
             Target(TARGET_EXTERNAL, symbol), confidence, "imported from an external module"
         )
 
+    def _local_name(self, scope: _Scope, unit: UnitMetrics, name: str) -> _Resolution:
+        """A name the unit binds: one its own import binds resolves like a module-level
+        import (the import reads the module each time it runs); any other is unknown."""
+        own_imports = scope.local_imports[unit.key]
+        if name in own_imports:
+            return self._import_call(own_imports[name], scope, name)
+        return _Resolution(
+            Target(TARGET_UNRESOLVED, name),
+            CONFIDENCE_UNRESOLVED,
+            "a parameter or local binding; its value is not known statically",
+        )
+
+    def _import_call(self, binding: _ImportBinding, scope: _Scope, name: str) -> _Resolution:
+        """A call of a name an import binds."""
+        if binding.imported == "":
+            return _Resolution(
+                Target(TARGET_UNRESOLVED, name),
+                CONFIDENCE_UNRESOLVED,
+                "a whole-module import is not callable",
+            )
+        return self._imported(binding, scope, None)
+
     def resolve_name(self, path: str, unit: UnitMetrics, name: str) -> _Resolution | None:
         """A bare name that is called or passed. ``None`` for a plain local/variable argument."""
         scope = self.scopes[path]
@@ -614,11 +660,7 @@ class _Resolver:
             )
         fact = unit.fact
         if name in fact.locals and name not in fact.globals_declared:
-            return _Resolution(
-                Target(TARGET_UNRESOLVED, name),
-                CONFIDENCE_UNRESOLVED,
-                "a parameter or local binding; its value is not known statically",
-            )
+            return self._local_name(scope, unit, name)
         if name in scope.functions and name in scope.units_by_name:
             return _Resolution(
                 Target(TARGET_UNIT, scope.units_by_name[name]),
@@ -626,14 +668,7 @@ class _Resolver:
                 "defined at module level",
             )
         if name in scope.imports:
-            binding = scope.imports[name]
-            if binding.imported == "":
-                return _Resolution(
-                    Target(TARGET_UNRESOLVED, name),
-                    CONFIDENCE_UNRESOLVED,
-                    "a whole-module import is not callable",
-                )
-            return self._imported(binding, scope, None)
+            return self._import_call(scope.imports[name], scope, name)
         if name in scope.variables:
             return _Resolution(
                 Target(TARGET_UNRESOLVED, name),
@@ -655,7 +690,7 @@ class _Resolver:
             return self._through_self(path, unit, dotted, rest)
         fact = unit.fact
         if root in fact.locals and root not in fact.globals_declared:
-            return self._through_local(path, unit, dotted, rest)
+            return self._through_local_root(path, unit, dotted, rest)
         if root in scope.imports:
             exact = root not in scope.variables  # an import the module never rebinds
             return self._through_import(path, scope.imports[root], rest, exact=exact)
@@ -670,6 +705,17 @@ class _Resolver:
             CONFIDENCE_UNRESOLVED,
             "receiver of unknown type",
         )
+
+    def _through_local_root(
+        self, path: str, unit: UnitMetrics, dotted: str, rest: list[str]
+    ) -> _Resolution:
+        """``root.x(...)`` on a name the unit binds: through its own import of ``root``, or
+        through what the unit assigned it."""
+        own_imports = self.scopes[path].local_imports[unit.key]
+        root = dotted.split(".")[0]
+        if root in own_imports:
+            return self._through_import(path, own_imports[root], rest, exact=False)
+        return self._through_local(path, unit, dotted, rest)
 
     # -- receivers (docs/proposal-receivers.md, R1; Python facts only) -------------------
 

@@ -183,6 +183,44 @@ def test_python_resolution_classes(empty_root: Path, strict_config: EffectiveCon
     assert fan_in_sources == {"pkg/main.py::direct", "pkg/main.py::higher"}
 
 
+def test_a_function_local_import_resolves_like_a_module_import(
+    empty_root: Path, strict_config: EffectiveConfig
+) -> None:
+    # MetaList's connect_to_ai imports its adapter on first use; a name a function binds
+    # by importing it is read from the module each time the import runs.
+    report = _report(
+        empty_root,
+        strict_config,
+        {
+            "pkg/__init__.py": "",
+            "pkg/util.py": PY_UTIL,
+            "pkg/lazy.py": (
+                "def connect(x):\n"
+                "    from pkg.util import helper\n"
+                "    return helper(x)\n\n\n"
+                "def connect_module(x):\n"
+                "    import pkg.util as u\n"
+                "    return u.helper(x)\n\n\n"
+                "def shadowed(helper):\n"
+                "    return helper(1)\n\n\n"
+                "from pkg.util import Base\n"
+                "Base()\n"
+            ),
+        },
+    )
+    helper = ("unit", "pkg/util.py::helper")
+    assert (*helper, "resolved", "call") in _edges(report, "pkg/lazy.py::connect")
+    assert [e[:2] for e in _edges(report, "pkg/lazy.py::connect_module")] == [helper]
+    # a parameter of the same name is still a local of unknown value
+    assert _edges(report, "pkg/lazy.py::shadowed") == [
+        ("unresolved", "helper", "unresolved", "call")
+    ]
+    # the module body's own imports resolve its calls too
+    assert ("unit", "pkg/util.py::Base", "resolved", "call") in _edges(
+        report, "pkg/lazy.py::<module>"
+    )
+
+
 def test_python_module_edges_and_canonical_names(
     empty_root: Path, strict_config: EffectiveConfig
 ) -> None:

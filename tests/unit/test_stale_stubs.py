@@ -80,6 +80,42 @@ def test_the_dotted_and_patch_forms_through_a_helper_and_a_fixture(tmp_path: Pat
     assert [line for line, _ in stale(tmp_path, test)] == [8, 13, 25]
 
 
+def test_a_patch_of_a_name_the_code_imports_inside_a_function(tmp_path: Path) -> None:
+    # MetaList's connect_to_ai: `from M import N` in the function body reads M.N at call
+    # time, so a patch of M.N is in effect whenever the function runs (reported by MetaList
+    # against 0.21.0: 8 such stubs in 5 tests, all reached). The shape of its route.
+    files = {
+        ".shockharness.toml": CONFIG,
+        "app/__init__.py": "",
+        "app/routes/__init__.py": "",
+        "app/inference.py": (
+            "class Adapter:\n    def __init__(self, key):\n        self.key = key\n"
+        ),
+        "app/setup.py": (
+            "class Guard:\n    def __init__(self, inner):\n        self.inner = inner\n\n\n"
+            "def connect(*, key):\n    from app.inference import Adapter\n"
+            "    return Guard(inner=Adapter(key))\n"
+        ),
+        "app/routes/ai.py": (
+            "from app.setup import connect\n\n\n"
+            "def _require(*, key):\n    try:\n        return connect(key=key)\n"
+            "    except KeyError as exc:\n        raise ValueError(key) from exc\n\n\n"
+            "def route(*, key):\n    return _require(key=key)\n"
+        ),
+        "tests/test_route.py": (
+            "from app import inference\nfrom app.routes import ai as ai_routes\n\n\n"
+            "def test_route(monkeypatch):\n"
+            "    monkeypatch.setattr(inference, 'Adapter', lambda key: key)\n"
+            "    assert ai_routes.route(key='k').inner == 'k'\n"
+        ),
+    }
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    report = analyze_paths([tmp_path], tmp_path, load_config(tmp_path, None), OPTIONS)
+    assert [f for f in report.findings if f.rule_id == "VERIFY005"] == []
+
+
 def test_tripwires_are_not_reported(tmp_path: Path) -> None:
     test = (
         "import pytest\n"
