@@ -6831,3 +6831,14 @@ and files there are formatted one by one.
 New tests: `tests/unit/test_skills_freshness.py` (fresh and absent installs, stale/new/
 missing counts, edited files only, a damaged manifest, `check` on stderr beside valid JSON,
 the hook once per upgrade).
+
+## Release 0.24.0 (2026-10-22)
+
+On Tom's go-ahead. CI was green on dcaca75 (run 39760809527) and on the release commit
+f3f6ff8 (run 39762451933), 16 of 16 jobs each. The pin now lives in 15 files (the skills
+split took it out of six skills). Two lines of `docs/skills.md` were not pins and were made
+safe for later bumps: the example notice names 0.22.0 as the installed-with version, and
+"since 0.24.0" became "until the split". Upgrade note: no analysis change; a project with
+installed skills gets the new notice and should run `skills update`. The tag `v0.24.0` is
+on f3f6ff8. Published by `publish.yml` (run 39763370066, 18 of 18 jobs). PyPI lists 0.24.0
+with a wheel and an sdist.
