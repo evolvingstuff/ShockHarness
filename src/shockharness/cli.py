@@ -77,6 +77,7 @@ from shockharness.skills.adapters import (
     pointer_line,
     resolve_destination,
 )
+from shockharness.skills.freshness import skills_drift
 from shockharness.skills.install import (
     ACTION_NONE,
     MANIFEST_FILENAME,
@@ -533,6 +534,8 @@ def _run_scan(args: argparse.Namespace) -> int:
     report = _analyze_working_tree(args)
     _write_output(_render_report(report, args.format, args.summary), args.output)
     _report_written(args, report.gate.status, process_exit_code(report.gate))
+    for drift in skills_drift(args.root):
+        sys.stderr.write(f"{PROGRAM}: {drift.notice}\n")  # beside the report, never in it
     return process_exit_code(report.gate)
 
 

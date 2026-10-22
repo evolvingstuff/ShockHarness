@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **`check` and the edit-time hook say when the installed skills are behind.** When a
+  project's skills (installed by `skills install` for Claude Code or Codex) are older than
+  the installed ShockHarness, `check` prints one line on stderr with the counts and the
+  exact command (`shockharness skills update --agent claude`), and the hook feeds it back
+  to the agent once per upgrade. The gate and the report are unchanged. Agents learn that
+  an update is due without anyone reading the release notes.
+
 ### Changed
 - **The setup guide is its own skill, `adopt-shockharness`.** Each of the seven skills
   carried the README's 151-line "Adopting ShockHarness" section; it now lives in the new

@@ -273,6 +273,13 @@ def _classify(
     return rows
 
 
+def classify_skills(
+    manifest: Manifest, contents: dict[str, bytes], destination: Path
+) -> list[tuple[str, Path, str, str]]:
+    """What ``skills update`` would find, for the notice ``check`` and the hook give."""
+    return _classify(manifest, contents, destination)
+
+
 def update_skills(destination: Path, agent: str, check: bool) -> SkillsResult:
     """Refresh generated files, keep edited ones, report everything; ``check`` writes nothing.
 

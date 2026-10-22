@@ -157,6 +157,23 @@ then re-apply your edits; `shockharness skills show <name>` prints the shipped
 version for comparison. `skills install --force` replaces every file,
 including edited ones, and is the only command that overwrites an edited skill.
 
+## Knowing when to update
+
+Nobody has to read the release notes to learn that the skills changed. When a project holds
+a skills manifest at a known place (Claude Code's `.claude/skills`, Codex's
+`.agents/skills`) and `skills update` would change something there (skills the installed
+ShockHarness ships newer, new skills, missing files), `shockharness check` prints one line
+on stderr after its report, and the edit-time hook feeds the same line back to the agent
+once per upgrade:
+
+```text
+shockharness: skills: 7 out of date, 1 new since they were installed with ShockHarness 0.23.0 (0.24.0 is installed); run: shockharness skills update --agent claude
+```
+
+It never changes the gate or the report. Edited skills are left out (`update` does not
+change them; `update --check` reports them), and so is a `generic` install, whose directory
+only its user knows. A manifest that cannot be read asks for `skills install --force`.
+
 ## Evaluation corpus
 
 `evals/` holds eight paired tasks (four Python, four JavaScript) with a

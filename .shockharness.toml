@@ -50,6 +50,12 @@ exception = "UnicodeDecodeError"
 reason = "Config file bytes are external input; non-UTF-8 becomes a ConfigError (exit 2)"
 
 [[tool.shockharness.rules.exceptions.boundaries]]
+path = "src/shockharness/skills/freshness.py"
+language = "python"
+exception = "shockharness.errors.UsageError"
+reason = "A project's skills manifest is external input; one that cannot be read becomes the skills notice telling the agent how to reinstall, never a failed check"
+
+[[tool.shockharness.rules.exceptions.boundaries]]
 path = "src/shockharness/godot_project.py"
 language = "python"
 exceptions = ["OSError", "UnicodeDecodeError"]

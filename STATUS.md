@@ -6802,3 +6802,32 @@ with `"**/*.cs"` included; new configuration keys are additions; cache schema "3
 tag `v0.23.0` is on 3620237. Published by `publish.yml` (run 39753193484, 18 of 18 jobs).
 PyPI lists 0.23.0 with a wheel and an sdist. The adopt-shockharness skill split (58e7ca9)
 came after the release commit and is not in 0.23.0.
+
+## Agents learn that the skills are behind (2026-10-22)
+
+Tom: "Will the coding agents for these repos be aware of the fact that they are expected to
+do the skill update? Because I'm using agents to do all my work." They would not have been:
+only `skills update --check` in CI, or a reader of the changelog, noticed. Go-ahead: "make
+check and the edit-time hook print a one-line notice with the exact command when a
+repository's installed skills are behind the installed ShockHarness".
+
+`skills/freshness.py`: for each adapter whose skills live at a known project path
+(`.claude/skills`, `.agents/skills`; `generic` has none), a manifest there is classified
+with `skills update`'s own logic (`classify_skills`, made public); stale, new and missing
+files make the notice, with the version installed, the version running and the command.
+Edited files alone do not (update leaves them). A manifest that cannot be read is a
+notice asking for `skills install --force`, behind a one-file boundary in
+`.shockharness.toml`, never a failed check. `check` writes the notice to stderr after the
+report (the JSON stays parseable); the hook feeds it back (exit 2) once per agent and
+version pair, remembered in its state file under `skills-notice:<agent>`.
+
+Found on the way: none of Tom's repositories has the skills installed (no manifest in
+MetaList3, TheLivingLabyrinth, Godot or OPR, nor at user level), so their agents have
+never had them; `skills install --agent claude` once per repository is the first step.
+Also: `ruff format` given the skills folder by name reformats the Markdown skills' Python
+examples and `lock.py`, which `pyproject.toml` excludes; the change was reverted at once,
+and files there are formatted one by one.
+
+New tests: `tests/unit/test_skills_freshness.py` (fresh and absent installs, stale/new/
+missing counts, edited files only, a damaged manifest, `check` on stderr beside valid JSON,
+the hook once per upgrade).

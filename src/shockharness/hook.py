@@ -16,6 +16,10 @@ content changed since the hook last saw it, every rule it switches off since the
 configuration (VERIFY003, spec 21.1 decision 35) and every key that tries to loosen the
 ``--policy`` file is fed back, so an agent hears at once that switching a rule off is the
 user's decision.
+
+When the project's installed skills are behind the installed ShockHarness (``skills
+update`` would change them), the hook says so once per upgrade, with the command: the state
+remembers, per agent, the versions it last told the agent about.
 """
 
 import json
@@ -37,6 +41,7 @@ from shockharness.output.text import finding_lines
 from shockharness.rules.accepted_policy import accepted_policy
 from shockharness.rules.policy_integrity import USER_TIERS, policy_attempt_findings
 from shockharness.rules.registry import VERIFICATION_SECTION
+from shockharness.skills.freshness import skills_drift
 
 AGENT_CLAUDE_CODE = "claude-code"
 HOOK_AGENTS = (AGENT_CLAUDE_CODE,)
@@ -210,6 +215,25 @@ def _feedback(
     return "".join(parts), details
 
 
+SKILLS_STATE_PREFIX = "skills-notice:"  # a state key per agent, beside the files' hashes
+
+
+def _skills_feedback(root: Path, state: Mapping[str, str]) -> tuple[str, list[str], dict[str, str]]:
+    """(message, run-log lines, new state) for installed skills that ``skills update``
+    would change, told once per upgrade."""
+    message = ""
+    details: list[str] = []
+    told: dict[str, str] = {}
+    for drift in skills_drift(root):
+        key = SKILLS_STATE_PREFIX + drift.agent
+        if key in state and state[key] == drift.key:
+            continue
+        message += f"shockharness: {drift.notice}\n"
+        details.append(f"skills {drift.agent}")
+        told[key] = drift.key
+    return message, details, told
+
+
 def _config_name(root: Path, config: EffectiveConfig) -> str | None:
     """The project's configuration file relative to ``root``; None for the bundled
     defaults or a file outside the project."""
@@ -277,12 +301,13 @@ def run_post_edit(
     config_message, config_details, config_changed = _config_feedback(
         root, config, state, store, fail_on
     )
-    if len(changed) > 0 or len(config_changed) > 0:
-        store.save_state({**state, **changed, **config_changed})
+    skills_message, skills_details, skills_told = _skills_feedback(root, state)
+    if len(changed) > 0 or len(config_changed) > 0 or len(skills_told) > 0:
+        store.save_state({**state, **changed, **config_changed, **skills_told})
     files = sorted({*changed, *config_changed})
-    return _finish(
-        store, tool, files, [*details, *config_details], message + config_message, candidates.note
-    )
+    details = [*details, *config_details, *skills_details]
+    message = message + config_message + skills_message
+    return _finish(store, tool, files, details, message, candidates.note)
 
 
 def _finish(
