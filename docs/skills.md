@@ -71,13 +71,19 @@ shockharness skills install --agent claude|codex|generic [--project PATH] [--use
 Writes `<destination>/<name>/SKILL.md` for each of the eight skills, byte for
 byte as shipped, then `<destination>/.shockharness-skills.json`. If any of
 those files already exists the command refuses (exit 2) and writes nothing;
-`--force` replaces them all. Besides the skills, only three files are ever
+`--force` replaces them all. Besides the skills, only four files are ever
 written:
 
 * **`.shockharness.toml`**, when the project (not `--user`) has no ShockHarness
   configuration at all: the file `shockharness init` writes, strict profile with
   the test exemption (spec 21.1 decision 35). An existing configuration is never
   changed.
+* **The agent's instruction file**, for a project install of `claude` (`CLAUDE.md`)
+  or `codex` (`AGENTS.md`): one pointer line telling the agent to read the matching
+  skill before it writes, fixes, refactors or reviews code, appended (the file is
+  created when absent). A file that already names the skills directory
+  (`.claude/skills`, `.agents/skills`) is kept as it is, so a second install or a
+  line of the project's own adds nothing.
 * **`.claude/settings.json`**, with `--hook` (`--agent claude`): the edit-time
   hook is appended to the `PostToolUse` hooks, once.
 * **The lock**, with `--hook --lock`: the project's effective configuration,
@@ -90,12 +96,12 @@ written:
   still edit a file in the home directory, so the lock is a strong signal, not a
   guarantee; Claude Code's sandbox, when on, keeps writes inside the project.
 
-It never touches `AGENTS.md`, `CLAUDE.md` or other agent configuration. For
-`generic` it prints the line to add by hand:
+For `generic`, whose instruction file only its user knows, it prints the line to
+add by hand:
 
 ```text
 Add this line to the agent's instruction file (for example AGENTS.md):
-  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review, verification-integrity, async-lifecycle).
+  Before writing, fixing, refactoring or reviewing code, read the matching ShockHarness skill in docs/agent-skills/<name>/SKILL.md (write-compliant-code, fix-violations, refactor-complexity, pre-commit-review, verification-integrity, async-lifecycle, property-contracts, adopt-shockharness).
 ```
 
 ## The manifest
@@ -156,6 +162,41 @@ the file, run `skills update` again (the file is restored from the package),
 then re-apply your edits; `shockharness skills show <name>` prints the shipped
 version for comparison. `skills install --force` replaces every file,
 including edited ones, and is the only command that overwrites an edited skill.
+
+## `init` installs them
+
+An agent that adopts ShockHarness by running its commands may never read the setup
+guide, so `shockharness init` installs the skills itself: for every coding agent whose
+files are in the project (the directory of the configuration file `init` writes), it
+runs what `skills install` does there, pointer line included.
+
+| Files found | Agent | Skills | Pointer line in |
+|---|---|---|---|
+| `.claude/` or `CLAUDE.md` | `claude` | `.claude/skills` | `CLAUDE.md` |
+| `.agents/` or `AGENTS.md` | `codex` (Codex and the other agents that read `AGENTS.md`) | `.agents/skills` | `AGENTS.md` |
+
+An agent whose skills are already installed (a manifest in the project's or the home
+directory's skills directory) is left alone, and `init` says `skills update` refreshes
+them. `--agent claude|codex` (repeatable) chooses instead of the detection;
+`--no-skills` writes only the configuration. When no agent's files are there, `init`
+installs nothing and prints both install commands.
+
+## Knowing when they are missing
+
+A repository adopted before `init` installed skills, or with `--no-skills`, would never
+hear of them. So while the project has a ShockHarness configuration of its own,
+`shockharness check` prints one line on stderr after its report for each agent from the
+table above whose files are there with no ShockHarness skills installed for it (in the
+project, or under the home directory with `--user`):
+
+```text
+shockharness: skills: none installed for Claude Code, which works here (CLAUDE.md found); run: shockharness skills install --agent claude (a repository that wants no skills sets notify_missing = false in [tool.shockharness.skills])
+```
+
+With no agent's files and no skills installed for either agent, the line names both
+commands. `notify_missing = false` under `[tool.shockharness.skills]` records that the
+repository wants none (a `generic` install, whose directory ShockHarness cannot know, is
+one reason), and the line stops. It never changes the gate or the report.
 
 ## Knowing when to update
 

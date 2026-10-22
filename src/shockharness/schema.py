@@ -637,6 +637,7 @@ CONFIG_SCHEMA = TableField(
             fields={"enabled": BoolField(), "directory": StrField(allow_empty=False)},
             required=(),
         ),
+        "skills": TableField(fields={"notify_missing": BoolField()}, required=()),
     },
     required=(),
 )

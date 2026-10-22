@@ -338,3 +338,8 @@ entry_points = ["src/shockharness/contracts/runtime/contracts.py::*"]
 # suppression where they are defined.
 [tool.shockharness.rules.duplicates]
 enabled = true
+
+# This repository ships the skills (src/shockharness/skills) rather than installing them,
+# so `check` does not suggest `skills install` here.
+[tool.shockharness.skills]
+notify_missing = false

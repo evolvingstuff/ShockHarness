@@ -5,6 +5,30 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **`init` installs the agent skills.** An agent that adopts ShockHarness by running its
+  commands never read the setup guide's skills step, so the skills never reached it (a
+  repository adopted on the day the skills shipped never had them). `init` now installs
+  them for every coding agent whose files are in the project: `.claude/` or `CLAUDE.md`
+  for Claude Code (`.claude/skills`), `.agents/` or `AGENTS.md` for Codex and the other
+  agents that read `AGENTS.md` (`.agents/skills`). An agent whose skills are installed is
+  left alone. `--agent claude|codex` chooses instead of the detection; `--no-skills`
+  writes only the configuration. With no agent's files it prints both install commands.
+- **`skills install` adds a pointer line** to `CLAUDE.md` (claude) or `AGENTS.md` (codex)
+  telling the agent to read the matching skill before it writes code, created when absent
+  and kept when the file already names the skills directory. `init` does the same.
+- **`check` says when no skills are installed.** While a project with its own
+  configuration has an agent's files and no ShockHarness skills for that agent (in the
+  project or under the home directory), `check` prints one line on stderr after the report
+  with the exact command; the report and the gate are unchanged. With no agent's files it
+  names both commands. The new key `skills.notify_missing = false` records that a
+  repository wants no skills; like `cache`, the `skills` table is not part of the
+  configuration digest, so baselines and the cache are unaffected.
+
+### Fixed
+- The README said six skills ship; there are eight. `docs/skills.md`'s example pointer line
+  listed six names.
+
 ## [0.24.0] - 2026-10-22
 
 The setup guide becomes its own skill, `adopt-shockharness`, and `check` and the edit-time

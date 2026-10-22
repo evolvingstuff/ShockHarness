@@ -821,6 +821,15 @@ complexity_regressions = "warn"
 enabled = true
 directory = ".shockharness-cache"
 
+# The agent skills (`shockharness skills install`). When this project is configured and a
+# coding agent works in it (Claude Code: .claude/ or CLAUDE.md; Codex and other agents
+# that read AGENTS.md: .agents/ or AGENTS.md) with no ShockHarness skills installed for it,
+# `check` prints one line with the install command. false records that this repository
+# wants no skills, and the line stops. Not part of the configuration digest: it cannot
+# change a result.
+[tool.shockharness.skills]
+notify_missing = true
+
 # Property contracts (docs/shockharness_property_contracts_spec.md, milestones P1a and P1b,
 # Python and JavaScript): requires / produces / preserves declarations checked at call
 # sites and catalog sinks.

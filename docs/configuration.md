@@ -172,6 +172,9 @@ follow_symlinks = false                 # never leave the root through a link un
 enabled = true                          # the content-hash cache of per-file results (0.3.0); see Cache below
 directory = ".shockharness-cache"       # relative to the root; belongs in .gitignore; not part of the config digest
 
+[tool.shockharness.skills]
+notify_missing = true                   # check prints one line while an agent works here with no skills installed; see Skills notice below
+
 [tool.shockharness.file_roles]          # H1: one role per file, first match wins in this order; see File roles
 generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
 vendor = ["**/vendor/**", "**/third_party/**"]
@@ -1193,6 +1196,16 @@ pruned directory are never affected; `coverage.discovery.unsupported_extension`
 still counts every unparseable file the walk saw. An explicit target with an
 unsupported extension stays a usage error (exit 2). `fail` is stricter than
 the profile default and is not a deviation.
+
+## Skills notice
+
+`skills.notify_missing` (default `true`): while the project has a configuration of its
+own and a coding agent's files are in it (`.claude/` or `CLAUDE.md` for Claude Code,
+`.agents/` or `AGENTS.md` for Codex and the other agents that read `AGENTS.md`) with no
+ShockHarness skills installed for that agent, `check` prints one line on stderr naming
+the `skills install` command (docs/skills.md). `false` records that the repository wants
+no skills and stops the line. Like the `cache` table, the `skills` table is not part of
+the configuration digest: it cannot change a result.
 
 ## Cache
 

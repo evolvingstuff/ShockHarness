@@ -36,7 +36,7 @@ the gate stops new violations from day one while the old ones are paid down.
 - [ ] `.shockharness.toml` (or `[tool.shockharness]`) exists and `shockharness config validate` passes.
 - [ ] `shockharness check .` runs; existing findings are baselined, or the profile or gate mode was chosen on purpose and written down.
 - [ ] CI runs the gate with the same pin, and Dependabot (or Renovate) proposes upgrades.
-- [ ] The agent skills are installed for the agents that work in the repository.
+- [ ] The agent skills are installed for the agents that work in the repository (`init` does this; `check` prints a `skills:` line while one is missing), and their instruction files point at them.
 - [ ] Each step's verification command was run and its output read.
 
 ## Adopting ShockHarness
@@ -66,7 +66,7 @@ step 4), never only inside a shell command.
 ### Step 2: write the policy file
 
 ```bash
-shockharness init                 # writes .shockharness.toml: strict profile, every default spelled out, tests exempt
+shockharness init                 # writes .shockharness.toml: strict profile, every default spelled out, tests exempt; installs the skills (step 5)
 shockharness config validate      # exit 0; prints the profile and every policy deviation
 ```
 
@@ -76,6 +76,15 @@ switch a rule off to get past a finding (an override, a disabled rule, a lower
 severity, a wider `exclude`): that is the user's decision, and `check` and the
 hook report it as `VERIFY003` until a person commits it. A catch boundary
 naming one file is the remedy `EXC001` asks for and needs no sign-off.
+
+`init` also installs the agent skills (step 5) for every coding agent whose
+files are in the repository: `.claude/` or `CLAUDE.md` means Claude Code
+(`.claude/skills`), `.agents/` or `AGENTS.md` means Codex and the other agents
+that read `AGENTS.md` (`.agents/skills`). It adds one line to that agent's
+instruction file (`CLAUDE.md`, `AGENTS.md`) telling it to read the matching skill
+before it writes code. `--agent claude` or `--agent codex` chooses instead of the
+detection; `--no-skills` writes only the configuration. Commit the skills
+directories and the instruction file with the configuration.
 
 ### Step 3: first run, and the four onboarding paths for an existing codebase
 
@@ -150,7 +159,12 @@ updates:
 
 ### Step 5: install the agent skills
 
-Six skills ship inside the package (`shockharness skills list` names them).
+Eight skills ship inside the package (`shockharness skills list` names them).
+`init` installed them for the agents it found; these commands install them for
+another agent, or in a repository adopted before `init` did. While a configured
+repository has an agent's files and no skills installed for that agent, `check`
+prints one line naming the command; `notify_missing = false` under
+`[tool.shockharness.skills]` records that the repository wants none.
 
 ```bash
 shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
@@ -163,7 +177,8 @@ shockharness skills update --agent claude --check                       # exit 1
 
 Add `--user` to install into `~/.claude/skills` or `~/.agents/skills`
 instead. `install` writes `.shockharness.toml` (as `init` does) when the project
-has none, and never overwrites a file without `--force`. A manifest,
+has none, adds the pointer line to `CLAUDE.md` or `AGENTS.md` unless the file
+already names the skills directory, and never overwrites a file without `--force`. A manifest,
 `.shockharness-skills.json`, records a SHA-256 per file: `skills update`
 rewrites unedited files and reports edited ones as conflicts. Put `skills
 update --check` in CI to detect drift after an upgrade.
@@ -190,3 +205,4 @@ https://github.com/evolvingstuff/ShockHarness/blob/main/docs/integration.md,
 skills https://github.com/evolvingstuff/ShockHarness/blob/main/docs/skills.md,
 limitations
 https://github.com/evolvingstuff/ShockHarness/blob/main/docs/limitations.md.
+

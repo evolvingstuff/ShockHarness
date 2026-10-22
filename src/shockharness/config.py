@@ -926,14 +926,20 @@ def _merge_legacy_configuration_files(
 
 
 CACHE_KEY = "cache"
+SKILLS_KEY = "skills"
+# Tables that cannot change a result: where results are stored, and the skills notice.
+NOT_DIGESTED = (CACHE_KEY, SKILLS_KEY)
 
 
 def config_digest(values: Mapping[str, Any], entry_points: Sequence[str]) -> str:
     """SHA-256 of the canonical JSON of every key that can change a result: the
-    ``cache`` table (where results are stored, and whether) is left out, so toggling
-    the cache neither changes the digest a baseline records nor the cache key. The
-    project's entry points change DEF005 findings, so they are part of it."""
-    policy: dict[str, Any] = {key: value for key, value in values.items() if key != CACHE_KEY}
+    ``cache`` table (where results are stored, and whether) and the ``skills`` table (a
+    notice beside the report) are left out, so toggling them neither changes the digest a
+    baseline records nor the cache key. The project's entry points change DEF005
+    findings, so they are part of it."""
+    policy: dict[str, Any] = {
+        key: value for key, value in values.items() if key not in NOT_DIGESTED
+    }
     policy[ENTRY_POINTS_DIGEST_KEY] = list(entry_points)
     canonical = json.dumps(policy, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

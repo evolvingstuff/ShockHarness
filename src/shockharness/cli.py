@@ -28,6 +28,7 @@ from shockharness.config import (
     NO_OVERRIDES,
     PARSE_ERROR_POLICIES,
     PYPROJECT_FILENAME,
+    SKILLS_KEY,
     TEST_EXEMPTION_RULES,
     USER_TIERS,
     CliOverrides,
@@ -91,6 +92,16 @@ from shockharness.skills.install import (
     write_lock,
 )
 from shockharness.skills.lock import lock_path, render_lock
+from shockharness.skills.presence import (
+    KNOWN_AGENTS,
+    KnownAgent,
+    add_pointer,
+    detected_agents,
+    install_choices,
+    known_agent,
+    missing_skills_notices,
+    skills_installed,
+)
 from shockharness.version import __version__
 
 PROGRAM = "shockharness"
@@ -205,8 +216,17 @@ def build_parser() -> argparse.ArgumentParser:
     explain = rules_commands.add_parser("explain", help="print the full description of one rule")
     explain.add_argument("rule_id")
 
+    _add_init_parser(commands)
+    _add_skills_parser(commands)
+    _add_contracts_parser(commands)
+    return parser
+
+
+def _add_init_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
     init = commands.add_parser(
-        "init", help=f"write a {DEDICATED_FILENAME} selecting a built-in profile"
+        "init",
+        help=f"write a {DEDICATED_FILENAME} selecting a built-in profile and install the agent "
+        "skills for the coding agents working in the project",
     )
     init.add_argument(
         "--profile",
@@ -219,10 +239,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--path", type=Path, default=Path(DEDICATED_FILENAME), help="where to write the file"
     )
     init.add_argument("--force", action="store_true", help="overwrite an existing file")
-
-    _add_skills_parser(commands)
-    _add_contracts_parser(commands)
-    return parser
+    init.add_argument(
+        "--no-skills",
+        action="store_true",
+        help="write only the configuration; by default init also installs the agent skills "
+        "for each coding agent whose files are in the project (.claude/ or CLAUDE.md: "
+        "claude; .agents/ or AGENTS.md: codex) and adds a pointer line to its instruction file",
+    )
+    init.add_argument(
+        "--agent",
+        action="append",
+        choices=tuple(known.agent for known in KNOWN_AGENTS),
+        default=None,
+        help="install the skills for this agent instead of the detected ones (repeatable)",
+    )
 
 
 def _add_skills_parser(commands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -493,7 +523,7 @@ def _load_config(args: argparse.Namespace) -> EffectiveConfig:
     return load_config_with_overrides(args.root, args.config, overrides)
 
 
-def _analyze_working_tree(args: argparse.Namespace) -> Report:
+def _analyze_working_tree(args: argparse.Namespace) -> tuple[Report, EffectiveConfig]:
     config = _load_config(args)
     report = analyze_paths(list(args.paths), args.root, config, _options(args))
     report = with_accepted_policy(report, args.root, args.config, config)
@@ -502,7 +532,7 @@ def _analyze_working_tree(args: argparse.Namespace) -> Report:
     report = with_history(report, args.root, WORKING_TREE_REVISION, config)
     if args.exit_zero:
         report = replace(report, gate=as_advisory(report.gate))
-    return report
+    return report, config
 
 
 def _render_report(report: Report, fmt: str, summary: bool) -> str:
@@ -530,12 +560,21 @@ def _report_written(args: argparse.Namespace, status: str, exit_code: int) -> No
         )
 
 
+def _skills_notices(root: Path, config: EffectiveConfig) -> list[str]:
+    """Installed skills behind the package; and, for a project with its own configuration
+    that has not turned the notice off, agents working here with no skills at all."""
+    notices = [drift.notice for drift in skills_drift(root)]
+    if config.source.tier in USER_TIERS and config.values[SKILLS_KEY]["notify_missing"]:
+        notices.extend(missing_skills_notices(root, Path.home()))
+    return notices
+
+
 def _run_scan(args: argparse.Namespace) -> int:
-    report = _analyze_working_tree(args)
+    report, config = _analyze_working_tree(args)
     _write_output(_render_report(report, args.format, args.summary), args.output)
     _report_written(args, report.gate.status, process_exit_code(report.gate))
-    for drift in skills_drift(args.root):
-        sys.stderr.write(f"{PROGRAM}: {drift.notice}\n")  # beside the report, never in it
+    for notice in _skills_notices(args.root, config):
+        sys.stderr.write(f"{PROGRAM}: {notice}\n")  # beside the report, never in it
     return process_exit_code(report.gate)
 
 
@@ -680,7 +719,59 @@ def _run_init(args: argparse.Namespace) -> int:
         )
     _write_output(render_profile_config_toml(args.profile), target)
     sys.stdout.write(f"{PROGRAM}: wrote {target} ({args.profile} profile)\n")
+    _init_skills(args, target.parent)
     return EXIT_OK
+
+
+def _init_skills(args: argparse.Namespace, project_root: Path) -> None:
+    """``init`` installs the skills for every agent working in the project, so an agent
+    that adopts ShockHarness by running commands has them without reading the setup guide."""
+    if args.no_skills:
+        sys.stdout.write(
+            f"{PROGRAM}: skills not installed (--no-skills); `check` says so while an agent "
+            "works here without them, unless skills.notify_missing = false\n"
+        )
+        return
+    agents = detected_agents(project_root)
+    if args.agent is not None:
+        agents = [known_agent(agent) for agent in args.agent]
+    if len(agents) == 0:
+        markers = ", ".join(marker for known in KNOWN_AGENTS for marker in known.markers)
+        sys.stdout.write(
+            f"{PROGRAM}: skills not installed: no coding agent's files in {project_root} "
+            f"({markers}); run {install_choices()}\n"
+        )
+        return
+    for known in agents:
+        _init_agent_skills(project_root, known)
+
+
+def _init_agent_skills(project_root: Path, known: KnownAgent) -> None:
+    if skills_installed(project_root, Path.home(), known):
+        sys.stdout.write(
+            f"  skills     {known.agent}: already installed (in {known.skills_dir} here or "
+            f"under the home directory); `shockharness skills update --agent {known.agent}` "
+            "refreshes them\n"
+        )
+        return
+    destination = project_root / known.skills_dir
+    result = install_skills(destination, known.agent, force=False)
+    sys.stdout.write(
+        f"{PROGRAM}: installed {len(result.files)} skill(s) for {known.agent} into {destination}\n"
+    )
+    sys.stdout.write(f"{get_adapter(known.agent).discovery}\n")
+    _report_pointer(project_root, known)
+    if known.agent == AGENT_CLAUDE:
+        sys.stdout.write(
+            "Edit-time feedback: `shockharness skills install --agent claude --hook --force` "
+            "also adds a PostToolUse hook to .claude/settings.json, so the agent hears "
+            "findings right after each edit instead of at commit or in CI.\n"
+        )
+
+
+def _report_pointer(project_root: Path, known: KnownAgent) -> None:
+    path, status = add_pointer(project_root, known)
+    sys.stdout.write(f"  pointer    {path}: {status}\n")
 
 
 def _skills_destination(args: argparse.Namespace) -> tuple[Path, Path]:
@@ -814,6 +905,8 @@ def _install_skills(args: argparse.Namespace, destination: Path, project_root: P
             "Add this line to the agent's instruction file (for example AGENTS.md):\n"
             f"  {pointer_line(project_root)}\n"
         )
+    elif not args.user:
+        _report_pointer(project_root, known_agent(adapter.agent))
     if not args.user:
         _ensure_project_config(project_root)
     _report_hook(args, adapter.agent, project_root)

@@ -6842,3 +6842,35 @@ safe for later bumps: the example notice names 0.22.0 as the installed-with vers
 installed skills gets the new notice and should run `skills update`. The tag `v0.24.0` is
 on f3f6ff8. Published by `publish.yml` (run 39763370066, 18 of 18 jobs). PyPI lists 0.24.0
 with a wheel and an sdist.
+
+## Skills reach the agent through the commands (2026-10-22)
+
+Tom asked why MetaList never installed the skills, since any adopter's agent could end up
+the same way. Diagnosis: MetaList adopted ShockHarness on 2026-10-14 (its commit 08e0d7a1),
+the day the skills shipped (0575341). Its agent ran the commands; installing the skills
+was only step 5 of the README's setup guide, `init` wrote just the configuration, and
+neither `check` nor the gate ever mentioned skills. 0.24.0's notice only covers skills
+already installed. TheLivingLabyrinth has them (Codex, `.agents/skills`, installed with
+0.23.0) because its agent read the whole guide. This corrects the previous entry, which
+said no repository of Tom's had them; MetaList is the one without.
+
+Built (new module `skills/presence.py`):
+* `init` installs the skills for each agent whose files are in the project (`.claude/` or
+  `CLAUDE.md`: claude; `.agents/` or `AGENTS.md`: codex), skipping one whose manifest is
+  in the project or home skills directory; `--agent` (repeatable) and `--no-skills`.
+  With no agent's files it prints both commands. The `init` options moved into
+  `_add_init_parser`, so `build_parser` shrank.
+* `skills install` (project, claude or codex) and `init` append a pointer line to
+  `CLAUDE.md`/`AGENTS.md` unless the file already names the skills directory.
+* `check` prints `skills: none installed for <agent> ...; run: <command>` on stderr for a
+  project with its own configuration, unless `skills.notify_missing = false` (new key,
+  schema and defaults; left out of the digest with `cache`). This repository sets it false:
+  it ships the skills rather than installing them.
+* README (setup guide step 2 and step 5, and "six" skills corrected to eight), the
+  adoption skill's copy of the guide, `docs/skills.md`, `docs/configuration.md`.
+
+New tests: `tests/unit/test_skills_presence.py` (13: detection, per-agent notices, a
+per-user install counting, no agent's files, the pointer appended once and kept when the
+file names the skills, `init` with both agents and on a rerun, without agent files,
+`--no-skills` and `--agent`, `skills install` adding the pointer, `check` on stderr beside
+valid JSON, the opt-out, and no notice under the bundled defaults).
