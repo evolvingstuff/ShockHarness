@@ -16,7 +16,12 @@ Recognised (JavaScript comments): ``eslint-disable``, ``eslint-disable-line``,
 ``@ts-expect-error``, ``@ts-nocheck`` (file); ``istanbul ignore next|if|else|file``;
 ``c8 ignore`` and ``v8 ignore`` ``next|start|file``.
 
-Both languages: ``shockharness: ignore[RULE] reason="..."``.
+Recognised (C# comments, G4): ``// ReSharper disable X, Y`` (region),
+``// ReSharper disable once X`` (next line), ``// ReSharper disable All`` (blanket). The
+compiler's own ``#pragma warning disable``, ``#nullable disable`` and
+``[SuppressMessage]`` are syntax, not comments, and are read in ir/csharp_verification.py.
+
+Every language: ``shockharness: ignore[RULE] reason="..."``.
 
 ``@ts-expect-error`` names no codes and is therefore blanket, although it fails when
 nothing needs suppressing; the classification is deliberately the strict one.
@@ -48,6 +53,10 @@ TOOL_TS_NOCHECK = "ts-nocheck"
 TOOL_ISTANBUL = "istanbul-ignore"
 TOOL_C8 = "c8-ignore"
 TOOL_SHOCKHARNESS = "shockharness"
+TOOL_RESHARPER = "resharper-disable"
+TOOL_PRAGMA_WARNING = "pragma-warning"  # C#'s #pragma warning disable
+TOOL_NULLABLE_DISABLE = "nullable-disable"  # C#'s #nullable disable
+TOOL_SUPPRESS_MESSAGE = "suppress-message"  # C#'s [SuppressMessage(...)]
 
 CODE_SPLIT = re.compile(r"[\s,]+")
 BLANKET_CODES = frozenset({"all"})
@@ -72,7 +81,12 @@ TS_DIRECTIVE = re.compile(r"@ts-(?P<kind>ignore|expect-error|nocheck)\b")
 ISTANBUL = re.compile(r"istanbul\s+ignore\s+(?P<kind>next|if|else|file)\b")
 C8 = re.compile(r"\b(?:c8|v8)\s+ignore\s+(?P<kind>next|start|file)\b")
 
-# Both
+# C#
+RESHARPER = re.compile(
+    r"ReSharper\s+disable(?P<once>\s+once)?\s+(?P<codes>[\w.]+(?:\s*,\s*[\w.]+)*)"
+)
+
+# Every language
 SHOCKHARNESS = re.compile(r"shockharness\s*:\s*ignore\[(?P<codes>[^\]]*)\](?P<rest>[^\n]*)")
 REASON = re.compile(r"reason\s*=\s*\"(?P<reason>[^\"]*)\"")
 
@@ -240,6 +254,20 @@ def _javascript_comment(comment: Comment) -> list[SuppressionDirective]:
     return found
 
 
+def _csharp_comment(comment: Comment) -> list[SuppressionDirective]:
+    found: list[SuppressionDirective] = []
+    for match in RESHARPER.finditer(comment.text):
+        codes = _codes(match.group("codes"))
+        once = match.group("once") is not None
+        scope = DIRECTIVE_SCOPE_NEXT_LINE if once else DIRECTIVE_SCOPE_REGION
+        written = "ReSharper disable" + (" once" if once else "") + " " + ",".join(codes)
+        found.append(
+            _directive(TOOL_RESHARPER, scope, codes, _narrow(codes), written, comment.span)
+        )
+    found.extend(_shockharness(comment))
+    return found
+
+
 def _collect(
     comments: Sequence[Comment], classify: Callable[[Comment], list[SuppressionDirective]]
 ) -> tuple[SuppressionDirective, ...]:
@@ -256,3 +284,14 @@ def python_directives(comments: Sequence[Comment]) -> tuple[SuppressionDirective
 
 def javascript_directives(comments: Sequence[Comment]) -> tuple[SuppressionDirective, ...]:
     return _collect(comments, _javascript_comment)
+
+
+def csharp_directives(comments: Sequence[Comment]) -> tuple[SuppressionDirective, ...]:
+    return _collect(comments, _csharp_comment)
+
+
+def directive(
+    tool: str, scope: str, codes: tuple[str, ...], text: str, span: Span
+) -> SuppressionDirective:
+    """A directive read from syntax rather than a comment (C#'s ``#pragma``)."""
+    return _directive(tool, scope, codes, _narrow(codes), text, span)

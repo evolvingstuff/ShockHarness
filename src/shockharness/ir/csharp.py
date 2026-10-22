@@ -34,6 +34,7 @@ from shockharness.ir.csharp_policy import collect_csharp_policy
 from shockharness.ir.csharp_receivers import collect_csharp_receivers
 from shockharness.ir.csharp_strings import collect_csharp_strings
 from shockharness.ir.csharp_usage import collect_csharp_usage
+from shockharness.ir.csharp_verification import collect_csharp_verification
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.model import (
     MODULE_SCOPE,
@@ -41,7 +42,6 @@ from shockharness.ir.model import (
     NO_DATAFLOW,
     NO_DOM,
     NO_STUBS,
-    NO_VERIFICATION,
     Comment,
     ConstantDefinition,
     ModuleFacts,
@@ -173,7 +173,7 @@ def extract_csharp_facts(source: SourceText, filename: str) -> ModuleFacts:
         functions=collect_csharp_functions(source, root, comments),
         imports=imports,
         bindings=bindings,
-        verification=NO_VERIFICATION,
+        verification=collect_csharp_verification(source, root, comments),
         guardrails=guardrails,
         asynchrony=asynchrony,
         catalog=catalog,

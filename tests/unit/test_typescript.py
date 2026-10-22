@@ -317,7 +317,7 @@ def test_type001_switches_and_javascript(make_config: Callable[[str], EffectiveC
         "src/a.js", "javascript", "// @ts-ignore\nexport const a = b;\n", make_config(""), OPTIONS
     )
     assert "TYPE001" not in javascript.rules_applied
-    assert registry.TYPE001.languages == ("python", "typescript")
+    assert registry.TYPE001.languages == ("python", "typescript", "csharp")
 
 
 @pytest.mark.parametrize("suffix", [".ts", ".tsx", ".mts", ".cts"])

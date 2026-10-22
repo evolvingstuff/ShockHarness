@@ -13,6 +13,11 @@ two).
 * STUB003: a method named as a check (``IsReady``, ``CanInteract``, ``Validate``) whose
   whole body returns ``true``, and every class with its bases.
 * STUB002: ``using`` directives, as module imports of their namespace.
+* TYPE001 (G4): ``dynamic`` in a type position, C#'s ``any``, and the null-forgiving
+  operator ``x!``, which tells the compiler a value is not null without checking it.
+  ``null!`` and ``default!`` are not escapes: they are the late initialization idiom
+  (``private Label _score = null!;``, assigned in ``_Ready``), TypeScript's definite
+  assignment ``x!: T``, which TYPE001 does not report either.
 """
 
 import re
@@ -30,6 +35,8 @@ from shockharness.ir.model import (
     MODULE_SCOPE,
     NO_CATALOG,
     NO_GUARDRAILS,
+    TYPE_ESCAPE_ANY,
+    TYPE_ESCAPE_NON_NULL,
     CatalogFacts,
     ClassDecl,
     ConstantPredicate,
@@ -38,6 +45,7 @@ from shockharness.ir.model import (
     ImportTimeCall,
     ModuleBinding,
     ProcessCall,
+    TypeEscape,
 )
 from shockharness.ir.tree_sitter_common import node_span, node_text
 from shockharness.source import SourceText
@@ -55,6 +63,12 @@ PREDICATE = re.compile(
 TRUE = "true"
 USING = "using_directive"
 TEXT_LIMIT = 120
+DYNAMIC = "dynamic"
+TYPE_FIELDS = (Field.TYPE, "returns")
+TYPE_HOLDERS = frozenset({"type_argument_list", "array_type", "nullable_type"})
+POSTFIX = "postfix_unary_expression"
+NULL_FORGIVING = "!"
+LATE_INITIALIZED = frozenset({"null_literal", "default_expression"})
 
 
 def _modifiers(node: Node) -> frozenset[str]:
@@ -200,6 +214,32 @@ def _parts(node: Node) -> list[Node]:
     return [c for c in node.named_children if c.type != Kind.COMMENT]
 
 
+# -- TYPE001 ----------------------------------------------------------------------------------
+
+
+def _type_escape(node: Node, source: SourceText) -> TypeEscape | None:
+    """``dynamic`` where a type is written, or a null-forgiving ``x!``."""
+    if node.type == Kind.IDENTIFIER and node_text(node) == DYNAMIC:
+        parent = node.parent
+        if parent is None:
+            return None
+        typed = parent.type in TYPE_HOLDERS or any(
+            parent.child_by_field_name(f) == node for f in TYPE_FIELDS
+        )
+        if not typed:
+            return None
+        name = parent.child_by_field_name(Field.NAME)
+        text = _text(parent)
+        if name is not None:  # a member declared dynamic: its signature, not its body
+            text = f"{DYNAMIC} {node_text(name)}"
+        return TypeEscape(TYPE_ESCAPE_ANY, text, node_span(source, node))
+    if node.type == POSTFIX and node.child_count > 0:
+        last = node.children[node.child_count - 1]
+        if last.type == NULL_FORGIVING and node.children[0].type not in LATE_INITIALIZED:
+            return TypeEscape(TYPE_ESCAPE_NON_NULL, _text(node), node_span(source, node))
+    return None
+
+
 # -- the walk ---------------------------------------------------------------------------------
 
 
@@ -212,9 +252,13 @@ class _Collector:
         self.predicates: list[ConstantPredicate] = []
         self.classes: list[ClassDecl] = []
         self.imports: list[ImportFact] = []
+        self.escapes: list[TypeEscape] = []
 
     def visit(self, node: Node, scope: str, function: Node | None) -> None:
         kind = node.type
+        escape = _type_escape(node, self.source)
+        if escape is not None:
+            self.escapes.append(escape)
         if kind == Kind.FIELD_DECLARATION:
             self.bindings.extend(_static_fields(node, self.source))
         self.startup.extend(_startup_calls(node, self.source))
@@ -292,7 +336,7 @@ def collect_csharp_policy(
         sleeps=NO_CATALOG.sleeps,
         retries=NO_CATALOG.retries,
         batch_loops=NO_CATALOG.batch_loops,
-        type_escapes=NO_CATALOG.type_escapes,
+        type_escapes=tuple(sorted(collector.escapes, key=lambda t: (t.span, t.kind))),
         constant_predicates=tuple(sorted(collector.predicates, key=lambda p: p.span)),
         classes=tuple(collector.classes),
     )

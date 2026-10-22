@@ -6,6 +6,7 @@ discarded calls for RESULT001); this module applies the catalogs in each rule's 
 resolving callees through the file's own imports (rules/guardrails.py).
 """
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -27,8 +28,11 @@ from shockharness.ir.model import (
     ModuleFacts,
     ProcessCall,
     Span,
+    SuppressionDirective,
 )
 from shockharness.ir.suppression_directives import (
+    TOOL_NULLABLE_DISABLE,
+    TOOL_PRAGMA_WARNING,
     TOOL_TS_EXPECT_ERROR,
     TOOL_TS_IGNORE,
     TOOL_TS_NOCHECK,
@@ -100,10 +104,25 @@ PYTHON_ESCAPE_NAMES = {
     TYPE_ESCAPE_CAST: "cast(...)",
     TYPE_ESCAPE_NON_NULL: "",  # TypeScript only
 }
+CSHARP_ESCAPE_NAMES = {
+    TYPE_ESCAPE_ANY: "dynamic",
+    TYPE_ESCAPE_CAST: "",  # a C# cast is checked at run time
+    TYPE_ESCAPE_NON_NULL: "the null-forgiving operator",
+}
+CSHARP_NON_NULL_MESSAGE = "{name} (!) claims the value is never null without checking it: {text}"
+# C#'s nullable warnings (CS8600-CS8799): a #pragma that disables one of them, or that
+# names no code, turns null checking off for the region that follows (approximate: the
+# range holds every nullable warning and a few others).
+NULLABLE_WARNING = re.compile(r"^(?:CS)?8[67]\d\d$", re.IGNORECASE)
 TYPESCRIPT_ESCAPE_NAMES = {
     TYPE_ESCAPE_ANY: "any",
     TYPE_ESCAPE_CAST: "a type assertion",
     TYPE_ESCAPE_NON_NULL: "a non-null assertion",
+}
+ESCAPE_NAMES = {
+    PYTHON: PYTHON_ESCAPE_NAMES,
+    TYPESCRIPT: TYPESCRIPT_ESCAPE_NAMES,
+    CSHARP: CSHARP_ESCAPE_NAMES,
 }
 
 
@@ -279,6 +298,18 @@ def _result001(
 # -- TYPE001 -----------------------------------------------------------------------------
 
 
+def _silencer(directive: SuppressionDirective) -> str | None:
+    """What a directive that silences the type checker does, or ``None``."""
+    if directive.tool in TYPE_CHECKER_DIRECTIVES:
+        return f"{directive.text} silences the type checker on this line"
+    if directive.tool == TOOL_NULLABLE_DISABLE:
+        return f"{directive.text} turns the compiler's null checking off from here on"
+    nullable = not directive.narrow or any(NULLABLE_WARNING.match(c) for c in directive.codes)
+    if directive.tool == TOOL_PRAGMA_WARNING and nullable:
+        return f"{directive.text} silences the compiler's null checking from here on"
+    return None
+
+
 def _type001(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
@@ -289,28 +320,25 @@ def _type001(
         TYPE_ESCAPE_CAST: settings["report_cast"] is True,
         TYPE_ESCAPE_NON_NULL: settings["report_non_null"] is True,
     }
-    names = PYTHON_ESCAPE_NAMES if language == PYTHON else TYPESCRIPT_ESCAPE_NAMES
+    names = ESCAPE_NAMES[language]
     for escape in facts.catalog.type_escapes:
         if not wanted[escape.kind]:
             continue
-        message = ESCAPE_MESSAGES[escape.kind].format(name=names[escape.kind], text=escape.text)
+        template = ESCAPE_MESSAGES[escape.kind]
+        if language == CSHARP and escape.kind == TYPE_ESCAPE_NON_NULL:
+            template = CSHARP_NON_NULL_MESSAGE
+        message = template.format(name=names[escape.kind], text=escape.text)
         found.append(
             _finding(TYPE001, severity, path, escape.span, message, source, CONFIDENCE_EXACT)
         )
     if settings["report_type_ignore"] is True:
         for directive in facts.verification.suppressions:
-            if directive.tool not in TYPE_CHECKER_DIRECTIVES:
+            silenced = _silencer(directive)
+            if silenced is None:
                 continue
+            span = directive.span
             found.append(
-                _finding(
-                    TYPE001,
-                    severity,
-                    path,
-                    directive.span,
-                    f"{directive.text} silences the type checker on this line",
-                    source,
-                    CONFIDENCE_EXACT,
-                )
+                _finding(TYPE001, severity, path, span, silenced, source, CONFIDENCE_EXACT)
             )
     return found
 
@@ -527,7 +555,7 @@ def run_catalog_rules(
     if RESULT001.rule_id in active:
         permitted = runtime_callees(rules["property_contracts"])
         found.extend(_result001(facts, source, path, language, rules["results"], permitted))
-    if TYPE001.rule_id in active and language in (PYTHON, TYPESCRIPT):
+    if TYPE001.rule_id in active and language in ESCAPE_NAMES:
         found.extend(_type001(facts, source, path, language, rules["types"]))
     if SLEEP001.rule_id in active:
         found.extend(_sleep001(facts, source, path, language, rules["sleep"]))

@@ -6,7 +6,8 @@ at the analysis root: ``pyproject.toml`` ([tool.ruff], [tool.pytest.ini_options]
 ``.flake8`` ([flake8], [tool:pytest] / [pytest], [coverage:*]), ``pytest.ini``,
 ``.coveragerc``, and ``.eslintrc.json`` / ``.eslintrc`` (JSON only; a YAML
 ``.eslintrc`` is reported as not comparable). Flat-config ``eslint.config.js`` and
-``package.json`` ``eslintConfig`` are not read.
+``package.json`` ``eslintConfig`` are not read. .NET (G4): every ``*.csproj``,
+``Directory.Build.props`` and ``.editorconfig`` in the revision (rules/dotnet_settings.py).
 
 Each file becomes a :class:`ToolSettings`: sets of items per category, numbers, and
 ESLint rule levels. :func:`tool_loosenings` says what got looser between two
@@ -23,6 +24,8 @@ import tomllib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from shockharness.rules import dotnet_settings
 
 TOOL_CONFIG_FILES = (
     "pyproject.toml",
@@ -55,9 +58,16 @@ ADDED_IS_LOOSER = (
     "coverage.exclude_lines",
     "coverage.exclude_also",
     "eslint.ignorePatterns",
+    "dotnet.NoWarn",
 )
 # Removing an item from one of these turns a check off (or narrows what is tested).
-REMOVED_IS_LOOSER = ("ruff.select", "ruff.extend-select", "pytest.testpaths")
+REMOVED_IS_LOOSER = (
+    "ruff.select",
+    "ruff.extend-select",
+    "pytest.testpaths",
+    "dotnet.checks",  # Nullable=enable, TreatWarningsAsErrors=true and the like
+    "dotnet.WarningsAsErrors",
+)
 FAIL_UNDER = "coverage.fail_under"
 # Strictest first; a later level is looser. Numeric levels are read as strings.
 ESLINT_LEVELS = {
@@ -82,6 +92,9 @@ class ToolSettings:
     sets: Mapping[str, frozenset[str]]
     numbers: Mapping[str, float]
     eslint_rules: Mapping[str, str]  # rule -> error | warn | off
+    # .NET: AnalysisMode / AnalysisLevel -> all ... none; an .editorconfig severity key ->
+    # error ... none (rules/dotnet_settings.py)
+    dotnet_levels: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -96,6 +109,7 @@ class _Builder:
         self.sets: dict[str, set[str]] = {}
         self.numbers: dict[str, float] = {}
         self.eslint_rules: dict[str, str] = {}
+        self.dotnet_levels: dict[str, str] = {}
 
     def add(self, category: str, items: Iterable[str]) -> None:
         if category not in self.sets:
@@ -112,6 +126,7 @@ class _Builder:
             sets={key: frozenset(values) for key, values in self.sets.items()},
             numbers=dict(self.numbers),
             eslint_rules=dict(self.eslint_rules),
+            dotnet_levels=dict(self.dotnet_levels),
         )
 
 
@@ -320,8 +335,26 @@ def _eslint(name: str, text: str) -> tuple[ToolSettings | None, str | None]:
     return builder.build(), None
 
 
+def _dotnet(name: str, text: str) -> ToolSettings:
+    builder = _Builder()
+    if dotnet_settings.file_name(name) == dotnet_settings.EDITORCONFIG:
+        builder.dotnet_levels.update(dotnet_settings.editorconfig_severities(text))
+        return builder.build()
+    properties = dotnet_settings.msbuild_properties(text)
+    builder.add("dotnet.checks", dotnet_settings.switched_on(properties))
+    for listed in (dotnet_settings.WARNINGS_AS_ERRORS, dotnet_settings.NO_WARN):
+        written = dotnet_settings.values(properties, listed)
+        if len(written) > 0:
+            builder.add(f"dotnet.{listed}", dotnet_settings.codes(written))
+    builder.dotnet_levels.update(dotnet_settings.analysis_levels(properties))
+    return builder.build()
+
+
 def read_tool_settings(name: str, text: str) -> tuple[ToolSettings | None, str | None]:
-    """Parse one of :data:`TOOL_CONFIG_FILES`. Returns (settings, error); one is set."""
+    """Parse one of :data:`TOOL_CONFIG_FILES`, or a .NET settings file (any path).
+    Returns (settings, error); one is set."""
+    if dotnet_settings.is_dotnet_settings(name):
+        return _dotnet(name, text), None
     if name in ("pyproject.toml", "ruff.toml", ".ruff.toml"):
         return _toml(name, text)
     if name in (".eslintrc.json", ".eslintrc"):
@@ -381,12 +414,37 @@ def _eslint_loosenings(before: ToolSettings, after: ToolSettings) -> list[ToolLo
     return found
 
 
+def _dotnet_order(key: str) -> tuple[str, ...]:
+    if key in (dotnet_settings.ANALYSIS_MODE, dotnet_settings.ANALYSIS_LEVEL):
+        return dotnet_settings.ANALYSIS_ORDER
+    return dotnet_settings.SEVERITY_ORDER
+
+
+def _dotnet_loosenings(before: ToolSettings, after: ToolSettings) -> list[ToolLoosening]:
+    """An analysis mode or an analyzer severity turned down, or a severity removed."""
+    found: list[ToolLoosening] = []
+    for key, old_level in sorted(before.dotnet_levels.items()):
+        order = _dotnet_order(key)
+        if old_level == order[len(order) - 1]:
+            continue
+        if key not in after.dotnet_levels:
+            message = f"{key} ({old_level}) was removed"
+            found.append(ToolLoosening("dotnet.levels", key, message))
+            continue
+        new_level = after.dotnet_levels[key]
+        if order.index(new_level) > order.index(old_level):
+            message = f"{key} turned down from {old_level} to {new_level}"
+            found.append(ToolLoosening("dotnet.levels", key, message))
+    return found
+
+
 def tool_loosenings(before: ToolSettings, after: ToolSettings) -> list[ToolLoosening]:
     """What ``after`` turns off or narrows compared with ``before``."""
     return [
         *_set_loosenings(before, after),
         *_fail_under(before, after),
         *_eslint_loosenings(before, after),
+        *_dotnet_loosenings(before, after),
     ]
 
 

@@ -1895,11 +1895,12 @@ TYPE001 = RuleSpec(
     config_section=TYPES_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON, TYPESCRIPT),
+    languages=(PYTHON, TYPESCRIPT, CSHARP),
     summary=(
         "Any, typing.cast and # type: ignore (Python); any, as/<T> assertions, non-null ! and "
-        "@ts-ignore (TypeScript) switch the type checker off for a value or a line; each is a "
-        "claim nobody checks."
+        "@ts-ignore (TypeScript); dynamic, the null-forgiving x!, #nullable disable and "
+        "#pragma warning disable of a nullable warning (C#) switch the type checker off for a "
+        "value, a line or a region; each is a claim nobody checks."
     ),
     rationale=(
         "An agent that cannot satisfy the type checker can make it stop looking. Each escape "
@@ -1912,11 +1913,15 @@ TYPE001 = RuleSpec(
         "kind can be switched off (report_any, report_cast, report_type_ignore). TypeScript: "
         "the any type anywhere; x as T and <T>x (not as const; x as unknown as T is reported "
         "once); the non-null assertion x! (report_non_null); @ts-ignore, @ts-expect-error and "
-        "@ts-nocheck (report_type_ignore). Exact."
+        "@ts-nocheck (report_type_ignore). C# (G4): dynamic where a type is written "
+        "(report_any); the null-forgiving operator x! (report_non_null); #nullable disable, "
+        "and #pragma warning disable naming a nullable warning (CS86xx, CS87xx) or no code "
+        "at all (report_type_ignore). Exact on the syntax."
     ),
     limitations=(
         "Type checking itself stays with mypy, pyright or tsc; ShockHarness only lists the "
-        "escapes. Plain JavaScript has no types, so TYPE001 does not apply to it. A "
+        "escapes. Plain JavaScript has no types, so TYPE001 does not apply to it. A C# cast "
+        "is checked at run time and is not an escape; a pragma's code range is approximate. A "
         "deliberate boundary is excluded with an [[overrides]] entry."
     ),
     remediation=(
@@ -1936,10 +1941,11 @@ TYPE002 = RuleSpec(
     config_section=TYPES_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=(PYTHON,),
+    languages=(PYTHON, CSHARP),
     summary=(
         "Most production functions carry type annotations and no Python type checker is "
-        "configured: one finding per run (spec 21.1 decision 33)."
+        "configured: one finding per run (spec 21.1 decision 33). C#: a project whose "
+        "nullable reference types are off, so the compiler checks no null (decision 52)."
     ),
     rationale=(
         "An annotation is a claim. Without a checker nothing verifies it, so a wrong one "
@@ -1954,13 +1960,18 @@ TYPE002 = RuleSpec(
         ".mypy.ini, pyrightconfig.json, .pyre_configuration, ty.toml, a [tool.mypy], "
         "[tool.pyright], [tool.basedpyright], [tool.pyre] or [tool.ty] table in "
         "pyproject.toml, or [mypy] in setup.cfg or tox.ini. Severity "
-        "rules.types.type002_severity (review by default)."
+        "rules.types.type002_severity (review by default). C#: each *.csproj under the "
+        "analysis root that has C# files where the rule applies, when neither it nor the "
+        "Directory.Build.props above it sets <Nullable> to enable or warnings; one finding "
+        "per project, at line 1 of its first C# file, naming the project file."
     ),
     limitations=(
         "Configuration only: a configured checker that CI never runs is not seen, and a "
         "checker configured outside the analysis root (a parent directory, a command line) "
         "is not either. TypeScript is not covered: a TypeScript project that builds has a "
-        "tsconfig.json."
+        "tsconfig.json. C#: MSBuild is not evaluated (conditions, imports and $(...) are "
+        "not followed), and files that turn null checking on themselves (#nullable enable) "
+        "are not counted; C# files with no project file above them are not judged."
     ),
     remediation=(
         "Configure the checker and run it in CI (mypy or pyright with the project's own "

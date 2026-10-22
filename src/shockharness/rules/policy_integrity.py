@@ -53,6 +53,7 @@ from shockharness.gating.baseline import FINGERPRINTS_FIELD, assign_fingerprints
 from shockharness.ir.model import Span
 from shockharness.loosening import is_remedy, loosenings, scope_changes
 from shockharness.roles import FILE_ROLES_KEY, ROLE_PRODUCTION, ROLE_TEST, role_classifier
+from shockharness.rules.dotnet_settings import dotnet_setting_files, is_dotnet_settings
 from shockharness.rules.registry import VERIFY003
 from shockharness.rules.tool_configs import TOOL_CONFIG_FILES, read_tool_settings, tool_loosenings
 from shockharness.rules.workflows import (
@@ -266,6 +267,8 @@ def take_snapshot(
         path = export_root / name
         if path.is_file():
             _read_into(path, name, texts, errors)
+    for name in dotnet_setting_files(export_root):
+        _read_into(export_root / name, name, texts, errors)
     workflows_checked = prefix == ""
     if workflows_checked:
         for path in _workflow_files(toplevel / WORKFLOW_DIRECTORY):
@@ -544,7 +547,8 @@ def _tool_findings(
     base: PolicySnapshot, head: PolicySnapshot, short: str, severity: str
 ) -> list[Finding]:
     findings: list[Finding] = []
-    for name in TOOL_CONFIG_FILES:
+    dotnet = sorted(p for p in {*base.texts, *head.texts} if is_dotnet_settings(p))
+    for name in (*TOOL_CONFIG_FILES, *dotnet):
         base_text = _text_at(base.texts, name)
         head_text = _text_at(head.texts, name)
         if base_text == head_text or base_text is None:
@@ -568,9 +572,10 @@ def _tool_findings(
             )
             continue
         for item in tool_loosenings(before, after):
+            setting, _equals, _value = item.item.partition("=")  # dotnet.checks: Nullable=enable
             line = _first_line_mentioning(
                 anchor_text,
-                (item.item, item.category.split(".")[len(item.category.split(".")) - 1]),
+                (item.item, setting, item.category.split(".")[len(item.category.split(".")) - 1]),
             )
             findings.append(
                 policy_finding(
