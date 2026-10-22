@@ -6917,3 +6917,15 @@ New tests in `tests/unit/test_import_boundaries.py` (8): Python names with submo
 on a module; JavaScript packages, scoped packages, `node:` and dynamic `import()`;
 `allowed_importers` on a path boundary; configuration errors; the loosening clauses; an old
 entry covered by a new one with the keys.
+
+## Release 0.26.0 (2026-10-22)
+
+On Tom's go-ahead. CI was green on 52c3cc5 (run 39869311397) and on the release commit
+86ff862 (run 39872868276), 16 of 16 jobs each. The pin moved in the same 15 files.
+Upgrade note: no change for existing configurations; the new IMPORT002 keys add findings
+only where a project writes them. Three skills changed (async-lifecycle's new section,
+the pin in adopt-shockharness and pre-commit-review), so a repository with installed
+skills gets `skills: 3 out of date` from `check` and should run `skills update`. While
+writing the note I first said one skill changed; `git diff v0.25.0` showed the pins count
+too. The tag `v0.26.0` is on 86ff862. Published by `publish.yml` (run 39873995960, 18 of
+18 jobs). PyPI lists 0.26.0 with a wheel and an sdist.
