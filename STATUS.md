@@ -6652,3 +6652,15 @@ not, because the dead-code rules' same-name fallback reached the class anyway).
 `_Resolver._local_name`, split out of `resolve_name` to keep its paths where they were, keep
 its decisions (a whole-module import is not callable; a local no own import binds is of
 unknown value: unresolved edges, no finding).
+
+## Release 0.22.0 (2026-10-21)
+
+On Tom's go-ahead. CI was green on 82d6f29 (run 39729752652) and on the release commit
+a82a696 (run 39732568816), 16 of 16 jobs each. Every pin moved from 0.21.0 (the same 20
+files); two mentions of 0.21.0 as history stayed (the VERIFY005 backlog row and the
+comment in `test_stale_stubs.py` naming the version MetaList reported against), and the
+bump's diff was checked for lines that are not pins (none). The `[0.22.0]` upgrade note:
+STATE003 at review; the call-graph fix can change what the graph-reading rules report, all
+warning or review by default (property contracts and IMPORT002 do not read it); cache
+schema "33". The tag `v0.22.0` is on a82a696. Published by `publish.yml` (run 39733256610,
+18 of 18 jobs). PyPI lists 0.22.0 with a wheel and an sdist.
