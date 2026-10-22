@@ -37,7 +37,7 @@ Each rule family enforces one of these. `docs/rules.md` has the rules, and the
   only at a declared boundary, where the program meets the outside world, and there
   the failure becomes a typed error, never a success-shaped value. A `finally` does
   not swallow it, a batch loop does not log it away, a retry gives up.
-  (`EXC001`-`EXC005`, `DEF005`, `BATCH001`, `RETRY001`, `ASYNC001`-`ASYNC003`)
+  (`EXC001`-`EXC006`, `DEF005`, `BATCH001`, `RETRY001`, `ASYNC001`-`ASYNC003`)
 * **Absence is a decision, not a default.** Missing data fails loudly, once, where it
   enters. No parameter defaults, `.get(k, v)`, `x or v`, `x ?? v` or environment
   fallbacks. A value that is really optional says so in its type, and the code
@@ -111,6 +111,7 @@ Implemented rules:
 | `EXC003` | approved `try` wrapping more than the one sanctioned operation | error |
 | `EXC004` | `return`, `break` or `continue` that leaves a `finally` block, discarding the exception in flight | warning |
 | `EXC005` | a declared catch boundary that no catch in its files uses | warning |
+| `EXC006` | an error class derived from `SystemExit`, which `except Exception` does not catch and which ends the process | warning |
 | `DEF001` | parameter default, dataclass field default / `default_factory` | error |
 | `DEF002` | `m.get(k, v)`, `getattr(o, a, v)`, `o?.x ?? v`, `const {x = v} = o`; `.get(k)` implicit `None` as review | error |
 | `DEF003` | `x or v`, `x || v` outside Boolean logic | review |

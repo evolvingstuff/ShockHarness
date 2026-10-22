@@ -35,6 +35,7 @@ from shockharness.rules.registry import (
     CSHARP,
     DOM001,
     EXC004,
+    EXC006,
     IMPORT001,
     JAVASCRIPT,
     JAVASCRIPT_FAMILY,
@@ -53,6 +54,7 @@ from shockharness.source import SourceText
 # ASSERT001 and ASSERT002 are applied here and run in the cross-file phase (rules/dataflow.py).
 GUARDRAIL_RULES = (
     EXC004,
+    EXC006,
     STUB001,
     STUB002,
     ASSERT001,
@@ -122,6 +124,23 @@ def _exc004(facts: ModuleFacts, source: SourceText, path: str, severity: str) ->
             CONFIDENCE_EXACT,
         )
         for exit_ in facts.guardrails.finally_exits
+    ]
+
+
+def _exc006(facts: ModuleFacts, source: SourceText, path: str, severity: str) -> list[Finding]:
+    return [
+        _finding(
+            EXC006,
+            severity,
+            path,
+            exit_.span,
+            f"{exit_.name} derives from {exit_.base}: except Exception does not catch it, and "
+            "raising it ends the process with its argument as the exit status",
+            source,
+            exit_.name,
+            CONFIDENCE_EXACT,
+        )
+        for exit_ in facts.guardrails.exit_exceptions
     ]
 
 
@@ -492,8 +511,10 @@ def run_guardrail_rules(
 ) -> list[Finding]:
     """Findings of the active H3 rules for one file; ``rules`` is the ``rules`` table."""
     exc004 = section_severity(rules["exceptions"], EXC004.default_severity)
+    exc006 = section_severity(rules["exceptions"], EXC006.default_severity)
     runners: tuple[tuple[RuleSpec, Callable[[], list[Finding]]], ...] = (
         (EXC004, lambda: _exc004(facts, source, path, exc004)),
+        (EXC006, lambda: _exc006(facts, source, path, exc006)),
         (STUB001, lambda: _stub001(facts, source, path, rules["stubs"])),
         (STUB002, lambda: _stub002(facts, source, path, language, rules["stubs"])),
         (BOOL001, lambda: _bool001(facts, source, path, rules["boolean_arguments"])),

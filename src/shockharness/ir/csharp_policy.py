@@ -285,6 +285,7 @@ def collect_csharp_policy(
         element_guards=NO_GUARDRAILS.element_guards,
         early_publications=NO_GUARDRAILS.early_publications,
         unlocked_reads=NO_GUARDRAILS.unlocked_reads,
+        exit_exceptions=NO_GUARDRAILS.exit_exceptions,
     )
     catalog = CatalogFacts(
         process_calls=tuple(sorted(collector.processes, key=lambda c: c.span)),

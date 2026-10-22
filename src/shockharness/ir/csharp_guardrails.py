@@ -187,6 +187,7 @@ def collect_csharp_guardrails(source: SourceText, root: Node) -> tuple[Guardrail
         element_guards=NO_GUARDRAILS.element_guards,
         early_publications=NO_GUARDRAILS.early_publications,
         unlocked_reads=NO_GUARDRAILS.unlocked_reads,
+        exit_exceptions=NO_GUARDRAILS.exit_exceptions,
     )
     asynchrony = AsyncFacts(
         discarded_calls=tuple(sorted(collector.discarded, key=lambda c: c.span)),

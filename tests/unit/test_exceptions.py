@@ -433,6 +433,7 @@ def test_exception_rules_share_one_enabled_switch(
         "EXC003",
         "EXC004",
         "EXC005",
+        "EXC006",
     ]
     assert "rules.exceptions is disabled" in config.deviations
 
@@ -461,6 +462,7 @@ OVERRIDE_APPLIED = (
     "EXC001",
     "EXC003",
     "EXC004",
+    "EXC006",
     "GUARD001",
     "IMPORT001",
     "INPUT001",

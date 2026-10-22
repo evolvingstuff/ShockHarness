@@ -841,6 +841,19 @@ this run, so the edit hook, `check` on a subdirectory, and a boundary for a file
 does not exist yet produce nothing. On ShockHarness's own 37 boundaries and the
 experiment's 53 it found none unused.
 
+**EXC006 (warning, Python).** An error class derived from `SystemExit` (spec 21.1
+decision 49): `except Exception` does not catch it, so it skips every handler written
+for errors, and raising it ends the process with its argument as the exit status. Agents
+in the under-the-gate experiment wrote `ConfigError(SystemExit)` and
+`InputUnreadableError(SystemExit)` to get an exit code without an entry point that maps
+errors to one. Reported at the class statement when `SystemExit` or
+`builtins.SystemExit` is among its bases, in any role; severity follows
+`rules.exceptions` like EXC004. Classes derived from `KeyboardInterrupt`,
+`GeneratorExit` or `BaseException` are left alone: in the 672 files of pip, _pytest,
+hypothesis, build and hatchling they are all framework control flow (pytest's outcome
+exceptions, hypothesis's `StopTest`). Measured: the two experiment builds above, nothing
+in MetaList, ShockHarness or that corpus.
+
 **EXC004.** Python: `return` anywhere in a `finally` block, and `break`/`continue`
 not inside a loop of their own within the block (a `break` in the `else` of such
 a loop leaves the block). JavaScript: `return` in a `finally` clause; an

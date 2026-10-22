@@ -6675,3 +6675,14 @@ timers/promises `setTimeout`). SLEEP001 skips them. Version 2; cache schema "34"
 MetaList 0e6b708a with its own configuration, 75 SLEEP001 to 71: `tagging_run.py:469`
 (`await asyncio.sleep(0)`) and three `setTimeout(resolve, 0)` in browser scripts.
 New test: `test_api_catalog.py::test_sleep001_lets_a_zero_delay_yield_pass`.
+
+## Decision 49: EXC006, error classes derived from SystemExit — DONE (2026-10-21)
+
+Tom's go-ahead ("Do all of those"). Facts: `GuardrailFacts.exit_exceptions` (Python; the
+other languages record none), a class statement with `SystemExit` or `builtins.SystemExit`
+among its bases. Runner beside EXC004 in `rules/guardrails.py`, warning, the
+`rules.exceptions` section's cap (which lowers errors only), every role. Narrower than
+proposed: `KeyboardInterrupt` and `GeneratorExit` bases are left out with `BaseException`,
+since the only one measured (pytest's `Interrupted`) is framework control flow. Measured
+with the tool: feedcheck r2's `ConfigError` and contactclean r1's `InputUnreadableError`,
+the two incidents. Cache schema "35". New tests: `tests/unit/test_exc006.py`.

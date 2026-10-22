@@ -616,6 +616,16 @@ class FinallyExit:
 
 
 @dataclass(frozen=True)
+class ExitException:
+    """EXC006: ``class <name>(SystemExit)``, a class raised like an error that ``except
+    Exception`` does not catch and that ends the process. Python only."""
+
+    name: str
+    base: str
+    span: Span
+
+
+@dataclass(frozen=True)
 class Placeholder:
     """Code that stands in for an implementation. ``scope`` is the enclosing unit."""
 
@@ -707,6 +717,7 @@ class GuardrailFacts:
     element_guards: tuple[ElementGuard, ...]
     early_publications: tuple[EarlyPublication, ...]
     unlocked_reads: tuple[UnlockedRead, ...]
+    exit_exceptions: tuple[ExitException, ...]
 
 
 NO_GUARDRAILS = GuardrailFacts(
@@ -718,6 +729,7 @@ NO_GUARDRAILS = GuardrailFacts(
     element_guards=(),
     early_publications=(),
     unlocked_reads=(),
+    exit_exceptions=(),
 )
 
 

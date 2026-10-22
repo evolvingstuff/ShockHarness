@@ -2973,6 +2973,49 @@ EXC005 = RuleSpec(
 )
 
 
+EXC006 = RuleSpec(
+    rule_id="EXC006",
+    version="1",
+    name="an error class derived from SystemExit",
+    family="exceptions",
+    config_section="rules.exceptions",
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A class derived from SystemExit is raised like an error, but except Exception does "
+        "not catch it and the process ends with its argument as the exit status."
+    ),
+    rationale=(
+        "Deriving a domain error from SystemExit makes it skip every handler written for "
+        "errors, including the ones at the boundaries that report and recover, and turns it "
+        "into a silent exit. Agents in the under-the-gate experiment wrote ConfigError(SystemExit) "
+        "and InputUnreadableError(SystemExit) to get an exit code without writing an entry point "
+        "that maps errors to one."
+    ),
+    guarantees=(
+        "Python: a class statement with SystemExit or builtins.SystemExit among its bases, in "
+        "any role. Exact on the syntax."
+    ),
+    limitations=(
+        "Only SystemExit itself: classes derived from KeyboardInterrupt, GeneratorExit or "
+        "BaseException are framework control flow more often than not (pytest's outcomes, "
+        "hypothesis's StopTest) and are not reported; nor is a base reached through another "
+        "class or an alias."
+    ),
+    remediation=(
+        "Derive the error from Exception (or a domain base under it), and let the entry point "
+        "catch it and exit with the status it maps to: except ConfigError as error: "
+        "raise SystemExit(EXIT_CONFIG) from error."
+    ),
+    noncompliant_example="class ConfigError(SystemExit):\n    pass",
+    compliant_example=(
+        "class ConfigError(Exception):\n    pass\n\n\ndef main():\n    try:\n        run()\n"
+        "    except ConfigError as error:\n        raise SystemExit(EXIT_CONFIG) from error"
+    ),
+)
+
+
 # --- DOM001 (decision 27) ---------------------------------------------------------------
 
 DOM001 = RuleSpec(
@@ -3489,6 +3532,7 @@ RULES: tuple[RuleSpec, ...] = (
     MAGIC004,
     MAGIC005,
     EXC005,
+    EXC006,
     STATE002,
     STATE003,
     PROP001,

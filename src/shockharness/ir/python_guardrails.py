@@ -33,6 +33,7 @@ from shockharness.ir.model import (
     PLACEHOLDER_NOT_IMPLEMENTED_CONSTANT,
     AssertFact,
     BooleanArgument,
+    ExitException,
     FinallyExit,
     GuardrailFacts,
     ImportTimeCall,
@@ -71,6 +72,22 @@ def _is_main_guard(test: ast.expr) -> bool:
 
 
 # -- finally exits ------------------------------------------------------------------------
+
+
+EXIT_BASES = frozenset({"SystemExit", "builtins.SystemExit"})
+
+
+def _exit_exceptions(source: SourceText, module: ast.Module) -> tuple[ExitException, ...]:
+    """Classes whose base is ``SystemExit`` (EXC006)."""
+    found: list[ExitException] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = [dotted_name(base) for base in node.bases]
+        for base in bases:
+            if base is not None and base in EXIT_BASES:
+                found.append(ExitException(node.name, base, node_span(source, node)))
+    return tuple(sorted(found, key=lambda e: e.span))
 
 
 def _finally_exits(source: SourceText, module: ast.Module) -> list[FinallyExit]:
@@ -315,4 +332,5 @@ def collect_python_guardrails(source: SourceText, module: ast.Module) -> Guardra
         element_guards=(),  # DOM001 is JavaScript and TypeScript only
         early_publications=collect_python_publications(source, module),
         unlocked_reads=collect_python_unlocked_reads(source, module),
+        exit_exceptions=_exit_exceptions(source, module),
     )

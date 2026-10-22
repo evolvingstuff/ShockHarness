@@ -119,8 +119,9 @@ ELAPSED_DECIMALS: Final[int] = 3
 # "27": function shapes (DUP001, DUP002); "28": C# exceptions and defaults (decision 41);
 # "29": the annotated signature of a function shape (DUP002); "30": test stubs (VERIFY005);
 # "31": text positions (DOM003); "32": C# usage facts (decision 46); "33": reads outside a
-# lock (STATE003); "34": zero-delay sleeps (SLEEP001 version 2).
-CACHE_SCHEMA_VERSION: Final[str] = "34"
+# lock (STATE003); "34": zero-delay sleeps (SLEEP001 version 2); "35": SystemExit
+# subclasses (EXC006).
+CACHE_SCHEMA_VERSION: Final[str] = "35"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

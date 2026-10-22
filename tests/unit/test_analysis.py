@@ -162,6 +162,7 @@ APPLIED_TO_PYTHON = (
     "EXC002",
     "EXC003",
     "EXC004",
+    "EXC006",
     "GUARD001",
     "IMPORT001",
     "INPUT001",

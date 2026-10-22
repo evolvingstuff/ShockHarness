@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **EXC006 (warning, Python): an error class derived from `SystemExit`** (spec 21.1
+  decision 49). `except Exception` does not catch it, and raising it ends the process with
+  its argument as the exit status. The remedy is an `Exception` subclass the entry point
+  maps to an exit status. In the under-the-gate experiment it finds the two builds that
+  did this; nothing in MetaList, ShockHarness or 672 files of pip, pytest, hypothesis,
+  build and hatchling. Cache schema "35".
+
 ### Changed
 - **SLEEP001 (version 2) leaves a zero delay alone.** `await asyncio.sleep(0)`,
   `setTimeout(resolve, 0)` and `setTimeout(resolve)` yield to the event loop; they do not
