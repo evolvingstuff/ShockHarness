@@ -5,6 +5,25 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-21
+
+STATE003 (state read outside the lock that guards its writes), and a call-graph fix for
+names a function imports inside its body, which MetaList found through VERIFY005 false
+positives.
+
+**Upgrading from 0.21.0.** No new dependency, and nothing can fail a gate that passed
+unless a project raised a severity to `error`:
+
+- **STATE003** is on for Python production code at `review`.
+- **The call-graph fix** resolves calls of function-local imports and of a module body's
+  own imports. The rules that read the call graph can report differently, all at warning
+  or review by default: VERIFY005 drops stubs it wrongly called stale; DEAD001/DEAD002
+  (opt-in) can find a function a same-name fallback had kept alive; CPLX005 fan-out can
+  rise on module bodies; ASYNC001-ASYNC003, INPUT001, ASSERT001, PROV001 and GUARD001 can
+  see calls they missed. Property contracts and IMPORT002 do not use it.
+
+The cache schema is "33", so the first run after upgrading rebuilds the cache.
+
 ### Added
 - **STATE003 (review, Python): state read outside the lock that guards its writes** (spec
   21.1 decision 48). An attribute (or module `global`) that other code only writes while
