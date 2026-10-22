@@ -52,9 +52,9 @@ root.
 The version is always an exact pin; nothing updates to `latest`. Pick one:
 
 ```bash
-uv tool install 'shockharness==0.23.0'                    # isolated tool environment; any repository, JavaScript included
-uvx --from 'shockharness==0.23.0' shockharness version     # one-off run, nothing installed
-pip install 'shockharness==0.23.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
+uv tool install 'shockharness==0.24.0'                    # isolated tool environment; any repository, JavaScript included
+uvx --from 'shockharness==0.24.0' shockharness version     # one-off run, nothing installed
+pip install 'shockharness==0.24.0'                        # Python project: keep the pin in pyproject.toml (a dev extra) or requirements-dev.txt
 ```
 
 The analyzer needs Python 3.11 or newer to run; the analyzed code may be
@@ -121,12 +121,12 @@ permissions:
   contents: read
 jobs:
   shockharness:
-    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.23.0
+    uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@v0.24.0
     permissions:
       contents: read
       security-events: write
     with:
-      shockharness-version: "0.23.0"
+      shockharness-version: "0.24.0"
       base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
 ```
 
@@ -174,7 +174,7 @@ Each command's output confirms one step.
 
 | Step | Command | Output that confirms it |
 |---|---|---|
-| Install | `shockharness version` | `shockharness 0.23.0` |
+| Install | `shockharness version` | `shockharness 0.24.0` |
 | Policy | `shockharness config validate` | a line starting `shockharness: configuration is valid` naming `profile strict`, exit 0 |
 | Analysis | `shockharness check .` | a report whose last lines start with `gate: PASS (exit 0)` or `gate: FAIL (exit 1)`; exit 2 or 3 means the setup is wrong, not the code |
 | Baseline, if used | `shockharness check . --baseline .shockharness-baseline.json` | `gate: PASS (exit 0)` followed by `N legacy finding(s) matched the baseline` |

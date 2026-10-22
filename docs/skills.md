@@ -37,8 +37,8 @@ examples (the worked examples are `examples/python` and `examples/js`), exact
 CLI invocations, a corrective workflow and a checklist. The setup guide, the
 README's "Adopting ShockHarness" section, lives in `adopt-shockharness` alone,
 byte-identical to the README's, so an agent with the skills installed never needs
-to fetch the README; the other skills end with a pointer to it (since 0.24.0;
-before, each of the seven carried its own 151-line copy). The test suite checks
+to fetch the README; the other skills end with a pointer to it (until the
+split, each of the seven carried its own 151-line copy). The test suite checks
 the frontmatter of every shipped skill, that every rule ID a skill mentions exists
 in the registry (any family), and that the adoption skill's section matches the
 README.
@@ -112,7 +112,7 @@ Add this line to the agent's instruction file (for example AGENTS.md):
       "sha256": "<hex SHA-256 of the file as written>"
     }
   },
-  "tool_version": "0.23.0"
+  "tool_version": "0.24.0"
 }
 ```
 
@@ -167,7 +167,7 @@ on stderr after its report, and the edit-time hook feeds the same line back to t
 once per upgrade:
 
 ```text
-shockharness: skills: 7 out of date, 1 new since they were installed with ShockHarness 0.23.0 (0.24.0 is installed); run: shockharness skills update --agent claude
+shockharness: skills: 7 out of date, 1 new since they were installed with ShockHarness 0.22.0 (0.24.0 is installed); run: shockharness skills update --agent claude
 ```
 
 It never changes the gate or the report. Edited skills are left out (`update` does not
