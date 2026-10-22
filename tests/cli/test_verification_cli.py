@@ -124,7 +124,7 @@ def test_diff_reports_every_weakening_as_new_policy_integrity(
     assert coverage["status"] == "analyzed"
     assert coverage["base_commit"] == base
     assert coverage["files_compared"] == 3
-    assert coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY003", "VERIFY004"]
+    assert coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY003", "VERIFY004", "VERIFY006"]
     test_file = next(f for f in data["head"]["files"] if f["path"] == "tests/test_calc.py")
     assert {"VERIFY001", "VERIFY002", "VERIFY004"} <= set(test_file["rules_applied"])
     assert data["gate"]["status"] == "pass"
@@ -143,7 +143,9 @@ def test_diff_text_lists_policy_integrity_first(
     assert lines[1].startswith("  new: src/app.py:2:")
     assert "VERIFY002 warning: blanket suppression # noqa added" in lines[1]
     assert any(
-        line.startswith("  verification: VERIFY001, VERIFY002, VERIFY003, VERIFY004 against base ")
+        line.startswith(
+            "  verification: VERIFY001, VERIFY002, VERIFY003, VERIFY004, VERIFY006 against base "
+        )
         and "3 source file(s) compared" in line
         for line in lines
     )
@@ -252,6 +254,7 @@ def test_plain_check_reports_verification_as_not_applicable(
         "VERIFY002",
         "VERIFY003",
         "VERIFY004",
+        "VERIFY006",
     ]
     _code, out, _ = run(["check", str(empty_root), "--root", str(empty_root)], capsys)
     assert "rules needing a base revision (not analyzed in this run" in out

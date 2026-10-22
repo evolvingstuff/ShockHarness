@@ -39,7 +39,13 @@ def file(path: str, text: str, role: str) -> FileVerification:
         facts = extract_javascript_facts(SourceText.from_text(text), path)
     assert facts.parse_failure is None, facts.parse_failure
     return FileVerification(
-        path=path, role=role, failure=None, disabled=frozenset(), facts=facts.verification
+        path=path,
+        role=role,
+        failure=None,
+        disabled=frozenset(),
+        facts=facts.verification,
+        language="python" if path.endswith(".py") else "javascript",
+        imports=facts.imports,
     )
 
 
@@ -50,6 +56,8 @@ def failed(path: str, role: str) -> FileVerification:
         failure="parse_error: SyntaxError",
         disabled=frozenset(),
         facts=NO_VERIFICATION,
+        language="python",
+        imports=(),
     )
 
 
@@ -337,6 +345,8 @@ def test_disabled_rules_and_family() -> None:
         failure=None,
         disabled=frozenset({"VERIFY001"}),
         facts=head.facts,
+        language=head.language,
+        imports=head.imports,
     )
     found = compare([], [partly])
     assert sorted(f.rule_id for f in found) == ["VERIFY002", "VERIFY004"]
@@ -361,12 +371,74 @@ def test_coverage_and_applied_rules_by_role() -> None:
     )
     assert result.applied == {
         "src/a.py": ("VERIFY002",),
-        "tests/test_a.py": ("VERIFY001", "VERIFY002", "VERIFY004"),
+        "tests/test_a.py": ("VERIFY001", "VERIFY002", "VERIFY004", "VERIFY006"),
     }
     assert result.coverage["status"] == COVERAGE_ANALYZED
     assert result.coverage["files_compared"] == 2
     assert result.coverage["files_new"] == 2
-    assert result.coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY004"]
+    assert result.coverage["rules"] == ["VERIFY001", "VERIFY002", "VERIFY004", "VERIFY006"]
+
+
+TOKENS = "def issue(user):\n    return user\n"
+TOKENS_TEST = "from app.tokens import issue\n\n\ndef test_issue():\n    assert issue('u') == 'u'\n"
+
+
+def _deleted(
+    base: list[FileVerification], head: list[FileVerification], renames: Renames = NO_RENAMES
+) -> list[tuple[str, str, str]]:
+    result = compare_revisions(
+        {f.path: f for f in base}, {f.path: f for f in head}, renames, SETTINGS, BASE_COMMIT
+    )
+    return [
+        (f.path, f.status, f.message.split(":")[0])
+        for f in result.findings
+        if f.rule_id == "VERIFY006"
+    ]
+
+
+def test_a_test_file_deleted_while_its_code_remains() -> None:
+    code = file("app/tokens.py", TOKENS, ROLE_PRODUCTION)
+    init = file("app/__init__.py", "", ROLE_PRODUCTION)
+    test = file("tests/test_tokens.py", TOKENS_TEST, ROLE_TEST)
+    assert _deleted([code, init, test], [code, init]) == [
+        (
+            "tests/test_tokens.py",
+            STATUS_VIOLATION,
+            "tests/test_tokens.py is deleted since base aaaaaaaaaaaa, while the project code it "
+            "imported remains (app/tokens.py)",
+        )
+    ]
+    # the code went with its tests, the test moved, or the base kept both: nothing
+    assert _deleted([code, init, test], [init]) == []
+    moved = file("tests/auth/test_tokens.py", TOKENS_TEST, ROLE_TEST)
+    renamed = Renames(True, None, {"tests/auth/test_tokens.py": "tests/test_tokens.py"})
+    assert _deleted([code, init, test], [code, init, moved], renamed) == []
+    assert _deleted([code, init, test], [code, init, test]) == []
+
+
+def test_tests_that_imported_no_project_code_are_not_judged() -> None:
+    code = file("app/tokens.py", TOKENS, ROLE_PRODUCTION)
+    helper = file("tests/conftest.py", "import pytest\n", ROLE_TEST)
+    javascript = file("web/a.js", "export const a = 1;\n", ROLE_PRODUCTION)
+    js_test = file("web/a.test.js", "import { a } from './a.js';\n", ROLE_TEST)
+    assert _deleted([code, helper, javascript, js_test], [code, javascript]) == [
+        (
+            "web/a.test.js",
+            STATUS_VIOLATION,
+            "web/a.test.js is deleted since base aaaaaaaaaaaa, while the project code it "
+            "imported remains (web/a.js)",
+        )
+    ]
+
+
+def test_failed_rename_detection_makes_a_deletion_unknown() -> None:
+    code = file("app/tokens.py", TOKENS, ROLE_PRODUCTION)
+    test = file("tests/test_tokens.py", TOKENS_TEST, ROLE_TEST)
+    unavailable = Renames(False, "git failed", {})
+    found = _deleted([code, test], [code], unavailable)
+    assert [(path, status) for path, status, _m in found] == [
+        ("tests/test_tokens.py", STATUS_UNKNOWN)
+    ]
 
 
 def test_fingerprints_are_unique_and_survive_line_moves() -> None:

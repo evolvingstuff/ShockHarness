@@ -61,6 +61,7 @@ IMPLEMENTED = {
     "VERIFY003",
     "VERIFY004",
     "VERIFY005",
+    "VERIFY006",
     "EXC004",
     "STUB001",
     "STUB002",
@@ -123,6 +124,7 @@ def test_verification_rules_need_a_base_revision_and_are_policy_integrity() -> N
         "VERIFY002",
         "VERIFY003",
         "VERIFY004",
+        "VERIFY006",
     ]
     for rule in registry.RULES:
         assert rule.family in registry.FAMILY_CATEGORIES, rule.rule_id

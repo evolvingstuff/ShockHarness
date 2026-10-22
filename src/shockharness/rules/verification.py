@@ -1,9 +1,12 @@
-"""VERIFY001, VERIFY002, VERIFY004: what a change did to its own verification (H2).
+"""VERIFY001, VERIFY002, VERIFY004, VERIFY006: what a change did to its own verification
+(H2).
 
 The facts are extracted per file like every other fact (``ir/*_verification.py``) and
 cached with them; this module compares a head revision's facts with the base
 revision's and reports what was *added*: skip and focus markers (VERIFY001),
-suppression directives (VERIFY002), and assertions made unable to fail (VERIFY004).
+suppression directives (VERIFY002), and assertions made unable to fail (VERIFY004); and
+what was *removed*: a test file deleted while the project code it imported remains
+(VERIFY006).
 Whatever already existed at the base is debt, never a finding here.
 
 A head file is compared with its base version: the same path, or the path git reports
@@ -20,7 +23,8 @@ from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-from shockharness.constants import COMMIT_SHORT_HEX
+from shockharness.complexity.callgraph import resolved_imports
+from shockharness.constants import COMMIT_SHORT_HEX, FIRST_COLUMN, FIRST_LINE
 from shockharness.findings import (
     CONFIDENCE_EXACT,
     CONFIDENCE_UNRESOLVED,
@@ -39,13 +43,14 @@ from shockharness.ir.model import (
     MARKER_XFAIL,
     NO_VERIFICATION,
     CaseFact,
+    ImportFact,
     SkipMarker,
     Span,
     SuppressionDirective,
     VerificationFacts,
 )
 from shockharness.roles import ROLE_GENERATED, ROLE_TEST, ROLE_VENDOR, ROLES
-from shockharness.rules.registry import VERIFY001, VERIFY002, VERIFY004, RuleSpec
+from shockharness.rules.registry import VERIFY001, VERIFY002, VERIFY004, VERIFY006, RuleSpec
 
 COVERAGE_ANALYZED = "analyzed"
 COVERAGE_DISABLED = "disabled"
@@ -57,11 +62,13 @@ NOT_APPLICABLE_REASON = (
 RENAMES_AVAILABLE = "available"
 RENAMES_UNAVAILABLE = "unavailable"
 
-VERIFICATION_RULES = (VERIFY001, VERIFY002, VERIFY004)
+VERIFICATION_RULES = (VERIFY001, VERIFY002, VERIFY004, VERIFY006)
+LISTED_MODULES = 3  # the remaining modules a VERIFY006 message names; the rest are counted
 ROLE_SCOPES: Mapping[str, frozenset[str]] = {
     VERIFY001.rule_id: frozenset({ROLE_TEST}),
     VERIFY002.rule_id: frozenset(ROLES) - {ROLE_GENERATED, ROLE_VENDOR},
     VERIFY004.rule_id: frozenset({ROLE_TEST}),
+    VERIFY006.rule_id: frozenset({ROLE_TEST}),
 }
 MARKER_EFFECTS = {
     MARKER_SKIP: "the test no longer runs",
@@ -92,6 +99,8 @@ class FileVerification:
     failure: str | None  # why the file could not be analyzed, None when it was
     disabled: frozenset[str]
     facts: VerificationFacts
+    language: str
+    imports: tuple[ImportFact, ...]  # what VERIFY006 resolves at the base revision
 
 
 @dataclass(frozen=True)
@@ -272,6 +281,58 @@ def _verify004(
     return findings
 
 
+def _deleted_tests(
+    base: Mapping[str, FileVerification], head: Mapping[str, FileVerification], renames: Renames
+) -> list[FileVerification]:
+    """Test files of the base that the head neither has nor renamed."""
+    renamed_from = frozenset(renames.head_to_base.values())
+    return [
+        file
+        for path, file in sorted(base.items())
+        if path not in head
+        and path not in renamed_from
+        and file.failure is None
+        and VERIFY006.rule_id not in file.disabled
+        and file.role in ROLE_SCOPES[VERIFY006.rule_id]
+    ]
+
+
+def _verify006(
+    base: Mapping[str, FileVerification],
+    head: Mapping[str, FileVerification],
+    renames: Renames,
+    short: str,
+    severity: str,
+) -> list[Finding]:
+    """A test file deleted while every project module it imported remains: the change
+    removes verification of code that is still there. A file that imported no project
+    module (a helper, a conftest) is not judged."""
+    deleted = _deleted_tests(base, head, renames)
+    if len(deleted) == 0:
+        return []
+    targets = resolved_imports([(f.path, f.language, f.imports) for f in base.values()])
+    present = frozenset(head) | frozenset(renames.head_to_base.values())
+    unknown: str | None = None
+    if not renames.available:
+        unknown = f"rename detection failed ({renames.error}), so the file may have moved"
+    found: list[Finding] = []
+    for file in deleted:
+        imported = sorted(t for t in targets[file.path] if t != file.path)
+        if len(imported) == 0 or any(t not in present for t in imported):
+            continue
+        listed = ", ".join(imported[:LISTED_MODULES])
+        if len(imported) > LISTED_MODULES:
+            listed += f" and {len(imported) - LISTED_MODULES} more"
+        message = (
+            f"{file.path} is deleted since base {short}, while the project code it imported "
+            f"remains ({listed}): its tests are gone and nothing in this change replaces them"
+        )
+        context = _Context(file.path, f"at base {short}", unknown, severity)
+        span = Span(FIRST_LINE, FIRST_COLUMN, FIRST_LINE, FIRST_COLUMN)
+        found.extend(assign_fingerprints([_finding(VERIFY006, context, span, message, "", None)]))
+    return found
+
+
 def _applied_rules(file: FileVerification) -> tuple[str, ...]:
     return tuple(
         rule.rule_id
@@ -341,16 +402,43 @@ def compare_revisions(
         if len(found) > 0:
             found.sort(key=lambda f: f.sort_key())
             by_path[path] = assign_fingerprints(found)
+    by_path.update(_deletions(base, head, renames, short, severity, enabled=enabled))
     findings = tuple(f for path in sorted(by_path) for f in by_path[path])
-    coverage: dict[str, Any] = {
+    coverage = _coverage(settings, rules_seen, base_commit, counts, renames)
+    return VerificationResult(findings=findings, applied=applied, coverage=coverage)
+
+
+def _deletions(
+    base: Mapping[str, FileVerification],
+    head: Mapping[str, FileVerification],
+    renames: Renames,
+    short: str,
+    severity: str,
+    *,
+    enabled: bool,
+) -> dict[str, list[Finding]]:
+    """VERIFY006's findings by deleted path (none while the family is off)."""
+    if not enabled:
+        return {}
+    return {f.path: [f] for f in _verify006(base, head, renames, short, severity)}
+
+
+def _coverage(
+    settings: Mapping[str, Any],
+    rules_seen: set[str],
+    base_commit: str,
+    counts: Mapping[str, int],
+    renames: Renames,
+) -> dict[str, Any]:
+    enabled = settings["enabled"] is True
+    return {
         "status": COVERAGE_ANALYZED if enabled else COVERAGE_DISABLED,
         "rules": sorted(rules_seen),
         "base_commit": base_commit,
         **counts,
         "rename_detection": RENAMES_AVAILABLE if renames.available else RENAMES_UNAVAILABLE,
         "rename_detection_error": renames.error,
-        "severity": severity,
-        "allowed_skip_reasons": sorted(allowed),
-        "report_narrow_suppressions": report_narrow,
+        "severity": str(settings["severity"]),
+        "allowed_skip_reasons": sorted(str(reason) for reason in settings["allowed_skip_reasons"]),
+        "report_narrow_suppressions": bool(settings["report_narrow_suppressions"]),
     }
-    return VerificationResult(findings=findings, applied=applied, coverage=coverage)

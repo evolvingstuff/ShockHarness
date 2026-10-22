@@ -101,6 +101,7 @@ def test_report_lists_unimplemented_rules(empty_root: Path, strict_config: Effec
         "VERIFY002",
         "VERIFY003",
         "VERIFY004",
+        "VERIFY006",
     ]
     assert report.coverage["verification"]["status"] == "not_applicable"
     assert "DEF001" not in report.coverage["rules_not_implemented"]
@@ -135,6 +136,7 @@ IMPLEMENTED_IN_ORDER = (
     "VERIFY003",
     "VERIFY004",
     "VERIFY005",
+    "VERIFY006",
     "STUB001",
     "STUB002",
     "ASSERT001",

@@ -1166,6 +1166,48 @@ VERIFY005 = RuleSpec(
     compliant_example="monkeypatch.setattr(switcher, '_launch_namespace_process', fake)",
 )
 
+
+VERIFY006 = RuleSpec(
+    rule_id="VERIFY006",
+    version="1",
+    name="a test file deleted while its code remains",
+    family=VERIFICATION_FAMILY,
+    config_section=VERIFICATION_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A change deletes a test file while every project module it imported is still "
+        "there: the code keeps running, and the checks on it are gone."
+    ),
+    rationale=(
+        "VERIFY004 sees a test emptied of its assertions, but deleting the whole file leaves "
+        "nothing to compare, so the build stays green with less verification. In MetaList's "
+        "history, 26 of the 49 deleted test files that imported project code left all of it "
+        "behind; a reviewer should see that the checks went."
+    ),
+    guarantees=(
+        "Needs a base revision. A file whose role at the base was test, analyzed there, that "
+        "the head neither has nor renamed (git's rename detection), whose imports resolve, by "
+        "the module graph's rules, to at least one analyzed file of the base, all of which "
+        "the head still has (or renamed). Reported at the deleted path, line 1. When rename "
+        "detection failed the finding is unknown."
+    ),
+    limitations=(
+        "Whether the deletion is deliberate is not known: tests deleted with a redesign, or "
+        "by a decision to test another way, are reported too, which is the point of a "
+        "review. A test that imported no project module (a helper, a conftest, a test that "
+        "loads code by path) is not judged, and a test whose code went in the same change is "
+        "not reported. Tests moved into another file look deleted unless git sees a rename."
+    ),
+    remediation=(
+        "Keep the tests, or move them where they now belong, or say in the change why the "
+        "code no longer needs them. " + VERIFICATION_REMEDIATION_COMMON
+    ),
+    noncompliant_example="git rm tests/test_tokens.py  # app/tokens.py stays",
+    compliant_example="git mv tests/test_tokens.py tests/auth/test_tokens.py",
+)
+
 VERIFY003 = RuleSpec(
     rule_id="VERIFY003",
     version="1",
@@ -3505,6 +3547,7 @@ RULES: tuple[RuleSpec, ...] = (
     VERIFY003,
     VERIFY004,
     VERIFY005,
+    VERIFY006,
     STUB001,
     STUB002,
     ASSERT001,

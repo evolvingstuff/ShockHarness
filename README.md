@@ -126,6 +126,7 @@ Implemented rules:
 | `VERIFY002` | a blanket suppression comment the change adds (`# noqa`, `// eslint-disable`, `@ts-ignore`, ...) | warning |
 | `VERIFY003` | a looser configuration, files dropped from analysis, baseline growth, a weakened ShockHarness workflow job, loosened ruff/flake8/pytest/coverage/ESLint settings; a key that loosens the `--policy` file (also in `check`) | warning |
 | `VERIFY004` | an assertion the change makes unable to fail, or a test it empties | warning |
+| `VERIFY006` | a test file the change deletes while the code it imported stays | warning |
 | `VERIFY005` | a test's stub (`monkeypatch.setattr`, `mock.patch`) of a function the code the test calls no longer reaches, so the test runs the real code | warning |
 | `STUB001` | `raise NotImplementedError`, `raise NotImplemented`, an empty function body, `throw new Error("not implemented")` in production code (abstract API exempt) | warning |
 | `STUB002` | production code importing a mocking or fake-data library or a module under `tests/`, `fixtures/`, `mocks/` | warning |

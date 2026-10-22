@@ -6686,3 +6686,23 @@ proposed: `KeyboardInterrupt` and `GeneratorExit` bases are left out with `BaseE
 since the only one measured (pytest's `Interrupted`) is framework control flow. Measured
 with the tool: feedcheck r2's `ConfigError` and contactclean r1's `InputUnreadableError`,
 the two incidents. Cache schema "35". New tests: `tests/unit/test_exc006.py`.
+
+## Decision 50: VERIFY006, a test file deleted while its code remains — DONE (2026-10-21)
+
+Tom's go-ahead ("Do all of those"). In `compare_revisions` (`rules/verification.py`):
+base files of role test, analyzed, not in the head and not a rename's source, not
+disabled. Their imports are resolved with a new public helper,
+`complexity/callgraph.resolved_imports`, which runs the module graph's resolver over
+(path, language, imports) without building the call graph; `FileVerification` gains
+`language` and `imports` for it (`analysis.verification_input`). A file whose imported
+analyzed files all survive in the head (or as a rename) is a finding at its deleted path,
+line 1 (VERIFY003's anchor for a deleted workflow), fingerprinted like the others;
+unknown when rename detection failed. VERIFY006 is listed as applied to head test files
+(it is what would report their deletion) and in the coverage's rules.
+
+**Measured** with the tool, `diff --root MetaList3 --base 403670b4^ --head 403670b4` (its
+dead-code commit, three test files deleted): the two whose modules stayed
+(`test_fetch_children_ordered.py`, `test_undo_state_move_batch.py`); the third's module
+went with it. New tests: four in `tests/unit/test_verification_rules.py` (deleted with the
+code kept or gone, renamed, unchanged; no project imports; JavaScript; failed rename
+detection), and the VERIFY lists in the CLI, registry and report tests.

@@ -62,6 +62,7 @@ from shockharness.ir.model import (
     UNIT_CLASS,
     UNIT_METHOD,
     CatchFact,
+    ImportFact,
     ModuleFacts,
     ParseFailure,
 )
@@ -802,6 +803,7 @@ def verification_input(pending: PendingFile) -> FileVerification:
     """What the VERIFY rules need from a prepared file (H2)."""
     failure: str | None = None
     facts = NO_VERIFICATION
+    imports: tuple[ImportFact, ...] = ()
     if pending.failed:
         failure = pending.status
         if pending.error is not None:
@@ -809,12 +811,15 @@ def verification_input(pending: PendingFile) -> FileVerification:
     else:
         assert pending.facts is not None
         facts = pending.facts.verification
+        imports = pending.facts.imports
     return FileVerification(
         path=pending.path,
         role=pending.role,
         failure=failure,
         disabled=pending.disabled_ids(),
         facts=facts,
+        language=pending.language,
+        imports=imports,
     )
 
 

@@ -626,7 +626,7 @@ early return, a catch or a default; the graph records the delegation and the
 numbers stay advisory either way. The `refactor-complexity` skill walks
 through it.
 
-### VERIFY001-VERIFY004: verification integrity (warning, Python and JavaScript; need a base revision)
+### VERIFY001-VERIFY004, VERIFY006: verification integrity (warning, Python and JavaScript; need a base revision)
 
 These rules ask what a change did to its **own verification**. They compare a
 head revision with a base revision, so they run only under
@@ -650,6 +650,7 @@ tell what this change added. `rules.verification.fail_on_unknown` (default
 | `VERIFY002` | a blanket suppression comment (names no rule codes, names `all`, or covers a file); narrow ones too with `report_narrow_suppressions = true` | every role except generated and vendor |
 | `VERIFY003` | a looser ShockHarness configuration, files dropped from analysis, baseline fingerprints, a weakened workflow that runs ShockHarness, or loosened ruff, flake8, pytest, coverage or ESLint settings; and, with `--policy`, a repository key that loosens the policy file (also in a plain `check`) | configuration, workflow and baseline files |
 | `VERIFY004` | an assertion that can never fail; a test whose assertions all disappeared; a test whose body became empty | test |
+| `VERIFY006` | a test file deleted (not renamed) while every project module it imported is still there | test (at the base) |
 
 **VERIFY001 markers.** Python: `pytest.mark.skip` / `skipif` / `xfail` (also
 through `from pytest import mark`), `unittest.skip` / `skipIf` / `skipUnless` /
@@ -673,6 +674,19 @@ least one code (`# noqa: E501`, `// eslint-disable-next-line no-console`) is
 *blanket*. A directive's identity is its tool and the codes it names, not its
 free-text description or a ShockHarness reason, so rewording a reason is not a
 new suppression. `@ts-expect-error` names no code and is therefore blanket.
+
+**VERIFY006 (spec 21.1 decision 50).** VERIFY004 sees a test emptied of its
+assertions, but a deleted file leaves nothing to compare. VERIFY006 looks at the base
+revision's test files that the head neither has nor renamed (git's rename detection):
+when the file's imports resolve, by the module graph's rules, to analyzed files of the
+base and the head still has every one of them, the change removed the checks and kept the
+code. One finding per file, at the deleted path, line 1. A test that imported no project
+module (a helper, a conftest) is not judged, nor one whose code went in the same change;
+when rename detection failed, the finding is unknown. Measured on MetaList's history: of
+49 deleted test files that imported project code, 26 left all of it behind (21 in one
+deliberate commit that dropped its unit suites, 5 with redesigns or dead-code removal);
+across its dead-code commit (403670b4) the diff reports exactly the two whose modules
+stayed.
 
 **VERIFY004 patterns.** Tautologies: `assert <truthy constant>`, `assert c == c`
 or `assert c is c` on equal constants, `self.assertTrue` / `assertEqual` /

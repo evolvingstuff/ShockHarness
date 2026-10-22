@@ -51,6 +51,7 @@ from shockharness.ir.model import (
     IMPORT_NAMES,
     IMPORT_REEXPORT,
     MODULE_SCOPE,
+    NO_RECEIVER_FACTS,
     CallSite,
     ImportFact,
     ModuleBinding,
@@ -388,6 +389,23 @@ def _python_module_names(path: str, packages: set[str]) -> list[str]:
     if full != "" and full != canonical:
         names.append(full)
     return names
+
+
+def resolved_imports(
+    files: Sequence[tuple[str, str, tuple[ImportFact, ...]]],
+) -> dict[str, frozenset[str]]:
+    """For each (path, language, imports), the analyzed files its imports resolve to, by
+    the module graph's rules, without building the call graph (VERIFY006)."""
+    modules = [
+        ModuleInput(path, language, (), imports, (), NO_RECEIVER_FACTS)
+        for path, language, imports in files
+    ]
+    index = _ModuleIndex(modules)
+    found: dict[str, frozenset[str]] = {}
+    for module in modules:
+        edges = [e for fact in module.imports for e in resolve_module_edges(index, module, fact)]
+        found[module.path] = frozenset(e.target for e in edges if e.target is not None)
+    return found
 
 
 def resolve_module_edges(

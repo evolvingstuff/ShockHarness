@@ -6,6 +6,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **VERIFY006 (warning, needs a base revision): a test file deleted while its code
+  remains** (spec 21.1 decision 50). In `diff` and `gate --base`, a test file of the base
+  that the head neither has nor renamed is reported when every project module it imported
+  is still there: the checks went, the code stayed. Tests that imported no project code,
+  and tests deleted with their code, are not reported. Across MetaList's dead-code commit
+  it reports the two test files whose modules stayed.
 - **EXC006 (warning, Python): an error class derived from `SystemExit`** (spec 21.1
   decision 49). `except Exception` does not catch it, and raising it ends the process with
   its argument as the exit status. The remedy is an `Exception` subclass the entry point
