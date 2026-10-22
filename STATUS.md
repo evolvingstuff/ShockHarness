@@ -6874,3 +6874,12 @@ per-user install counting, no agent's files, the pointer appended once and kept 
 file names the skills, `init` with both agents and on a rerun, without agent files,
 `--no-skills` and `--agent`, `skills install` adding the pointer, `check` on stderr beside
 valid JSON, the opt-out, and no notice under the bundled defaults).
+
+## Release 0.25.0 (2026-10-22)
+
+On Tom's go-ahead. CI was green on 186dc4b (run 39768136872) and on the release commit
+f21694c (run 39792556753), 16 of 16 jobs each. The pin moved in the same 15 files as
+0.24.0. Upgrade note: no analysis change and the same configuration digest; a configured
+repository whose agent has no skills installed now gets a `skills:` line from `check`
+with the install command. The tag `v0.25.0` is on f21694c. Published by `publish.yml`
+(run 39794228848, 18 of 18 jobs). PyPI lists 0.25.0 with a wheel and an sdist.
