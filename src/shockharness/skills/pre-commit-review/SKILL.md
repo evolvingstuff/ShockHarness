@@ -156,10 +156,10 @@ export function paginate(items, size = 10)  // DEF001 + MAGIC001
 
 And what passes: a required, validated settings object; a `try` inside a
 declared boundary that wraps one operation and re-throws a typed error; a
-cited inline suppression for a protocol constant:
+protocol value as a module-level named constant with its source (no suppression):
 
 ```python
-NOT_FOUND = 404  # shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.5"
+NOT_FOUND = 404  # RFC 9110 section 15.5.5
 ```
 
 ## Checklist

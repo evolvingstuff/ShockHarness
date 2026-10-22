@@ -6572,3 +6572,21 @@ new C# findings are all warning or review by default; the configuration changes 
 0.20.0 are additions only; cache schema "32". The tag `v0.21.0` is on 1e76c25. Published by
 `publish.yml` (run 39682660011, 18 of 18 jobs). PyPI lists 0.21.0 with a wheel and an
 sdist.
+
+## Skills: the missing rule rows, and a suppression example that taught a wrong move (2026-10-21)
+
+Housekeeping, on Tom's "keep doing what you can do without a decision from me".
+
+* **fix-violations** gains rows for DEAD001/DEAD002, DUP001/DUP002, VERIFY005, IMPORT002
+  and DOM003, which had been left out at its 500-line limit. Room came from rewrapping
+  workflow and proposal prose to 92 columns (no wording change there); the installed
+  "Adopting ShockHarness" section, which must match the README, is untouched.
+* **A stale example, in three skills.** fix-violations, write-compliant-code and
+  pre-commit-review showed `NOT_FOUND = 404  # shockharness: ignore[MAGIC001]
+  reason="RFC 9110 ..."` as the right fix. Since decision 36 a module-level named constant
+  is not reported, so that suppression is itself a SUPP002 ("silences nothing"; checked in
+  Python and JavaScript). The skills now say a protocol value needs no suppression, only a
+  named constant with its source in a comment, and their suppression examples use findings
+  a rule cannot judge (VERIFY005 for code reached through `importlib`, DOM003 for a
+  text-only field). The README's and configuration.md's `status = 404` examples stay: a
+  lowercase name is still reported, so the suppression there is real.

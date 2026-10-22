@@ -299,16 +299,17 @@ try {
 }
 ```
 
-A protocol constant with an authoritative source may be suppressed inline, on
-the same line, with an exact rule ID and a reason:
+A protocol constant needs no suppression: as a module-level named constant (`export const
+NOT_FOUND = 404; // RFC 9110 section 15.5.5`) it is not reported. A suppression is for code
+the rule cannot see is right: same line, exact rule ID, a reason:
 
 ```javascript
-export const NOT_FOUND = 404; // shockharness: ignore[MAGIC001] reason="RFC 9110 section 15.5.5"
+const point = pointAt(title, saved.start); // shockharness: ignore[DOM003] reason="the title field holds text only"
 ```
 
-The finding stays in every report with the suppression attached; only the
-gate ignores it. A suppression with no rule ID, or a reason-less one, is a
-`SUPP001` error; one that silences nothing is a `SUPP002` warning.
+The finding stays in every report with the suppression attached; only the gate ignores it. A
+suppression with no rule ID, or a reason-less one, is a `SUPP001` error; one that silences
+nothing is a `SUPP002` warning.
 
 ## Workflow
 
