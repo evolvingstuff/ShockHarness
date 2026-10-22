@@ -5,6 +5,21 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-22
+
+Import boundaries can now name packages and standard-library modules and say which files
+alone may import them, and the `async-lifecycle` skill covers scroll positions measured
+before an await.
+
+**Upgrading from 0.25.0.** No new dependency, and existing configurations, findings and
+the gate are as in 0.25.0: an IMPORT002 entry written before means what it meant, and the
+new keys (`modules`, `allowed_importers`) only add findings where a project writes them.
+Three skills changed (`async-lifecycle`'s new section, and the version pin in
+`adopt-shockharness` and `pre-commit-review`), so a repository with installed skills sees
+one line from `check` (`skills: 3 out of date ...`), and its agent hears it once from the
+hook. Run
+`shockharness skills update --agent claude` (or `codex`) and commit the result.
+
 ### Added
 - **The `async-lifecycle` skill: positions measured across an await.** After awaiting
   something that changes the page, do not animate to a position measured once; place at

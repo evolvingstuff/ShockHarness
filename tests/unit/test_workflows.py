@@ -105,12 +105,12 @@ def test_example_workflows_call_the_reusable_workflow_pinned() -> None:
         text = read(f"examples/{example}/.github/workflows/shockharness.yml")
         assert "uses: evolvingstuff/ShockHarness/.github/workflows/check.yml@" in text
         assert "@main" not in text
-        assert 'shockharness-version: "0.25.0"' in text
+        assert 'shockharness-version: "0.26.0"' in text
         assert "security-events: write" in text
         dependabot = read(f"examples/{example}/.github/dependabot.yml")
         assert "package-ecosystem: github-actions" in dependabot
     pyproject = (REPO_ROOT / "examples" / "python" / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"shockharness==0.25.0"' in pyproject
+    assert '"shockharness==0.26.0"' in pyproject
     package = (REPO_ROOT / "examples" / "js" / "package.json").read_text(encoding="utf-8")
     assert "shockharness" not in package.split('"scripts"')[0]  # never an npm dependency
     assert "shockharness check ." in package
