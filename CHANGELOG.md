@@ -5,6 +5,19 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-22
+
+The skills now reach an agent through the commands it runs: `init` installs them, and
+`check` says when a repository's agent has none.
+
+**Upgrading from 0.24.0.** No new dependency and no analysis change: findings, the gate,
+the report and the configuration digest are as in 0.24.0. A repository with its own
+configuration whose coding agent has no ShockHarness skills installed now sees one line
+from `check` with the install command (for example `shockharness skills install --agent
+claude`); run it and commit the skills and the pointer line it adds to `CLAUDE.md` or
+`AGENTS.md`, or set `notify_missing = false` under `[tool.shockharness.skills]` if the
+repository wants none. Repositories with skills installed see nothing new.
+
 ### Added
 - **`init` installs the agent skills.** An agent that adopts ShockHarness by running its
   commands never read the setup guide's skills step, so the skills never reached it (a
