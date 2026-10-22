@@ -42,9 +42,9 @@ publishing**. No API token is stored in the repository or in GitHub secrets.
 2. Edit `src/shockharness/version.py` (`__version__ = "X.Y.Z"`); it is the only
    place the version lives (hatchling reads it at build time).
    Also update the pinned version in the README's "Adopting ShockHarness"
-   section and, because every bundled skill embeds that section verbatim, in
-   `src/shockharness/skills/*/SKILL.md`; `tests/unit/test_skills.py` fails until
-   the five copies agree with `version.py`. Move pins only: a version named in
+   section and, because the `adopt-shockharness` skill embeds that section
+   verbatim, in `src/shockharness/skills/adopt-shockharness/SKILL.md`;
+   `tests/unit/test_skills.py` fails until the two copies agree with `version.py`. Move pins only: a version named in
    prose ("since 0.12.0") is history and stays. A blanket replace of the old
    version over these files rewrites it, as one did to a paragraph of
    `docs/configuration.md`; write such prose without a version, or check the diff

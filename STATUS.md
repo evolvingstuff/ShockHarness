@@ -6765,3 +6765,26 @@ $ shockharness check .
 shockharness 0.22.0: 257 file(s), 257 analyzed, 0 failed; 197 finding(s), 8 suppressed
 gate: PASS (exit 0)
 ```
+
+## Skills: the setup guide is its own skill, adopt-shockharness (2026-10-22)
+
+Tom's go-ahead, after the write-compliant-code skill hit its 500-line limit again: "move
+the Adopting ShockHarness section out of the seven skills into a new adopt-shockharness
+skill, update the skill tests and docs, and commit locally."
+
+Each of the seven skills ended with the README's "Adopting ShockHarness" section, 151 lines
+kept byte-identical by a test. It now lives only in the new eighth skill
+(`src/shockharness/skills/adopt-shockharness/SKILL.md`: frontmatter, a short introduction,
+a first-run example in Python and JavaScript, a setup checklist, then the section verbatim);
+the seven end with a three-line pointer instead. Sizes: fix-violations and
+write-compliant-code 499 to 352 lines, refactor-complexity 415 to 268, pre-commit-review
+330 to 183, property-contracts 314 to 167, verification-integrity 289 to 142,
+async-lifecycle 281 to 134; adopt-shockharness 192.
+
+Tests: the README section is compared with the adoption skill alone, the others must point
+to it and not carry it, and the rule-ID check now knows every registered family (it had
+only MAGIC, EXC, DEF, SUPP and CPLX, which async-lifecycle and property-contracts had
+mentioned only in the copied section; all the IDs the skills mention are registered).
+`docs/releasing.md`: the version pin now lives in the README and one skill, so a release
+bump touches 15 files instead of 20 (pre-commit-review keeps two sample report lines
+that name the version). `docs/skills.md`: eight skills, the new row.

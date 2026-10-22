@@ -5,6 +5,17 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **The setup guide is its own skill, `adopt-shockharness`.** Each of the seven skills
+  carried the README's 151-line "Adopting ShockHarness" section; it now lives in the new
+  eighth skill alone, and the others end with a pointer to it. `skills install` writes
+  eight skills, and `skills update` adds the new one and refreshes the seven it installed
+  (a skill file someone edited is reported as a conflict, as before). The
+  space it frees lets `fix-violations` and `write-compliant-code` (both at their 500-line
+  limit before) carry the guidance for the newer rules. `write-compliant-code`'s principle
+  9 now says a state the user can reach is no failure: disable the control or say so,
+  never throw.
+
 ## [0.23.0] - 2026-10-22
 
 C# for Godot .NET, fourth milestone (Godot names the project does not define, C#

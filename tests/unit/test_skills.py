@@ -44,8 +44,11 @@ from shockharness.skills.install import (
 from shockharness.version import __version__
 from tests.conftest import REPO_ROOT
 
-RULE_ID = re.compile(r"\b(?:MAGIC|EXC|DEF|SUPP|CPLX)\d{3}\b")
+# A rule ID of any registered family (MAGIC001, ASYNC002, PROP008, GODOT003, ...).
+FAMILY_PREFIXES = sorted({re.sub(r"\d+$", "", rule_id) for rule_id in registry.rule_ids()})
+RULE_ID = re.compile(r"\b(?:" + "|".join(FAMILY_PREFIXES) + r")\d{3}\b")
 ADOPTION_HEADING = "## Adopting ShockHarness\n"
+ADOPTION_SKILL = "adopt-shockharness"
 SKILLS_SOURCE = REPO_ROOT / "src" / "shockharness" / "skills"
 
 
@@ -68,7 +71,7 @@ def section(text: str, heading: str) -> str:
 # ----------------------------------------------------------------- shipped files
 
 
-def test_seven_skills_ship_with_valid_frontmatter() -> None:
+def test_eight_skills_ship_with_valid_frontmatter() -> None:
     assert SKILL_NAMES == (
         "write-compliant-code",
         "fix-violations",
@@ -77,6 +80,7 @@ def test_seven_skills_ship_with_valid_frontmatter() -> None:
         "verification-integrity",
         "async-lifecycle",
         "property-contracts",
+        "adopt-shockharness",
     )
     for name in SKILL_NAMES:
         text = skill_text(name)
@@ -117,13 +121,17 @@ def test_skill_mentions_only_registered_rule_ids(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", SKILL_NAMES)
-def test_skill_has_examples_commands_workflow_checklist_and_adoption(name: str) -> None:
+def test_skill_has_examples_commands_checklist_and_the_setup_guide(name: str) -> None:
     text = skill_text(name)
     assert "```python" in text and "```javascript" in text, name
     assert "shockharness check" in text, name
     assert "## Checklist" in text, name
     assert "- [ ]" in text, name
-    assert ADOPTION_HEADING in text, name
+    # The setup guide lives in one skill; the others point to it.
+    if name == ADOPTION_SKILL:
+        assert ADOPTION_HEADING in text, name
+    else:
+        assert ADOPTION_HEADING not in text and ADOPTION_SKILL in text, name
     for line in text.splitlines():
         # No relative Markdown links: skills are read wherever they are installed.
         assert not re.search(r"\]\((?!https?://)[^)]*\)", line), f"{name}: {line}"
@@ -161,7 +169,7 @@ def test_refactor_complexity_quotes_the_real_rules_fields_and_commands() -> None
         assert key in text, key
 
 
-def test_adoption_section_is_identical_in_readme_and_every_skill() -> None:
+def test_adoption_section_is_identical_in_readme_and_the_adoption_skill() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     expected = section(readme, ADOPTION_HEADING)
     assert "uv tool install" in expected and "uvx --from" in expected
@@ -180,8 +188,7 @@ def test_adoption_section_is_identical_in_readme_and_every_skill() -> None:
     # Self-contained: no relative links, only absolute GitHub URLs.
     assert not re.search(r"\]\((?!https?://)[^)]*\)", expected)
     assert "https://github.com/evolvingstuff/ShockHarness/blob/main/docs/" in expected
-    for name in SKILL_NAMES:
-        assert section(skill_text(name), ADOPTION_HEADING) == expected, name
+    assert section(skill_text(ADOPTION_SKILL), ADOPTION_HEADING) == expected
 
 
 # ----------------------------------------------------------------- adapters

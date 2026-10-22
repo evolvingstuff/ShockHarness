@@ -1,13 +1,13 @@
 # Agent skills
 
-ShockHarness ships seven vendor-neutral agent skills as package data
+ShockHarness ships eight vendor-neutral agent skills as package data
 (`src/shockharness/skills/<name>/SKILL.md`), in the open Agent Skills format:
 YAML frontmatter with `name` and `description`, then a Markdown body. The
 files mention no agent's internals; the `skills` command knows where each
 supported agent expects them. Installing is opt-in and never touches a file
 outside the chosen destination.
 
-## The seven skills
+## The eight skills
 
 | Skill | Use it when | What it enforces |
 |---|---|---|
@@ -18,6 +18,7 @@ outside the chosen destination.
 | `verification-integrity` | A test, linter or gate fails and it is tempting to skip, suppress or loosen instead of fixing; editing `.shockharness.toml`, a baseline, a CI workflow or another tool's settings; a `VERIFY00x` finding | Fix the cause or stop and say what could not be fixed; never make a check pass by weakening it. Explains each of `VERIFY001`-`VERIFY004`, why they cannot be suppressed inline, the `--policy` floor and the strictest-of-base rule, and how to propose a policy change as its own reviewed change |
 | `async-lifecycle` | Writing or changing async Python or JavaScript; an unawaited call, a background task, `gather(return_exceptions=True)` or `Promise.allSettled`; an `ASYNC00x` finding | Every coroutine, task and Promise has an owner that waits for it and sees its failure: await, return, a `TaskGroup`, or `Promise.all` whose result is awaited; settled batches are checked for failures; no `void`; entry points end in a reporting `.catch` |
 | `property-contracts` | A repository enables `rules.property_contracts`; a value must carry a fact the code cannot see (normalized, redacted, sanitized HTML, a validated path); a `PROP00x` finding; writing the catalog, a predicate or a test bootstrap; `enforcement = "complete"` | Choose properties that are facts not observable from the value; put a parameter's `requires` first, `produces` only where the property is established (with a test), `preserves` for pass-through; never remove a `requires` to satisfy `PROP001`; call `enable` once from test code (`conftest.py`, a test-only entry script, a test-entry page or an init-script pre-load), never production; read `requires(x)` declarations as the sorry count |
+| `adopt-shockharness` | Adding ShockHarness to a repository, upgrading its pin or wiring it into CI; a check or gate that cannot run because ShockHarness is not set up | Install a pinned version, write and validate the policy file, take an existing codebase on with a baseline, the minimal profile or warn mode, add the CI gate and Dependabot, install the skills, and verify each step. Holds the README's "Adopting ShockHarness" section byte for byte |
 
 Since 0.5.0, `fix-violations` and `pre-commit-review` also ask for a written
 rule proposal whenever a bug turns up that ShockHarness did not report (the
@@ -33,11 +34,14 @@ exempt.
 
 Every skill contains compliant and non-compliant Python and JavaScript
 examples (the worked examples are `examples/python` and `examples/js`), exact
-CLI invocations, a corrective workflow, a checklist, and an "Adopting
-ShockHarness" section that is byte-identical to the README's, so an agent with
-the skill installed never needs to fetch the README. The test suite checks the
-frontmatter of every shipped skill, that every rule ID a skill mentions exists
-in the registry, and that the adoption sections match the README.
+CLI invocations, a corrective workflow and a checklist. The setup guide, the
+README's "Adopting ShockHarness" section, lives in `adopt-shockharness` alone,
+byte-identical to the README's, so an agent with the skills installed never needs
+to fetch the README; the other skills end with a pointer to it (since 0.24.0;
+before, each of the seven carried its own 151-line copy). The test suite checks
+the frontmatter of every shipped skill, that every rule ID a skill mentions exists
+in the registry (any family), and that the adoption skill's section matches the
+README.
 
 ```bash
 shockharness skills list                 # names and descriptions
@@ -64,7 +68,7 @@ with `generic`, an unknown agent) exit 2 and write nothing.
 shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force] [--hook [--lock]]
 ```
 
-Writes `<destination>/<name>/SKILL.md` for each of the seven skills, byte for
+Writes `<destination>/<name>/SKILL.md` for each of the eight skills, byte for
 byte as shipped, then `<destination>/.shockharness-skills.json`. If any of
 those files already exists the command refuses (exit 2) and writes nothing;
 `--force` replaces them all. Besides the skills, only three files are ever

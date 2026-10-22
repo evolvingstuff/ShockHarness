@@ -19,6 +19,7 @@ SKILL_NAMES: tuple[str, ...] = (
     "verification-integrity",
     "async-lifecycle",
     "property-contracts",
+    "adopt-shockharness",
 )
 FRONTMATTER_DELIMITER = "---"
 # Agent Skills specification: lowercase letters, digits and single hyphens, no leading,
