@@ -157,15 +157,15 @@ a plain `check`; see the `refactor-complexity` skill.
    add_item(order, item): order.items.append(item)`, which changes every holder
    of `order`, and `function markPaid(order) { order.paid = true; }`, which a
    caller cannot see coming from the call site.
-9. **Assert internal invariants; raise for expected failures.** Where the code
-   relies on something being true (the ordering has a head here, a started run
-   is in the history), assert it where it must hold: an assert that fires is a
-   bug found at its source. Input from outside (a request field, a file, the
-   configuration, an environment variable, an argument) fails for reasons that are not bugs:
-   check it where it enters and raise a typed error (`ASSERT001` reports an
-   assert on input). Python drops asserts under `-O`, so an entry point whose
-   code asserts refuses to run optimized (`ASSERT002`); code with no asserts
-   needs no such guard. JavaScript's `console.assert` only logs.
+9. **Assert internal invariants; raise for expected failures.** Where the code relies on
+   something being true (the ordering has a head here, a started run is in the history),
+   assert it where it must hold: an assert that fires is a bug found at its source. Input from
+   outside (a request field, a file, the configuration, an environment variable, an argument)
+   fails for reasons that are not bugs: check it where it enters and raise a typed error
+   (`ASSERT001` reports an assert on input). A state the user can reach is no failure: disable
+   the control or say so, never throw. Python drops asserts under `-O`, so an entry point
+   whose code asserts refuses to run optimized (`ASSERT002`); code with no asserts needs no
+   such guard. JavaScript's `console.assert` only logs.
 
    ```python
    def next_step(plan: Plan) -> Step:
@@ -339,7 +339,7 @@ nothing is a `SUPP002` warning.
 - [ ] Each `0` or `1` that means something (exit code, sentinel, flag) has a name.
 - [ ] Data, configuration and specification live in data files or named constants, not in executable source; test values stay in the tests.
 - [ ] `shockharness check .` ends in `gate: PASS (exit 0)` and the tests pass.
-- [ ] Any suppression has an exact rule ID and a reason that cites a source.
+- [ ] Any suppression has an exact rule ID and a reason naming what the rule cannot see.
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
 - [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses `python -O` only when the code asserts.
