@@ -6590,3 +6590,30 @@ Housekeeping, on Tom's "keep doing what you can do without a decision from me".
   a rule cannot judge (VERIFY005 for code reached through `importlib`, DOM003 for a
   text-only field). The README's and configuration.md's `status = 404` examples stay: a
   lowercase name is still reported, so the suppression there is real.
+
+## Decision 48: STATE003, state read outside its lock — DONE (2026-10-21)
+
+Tom's go-ahead: "build the lock-read rule from the prototype (review, Python, beside
+STATE001, with the lock-held method refinement), test it, re-measure on MetaList before and
+after its race fix, and commit locally."
+
+**Built** as STATE002 was: facts in `GuardrailFacts.unlocked_reads` (`ir/python_locks.py`;
+JavaScript and C# record none), a per-file runner in `rules/guardrails.py`, severity
+`rules.module_state.state003_severity` (`review`, an ordered loosening when lowered), roles
+as STATE001. Locks are recognized by name in `with self.<lock>:` (or a module-level lock);
+an attribute or `global` is guarded when a non-constructor writes it under one; a read
+outside every lock is a finding when it is a test or a non-logging call argument, in a
+method that does not run with the lock held (`*_locked`, or every in-class caller holds
+it, to a fixpoint). Confidence approximate. Cache schema "33".
+
+**Measured** with the tool (MetaList's own configuration, `--no-cache`): 15 at bbc710aa^,
+13 at bbc710aa (the incident's two, `EncryptedTextStream.write`, go), 13 at HEAD. The 13:
+`EncryptedLogSink.write` checks `_closed` and encrypts with `_dek` before taking the lock
+`close()` holds to close the file and clear the key, the same race in a sibling class and
+still unfixed; and 11 `NoteStore` methods that return early on `self._loaded` before
+taking the lock `reset()` holds, a check-then-act window for MetaList to judge. Same
+numbers as the scratch prototype.
+
+New tests: `tests/unit/test_state003.py` (a module global and a class, the exemptions:
+constructor, held lock, `*_locked`, only-called-under-lock, logging; the message; a
+reasoned suppression; severity, roles and language).

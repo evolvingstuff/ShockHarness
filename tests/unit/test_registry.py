@@ -90,6 +90,7 @@ IMPLEMENTED = {
     "MAGIC005",
     "EXC005",
     "STATE002",
+    "STATE003",
     "PROP001",
     "PROP002",
     "PROP003",

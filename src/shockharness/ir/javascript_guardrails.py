@@ -226,6 +226,7 @@ def collect_javascript_guardrails(source: SourceText, root: Node) -> GuardrailFa
         ),
         element_guards=collect_element_guards(source, root),
         early_publications=(),  # STATE002 is Python only
+        unlocked_reads=(),  # STATE003 is Python only
     )
 
 

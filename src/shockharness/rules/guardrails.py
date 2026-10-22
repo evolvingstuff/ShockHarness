@@ -41,6 +41,7 @@ from shockharness.rules.registry import (
     PYTHON,
     STATE001,
     STATE002,
+    STATE003,
     STUB001,
     STUB002,
     TYPESCRIPT,
@@ -59,6 +60,7 @@ GUARDRAIL_RULES = (
     BOOL001,
     STATE001,
     STATE002,
+    STATE003,
     IMPORT001,
     DOM001,
 )
@@ -366,6 +368,26 @@ def _state002(
     ]
 
 
+def _state003(
+    facts: ModuleFacts, source: SourceText, path: str, settings: Mapping[str, Any]
+) -> list[Finding]:
+    return [
+        _finding(
+            STATE003,
+            str(settings["state003_severity"]),
+            path,
+            read.span,
+            f"{read.name} is read outside {' / '.join(read.locks)} in {read.scope}, while "
+            f"{read.writer} (line {read.written.line}) writes it holding the lock: it can "
+            "change between this read and what follows",
+            source,
+            read.scope,
+            CONFIDENCE_APPROXIMATE,
+        )
+        for read in facts.guardrails.unlocked_reads
+    ]
+
+
 # -- IMPORT001 ---------------------------------------------------------------------------
 
 
@@ -477,6 +499,7 @@ def run_guardrail_rules(
         (BOOL001, lambda: _bool001(facts, source, path, rules["boolean_arguments"])),
         (STATE001, lambda: _state001(facts, source, path, language, rules["module_state"])),
         (STATE002, lambda: _state002(facts, source, path, rules["module_state"])),
+        (STATE003, lambda: _state003(facts, source, path, rules["module_state"])),
         (IMPORT001, lambda: _import001(facts, source, path, language, rules["import_effects"])),
         (DOM001, lambda: _dom001(facts, source, path, rules["dom"])),
     )

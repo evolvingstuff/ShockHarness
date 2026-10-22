@@ -684,6 +684,20 @@ class EarlyPublication:
 
 
 @dataclass(frozen=True)
+class UnlockedRead:
+    """STATE003: ``name`` (``self.<attr>`` or a module ``global``) is read at ``span`` in
+    ``scope`` outside the ``locks``, while ``writer`` assigns it under one of them at
+    ``written``. Python only."""
+
+    span: Span
+    scope: str
+    name: str
+    locks: tuple[str, ...]
+    writer: str
+    written: Span
+
+
+@dataclass(frozen=True)
 class GuardrailFacts:
     finally_exits: tuple[FinallyExit, ...]
     placeholders: tuple[Placeholder, ...]
@@ -692,6 +706,7 @@ class GuardrailFacts:
     import_time_calls: tuple[ImportTimeCall, ...]
     element_guards: tuple[ElementGuard, ...]
     early_publications: tuple[EarlyPublication, ...]
+    unlocked_reads: tuple[UnlockedRead, ...]
 
 
 NO_GUARDRAILS = GuardrailFacts(
@@ -702,6 +717,7 @@ NO_GUARDRAILS = GuardrailFacts(
     import_time_calls=(),
     element_guards=(),
     early_publications=(),
+    unlocked_reads=(),
 )
 
 

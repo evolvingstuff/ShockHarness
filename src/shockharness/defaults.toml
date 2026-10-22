@@ -360,6 +360,9 @@ allowed = []
 # STATE002: a shared object published before it is initialized (G = Thing() then
 # G.field = ...). "review" (default), "warning" or "error".
 state002_severity = "review"
+# STATE003: an attribute or global read outside the lock its writes hold (check, then act).
+# "review" (default), "warning" or "error".
+state003_severity = "review"
 
 [tool.shockharness.rules.import_effects]
 enabled = true

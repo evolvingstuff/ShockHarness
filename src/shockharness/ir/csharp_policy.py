@@ -284,6 +284,7 @@ def collect_csharp_policy(
         import_time_calls=tuple(sorted(collector.startup, key=lambda c: c.span)),
         element_guards=NO_GUARDRAILS.element_guards,
         early_publications=NO_GUARDRAILS.early_publications,
+        unlocked_reads=NO_GUARDRAILS.unlocked_reads,
     )
     catalog = CatalogFacts(
         process_calls=tuple(sorted(collector.processes, key=lambda c: c.span)),

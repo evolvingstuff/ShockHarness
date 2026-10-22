@@ -2868,6 +2868,58 @@ STATE002 = RuleSpec(
     compliant_example="service = EncryptionService()\nservice.dek = dek\n_service = service",
 )
 
+STATE003 = RuleSpec(
+    rule_id="STATE003",
+    version="1",
+    name="state read outside the lock that guards its writes",
+    family="module_state",
+    config_section=MODULE_STATE_SECTION,
+    default_severity=SEVERITY_REVIEW,
+    implemented=True,
+    languages=(PYTHON,),
+    summary=(
+        "A method checks or passes on an attribute that another method only writes while "
+        "holding a lock, without taking the lock itself: the value can change between the "
+        "check and what the method does with it."
+    ),
+    rationale=(
+        "A lock protects a value only where it is held. In MetaList, EncryptedTextStream.write "
+        "checked _closed and encrypted with _dek before taking the lock that close() holds to "
+        "close the stream and clear the key, so a write racing a logout could use a cleared "
+        "key or a closed file."
+    ),
+    guarantees=(
+        "Python. In a class, a lock is an attribute taken as with self.<lock>: whose name holds "
+        "lock, mutex, cond, guard or sem; an attribute is guarded when a method other than a "
+        "constructor assigns self.<attr> inside such a with. Reported: a read of it outside "
+        "every such with, as an if / while / assert / conditional-expression test or as an "
+        "argument of a call that is not logging, in a method that does not run with the lock "
+        "held (one named *_locked, or one every self.m(...) call in the class makes under the "
+        "lock or from such a method, to a fixpoint); once per attribute and method. A module "
+        "works the same way with module-level locks and global names. Severity "
+        "rules.module_state.state003_severity (review by default)."
+    ),
+    limitations=(
+        "Whether other threads run the method is not known, and a deliberate lock-free fast "
+        "path (a flag re-checked under the lock) matches too. Locks are recognized by name; a "
+        "lock passed in, held by a caller in another class, or taken with acquire() / "
+        "release() is not seen. Reads that only feed logging are not reported."
+    ),
+    remediation=(
+        "Take the lock before the read and hold it through what the read decides: the check "
+        "and the act under one with. A deliberate fast path re-checks under the lock; "
+        "suppress it with that reason."
+    ),
+    noncompliant_example=(
+        "def write(self, message):\n    if self._closed:\n        raise StreamClosed()\n"
+        "    with self._lock:\n        self._file.write(message)"
+    ),
+    compliant_example=(
+        "def write(self, message):\n    with self._lock:\n        if self._closed:\n"
+        "            raise StreamClosed()\n        self._file.write(message)"
+    ),
+)
+
 
 # --- EXC005 (0.9.0, under-the-gate round 3) ---------------------------------------------
 
@@ -3436,6 +3488,7 @@ RULES: tuple[RuleSpec, ...] = (
     MAGIC005,
     EXC005,
     STATE002,
+    STATE003,
     PROP001,
     PROP002,
     PROP003,

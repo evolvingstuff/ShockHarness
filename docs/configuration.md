@@ -698,11 +698,13 @@ roles = ["production"]
 allowed_callees = ["get", "getattr", "setattr", "setdefault", "pop", "next",
                    "SetShaderParameter", "Set", "SetDeferred", "Call", "Rpc", "EmitSignal", ...]   # Godot (G2)
 
-[tool.shockharness.rules.module_state]     # STATE001
+[tool.shockharness.rules.module_state]     # STATE001, STATE002, STATE003
 enabled = true
 severity = "warning"
 roles = ["production"]
 allowed = []                               # [[...allowed]] path, name, reason
+state002_severity = "review"               # STATE002: published before initialized
+state003_severity = "review"               # STATE003: read outside the lock its writes hold
 
 [tool.shockharness.rules.import_effects]   # IMPORT001
 enabled = true

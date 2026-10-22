@@ -823,6 +823,7 @@ deviation. Every finding is a `violation` (the facts are exact syntax).
 | `BOOL001` | a `True`/`False` literal passed positionally to a call with several arguments | Python, JavaScript | `rules.boolean_arguments.roles` (production) |
 | `STATE001` | a module-level mutable binding that a function assigns or mutates | Python, JavaScript | `rules.module_state.roles` (production) |
 | `STATE002` | a shared object (a global, or `self.<attr>` outside a constructor) assigned before its fields are set | Python | `rules.module_state.roles` (production) |
+| `STATE003` | an attribute or global checked or passed on outside the lock that every write to it holds | Python | `rules.module_state.roles` (production) |
 | `IMPORT001` | a configured side-effecting call (processes, network, sockets, threads, deletion) executed at import time | Python, JavaScript | `rules.import_effects.roles` (production) |
 
 A rule whose section does not list a file's role is not applied to that file
@@ -934,6 +935,31 @@ initialized:
   pytest, hypothesis, hatchling, packaging and their neighbours installed with
   ShockHarness.
 * **Configuration.** Severity `rules.module_state.state002_severity`, `review` by
+  default; roles as STATE001.
+
+**STATE003 (review, Python).** State read outside the lock that guards its writes
+(spec 21.1 decision 48):
+* **The shape.** In a class, a lock is an attribute taken as `with self.<lock>:` whose
+  name says it is one (`lock`, `mutex`, `cond`, `guard`, `sem`). An attribute is guarded
+  when a method other than a constructor assigns it inside such a `with`. A read of it
+  outside every lock is reported when it is acted on: an `if` / `while` / `assert` /
+  conditional-expression test, or an argument of a call that is not logging. Methods that
+  run with the lock already held are exempt: one named `*_locked`, or one that every
+  `self.m(...)` call in the class makes under the lock or from such a method (to a
+  fixpoint). A module works the same way with module-level locks and `global` names.
+* **Why it matters.** The value can change between the read and what the code does with
+  it. MetaList's `EncryptedTextStream.write` checked `_closed` and encrypted with `_dek`
+  before taking the lock `close()` holds to close the stream and clear the key.
+* **Not known.** Whether other threads run the method; a lock-free fast path that
+  re-checks under the lock matches too and takes a reasoned suppression. Locks passed in,
+  held by another class, or taken with `acquire()` are not seen.
+* **Measured.** MetaList before its race fix (bbc710aa^) 15, after it 13: the incident's
+  two go. Of the 13, `EncryptedLogSink.write` (2) is the same bug in a sibling class,
+  still at HEAD, and 11 are `NoteStore` methods returning early on `self._loaded` before
+  taking the lock that `reset()` holds. Without the lock-held exemption the counts were
+  33 and 31. pip, _pytest, hypothesis, build and hatchling (672 files): 3, benign.
+  ShockHarness: none.
+* **Configuration.** Severity `rules.module_state.state003_severity`, `review` by
   default; roles as STATE001.
 
 **IMPORT001.** Calls executed when the module is imported (module body, class

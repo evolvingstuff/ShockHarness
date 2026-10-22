@@ -179,6 +179,7 @@ APPLIED_TO_PYTHON = (
     "SLEEP001",
     "STATE001",
     "STATE002",
+    "STATE003",
     "STUB001",
     "STUB002",
     "STUB003",

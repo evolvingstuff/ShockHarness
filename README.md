@@ -133,6 +133,7 @@ Implemented rules:
 | `BOOL001` | a `True`/`False` passed positionally to a call with several arguments | review |
 | `STATE001` | a module-level mutable binding that functions assign or mutate | warning |
 | `STATE002` | a shared object assigned before its fields are set (`G = Thing()` then `G.x = ...`) | review |
+| `STATE003` | an attribute checked or passed on outside the lock that every write to it holds (`if self._closed:` before `with self._lock:`) | review |
 | `PROP001` | opt-in property contracts: a value reaching a `requires` or a catalog sink (a call or an assignment such as `el.innerHTML = ...`) without the property it requires (Python, JavaScript) | review |
 | `PROP002` | opt-in property contracts: a `produces` outside the property's declared producers | review |
 | `PROP003` | opt-in property contracts: a property name the catalog does not list | error |

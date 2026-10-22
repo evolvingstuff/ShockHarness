@@ -67,6 +67,7 @@ ORDERED_SETTINGS: Mapping[str, tuple[str, ...]] = {
     "rules.boolean_arguments.severity": ("error", "warning", "review"),
     "rules.module_state.severity": ("error", "warning", "review"),
     "rules.module_state.state002_severity": ("error", "warning", "review"),
+    "rules.module_state.state003_severity": ("error", "warning", "review"),
     "rules.import_effects.severity": ("error", "warning", "review"),
     "rules.async_lifecycle.severity": ("error", "warning", "review"),
     "rules.stubs.stub003_severity": ("error", "warning", "review"),

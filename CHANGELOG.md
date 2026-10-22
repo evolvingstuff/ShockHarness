@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **STATE003 (review, Python): state read outside the lock that guards its writes** (spec
+  21.1 decision 48). An attribute (or module `global`) that other code only writes while
+  holding a lock, checked or passed on outside it, can change between the read and what
+  follows. Methods named `*_locked`, or only called under the lock, are exempt, as are
+  reads that only feed logging. Severity `rules.module_state.state003_severity`. On
+  MetaList it reports the two reads of its encrypted-log race before the fix and not
+  after, and the same race still present in a sibling class. Cache schema "33".
+
 ## [0.21.0] - 2026-10-21
 
 C# for Godot .NET, third milestone: ShockHarness reads Godot's project and scene files,

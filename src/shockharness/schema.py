@@ -392,6 +392,7 @@ CONFIG_SCHEMA = TableField(
                         **GUARDRAIL_COMMON,
                         "allowed": ListField(ALLOWED_STATE_SCHEMA),
                         "state002_severity": EnumField(VERIFICATION_SEVERITIES),
+                        "state003_severity": EnumField(VERIFICATION_SEVERITIES),
                     },
                     required=(),
                 ),
