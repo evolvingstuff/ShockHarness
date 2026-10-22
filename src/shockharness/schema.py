@@ -452,6 +452,7 @@ CONFIG_SCHEMA = TableField(
                     fields={
                         **GUARDRAIL_COMMON,
                         "python_sleep_apis": ListField(StrField(allow_empty=False)),
+                        "csharp_sleep_apis": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

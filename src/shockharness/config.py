@@ -594,6 +594,7 @@ GUARDRAIL_CATALOGS = (
     ("sleep", "roles"),
     ("godot_names", "roles"),
     ("sleep", "python_sleep_apis"),
+    ("sleep", "csharp_sleep_apis"),
     ("retry", "roles"),
     ("retry", "retry_decorators"),
     ("batches", "roles"),

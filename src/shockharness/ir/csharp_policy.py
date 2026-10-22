@@ -18,6 +18,11 @@ two).
   ``null!`` and ``default!`` are not escapes: they are the late initialization idiom
   (``private Label _score = null!;``, assigned in ``_Ready``), TypeScript's definite
   assignment ``x!: T``, which TYPE001 does not report either.
+* SLEEP001 (G4): calls whose method is ``Sleep``, ``Delay``, ``DelayMsec``,
+  ``DelayUsec`` or ``AwaitMillis``, with whether they sit in a loop of their function
+  and whether the delay is zero or left out (``Thread.Sleep(0)``, ``Task.Delay(0)``,
+  ``TimeSpan.Zero``: a yield, not a wait). The rule keeps the ones
+  ``rules.sleep.csharp_sleep_apis`` lists.
 """
 
 import re
@@ -25,7 +30,12 @@ import re
 from tree_sitter import Node
 
 from shockharness.ir.csharp_defaults import argument_values
-from shockharness.ir.csharp_functions import FUNCTION_TYPES, TYPE_DECLARATIONS, scope_for
+from shockharness.ir.csharp_functions import (
+    FUNCTION_TYPES,
+    LOOP_STATEMENTS,
+    TYPE_DECLARATIONS,
+    scope_for,
+)
 from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.csharp_receivers import simple_type
 from shockharness.ir.csharp_strings import literal_text
@@ -45,6 +55,7 @@ from shockharness.ir.model import (
     ImportTimeCall,
     ModuleBinding,
     ProcessCall,
+    SleepCall,
     TypeEscape,
 )
 from shockharness.ir.tree_sitter_common import node_span, node_text
@@ -69,6 +80,8 @@ TYPE_HOLDERS = frozenset({"type_argument_list", "array_type", "nullable_type"})
 POSTFIX = "postfix_unary_expression"
 NULL_FORGIVING = "!"
 LATE_INITIALIZED = frozenset({"null_literal", "default_expression"})
+SLEEP_METHODS = frozenset({"Sleep", "Delay", "DelayMsec", "DelayUsec", "AwaitMillis"})
+ZERO_DELAYS = frozenset({"0", "0f", "0.0", "0.0f", "0d", "0L", "TimeSpan.Zero"})
 
 
 def _modifiers(node: Node) -> frozenset[str]:
@@ -240,6 +253,29 @@ def _type_escape(node: Node, source: SourceText) -> TypeEscape | None:
     return None
 
 
+# -- SLEEP001 ---------------------------------------------------------------------------------
+
+
+def _in_loop(call: Node) -> bool:
+    """Inside a loop of the call's own function (a lambda or local function stops it)."""
+    current = call.parent
+    while current is not None and current.type not in FUNCTION_TYPES:
+        if current.type in LOOP_STATEMENTS:
+            return True
+        current = current.parent
+    return False
+
+
+def _sleep(call: Node, source: SourceText) -> SleepCall | None:
+    callee = _callee(call)
+    _receiver, _dot, method = callee.rpartition(".")
+    if call.type != Kind.INVOCATION_EXPRESSION or method not in SLEEP_METHODS:
+        return None
+    arguments = argument_values(call)
+    zero = len(arguments) == 0 or node_text(arguments[0]) in ZERO_DELAYS
+    return SleepCall(callee, _text(call), _in_loop(call), zero, node_span(source, call))
+
+
 # -- the walk ---------------------------------------------------------------------------------
 
 
@@ -253,6 +289,7 @@ class _Collector:
         self.classes: list[ClassDecl] = []
         self.imports: list[ImportFact] = []
         self.escapes: list[TypeEscape] = []
+        self.sleeps: list[SleepCall] = []
 
     def visit(self, node: Node, scope: str, function: Node | None) -> None:
         kind = node.type
@@ -269,6 +306,9 @@ class _Collector:
             found = _process_call(node, function, self.source)
             if found is not None:
                 self.processes.append(found)
+            sleep = _sleep(node, self.source)
+            if sleep is not None:
+                self.sleeps.append(sleep)
         elif kind == Kind.METHOD_DECLARATION:
             self._predicate(node, scope)
         elif kind in TYPE_DECLARATIONS and kind != Kind.ENUM_DECLARATION:
@@ -333,7 +373,7 @@ def collect_csharp_policy(
     )
     catalog = CatalogFacts(
         process_calls=tuple(sorted(collector.processes, key=lambda c: c.span)),
-        sleeps=NO_CATALOG.sleeps,
+        sleeps=tuple(sorted(collector.sleeps, key=lambda c: (c.span, c.callee))),
         retries=NO_CATALOG.retries,
         batch_loops=NO_CATALOG.batch_loops,
         type_escapes=tuple(sorted(collector.escapes, key=lambda t: (t.span, t.kind))),

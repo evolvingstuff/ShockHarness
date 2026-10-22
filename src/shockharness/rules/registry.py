@@ -974,7 +974,7 @@ VERIFY001 = RuleSpec(
     config_section=VERIFICATION_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A change adds a skip, expected-failure or focus marker to a test, taking tests "
         "out of the run while the suite still passes."
@@ -1029,7 +1029,7 @@ VERIFY002 = RuleSpec(
     config_section=VERIFICATION_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A change adds a suppression comment that names no rule codes or covers a whole "
         "file, silencing every check of a linter, type checker or coverage tool there."
@@ -1077,7 +1077,7 @@ VERIFY004 = RuleSpec(
     config_section=VERIFICATION_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A change makes a test unable to fail: it adds an assertion that is always true, "
         "removes every assertion from a test, or replaces a test's body with nothing."
@@ -1216,7 +1216,7 @@ VERIFY003 = RuleSpec(
     config_section=VERIFICATION_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A change loosens the policy that judges it: the ShockHarness configuration, a "
         "baseline, the CI workflow that runs the gate, or another tool's configuration; or "
@@ -1990,7 +1990,7 @@ SLEEP001 = RuleSpec(
     config_section=SLEEP_SECTION,
     default_severity=SEVERITY_REVIEW,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "time.sleep / asyncio.sleep / an awaited setTimeout waits a fixed time where the "
         "code needs a condition: too short and it races, too long and it is slow."
@@ -2153,7 +2153,7 @@ ROLE001 = RuleSpec(
     config_section=ROLE_INTEGRITY_SECTION,
     default_severity=SEVERITY_WARNING,
     implemented=True,
-    languages=ALL_LANGUAGES,
+    languages=WITH_CSHARP,
     summary=(
         "A file classified as a test is imported by production code (so it ships, yet the "
         "production rules do not apply to it), or contains no test cases at all."

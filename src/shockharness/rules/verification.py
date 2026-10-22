@@ -337,7 +337,9 @@ def _applied_rules(file: FileVerification) -> tuple[str, ...]:
     return tuple(
         rule.rule_id
         for rule in VERIFICATION_RULES
-        if rule.rule_id not in file.disabled and file.role in ROLE_SCOPES[rule.rule_id]
+        if rule.rule_id not in file.disabled
+        and file.role in ROLE_SCOPES[rule.rule_id]
+        and file.language in rule.languages
     )
 
 

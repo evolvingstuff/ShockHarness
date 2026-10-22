@@ -650,6 +650,11 @@ enabled = true
 severity = "review"
 roles = ["production"]
 python_sleep_apis = ["time.sleep", "asyncio.sleep", "trio.sleep", "anyio.sleep"]
+# C# (G4): a method matched by its last segments ("Thread.Sleep" matches
+# System.Threading.Thread.Sleep). Godot's OS.DelayMsec blocks the main thread; gdUnit4's
+# AwaitMillis waits in a test (reported once "test" is in roles). GetTree().CreateTimer
+# is a game timer, not a wait for a condition, and is not listed.
+csharp_sleep_apis = ["Thread.Sleep", "Task.Delay", "OS.DelayMsec", "OS.DelayUsec", "AwaitMillis"]
 
 [tool.shockharness.rules.retry]            # RETRY001
 enabled = true

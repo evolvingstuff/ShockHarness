@@ -346,10 +346,21 @@ def _type001(
 # -- SLEEP001 / RETRY001 / BATCH001 / STUB003 --------------------------------------------
 
 
+def _listed_csharp(callee: str, apis: set[str]) -> bool:
+    """``Thread.Sleep`` matches ``System.Threading.Thread.Sleep`` and ``Thread.Sleep``;
+    ``AwaitMillis`` matches a call of it on any receiver."""
+    return any(callee == api or callee.endswith("." + api) for api in apis)
+
+
+def _javascript_sleep(callee: str, qualified: str) -> bool:
+    return callee == PROMISE_SLEEP or qualified == TIMERS_SET_TIMEOUT
+
+
 def _sleep001(
     facts: ModuleFacts, source: SourceText, path: str, language: str, settings: Mapping[str, Any]
 ) -> list[Finding]:
     apis = {str(a) for a in settings["python_sleep_apis"]}
+    csharp_apis = {str(a) for a in settings["csharp_sleep_apis"]}
     aliases = import_aliases(facts.imports, language)
     found: list[Finding] = []
     for sleep in facts.catalog.sleeps:
@@ -358,7 +369,9 @@ def _sleep001(
         qualified = qualified_callee(sleep.callee, aliases)
         if language == PYTHON and qualified not in apis:
             continue
-        if language != PYTHON and sleep.callee != PROMISE_SLEEP and qualified != TIMERS_SET_TIMEOUT:
+        if language == CSHARP and not _listed_csharp(sleep.callee, csharp_apis):
+            continue
+        if language not in (PYTHON, CSHARP) and not _javascript_sleep(sleep.callee, qualified):
             continue
         what = "polls with a fixed sleep in a loop" if sleep.in_loop else "waits a fixed time"
         found.append(
