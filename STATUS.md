@@ -7078,3 +7078,17 @@ New tests: `tests/unit/test_call_boundaries.py` (11): Python imports, aliases, t
 `window.fetch`, `new WebSocket`, `fs/promises` and `node:fs` imports, `openSync` flags, a
 local `fetch`; a project's own names and the rule off without entries; malformed calls and
 empty entries; the loosening cases; dropping a catalog name is a deviation.
+
+## Release 0.29.0 (2026-10-23)
+
+On Tom's go-ahead. CI was green on 6937ed3 (run 39984643940) and on the release commit
+f93030a (run 39986579923), 16 of 16 jobs each. The pin moved in the same 15 files. Upgrade
+note, checked by installing skills and a baseline with v0.28.0 in a scratch project and
+running 0.29.0's `check`: `skills: 3 out of date` (fix-violations gained a CALL001 row; the
+pin in adopt-shockharness and pre-commit-review), and the baseline still applies with the
+"different configuration" note (the defaults gained the `call_boundaries` table). The cache
+schema is 38. CALL001 does nothing until a project writes an entry. Every check before the
+release commit was run with its exit code tested (after the CALL001 amend that carried a
+self-gate violation because a pipe into `tail` hid the gate's exit code). The tag `v0.29.0`
+is on f93030a. Published by `publish.yml` (run 39987849919, 18 of 18 jobs). PyPI lists
+0.29.0 with a wheel and an sdist.
