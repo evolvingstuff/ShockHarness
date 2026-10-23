@@ -5,6 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-23
+
+A new rule, ASYNC004, for commands that freeze while a page is not drawn, and skill
+guidance on clamps.
+
+**Upgrading from 0.27.0.** No new dependency.
+* **ASYNC004 needs your gates.** Out of the box it watches only `navigator.locks.request`.
+  A project with its own command queue names it under `[tool.shockharness.rules.async_lifecycle]`,
+  for example `gates = ["navigator.locks.request:last", "CommandGate.run:1",
+  "CommandGate.runWhenFree:1"]`, and `check` then reports any `.finished` a command waits on.
+  Without gates, nothing changes.
+* **Baselines.** The bundled defaults gained `gates`, so the configuration digest changes
+  again: a baseline recorded under 0.27.0 still applies, with the "created under a
+  different configuration" note until it is recreated.
+* **Cache.** The cache schema is 37: the first run rebuilds it.
+* **Skills.** Four skills changed (`async-lifecycle` and `write-compliant-code` gained
+  guidance; the version pin in `adopt-shockharness` and `pre-commit-review`), so `check`
+  says `skills: 4 out of date`. Run `shockharness skills update --agent claude` (or
+  `codex`) and commit the result.
+
 ### Added
 - **ASYNC004: a gated command waits on the page being drawn (JavaScript, TypeScript).**
   A browser does not run animations for a page it does not draw, so an awaited
