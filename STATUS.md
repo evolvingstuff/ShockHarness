@@ -7031,3 +7031,16 @@ Locks with and without options, and a `const` binding; a returned `.then` chain 
 TypeScript; a value named `finished` is not a wait; three malformed gates; removing the
 built-in gate is a deviation. The registry, report-order and unknown-inventory tests
 list ASYNC004.
+
+## Release 0.28.0 (2026-10-23)
+
+On Tom's go-ahead. CI was green on 8bf7ee3 (run 39965406837) and on the release commit
+57d8d9c (run 39966674755), 16 of 16 jobs each. The pin moved in the same 15 files (the
+blanket replace touched no other file this time). Upgrade note, checked by installing
+skills and a baseline with v0.27.0 in a scratch project and running 0.28.0's `check`:
+`skills: 4 out of date` (async-lifecycle and write-compliant-code gained guidance; the
+pin in adopt-shockharness and pre-commit-review), and the baseline still applies with the
+"different configuration" note (the defaults gained `rules.async_lifecycle.gates`). The
+cache schema is 37. ASYNC004 watches only `navigator.locks.request` until a project names
+its own gates. The tag `v0.28.0` is on 57d8d9c. Published by `publish.yml` (run
+39967631383, 18 of 18 jobs). PyPI lists 0.28.0 with a wheel and an sdist.
