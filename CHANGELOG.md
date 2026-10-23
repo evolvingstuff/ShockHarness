@@ -6,6 +6,12 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **The `write-compliant-code` skill: blank means no visible character.** `strip()` and
+  `trim()` leave zero-width characters (U+200B to U+200D, U+2060; Python also U+FEFF), so
+  text a person typed or pasted is tested for blankness through one shared check that
+  removes them. Skill wording rather than a rule (`docs/ideas.md`): MetaList has about 245
+  `strip()`/`trim()` emptiness checks, and which ones see a person's text is not in the
+  syntax.
 - **The `verification-integrity` skill: samples a parser really meets.** A parser,
   detector or guesser is tested on samples its real producer made (Markdown as editors
   and AI chats write it, files as tools export them), and round-tripped where the
