@@ -28,6 +28,9 @@ from shockharness.ir.javascript_guardrails import dotted_callee
 from shockharness.ir.javascript_nodes import Field, Kind
 from shockharness.ir.model import (
     CHECK_ABSENT,
+    OPEN_READ,
+    OPEN_UNKNOWN,
+    OPEN_WRITE,
     RETRY_LOOP,
     TYPE_ESCAPE_ANY,
     TYPE_ESCAPE_CAST,
@@ -36,6 +39,7 @@ from shockharness.ir.model import (
     CatalogFacts,
     ClassDecl,
     ConstantPredicate,
+    OpenMode,
     ProcessCall,
     RetryFact,
     SleepCall,
@@ -456,6 +460,37 @@ def _class(source: SourceText, node: Node) -> list[ClassDecl]:
     return [ClassDecl(name, _bases(node), node_span(source, node))]
 
 
+# CALL001: Node's open calls, whose flags (the second argument) decide whether they write.
+OPENS = frozenset({"open", "openSync"})
+# Node's flag strings ("r", "r+", "rs+", "w", "wx", "a+", ...); w, a or + writes.
+NODE_FLAGS = re.compile(r"[rwa][sx]?\+?")
+WRITE_FLAGS = re.compile(r"[wa+]")
+FLAGS_INDEX = 1
+
+
+def _open_mode(source: SourceText, node: Node) -> OpenMode | None:
+    if node.type != Kind.CALL_EXPRESSION:
+        return None
+    function = node.child_by_field_name(Field.FUNCTION)
+    callee = None if function is None else dotted_callee(function)
+    if callee is None:
+        return None
+    _owner, _dot, method = callee.rpartition(".")
+    if method not in OPENS:
+        return None
+    arguments = call_arguments(node)
+    span = node_span(source, node)
+    if len(arguments) <= FLAGS_INDEX:
+        return OpenMode(span, OPEN_READ)
+    flags = arguments[FLAGS_INDEX]
+    text = node_text(flags).strip("'\"")
+    if flags.type != Kind.STRING or NODE_FLAGS.fullmatch(text) is None:
+        return OpenMode(span, OPEN_UNKNOWN)
+    if WRITE_FLAGS.search(text) is None:
+        return OpenMode(span, OPEN_READ)
+    return OpenMode(span, OPEN_WRITE)
+
+
 def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
     processes: list[ProcessCall] = []
     sleeps: list[SleepCall] = []
@@ -464,6 +499,7 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
     predicates: list[ConstantPredicate] = []
     classes: list[ClassDecl] = []
     escapes: list[TypeEscape] = []
+    opens: list[OpenMode] = []
     stack: list[Node] = [root]
     while len(stack) > 0:
         node = stack.pop()
@@ -479,6 +515,9 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
         predicates.extend(_predicate(source, node))
         classes.extend(_class(source, node))
         escapes.extend(_type_escape(source, node))
+        mode = _open_mode(source, node)
+        if mode is not None:
+            opens.append(mode)
     return CatalogFacts(
         process_calls=tuple(sorted(processes, key=lambda p: (p.span, p.callee))),
         sleeps=tuple(sorted(sleeps, key=lambda s: (s.span, s.callee))),
@@ -487,4 +526,5 @@ def collect_javascript_catalog(source: SourceText, root: Node) -> CatalogFacts:
         type_escapes=tuple(sorted(escapes, key=lambda t: (t.span, t.kind))),
         constant_predicates=tuple(sorted(predicates, key=lambda c: c.span)),
         classes=tuple(sorted(classes, key=lambda c: c.span)),
+        open_modes=tuple(sorted(opens, key=lambda o: o.span)),
     )

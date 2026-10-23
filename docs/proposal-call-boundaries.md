@@ -1,6 +1,9 @@
 # Proposal: call boundaries, "only these files may call it"
 
-Status: **proposed** (2026-10-22), waiting for Tom's go-ahead. Nothing is built.
+Status: **built** (2026-10-23, on Tom's go-ahead) as CALL001, spec 21.1 decision 55.
+Differences from this text: the catalogs are `@disk_writes` and `@network` (underscores,
+as TOML keys); a `.open` method whose first argument is not a mode is another API and
+counts as a read. The measurement is in `docs/rules.md` under CALL001.
 Companion to IMPORT002's named modules (`docs/proposal-import-boundaries-modules.md`).
 Source: MetaList's policy note (2026-10-22), sections 3.1 (disk writes), 3.3 (logging
 content), 3.5 (process and environment) and 3.2 for the browser.

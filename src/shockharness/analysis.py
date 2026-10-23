@@ -448,6 +448,7 @@ SCOPED_RULES = (
     registry.DOM002,
     registry.DOM003,
     registry.IMPORT002,
+    registry.CALL001,
     *CONTRACT_RULES,
     *DEAD_RULES,
     *DUPLICATE_RULES,
@@ -505,6 +506,8 @@ def _opted_in(rule: registry.RuleSpec, config: EffectiveConfig) -> bool:
     section = rule.config_section
     if rule is registry.IMPORT002:
         return len(config.section(registry.IMPORT_BOUNDARIES_SECTION)["forbidden"]) > 0
+    if rule is registry.CALL001:
+        return len(config.section(registry.CALL_BOUNDARIES_SECTION)["forbidden"]) > 0
     return section is None or not is_opt_in(section) or config.section(section)["enabled"] is True
 
 

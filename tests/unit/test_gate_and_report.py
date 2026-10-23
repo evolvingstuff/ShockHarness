@@ -183,6 +183,7 @@ IMPLEMENTED_IN_ORDER = (
     "DEAD002",
     "DUP001",
     "DUP002",
+    "CALL001",
     "IMPORT002",
     "GODOT001",
     "GODOT002",

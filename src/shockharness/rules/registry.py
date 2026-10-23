@@ -3499,6 +3499,61 @@ DUP002 = RuleSpec(
 IMPORT_BOUNDARIES_SECTION = "rules.import_boundaries"
 IMPORT_BOUNDARIES_FAMILY = "import_boundaries"
 
+CALL_BOUNDARIES_SECTION = "rules.call_boundaries"
+CALL_BOUNDARIES_FAMILY = "call_boundaries"
+
+CALL001 = RuleSpec(
+    rule_id="CALL001",
+    version="1",
+    name="call across a declared boundary",
+    family=CALL_BOUNDARIES_FAMILY,
+    config_section=CALL_BOUNDARIES_SECTION,
+    default_severity=SEVERITY_ERROR,
+    implemented=True,
+    languages=ALL_LANGUAGES,
+    summary=(
+        "A file makes a call that a [[rules.call_boundaries.forbidden]] entry keeps it from "
+        "making: only the files the entry allows may write to disk, open a connection, or "
+        "make whatever call the entry names."
+    ),
+    rationale=(
+        "Some capabilities belong in one place: MetaList's policy note keeps every disk write "
+        "in an encrypted writer and every outbound request in one client, so plaintext never "
+        "touches disk and the network has one chokepoint. The capability is a call on "
+        "something everyone imports (open, Path.write_text, shutil) or a global (fetch), so "
+        "an import boundary cannot hold it, and one convenient call crosses it unseen."
+    ),
+    guarantees=(
+        "Python, JavaScript and TypeScript. Every call of a bound file (callers globs, less "
+        "allowed_callers), at any depth, a constructor call (new X) included. A call name "
+        "matches the call resolved through the file's own imports and everything below it "
+        "(shutil matches shutil.copy, fs/promises.writeFile matches itself); a name no "
+        "import binds is a global (fetch, open), skipped when the module or the calling "
+        "function binds the name itself; window. / globalThis. / self. are dropped. .method "
+        "matches a method of that name on any receiver (approximate). /mode=write counts "
+        "the call only when its literal mode or flags write (w, a, x or +); a mode the "
+        "analysis cannot read is an unknown finding. @disk_writes and @network expand to "
+        "the section's lists for the file's language. One finding per call, at the call."
+    ),
+    limitations=(
+        "The call is judged where it is written: a wrapper that writes is reported, not its "
+        "callers, and what reaches the call (plaintext or not) is property contracts' "
+        "question. A client's later calls are not calls of its module (client.get after "
+        "httpx.Client()): the construction is. Reading os.environ is an attribute, not a "
+        "call. A method matched by name may be another type's method of that name."
+    ),
+    remediation=(
+        "Make the call through the module the entry allows (the encrypted writer, the one "
+        "client), or move the code there. If the boundary itself is wrong, change the entry "
+        "in the configuration, where the change is reviewed."
+    ),
+    noncompliant_example=(
+        "# app/notes.py, under a boundary that keeps disk writes in app/storage/writer.py\n"
+        "Path(path).write_text(note.body)"
+    ),
+    compliant_example="storage.writer.save_note(note)  # the one module that writes",
+)
+
 IMPORT002 = RuleSpec(
     rule_id="IMPORT002",
     version="1",
@@ -3893,6 +3948,7 @@ RULES: tuple[RuleSpec, ...] = (
     DEAD002,
     DUP001,
     DUP002,
+    CALL001,
     IMPORT002,
     GODOT001,
     GODOT002,
@@ -3960,6 +4016,7 @@ FAMILY_CATEGORIES: dict[str, str] = {
     DEAD_CODE_FAMILY: CATEGORY_STRUCTURAL,
     DUPLICATES_FAMILY: CATEGORY_STRUCTURAL,
     IMPORT_BOUNDARIES_FAMILY: CATEGORY_STRUCTURAL,
+    CALL_BOUNDARIES_FAMILY: CATEGORY_STRUCTURAL,
     GODOT_NAMES_FAMILY: CATEGORY_CONTRACT,
 }
 

@@ -5,6 +5,19 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **CALL001: call boundaries, "only these files may call it" (Python, JavaScript).**
+  A `[[rules.call_boundaries.forbidden]]` entry binds `callers` (less `allowed_callers`)
+  and forbids `calls`: a qualified name with everything below it, resolved through the
+  file's imports (`shutil`, `os.replace`, a global like `fetch`), a method on any receiver
+  (`.write_text`, approximate), either with `/mode=write` (only a literal write mode or
+  write flags count; an unreadable mode is an unknown finding), or a shipped catalog,
+  `@disk_writes` or `@network`, per language. It keeps disk writes in one writer and the
+  network behind one client, which IMPORT002 cannot (`open` and `fetch` are not imports).
+  Nothing fires until a project writes an entry. On MetaList: 73 disk writes in 27 files
+  and 47 browser `fetch` calls in 28 files outside its API client, each one real. The
+  cache schema is 38 (an `open` call's mode is a new fact).
+
 ## [0.28.0] - 2026-10-23
 
 A new rule, ASYNC004, for commands that freeze while a page is not drawn, and skill

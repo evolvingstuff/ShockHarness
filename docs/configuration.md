@@ -1069,6 +1069,41 @@ least the same importers, exempts no other file, forbids at least the same files
 modules and allows no other name), and so is lowering the severity. Turning the
 section off is a deviation.
 
+## Call boundaries (CALL001)
+
+Calls some files must never make, declared per project: no entry by default, so CALL001
+reports nothing (and is not recorded in a file's `rules_applied`) until a project adds one.
+`callers`, `calls` and `reason` are required; `allowed_callers` exempts files.
+
+```toml
+[tool.shockharness.rules.call_boundaries]
+enabled = true
+severity = "error"                    # "warning" or "review" report without gating
+
+[[tool.shockharness.rules.call_boundaries.forbidden]]
+callers = ["/app/**"]                                  # the files the entry binds (globs)
+allowed_callers = ["/app/storage/encrypted_writer.py"] # bound files exempt from it (globs)
+calls = ["@disk_writes"]                               # what they may not call
+reason = "plaintext never touches disk"
+
+[[tool.shockharness.rules.call_boundaries.forbidden]]
+callers = ["/app/static/js/**"]
+allowed_callers = ["/app/static/js/modules/api-client.js"]
+calls = ["@network"]
+reason = "the browser talks to the server through one client"
+```
+
+A call is a qualified name and everything below it (`shutil`, `os.replace`, `fetch`,
+`fs/promises.writeFile`), a method on any receiver (`.write_text`), either with
+`/mode=write` (only a literal write mode counts), or a catalog. `@disk_writes` and
+`@network` expand to the section's `python_disk_writes` / `javascript_disk_writes` /
+`python_network` / `javascript_network` lists for the file's language; `shockharness
+config effective` prints them. Removing a name from a catalog is a policy deviation.
+Removing an entry, dropping a call, exempting another file or narrowing `callers` is a
+VERIFY003 loosening (an entry is kept when some new entry binds at least the same callers,
+exempts no other file and forbids at least the same calls). `docs/rules.md` has the
+matching rules.
+
 ## Property contracts (PROP001, PROP003, PROP005, PROP006, PROP007)
 
 Opt-in (`docs/shockharness_property_contracts_spec.md`, milestones P1a, P1b and P2,

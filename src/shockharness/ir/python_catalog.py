@@ -27,6 +27,9 @@ from shockharness.ir.model import (
     CHECK_ABSENT,
     CHECK_FALSE,
     CHECK_TRUE,
+    OPEN_READ,
+    OPEN_UNKNOWN,
+    OPEN_WRITE,
     RETRY_DECORATOR,
     RETRY_LOOP,
     TYPE_ESCAPE_ANY,
@@ -35,6 +38,7 @@ from shockharness.ir.model import (
     CatalogFacts,
     ClassDecl,
     ConstantPredicate,
+    OpenMode,
     ProcessCall,
     RetryFact,
     SleepCall,
@@ -370,6 +374,74 @@ def _classes(source: SourceText, module: ast.Module) -> list[ClassDecl]:
     return found
 
 
+# CALL001: ``open`` calls whose mode decides whether they write.
+OPEN = "open"
+MODE_KEYWORD = "mode"
+# A mode string ("r", "wb", "a+", "x", tarfile's "w:gz"); w, a, x or + writes.
+MODE_SYNTAX = re.compile(r"[rwxa][bt+]*(:\w+)?")
+WRITE_MODE = re.compile(r"[wax+]")
+# os.open flags by name: any of these writes; flags naming none of them read.
+WRITE_FLAGS = frozenset({"O_WRONLY", "O_RDWR", "O_CREAT", "O_APPEND", "O_TRUNC", "O_EXCL"})
+FLAG_PREFIX = "O_"
+# Modules whose ``open`` takes the mode second, like the builtin; any other ``.open``
+# (``Path.open``) takes it first.
+MODULE_OPENS = frozenset({"io", "codecs", "gzip", "bz2", "lzma", "os", "tarfile", "dbm", "shelve"})
+
+
+def _mode_position(call: ast.Call) -> tuple[ast.expr | None, bool]:
+    """(the mode argument, whether the call is a method whose first argument is the mode)."""
+    for keyword in call.keywords:
+        if keyword.arg == MODE_KEYWORD:
+            return keyword.value, False
+    func = call.func
+    second = isinstance(func, ast.Name) or (
+        isinstance(func, ast.Attribute)
+        and isinstance(func.value, ast.Name)
+        and func.value.id in MODULE_OPENS
+    )
+    index = 1 if second else 0
+    if len(call.args) <= index:
+        return None, not second
+    return call.args[index], not second
+
+
+def _flag_mode(expr: ast.expr) -> str | None:
+    """How ``os.open`` flags open the file, from their names; None when they are not flags."""
+    names = {
+        node.attr if isinstance(node, ast.Attribute) else node.id
+        for node in ast.walk(expr)
+        if isinstance(node, ast.Attribute | ast.Name)
+    }
+    flags = {name for name in names if name.startswith(FLAG_PREFIX)}
+    if len(flags) == 0:
+        return None
+    return OPEN_WRITE if len(flags & WRITE_FLAGS) > 0 else OPEN_READ
+
+
+def _mode_of(mode: ast.expr, method_first: bool) -> str:
+    flags = _flag_mode(mode)
+    if flags is not None:
+        return flags
+    if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
+        if MODE_SYNTAX.fullmatch(mode.value) is not None:
+            return OPEN_WRITE if WRITE_MODE.search(mode.value) is not None else OPEN_READ
+    if method_first:
+        return OPEN_READ  # another API's first argument (Image.open(fp)), not a mode
+    return OPEN_UNKNOWN
+
+
+def _open_mode(source: SourceText, call: ast.Call) -> OpenMode | None:
+    func = call.func
+    named = isinstance(func, ast.Name) and func.id == OPEN
+    method = isinstance(func, ast.Attribute) and func.attr == OPEN
+    if not named and not method:
+        return None
+    mode, method_first = _mode_position(call)
+    if mode is None:
+        return OpenMode(node_span(source, call), OPEN_READ)
+    return OpenMode(node_span(source, call), _mode_of(mode, method_first))
+
+
 def collect_python_catalog(source: SourceText, module: ast.Module) -> CatalogFacts:
     processes: list[ProcessCall] = []
     sleeps: list[SleepCall] = []
@@ -397,4 +469,15 @@ def collect_python_catalog(source: SourceText, module: ast.Module) -> CatalogFac
             sorted(_constant_predicates(source, module), key=lambda c: c.span)
         ),
         classes=tuple(sorted(_classes(source, module), key=lambda c: c.span)),
+        open_modes=tuple(
+            sorted(
+                (
+                    found
+                    for node in ast.walk(module)
+                    if isinstance(node, ast.Call)
+                    and (found := _open_mode(source, node)) is not None
+                ),
+                key=lambda o: o.span,
+            )
+        ),
     )

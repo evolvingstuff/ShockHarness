@@ -1823,6 +1823,46 @@ A line-by-line count of the same import statements found the same 31 sites, none
 none fewer. On ShockHarness itself, `subprocess` outside `src/shockharness/history/git.py`:
 no finding, and a probe file importing it was reported.
 
+### CALL001: a call across a declared boundary (error, configured; Python and JavaScript)
+
+From MetaList's policy note (`docs/proposal-call-boundaries.md`): some capabilities belong in
+one module. Every disk write goes through an encrypted writer, and the browser talks to the
+server through one client. The capability is a call on something everyone imports (`open`,
+`Path.write_text`, `shutil`) or a global (`fetch`), so IMPORT002 cannot hold it.
+
+Each `[[rules.call_boundaries.forbidden]]` entry (`docs/configuration.md`, Call boundaries)
+binds the files its `callers` globs match, less its `allowed_callers`, and names its
+`calls`. Every call of a bound file is judged, at any depth, `new X(...)` included:
+
+* **A call name** matches the call resolved through the file's own imports, and everything
+  below it. `shutil` matches `shutil.copy`, and `import shutil as sh; sh.copy(...)` is
+  `shutil.copy`. A name no import binds is a global (`fetch`, the builtin `open`), skipped
+  when the module or the calling function binds the name itself (a parameter named `open`).
+  JavaScript's `window.`, `globalThis.` and `self.` are dropped.
+* **`.method`** matches a method of that name on any receiver (`Path(p).write_text(...)`):
+  `approximate`, since the receiver's type is not known.
+* **`/mode=write`** counts the call only when its mode writes. Python reads `open`'s
+  second argument (and that of `io`, `codecs`, `gzip`, `bz2`, `lzma`, `os`, `tarfile`, `dbm`,
+  `shelve`), any other `.open`'s first (`Path.open`), or `mode=`. A literal in mode syntax
+  writes with `w`, `a`, `x` or `+`; `os.open` flags are read by name (`O_WRONLY`,
+  `O_RDWR`, `O_CREAT`, `O_APPEND`, `O_TRUNC`, `O_EXCL`). JavaScript reads the flags of
+  `open`/`openSync`. No mode is a read. A mode the analysis cannot read is an `unknown`
+  finding, never a silent read, except a `.open` method whose first argument is not a
+  mode at all (`Image.open(fp)`), which is another API.
+* **`@disk_writes` and `@network`** expand to the section's lists for the file's language
+  (`python_disk_writes`, `javascript_disk_writes`, `python_network`, `javascript_network`).
+  Disk writes include storage that outlives the page: `localStorage`, `sessionStorage`,
+  IndexedDB and the Cache API. A network client's construction counts
+  (`httpx.Client()`), its later calls (`client.get`) do not.
+
+One finding per call, at the call, naming who may make it and the entry's reason. The call
+is judged where it is written: a wrapper that writes is reported, not its callers; what
+reaches the call (plaintext or not) is a property contract's question. Not seen: a mode held
+in a variable passed to `Path.open`, reading `os.environ` (an attribute, not a call), a
+callee computed at run time.
+
+**Measured:** MetaList at d21c9f3f, read-only on an export, with `@disk_writes` over `app/**` and `main.py` (no file allowed) and `@network` over the browser code (only `modules/api-client.js` allowed): 120 findings. Disk: 73 in 27 files: in Python, 34 `sqlite3.connect`, 7 `tempfile`, 4 `shutil.rmtree`, 3 `os.replace`, 6 `open` / `Path.open` in a write mode, 2 `tarfile.open(..., mode="x:gz")`, 1 `os.open` with write flags and 1 `mkdir`; in the browser, 15 `sessionStorage` writes. Network: 47 `fetch` calls in 28 files. Every finding was read: each is a real write, connection or storage call. The first run had two wrong ones, `Image.open(BytesIO(...))` (PIL's first argument is the file) and `os.open(path, os.O_RDONLY)`, both unknown; modes are now read only in mode syntax and `os.O_*` flags by name, and both are gone.
+
 ### GODOT001-GODOT005: Godot names the project does not define (C#; warning, GODOT002 and GODOT004 review)
 
 Spec 21.1 decision 51, milestone G4 of [proposal-godot.md](proposal-godot.md). Godot

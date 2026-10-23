@@ -206,6 +206,23 @@ FORBIDDEN_IMPORT_SCHEMA = TableField(
     },
     required=("importers", "allowed_names", "reason"),
 )
+CALL_BOUNDARY_SCHEMA = TableField(
+    fields={
+        "callers": ListField(StrField(allow_empty=False)),
+        "allowed_callers": ListField(StrField(allow_empty=False)),
+        "calls": ListField(StrField(allow_empty=False)),
+        "reason": StrField(allow_empty=False),
+    },
+    required=("callers", "calls", "reason"),
+)
+
+
+def call_boundary_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """A validated ``[[rules.call_boundaries.forbidden]]`` entry with ``allowed_callers``
+    present: an entry that leaves it out exempts no file."""
+    return {"allowed_callers": [], **entry}
+
+
 # The lists a forbidden-import entry may leave out; an absent one lists nothing. At least
 # one of imported and modules must list something (checked in config.py).
 FORBIDDEN_IMPORT_OPTIONAL = ("allowed_importers", "imported", "modules")
@@ -545,6 +562,18 @@ CONFIG_SCHEMA = TableField(
                             },
                             required=(),
                         ),
+                    },
+                    required=(),
+                ),
+                "call_boundaries": TableField(
+                    fields={
+                        "enabled": BoolField(),
+                        "severity": EnumField(VERIFICATION_SEVERITIES),
+                        "forbidden": ListField(CALL_BOUNDARY_SCHEMA),
+                        "python_disk_writes": ListField(StrField(allow_empty=False)),
+                        "javascript_disk_writes": ListField(StrField(allow_empty=False)),
+                        "python_network": ListField(StrField(allow_empty=False)),
+                        "javascript_network": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

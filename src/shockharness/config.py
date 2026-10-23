@@ -46,6 +46,7 @@ from shockharness.schema import (
     SECTION_SEVERITIES,
     ConfigIssue,
     boundary_exceptions,
+    call_boundary_entry,
     forbidden_import_entry,
     validate_shape,
 )
@@ -573,6 +574,7 @@ GUARDRAIL_RULES = {
     "sentinels": "MAGIC003",
     "dom": "DOM001",
     "magic_strings": "MAGIC002",
+    "call_boundaries": "CALL001",
     "godot_names": "GODOT001, GODOT003, GODOT005",
 }
 GUARDRAIL_CATALOGS = (
@@ -592,6 +594,10 @@ GUARDRAIL_CATALOGS = (
     ("async_lifecycle", "javascript_promise_apis"),
     ("async_lifecycle", "csharp_task_apis"),
     ("async_lifecycle", "gates"),
+    ("call_boundaries", "python_disk_writes"),
+    ("call_boundaries", "javascript_disk_writes"),
+    ("call_boundaries", "python_network"),
+    ("call_boundaries", "javascript_network"),
     ("processes", "roles"),
     ("processes", "python_process_apis"),
     ("processes", "javascript_process_apis"),
@@ -739,6 +745,61 @@ def _gate_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     ]
 
 
+# CALL001: a call as code writes it (shutil.copy, fetch, fs/promises.writeFile,
+# node-fetch), a method on any receiver (.write_text), either with /mode=write, or a
+# catalog (@disk_writes, @network).
+CALL_NAME = re.compile(r"\.?[A-Za-z_$][\w$-]*(?:[./][A-Za-z_$][\w$-]*)*(?:/mode=write)?")
+CALL_CATALOGS = ("@disk_writes", "@network")
+CALL_CATALOG_LISTS = (
+    "python_disk_writes",
+    "javascript_disk_writes",
+    "python_network",
+    "javascript_network",
+)
+
+
+def _call_name_issues(key: str, names: Sequence[str]) -> list[ConfigIssue]:
+    return [
+        ConfigIssue(
+            f"{key}[{index}]",
+            f"{name!r} is not a call (shutil.copy, fetch, .write_text, open/mode=write) or a "
+            f"catalog ({', '.join(CALL_CATALOGS)})",
+        )
+        for index, name in enumerate(names)
+        if name not in CALL_CATALOGS and CALL_NAME.fullmatch(name) is None
+    ]
+
+
+def _call_entry_issues(index: int, raw: Mapping[str, Any]) -> list[ConfigIssue]:
+    entry = call_boundary_entry(raw)
+    prefix = f"rules.call_boundaries.forbidden[{index}]"
+    issues = [
+        ConfigIssue(f"{prefix}.{field}", "must list at least one")
+        for field in ("callers", "calls")
+        if len(entry[field]) == 0
+    ]
+    for field in ("callers", "allowed_callers"):
+        problems = [(g, validate_glob(pattern)) for g, pattern in enumerate(entry[field])]
+        issues.extend(
+            ConfigIssue(f"{prefix}.{field}[{g}]", problem)
+            for g, problem in problems
+            if problem is not None
+        )
+    issues.extend(_call_name_issues(f"{prefix}.calls", entry["calls"]))
+    return issues
+
+
+def _call_boundary_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
+    """CALL001: each entry binds at least one caller and forbids at least one call; every
+    glob is valid and every call is a call name or a catalog (the catalogs' too)."""
+    issues: list[ConfigIssue] = []
+    for key in CALL_CATALOG_LISTS:
+        issues.extend(_call_name_issues(f"rules.call_boundaries.{key}", section[key]))
+    for index, raw in enumerate(section["forbidden"]):
+        issues.extend(_call_entry_issues(index, raw))
+    return issues
+
+
 def _suppression_ban_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     """suppressions.forbidden: each entry lists at least one path glob, all valid."""
     issues: list[ConfigIssue] = []
@@ -765,6 +826,7 @@ def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
     issues.extend(_sink_issues(rules["input"]))
     issues.extend(_import_boundary_issues(rules["import_boundaries"]))
     issues.extend(_gate_issues(rules["async_lifecycle"]))
+    issues.extend(_call_boundary_issues(rules["call_boundaries"]))
     return issues
 
 

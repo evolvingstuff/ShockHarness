@@ -948,6 +948,24 @@ class ClassDecl:
     span: Span
 
 
+# CALL001: how an ``open`` call opens its file.
+OPEN_WRITE = "write"  # a literal mode or flags that write (w, a, x or +)
+OPEN_READ = "read"  # a literal read mode, or none (the default reads)
+OPEN_UNKNOWN = "unknown"  # a mode the analysis cannot read (a variable, a computed string)
+
+
+@dataclass(frozen=True)
+class OpenMode:
+    """An ``open`` / ``openSync`` call and how it opens its file (CALL001's mode condition).
+    Python: ``open`` and ``io``/``codecs``/``gzip``/``bz2``/``lzma``/``os`` ``.open`` read
+    the mode from the second argument, any other ``.open`` (``Path.open``) from the first,
+    and ``mode=`` from either. JavaScript: the flags are the second argument. ``span`` is
+    the call's (its ``CallSite``'s)."""
+
+    span: Span
+    mode: str
+
+
 @dataclass(frozen=True)
 class CatalogFacts:
     process_calls: tuple[ProcessCall, ...]
@@ -957,6 +975,7 @@ class CatalogFacts:
     type_escapes: tuple[TypeEscape, ...]
     constant_predicates: tuple[ConstantPredicate, ...]
     classes: tuple[ClassDecl, ...]
+    open_modes: tuple[OpenMode, ...]
 
 
 NO_CATALOG = CatalogFacts(
@@ -967,6 +986,7 @@ NO_CATALOG = CatalogFacts(
     type_escapes=(),
     constant_predicates=(),
     classes=(),
+    open_modes=(),
 )
 
 

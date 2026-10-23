@@ -33,6 +33,9 @@ The sources of looseness, each reported once per key:
    entry of the new configuration still covers (one binding at least the same importers,
    exempting no other file, forbidding at least the same imported files and modules,
    allowing no other name).
+8. **Call boundaries** (``rules.call_boundaries``): an entry of ``forbidden`` that no
+   entry of the new configuration still covers (one binding at least the same callers,
+   exempting no other file, forbidding at least the same calls).
 7. **Suppression bans** (``suppressions.forbidden``): an entry whose paths no entry of the
    new configuration still lists (removed, or a path dropped from it).
 
@@ -46,7 +49,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from shockharness.schema import forbidden_import_entry
+from shockharness.schema import call_boundary_entry, forbidden_import_entry
 
 INDEX = re.compile(r"\[\d+\]")
 LEADING_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
@@ -515,6 +518,43 @@ def _import_boundaries(
     return found
 
 
+CALL_BOUNDARIES_KEY = "rules.call_boundaries.forbidden"
+
+
+def _call_covers(new: Mapping[str, Any], old: Mapping[str, Any]) -> bool:
+    after = call_boundary_entry(new)
+    before = call_boundary_entry(old)
+    return (
+        set(before["callers"]) <= set(after["callers"])
+        and set(after["allowed_callers"]) <= set(before["allowed_callers"])
+        and set(before["calls"]) <= set(after["calls"])
+    )
+
+
+def _call_boundaries(
+    before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """An entry no new entry covers: removed, narrowed, exempting more, or forbidding less."""
+    if not has_key(before_values, CALL_BOUNDARIES_KEY) or not has_key(
+        after_values, CALL_BOUNDARIES_KEY
+    ):
+        return []
+    after = value_at(after_values, CALL_BOUNDARIES_KEY)
+    found: list[Loosening] = []
+    for entry in value_at(before_values, CALL_BOUNDARIES_KEY):
+        if any(_call_covers(new, entry) for new in after):
+            continue
+        callers = ", ".join(map(repr, entry["callers"]))
+        calls = ", ".join(map(repr, entry["calls"]))
+        message = (
+            f"{CALL_BOUNDARIES_KEY} no longer keeps {callers} from calling {calls} as before "
+            f"(removed, narrowed, exempting more files, or forbidding fewer calls): "
+            f"{entry['reason']}"
+        )
+        found.append(Loosening(CALL_BOUNDARIES_KEY, message))
+    return found
+
+
 SUPPRESSION_BANS_KEY = "suppressions.forbidden"
 
 
@@ -589,6 +629,7 @@ def loosenings(
     found.extend(_opt_in_off_or_roles(DUPLICATES, before_values, after_values))
     found.extend(_import_boundaries(before_values, after_values))
     found.extend(_suppression_bans(before_values, after_values))
+    found.extend(_call_boundaries(before_values, after_values))
     return found
 
 

@@ -379,5 +379,6 @@ def collect_csharp_policy(
         type_escapes=tuple(sorted(collector.escapes, key=lambda t: (t.span, t.kind))),
         constant_predicates=tuple(sorted(collector.predicates, key=lambda p: p.span)),
         classes=tuple(collector.classes),
+        open_modes=NO_CATALOG.open_modes,
     )
     return tuple(collector.bindings), guardrails, catalog, tuple(collector.imports)

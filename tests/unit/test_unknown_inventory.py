@@ -222,6 +222,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "the status is decided by the caller (_async001, _async002, _async003)",
     ),
+    # CALL001: a call the entry forbids is a violation; one whose mode condition the
+    # analysis cannot decide (a variable mode) is unknown, never a silent read.
+    ("rules/call_boundaries.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR, "STATUS_UNKNOWN"}),
+        "violation; unknown when a /mode=write call's mode is not a literal",
+    ),
     # ASYNC004 reports only a wait a gate's callback reaches; a probable call-graph step on
     # the way makes it approximate, never unknown (the wait itself is exact syntax).
     ("rules/drawn_waits.py", "_finding"): (

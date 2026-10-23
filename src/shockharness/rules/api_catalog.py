@@ -38,10 +38,12 @@ from shockharness.ir.suppression_directives import (
     TOOL_TS_NOCHECK,
     TOOL_TYPE_IGNORE,
 )
+from shockharness.rules.call_boundaries import run_call001
 from shockharness.rules.guardrails import import_aliases, qualified_callee
 from shockharness.rules.imports import ClassKey, imported_names
 from shockharness.rules.registry import (
     BATCH001,
+    CALL001,
     CSHARP,
     JAVASCRIPT,
     PROCESS001,
@@ -576,4 +578,6 @@ def run_catalog_rules(
         found.extend(_retry001(facts, source, path, language, rules["retry"]))
     if BATCH001.rule_id in active:
         found.extend(_batch001(facts, source, path, rules["batches"]))
+    if CALL001.rule_id in active:
+        found.extend(run_call001(facts, source, path, language, rules["call_boundaries"]))
     return found

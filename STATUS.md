@@ -7044,3 +7044,37 @@ pin in adopt-shockharness and pre-commit-review), and the baseline still applies
 cache schema is 37. ASYNC004 watches only `navigator.locks.request` until a project names
 its own gates. The tag `v0.28.0` is on 57d8d9c. Published by `publish.yml` (run
 39967631383, 18 of 18 jobs). PyPI lists 0.28.0 with a wheel and an sdist.
+
+## CALL001: call boundaries (2026-10-23)
+
+On Tom's go-ahead, built as `docs/proposal-call-boundaries.md` proposed. Spec decision 55.
+
+* Facts: `CatalogFacts.open_modes` (`OpenMode`: write, read or unknown) for every `open`
+  call, Python (`python_catalog.py`: the builtin and module `open`s take the mode second,
+  other `.open`s first, `mode=` either; literal modes in mode syntax; `os.O_*` flags by
+  name; a `.open` whose first argument is not a mode is another API, a read) and
+  JavaScript (`javascript_catalog.py`: `open`/`openSync` flags in Node's syntax). C#
+  leaves them empty. Cache schema 38.
+* Rule (`rules/call_boundaries.py`, run with the H5 catalog rules, per file): the entries
+  binding the file; each call site of each unit resolved through `import_aliases` (a
+  global unless the module or the unit binds its head; `window.`/`globalThis.`/`self.`
+  dropped); matched by name prefix, `.method` (approximate) or a mode condition (unknown
+  when unreadable). `@disk_writes`/`@network` expand to the section's per-language lists.
+* Config: `rules.call_boundaries` (`enabled`, `severity`, `forbidden`, the four catalog
+  lists), entries filled by `schema.call_boundary_entry`; validated call names and globs;
+  the catalogs in `GUARDRAIL_CATALOGS` (removing a name is a deviation); the loosening
+  check reports an entry no new entry covers.
+
+Measured on MetaList3 at d21c9f3f, read-only on a `git archive` export, with `@disk_writes`
+over `app/**` and `main.py` and `@network` over the browser code (only `api-client.js`
+allowed): 120 findings, 73 disk in 27 files and 47 `fetch` in 28 files, every one read and
+real. The first run had two wrong ones, both unknown: `Image.open(BytesIO(...))` and
+`os.open(path, os.O_RDONLY)`; fixed as above, and a latent one with them (a positional
+`tarfile.open(p, "w:gz")` would have read `p` as the mode).
+
+New tests: `tests/unit/test_call_boundaries.py` (11): Python imports, aliases, the builtin
+`open` in write, read and unreadable modes, a method on any receiver, a shadowing parameter,
+`os.path.join` not `os.replace`; allowed and unbound files; JavaScript globals,
+`window.fetch`, `new WebSocket`, `fs/promises` and `node:fs` imports, `openSync` flags, a
+local `fetch`; a project's own names and the rule off without entries; malformed calls and
+empty entries; the loosening cases; dropping a catalog name is a deviation.

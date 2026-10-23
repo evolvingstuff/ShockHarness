@@ -124,7 +124,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # "31": text positions (DOM003); "32": C# usage facts (decision 46); "33": reads outside a
 # lock (STATE003); "34": zero-delay sleeps (SLEEP001 version 2); "35": SystemExit
 # subclasses (EXC006).
-CACHE_SCHEMA_VERSION: Final[str] = "37"
+CACHE_SCHEMA_VERSION: Final[str] = "38"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.
