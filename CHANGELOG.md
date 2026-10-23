@@ -5,6 +5,24 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-22
+
+Paths where no inline suppression counts, and DEF002/DEF004 stop reporting lazy
+initialization.
+
+**Upgrading from 0.26.0.** No new dependency.
+* **Fewer findings, never more.** Fields and module variables filled on first use
+  (`this.#x ??= new Map()`, C# `_x ??= new X()`) are no longer reported. A suppression
+  written for one is now unused (a SUPP002 warning: delete it), and a baseline entry for
+  one is listed as stale.
+* **Baselines.** The bundled defaults gained the `suppressions` table, so every
+  repository's configuration digest changes. A baseline recorded under 0.26.0 is still
+  applied, with a note that it was created under a different configuration;
+  `shockharness baseline create` again removes the note.
+* **Skills.** Two skills changed (the version pin in `adopt-shockharness` and
+  `pre-commit-review`), so `check` says `skills: 2 out of date`. Run
+  `shockharness skills update --agent claude` (or `codex`) and commit the result.
+
 ### Changed
 - **Lazy initialization is not a fallback (DEF002, DEF004).** A field or a module
   variable filled on first use with a value built for it (`this.#x ??= new Map()`,
