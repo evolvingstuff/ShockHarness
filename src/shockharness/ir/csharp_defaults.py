@@ -269,6 +269,8 @@ class _Collector:
         right = node.child_by_field_name(Field.RIGHT)
         if left is None or right is None or _unwrap(right).type == Kind.THROW_EXPRESSION:
             return
+        if _lazy_field(node, left, right):
+            return
         self._add(
             node,
             scope,
@@ -489,6 +491,99 @@ class _Collector:
             CONFIDENCE_EXACT,
             f"{method} substitutes the fallback when no element matches",
         )
+
+
+# -- lazy initialization -------------------------------------------------------------------
+# ``_channel ??= new Channel(...)`` on a field fills it on first use with a value built for
+# it: not a fallback for missing data, so DEF004 leaves it alone. A constant, or a target
+# that is a parameter or a local, is still a fallback.
+THIS_KEYWORD = "this"  # the node of ``this`` in ``this._x``
+BUILT_TYPES = frozenset(
+    {
+        Kind.OBJECT_CREATION_EXPRESSION,
+        Kind.IMPLICIT_OBJECT_CREATION_EXPRESSION,
+        Kind.INVOCATION_EXPRESSION,
+    }
+)
+TYPE_DECLARATIONS = frozenset(
+    {Kind.CLASS_DECLARATION, Kind.STRUCT_DECLARATION, Kind.RECORD_DECLARATION}
+)
+FUNCTION_TYPES = frozenset(
+    {
+        Kind.METHOD_DECLARATION,
+        Kind.CONSTRUCTOR_DECLARATION,
+        Kind.LOCAL_FUNCTION_STATEMENT,
+        Kind.LAMBDA_EXPRESSION,
+    }
+)
+
+
+def _constructed(value: Node) -> bool:
+    """A value made for the target: ``new X(...)``, ``new()``, a call, or an empty ``[]``."""
+    inner = _unwrap(value)
+    if inner.type in BUILT_TYPES:
+        return True
+    return inner.type == Kind.COLLECTION_EXPRESSION and inner.named_child_count == 0
+
+
+def _field_name(target: Node) -> tuple[str, bool] | None:
+    """(the field's name, written through ``this``) for ``_x`` or ``this._x``."""
+    if target.type == Kind.IDENTIFIER:
+        return node_text(target), False
+    if target.type != Kind.MEMBER_ACCESS_EXPRESSION:
+        return None
+    owner = target.child_by_field_name(Field.EXPRESSION)
+    name = target.child_by_field_name(Field.NAME)
+    if owner is None or name is None or owner.type != THIS_KEYWORD:
+        return None
+    return node_text(name), True
+
+
+def _bound_names(function: Node) -> set[str]:
+    """Parameters and locals a function declares (nested ones included)."""
+    names: set[str] = set()
+    stack = [function]
+    while len(stack) > 0:
+        node = stack.pop()
+        if node.type in (Kind.PARAMETER, Kind.VARIABLE_DECLARATOR):
+            name = node.child_by_field_name(Field.NAME)
+            if name is not None:
+                names.add(node_text(name))
+        stack.extend(node.named_children)
+    return names
+
+
+def _declarator_names(field: Node) -> set[str]:
+    """The names one field declaration declares (``private int a, b;``: a and b)."""
+    declarators = [d for part in field.named_children for d in part.named_children]
+    names = [d.child_by_field_name(Field.NAME) for d in declarators]
+    return {node_text(name) for name in names if name is not None}
+
+
+def _declared_fields(declaration: Node) -> set[str]:
+    body = declaration.child_by_field_name(Field.BODY)
+    if body is None:
+        return set()
+    fields = [m for m in body.named_children if m.type == Kind.FIELD_DECLARATION]
+    return {name for field in fields for name in _declarator_names(field)}
+
+
+def _lazy_field(node: Node, left: Node, right: Node) -> bool:
+    """``??=`` that fills a field of the enclosing type with a value built for it."""
+    if not _constructed(right):
+        return False
+    field = _field_name(_unwrap(left))
+    if field is None:
+        return False
+    name, through_this = field
+    current = node.parent
+    while current is not None:
+        if current.type in TYPE_DECLARATIONS:
+            return name in _declared_fields(current)
+        if not through_this and current.type in FUNCTION_TYPES and name in _bound_names(current):
+            return False  # a parameter or a local of that name, not the field
+        current = current.parent
+    return False
 
 
 def _fallback_text(fallback: Node | None) -> str:

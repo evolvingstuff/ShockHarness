@@ -220,6 +220,56 @@ def _is_none(expr: ast.expr | None) -> bool:
     return expr is None or (isinstance(expr, ast.Constant) and expr.value is None)
 
 
+# Lazy initialization: ``self._x = self._x if self._x is not None else X()`` fills an
+# attribute on first use with a value built for it, not a fallback for missing data, so
+# DEF004 leaves it alone. A constant, or any other target, is still a fallback.
+OWNER_NAMES = frozenset({"self", "cls"})
+EMPTY_CONTAINERS = (ast.List, ast.Set, ast.Tuple)
+
+
+def _built(value: ast.expr) -> bool:
+    """A value made for the target: a call, or an empty ``[]`` / ``{}``."""
+    if isinstance(value, ast.Call):
+        return True
+    if isinstance(value, ast.Dict):
+        return len(value.keys) == 0
+    return isinstance(value, EMPTY_CONTAINERS) and len(value.elts) == 0
+
+
+def _owner_attribute(node: ast.IfExp, parent: ast.AST | None) -> ast.Attribute | None:
+    """The ``self.x`` / ``cls.x`` that ``node`` is the whole assigned value of."""
+    if not isinstance(parent, ast.Assign) or len(parent.targets) != 1 or parent.value is not node:
+        return None
+    target = parent.targets[0]
+    if not isinstance(target, ast.Attribute) or not isinstance(target.value, ast.Name):
+        return None
+    return target if target.value.id in OWNER_NAMES else None
+
+
+def _none_test(test: ast.expr) -> tuple[ast.expr, ast.cmpop] | None:
+    """(subject, operator) of ``subject is None`` and its ``is not`` / ``==`` / ``!=`` forms."""
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+        return None
+    op = test.ops[0]
+    if not isinstance(op, NONE_COMPARISONS) or not _is_none(test.comparators[0]):
+        return None
+    return test.left, op
+
+
+def _lazy_attribute(node: ast.IfExp, parent: ast.AST | None) -> bool:
+    """``self.x = self.x if self.x is not None else X()`` (or the ``is None`` spelling)."""
+    target = _owner_attribute(node, parent)
+    tested = _none_test(node.test)
+    if target is None or tested is None:
+        return False
+    subject, op = tested
+    missing, present = node.orelse, node.body
+    if isinstance(op, MISSING_WHEN_TRUE):
+        missing, present = node.body, node.orelse
+    written = ast.unparse(target)
+    return ast.unparse(subject) == written == ast.unparse(present) and _built(missing)
+
+
 def last_segment(decorator: ast.expr) -> str | None:
     target = decorator.func if isinstance(decorator, ast.Call) else decorator
     if isinstance(target, ast.Name):
@@ -1334,7 +1384,7 @@ class _Collector:
             self._helper_call(node, scope, context)
         elif isinstance(node, ast.BoolOp):
             self._bool_or(node, scope, context)
-        elif isinstance(node, ast.IfExp):
+        elif isinstance(node, ast.IfExp) and not _lazy_attribute(node, parent):
             self._if_exp(node, scope, context)
         elif isinstance(node, ast.ExceptHandler):
             self._handler_trace(node, scope)

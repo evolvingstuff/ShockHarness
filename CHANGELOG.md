@@ -5,6 +5,14 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **Lazy initialization is not a fallback (DEF002, DEF004).** A field or a module
+  variable filled on first use with a value built for it (`this.#x ??= new Map()`,
+  `channel ??= new Channel()` on a module `let`, C# `_channel ??= new Channel(...)`,
+  Python `self.x = self.x if self.x is not None else X()`) is no longer reported. A
+  constant, a parameter, a local or a parameter's property is still a fallback. On
+  14 code bases the only change is Sakuga-Engine's three lazy channel fields.
+
 ### Added
 - **Paths where no inline suppression counts (`suppressions.forbidden`).** An entry
   names `paths` (globs) and a `reason`; in a matching file every

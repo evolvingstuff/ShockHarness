@@ -435,7 +435,7 @@ pydantic and NamedTuple defaults are not recognized.
 | Python fallback helpers (decision 34): a call of a module-level function of the same file whose body, after a docstring and checks that only raise, is a lookup with a default that is one of its parameters (`m.get(k, default)`, `getattr(o, a, default)`, either membership form, `try: return m[k]` / `except KeyError: return default`) | `approximate`; mode `fallback_helpers` (`review` in strict); the helper's own lookup is reported as usual |
 | Python `m.get(k)` with no fallback | `review`; reported when the receiver is a known mapping, or when it is unknown and the key is a string literal; not when the result is awaited, compared with `None`, or the left operand of a reported `or` |
 | JavaScript `const {x = v} = o`, `const [x = v] = a`, `for (const {x = v} of rows)`, `({x = v} = o)` | `exact` |
-| JavaScript `o?.x ?? v`, `o.x ?? v`, `o[k] ?? v`, `m.get(k) ?? v`, and their `??=` forms | by the fallback |
+| JavaScript `o?.x ?? v`, `o.x ?? v`, `o[k] ?? v`, `m.get(k) ?? v`, and their `??=` forms (lazy initialization of an own field, `this.x ??= new X()`, is not: see DEF004) | by the fallback |
 | JavaScript ternaries on a null/undefined check of a property (`o.x == null ? v : o.x`) and membership ternaries (`k in o ? o[k] : v`, `o.hasOwnProperty(k) ? ...`, `Object.hasOwn(o, k) ? ...`) | by the fallback |
 
 **Not reported (0.5.0, `docs/shockharness-suggestions-4.md` items 1-4):**
@@ -516,6 +516,25 @@ Environment reads on the left (`os.environ.get("X") or v`,
 
 Exact when the fallback is constant-shaped, approximate otherwise. `x ?? null`
 is reported: normalizing `undefined` to `null` is still a substitution.
+
+**Lazy initialization is not a fallback** (2026-10-22). A field or a module variable
+filled on first use with a value built for it, `new X(...)`, a call, or an empty `[]`
+or `{}`, is not reported, here or under DEF002:
+
+* JavaScript and TypeScript: `this.x ??= v` and `this.#x ??= v`, and `name ??= v` on a
+  module-level `let`/`var` that no enclosing function declares again;
+* C#: `_x ??= v` and `this._x ??= v` on a field of the enclosing class, struct or
+  record that no parameter or local of the enclosing method shadows;
+* Python: `self.x = self.x if self.x is not None else v` (or `v if self.x is None else
+  self.x`, `self` or `cls`).
+
+A constant (`this.timeout ??= 30`), a parameter (`cache ??= new Map()`), a local, a
+parameter's property (`options.tags ??= []`) and a non-empty literal are still
+fallbacks. Measured on 14 code bases before and after: Sakuga-Engine's three lazy
+channel fields (`_reliableChannel ??= new ReliableChannel(...)`) are no longer
+reported, and its `_spectators = spectators ?? []` still is. Nothing else changed in
+MetaList, TheLivingLabyrinth, ShockHarness, godot-demo-projects, GameDemo or the
+eight editors.
 
 #### DEF005: exception-to-default (error, no mode)
 

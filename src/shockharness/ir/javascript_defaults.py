@@ -182,12 +182,110 @@ def _is_env_object(node: Node | None) -> bool:
     return node is not None and node_text(unwrap_parens(node)) == ENV_OBJECT
 
 
+# -- lazy initialization -------------------------------------------------------------------
+# ``this.#x ??= new Map()`` and ``channel ??= new Channel()`` on a module variable fill a
+# field on first use with a value built for it: not a fallback for missing data, so
+# DEF002 and DEF004 leave them alone. A constant (``this.timeout ??= 30``), or a target
+# that is a parameter or a local, is still a fallback.
+FUNCTION_TYPES = frozenset(
+    {
+        Kind.FUNCTION_DECLARATION,
+        Kind.FUNCTION_EXPRESSION,
+        Kind.ARROW_FUNCTION,
+        Kind.METHOD_DEFINITION,
+        Kind.GENERATOR_FUNCTION_DECLARATION,
+    }
+)
+BUILT_TYPES = frozenset({Kind.NEW_EXPRESSION, Kind.CALL_EXPRESSION})
+EMPTY_CONTAINER_TYPES = frozenset({Kind.ARRAY, Kind.OBJECT})
+# Where a function declares a name: its parameters, and declarators and patterns inside.
+DECLARING_TYPES = frozenset({Kind.IDENTIFIER, Kind.SHORTHAND_PROPERTY_IDENTIFIER_PATTERN})
+
+
+def _built(value: Node) -> bool:
+    """A value made for the target: ``new X(...)``, a call, or an empty ``[]`` / ``{}``."""
+    inner = unwrap_parens(value)
+    if inner.type in BUILT_TYPES:
+        return True
+    return inner.type in EMPTY_CONTAINER_TYPES and inner.named_child_count == 0
+
+
+def _own_field(target: Node) -> bool:
+    """``this.x`` or ``this.#x``: a field of the object the method runs on."""
+    if target.type != Kind.MEMBER_EXPRESSION:
+        return False
+    owner = target.child_by_field_name(Field.OBJECT)
+    return owner is not None and owner.type == Kind.THIS
+
+
+def _declared_names(function: Node) -> set[str]:
+    """The names a function's parameters and declarations bind (nested functions included:
+    a name they bind shadows the module's in them, and this is only a check for one)."""
+    names: set[str] = set()
+    stack = [function]
+    while len(stack) > 0:
+        node = stack.pop()
+        if node.type == Kind.VARIABLE_DECLARATOR:
+            name = node.child_by_field_name(Field.NAME)
+            if name is not None:
+                names.update(_binding_names(name))
+        elif node.type == Kind.FORMAL_PARAMETERS:
+            names.update(_binding_names(node))
+        stack.extend(node.named_children)
+    return names
+
+
+def _binding_names(pattern: Node) -> set[str]:
+    names: set[str] = set()
+    stack = [pattern]
+    while len(stack) > 0:
+        node = stack.pop()
+        if node.type in DECLARING_TYPES:
+            names.add(node_text(node))
+            continue
+        if node.type == Kind.ASSIGNMENT_PATTERN:
+            left = node.child_by_field_name(Field.LEFT)
+            if left is not None:
+                stack.append(left)
+            continue
+        stack.extend(node.named_children)
+    return names
+
+
+def _shadowed(node: Node, name: str) -> bool:
+    """Whether a function enclosing ``node`` binds ``name`` itself."""
+    current = node.parent
+    while current is not None:
+        if current.type in FUNCTION_TYPES and name in _declared_names(current):
+            return True
+        current = current.parent
+    return False
+
+
+def _module_variables(root: Node) -> set[str]:
+    """The names a module's top-level ``let``/``var``/``const`` declarations bind."""
+    declarations = [
+        s
+        for s in root.named_children
+        if s.type in (Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECLARATION)
+    ]
+    names = [
+        d.child_by_field_name(Field.NAME)
+        for s in declarations
+        for d in s.named_children
+        if d.type == Kind.VARIABLE_DECLARATOR
+    ]
+    return {node_text(n) for n in names if n is not None and n.type == Kind.IDENTIFIER}
+
+
 class _ModuleIndex:
-    """Module-level constants and one-statement helpers, for DEF005 traces."""
+    """Module-level constants and one-statement helpers, for DEF005 traces, and the
+    variables declared at module level, for lazy initialization."""
 
     def __init__(self, root: Node) -> None:
         self.constants: dict[str, Node] = {}
         self.helpers: dict[str, Node] = {}
+        self.variables = _module_variables(root)
         for statement in root.named_children:
             if statement.type in (Kind.LEXICAL_DECLARATION, Kind.VARIABLE_DECLARATION):
                 for declarator in statement.named_children:
@@ -447,8 +545,20 @@ class _Collector:
                 "'||=' assigns the fallback for every falsy value of the target "
                 "(undefined, null, 0, '', NaN, false alike)",
             )
-        elif operator == "??=":
+        elif operator == "??=" and not self._lazy(node, left, right):
             self._nullish(node, left, right, subject, scope, CONTEXT_ASSIGNMENT, "'??='")
+
+    def _lazy(self, node: Node, left: Node, right: Node) -> bool:
+        """``??=`` that fills a field or a module variable with a value built for it."""
+        if not _built(right):
+            return False
+        target = unwrap_parens(left)
+        if _own_field(target):
+            return True
+        if target.type != Kind.IDENTIFIER:
+            return False
+        name = node_text(target)
+        return name in self.index.variables and not _shadowed(node, name)
 
     def _truthiness(
         self,

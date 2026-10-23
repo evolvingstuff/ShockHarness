@@ -6948,3 +6948,40 @@ still counts; a malformed one there is still reported as malformed; a cached run
 `--no-inline-suppressions` keeps its message; configuration errors; removing or
 narrowing a ban is a loosening, widening or splitting it is not; a ban is not a
 deviation.
+
+## DEF002/DEF004: lazy initialization is not a fallback (2026-10-22)
+
+On Tom's go-ahead. A probe of each form first: `if x is None: x = ...` (Python), its
+JavaScript `if (this.x === undefined)` and C# `if (_x == null)` forms were never
+reported. What was reported: JavaScript `channel ??= new Channel()` on a module `let`
+(DEF004), `this.#x ??= new Map()` and `this.cache ??= new Map()` (DEF002), C#
+`_channel ??= new Channel()` (DEF004), and Python's one-line
+`self._x = self._x if self._x is not None else X()` (DEF004).
+
+Built where each language makes the fact, skipping it when the target is stored and the
+value is built (`new`, a call, an empty container):
+* JavaScript/TypeScript (`_lazy` in `javascript_defaults.py`): `this.x`/`this.#x`, or a
+  module-level `let`/`var` that no enclosing function declares again (parameters and
+  declarators, patterns included);
+* C# (`_lazy_field` in `csharp_defaults.py`): `_x` or `this._x` naming a field of the
+  enclosing class/struct/record, unless a parameter or local of an enclosing method,
+  constructor, local function or lambda shadows it (`this._x` is the field even then);
+* Python (`_lazy_attribute` in `python_defaults.py`): the conditional is the value of an
+  assignment to the same `self.`/`cls.` attribute, compared by source text since
+  `ast.dump` tells a stored target from a load.
+
+Measured with the committed analyzer and the working tree on the same exported trees
+(all findings compared, not only DEF): Sakuga-Engine 1098 -> 1095, the three lazy
+channel fields of `LiteNetPeer.cs`. Its fourth DEF004, `_spectators = spectators ?? []`,
+is a parameter's fallback and stays; the Milestone G2 note above, "the four DEF004 are
+lazy channel initialization", was wrong about that one. Unchanged: godot-demo-projects
+187, GameDemo 43, the eight editors (they use `??=` twice in all), MetaList at 556e6ebf
+2267 (no `??=` at all: its startup check forbids it), TheLivingLabyrinth at 0838376 240,
+ShockHarness 197.
+
+New tests: `tests/unit/test_lazy_initialization.py` (5): JavaScript and TypeScript lazy
+forms (`new`, `[]`, `{}`, a call; field, private field, module variable), the JavaScript
+fallbacks that stay (a shadowing local, a parameter, a constant into a field, a
+parameter's property, a non-empty object), C# (field, `this.` field, a shadowing
+parameter, a constant, a local) and Python (both spellings; a constant, a local and
+another attribute stay).
