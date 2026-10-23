@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **The `verification-integrity` skill: samples a parser really meets.** A parser,
+  detector or guesser is tested on samples its real producer made (Markdown as editors
+  and AI chats write it, files as tools export them), and round-tripped where the
+  producer is available. Skill wording rather than a rule (`docs/ideas.md`): from
+  MetaList's paste-format guesser.
+
 ## [0.29.0] - 2026-10-23
 
 Call boundaries: only the files a project names may write to disk, open a connection or

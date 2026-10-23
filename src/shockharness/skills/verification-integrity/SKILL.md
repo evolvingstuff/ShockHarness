@@ -1,6 +1,6 @@
 ---
 name: verification-integrity
-description: Keep a change from weakening the checks that judge it, in a repository that runs shockharness. Use whenever tests, linters, type checks or the gate fail and it is tempting to make them pass by skipping, focusing, suppressing, neutralizing or loosening instead of fixing; when editing .shockharness.toml, a baseline, CI workflows or ruff, flake8, pytest, coverage or ESLint settings; and when shockharness reports VERIFY001, VERIFY002, VERIFY003 or VERIFY004. Explains what each finding means, what to do instead, and why these findings cannot be suppressed inline.
+description: Keep a change from weakening the checks that judge it, in a repository that runs shockharness. Use whenever tests, linters, type checks or the gate fail and it is tempting to make them pass by skipping, focusing, suppressing, neutralizing or loosening instead of fixing; when writing tests for a parser, detector or format guesser; when editing .shockharness.toml, a baseline, CI workflows or ruff, flake8, pytest, coverage or ESLint settings; and when shockharness reports VERIFY001, VERIFY002, VERIFY003 or VERIFY004. Explains what each finding means, what to do instead, and why these findings cannot be suppressed inline.
 ---
 
 # Verification integrity
@@ -109,6 +109,29 @@ new_hard_violations = "warn"
   continue-on-error: true
 ```
 
+## Samples a parser really meets
+
+A test of a parser, detector or guesser checks it only against the samples it is given.
+Hand-written samples show the shapes the author thought of, not the ones the real producer
+makes, so a guesser can pass every test and still misread real input. Take samples from the
+producer itself: Markdown as editors and AI chats write it (headings over prose, fences with
+no language), files as the tool exports them, text as it is copied from the page. Where the
+producer is available in the tests, round-trip: produce the sample, then check that the
+parser or guesser recovers what was produced. No rule reports a test whose samples are
+unrealistic.
+
+```python
+@pytest.mark.parametrize("sample", MARKDOWN_SAMPLES)  # copied from real editors and AI chats
+def test_real_markdown_is_guessed_as_markdown(sample: str) -> None:
+    assert guess_format(sample) == "markdown"
+
+
+@pytest.mark.parametrize("document", DOCUMENTS)
+def test_each_writer_output_is_guessed_as_its_format(document: Document) -> None:
+    for name, write in WRITERS.items():  # each format's own writer: the round trip
+        assert guess_format(write(document)) == name
+```
+
 ## The organization policy file
 
 An organization can fix keys centrally with `shockharness check --policy FILE` (or the
@@ -135,6 +158,7 @@ first place and by reporting honestly what it could not fix.
 - [ ] `shockharness gate --base <default branch> --head HEAD` was run on the committed change and its output quoted.
 - [ ] Every VERIFY finding in the output is answered by reverting the weakening, not by explaining it away.
 - [ ] Anything still failing is reported as failing, with its cause, instead of hidden.
+- [ ] A parser, detector or guesser is tested on samples its real producer made, round-tripped where the producer is available.
 
 ## Setting ShockHarness up
 
