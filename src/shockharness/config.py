@@ -369,6 +369,25 @@ def _discover_source(
     return ConfigSource(TIER_BUNDLED, "defaults.toml"), {}, notes
 
 
+def _overrides_issues(overrides: Sequence[Mapping[str, Any]]) -> list[ConfigIssue]:
+    """Each override has a valid scope and disables at least one known rule."""
+    issues: list[ConfigIssue] = []
+    for index, override in enumerate(overrides):
+        key = f"overrides[{index}]"
+        issues.extend(_override_scope_issues(override, key))
+        if len(override["disable"]) == 0:
+            issues.append(ConfigIssue(f"{key}.disable", "must list at least one rule ID"))
+        for r_index, rule_id in enumerate(override["disable"]):
+            if not registry.is_known_rule(rule_id):
+                known = ", ".join(registry.rule_ids())
+                issues.append(
+                    ConfigIssue(
+                        f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
+                    )
+                )
+    return issues
+
+
 def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
     issues: list[ConfigIssue] = list(catalog_issues(values))
     for list_key in ("include", "exclude"):
@@ -386,20 +405,9 @@ def _semantic_issues(values: Mapping[str, Any]) -> list[ConfigIssue]:
                     f"extension {suffix!r} is not a supported language (supported: {supported})",
                 )
             )
-    for index, override in enumerate(values["overrides"]):
-        key = f"overrides[{index}]"
-        issues.extend(_override_scope_issues(override, key))
-        if len(override["disable"]) == 0:
-            issues.append(ConfigIssue(f"{key}.disable", "must list at least one rule ID"))
-        for r_index, rule_id in enumerate(override["disable"]):
-            if not registry.is_known_rule(rule_id):
-                known = ", ".join(registry.rule_ids())
-                issues.append(
-                    ConfigIssue(
-                        f"{key}.disable[{r_index}]", f"unknown rule ID {rule_id!r} (known: {known})"
-                    )
-                )
+    issues.extend(_overrides_issues(values["overrides"]))
     issues.extend(_guardrail_entry_issues(values["rules"]))
+    issues.extend(_suppression_ban_issues(values["suppressions"]))
     for index, allowed in enumerate(values["rules"]["module_state"]["allowed"]):
         problem = validate_glob(allowed["path"])
         if problem is not None:
@@ -714,6 +722,20 @@ def _import_boundary_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     return issues
 
 
+def _suppression_ban_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
+    """suppressions.forbidden: each entry lists at least one path glob, all valid."""
+    issues: list[ConfigIssue] = []
+    for index, entry in enumerate(section["forbidden"]):
+        key = f"suppressions.forbidden[{index}].paths"
+        if len(entry["paths"]) == 0:
+            issues.append(ConfigIssue(key, "must list at least one path glob"))
+        for g_index, pattern in enumerate(entry["paths"]):
+            problem = validate_glob(pattern)
+            if problem is not None:
+                issues.append(ConfigIssue(f"{key}[{g_index}]", problem))
+    return issues
+
+
 def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
     """ROLE001's support globs, IMPORT001's script globs, H6's sink entries and IMPORT002's
     boundaries."""
@@ -953,6 +975,7 @@ def _merge_legacy_configuration_files(
 
 CACHE_KEY = "cache"
 SKILLS_KEY = "skills"
+SUPPRESSIONS_KEY = "suppressions"
 # Tables that cannot change a result: where results are stored, and the skills notice.
 NOT_DIGESTED = (CACHE_KEY, SKILLS_KEY)
 

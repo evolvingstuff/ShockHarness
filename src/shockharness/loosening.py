@@ -33,6 +33,8 @@ The sources of looseness, each reported once per key:
    entry of the new configuration still covers (one binding at least the same importers,
    exempting no other file, forbidding at least the same imported files and modules,
    allowing no other name).
+7. **Suppression bans** (``suppressions.forbidden``): an entry whose paths no entry of the
+   new configuration still lists (removed, or a path dropped from it).
 
 Spec 21.1 decision 35 splits them in two. A catch boundary naming one file is the remedy
 EXC001 asks for (:func:`is_remedy`). Every other loosening, a boundary whose path is a
@@ -513,6 +515,31 @@ def _import_boundaries(
     return found
 
 
+SUPPRESSION_BANS_KEY = "suppressions.forbidden"
+
+
+def _suppression_bans(
+    before_values: Mapping[str, Any], after_values: Mapping[str, Any]
+) -> list[Loosening]:
+    """A ban whose paths no new entry still lists: inline suppressions count there again."""
+    if not has_key(before_values, SUPPRESSION_BANS_KEY) or not has_key(
+        after_values, SUPPRESSION_BANS_KEY
+    ):
+        return []
+    after = value_at(after_values, SUPPRESSION_BANS_KEY)
+    found: list[Loosening] = []
+    for entry in value_at(before_values, SUPPRESSION_BANS_KEY):
+        if any(set(entry["paths"]) <= set(new["paths"]) for new in after):
+            continue
+        paths = ", ".join(map(repr, entry["paths"]))
+        message = (
+            f"{SUPPRESSION_BANS_KEY} no longer refuses inline suppressions in {paths} as "
+            f"before (removed or narrowed): {entry['reason']}"
+        )
+        found.append(Loosening(SUPPRESSION_BANS_KEY, message))
+    return found
+
+
 def scope_changes(
     before_values: Mapping[str, Any], after_values: Mapping[str, Any]
 ) -> list[Loosening]:
@@ -561,6 +588,7 @@ def loosenings(
     found.extend(_dead_code(before_values, after_values))
     found.extend(_opt_in_off_or_roles(DUPLICATES, before_values, after_values))
     found.extend(_import_boundaries(before_values, after_values))
+    found.extend(_suppression_bans(before_values, after_values))
     return found
 
 

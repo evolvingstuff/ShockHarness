@@ -318,11 +318,16 @@ SUPP001 = RuleSpec(
         "A suppression is a policy decision. One that does not name an exact rule and give a "
         "reason is indistinguishable from hiding a violation."
     ),
-    guarantees="Exact: every comment starting with the 'shockharness:' prefix is checked.",
+    guarantees=(
+        "Exact: every comment starting with the 'shockharness:' prefix is checked. Under "
+        "--no-inline-suppressions, and in a file a suppressions.forbidden entry's paths "
+        "match, every suppression comment is reported and suppresses nothing."
+    ),
     limitations="Only the single-line form on the same line as the construct is recognized.",
     remediation=(
         'Use the exact form: # shockharness: ignore[RULEID] reason="why this is justified" '
-        "(JavaScript: // shockharness: ...). Keep the scope to one line."
+        "(JavaScript: // shockharness: ...). Keep the scope to one line. Where suppressions "
+        "are refused, fix the finding instead."
     ),
     noncompliant_example="x = 30  # shockharness: ignore\ny = 30  # shockharness: ignore[MAGIC001]",
     compliant_example=(

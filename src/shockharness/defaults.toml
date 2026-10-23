@@ -810,6 +810,17 @@ legacy = "baseline"
 # "ignore" says nothing. A plain `check` never fails on complexity.
 complexity_regressions = "warn"
 
+# Paths where no inline suppression counts: every `shockharness: ignore[...]` comment there
+# is a SUPP001 error and the finding it names stays, as `--no-inline-suppressions` does for a
+# whole run. For code whose findings are resolved by a change, never silenced (regression
+# cases, for example). None by default. Removing an entry or narrowing its paths is a
+# loosening (VERIFY003).
+#   [[tool.shockharness.suppressions.forbidden]]
+#   paths = ["tests/regression/adversarial/**"]
+#   reason = "a regression case is resolved by a code change"
+[tool.shockharness.suppressions]
+forbidden = []
+
 # The content-hash cache of per-file results (0.3.0). A file whose bytes, language,
 # effective configuration (digest), tool version and host interpreter are unchanged is
 # not re-parsed or re-checked; everything cross-file (call graph, cycles, diff, baseline

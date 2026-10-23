@@ -6929,3 +6929,22 @@ skills gets `skills: 3 out of date` from `check` and should run `skills update`.
 writing the note I first said one skill changed; `git diff v0.25.0` showed the pins count
 too. The tag `v0.26.0` is on 86ff862. Published by `publish.yml` (run 39873995960, 18 of
 18 jobs). PyPI lists 0.26.0 with a wheel and an sdist.
+
+## Paths where no inline suppression counts (2026-10-22)
+
+On Tom's go-ahead, from MetaList's policy note (section 4.1, regression cases). New table
+`[tool.shockharness.suppressions]` with `forbidden = []`; each `[[...forbidden]]` entry
+has `paths` (validated globs, at least one) and a `reason`. `complete` works out each
+file's refusal (`--no-inline-suppressions` first, then the first entry whose glob
+matches) and passes it to `finish`; `apply_suppressions` takes that message instead of
+a flag, so the switch and the ban share one path. Nothing new is stored per file, so
+the cache schema is unchanged; the table is part of the configuration digest, so a
+cached run sees a new ban. The loosening check reports an entry whose paths no new
+entry still lists.
+
+New tests: `tests/unit/test_suppression_bans.py` (7): a suppression under a banned path
+suppresses nothing and is a SUPP001 quoting the glob and reason, while one elsewhere
+still counts; a malformed one there is still reported as malformed; a cached run;
+`--no-inline-suppressions` keeps its message; configuration errors; removing or
+narrowing a ban is a loosening, widening or splitting it is not; a ban is not a
+deviation.

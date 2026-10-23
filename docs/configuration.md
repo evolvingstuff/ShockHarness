@@ -175,6 +175,9 @@ directory = ".shockharness-cache"       # relative to the root; belongs in .giti
 [tool.shockharness.skills]
 notify_missing = true                   # check prints one line while an agent works here with no skills installed; see Skills notice below
 
+[tool.shockharness.suppressions]
+forbidden = []                          # paths where no inline suppression counts; see Inline suppressions below
+
 [tool.shockharness.file_roles]          # H1: one role per file, first match wins in this order; see File roles
 generated = ["**/generated/**", "**/*_pb2.py", "**/*.min.js"]
 vendor = ["**/vendor/**", "**/third_party/**"]
@@ -1344,6 +1347,20 @@ const other = 500;  /* shockharness: ignore[MAGIC001] reason="RFC 9110 section 1
 * A suppression that silences nothing is a `SUPP002` warning.
 * Suppressed findings stay in the report with their `suppression` filled in; only the gate ignores them.
 * `--no-inline-suppressions` ignores every suppression and reports each as `SUPP001`.
+* `suppressions.forbidden` does the same for chosen paths, from the configuration: for
+  code whose findings are resolved by a change and never silenced, such as regression
+  cases. Each entry needs `paths` (globs) and a `reason`, which the `SUPP001` message
+  quotes with the matching glob.
+
+  ```toml
+  [[tool.shockharness.suppressions.forbidden]]
+  paths = ["tests/regression/adversarial/**"]
+  reason = "a regression case is resolved by a code change"
+  ```
+
+  A ban tightens the policy, so it is not a deviation. Removing an entry, or dropping a
+  path from it, is a `VERIFY003` loosening (an entry is kept when some new entry still
+  lists all its paths).
 
 ## Reporting of policy changes
 

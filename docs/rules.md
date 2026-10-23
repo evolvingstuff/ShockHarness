@@ -375,7 +375,9 @@ proven wrong. `finally` and `else` clauses are not inspected.
 A comment containing `shockharness:` that is not exactly
 `shockharness: ignore[RULEID[, RULEID]] reason="non-empty"`, or names an
 unknown rule, or has an empty reason. Under `--no-inline-suppressions`, every
-suppression comment is reported as SUPP001.
+suppression comment is reported as SUPP001, and so is every one in a file under a
+`suppressions.forbidden` path (`docs/configuration.md`, Inline suppressions). In both
+cases the finding it names stays unsuppressed.
 
 ### SUPP002: unused suppression comment (warning)
 

@@ -210,6 +210,12 @@ FORBIDDEN_IMPORT_SCHEMA = TableField(
 # one of imported and modules must list something (checked in config.py).
 FORBIDDEN_IMPORT_OPTIONAL = ("allowed_importers", "imported", "modules")
 
+# Paths where inline suppressions are refused (suppressions.forbidden).
+SUPPRESSION_BAN_SCHEMA = TableField(
+    fields={"paths": ListField(StrField(allow_empty=False)), "reason": StrField(allow_empty=False)},
+    required=("paths", "reason"),
+)
+
 # An override scopes its rule IDs either by path globs (`paths`) or by file role
 # (`roles`, H1); exactly one of the two, checked in config.py.
 OVERRIDE_SCHEMA = TableField(
@@ -643,6 +649,9 @@ CONFIG_SCHEMA = TableField(
             required=(),
         ),
         "skills": TableField(fields={"notify_missing": BoolField()}, required=()),
+        "suppressions": TableField(
+            fields={"forbidden": ListField(SUPPRESSION_BAN_SCHEMA)}, required=()
+        ),
     },
     required=(),
 )

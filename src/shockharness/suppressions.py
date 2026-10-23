@@ -137,20 +137,21 @@ def apply_suppressions(
     findings: list[Finding],
     comments: tuple[Comment, ...],
     source: SourceText,
-    honor_inline: bool,
+    refusal: str | None,
     supp001_enabled: bool,
     supp002_enabled: bool,
 ) -> list[Finding]:
     """Attach suppressions to findings and append SUPP001/SUPP002 findings.
 
-    ``source`` supplies evidence excerpts. When ``honor_inline`` is
-    false (``--no-inline-suppressions``), nothing is suppressed and every
-    suppression comment becomes a SUPP001 finding stating the policy.
+    ``source`` supplies evidence excerpts. ``refusal`` is None when inline suppressions
+    count; otherwise (``--no-inline-suppressions``, or a ``suppressions.forbidden`` path)
+    nothing is suppressed and every suppression comment becomes a SUPP001 finding whose
+    message is ``refusal``.
     """
     suppressions, problems = parse_suppressions(comments)
     result: list[Finding] = []
 
-    if not honor_inline:
+    if refusal is not None:
         result.extend(findings)
         if supp001_enabled:
             for suppression in suppressions:
@@ -158,10 +159,7 @@ def apply_suppressions(
                 result.append(
                     _problem_finding(
                         path,
-                        SuppressionProblem(
-                            suppression.span,
-                            "inline suppressions are disabled by policy (--no-inline-suppressions)",
-                        ),
+                        SuppressionProblem(suppression.span, refusal),
                         excerpt,
                     )
                 )

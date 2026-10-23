@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **Paths where no inline suppression counts (`suppressions.forbidden`).** An entry
+  names `paths` (globs) and a `reason`; in a matching file every
+  `shockharness: ignore[...]` comment is a SUPP001 error quoting the glob and the reason,
+  and the finding it names stays, as `--no-inline-suppressions` does for a whole run.
+  For code whose findings are resolved by a change, never silenced: MetaList's policy
+  note asks for it on `tests/regression/adversarial/**`. A ban is not a deviation;
+  removing an entry or dropping a path from it is a VERIFY003 loosening. With no entry
+  (the default) nothing changes.
+
 ## [0.26.0] - 2026-10-22
 
 Import boundaries can now name packages and standard-library modules and say which files

@@ -39,6 +39,7 @@ from shockharness.complexity.callgraph import (
 )
 from shockharness.complexity.metrics import UnitMetrics, measure_units
 from shockharness.config import (
+    SUPPRESSIONS_KEY,
     UNSUPPORTED_FAIL,
     UNSUPPORTED_SOURCES_KEY,
     EffectiveConfig,
@@ -53,7 +54,7 @@ from shockharness.contracts.report import ContractFile
 from shockharness.discovery import DiscoveredFile, DiscoveryResult, discover
 from shockharness.findings import Finding
 from shockharness.gating.baseline import assign_fingerprints
-from shockharness.globs import compile_globset
+from shockharness.globs import GlobSet, compile_globset
 from shockharness.godot_project import load_godot_projects
 from shockharness.ir.csharp import extract_csharp_facts
 from shockharness.ir.javascript import extract_javascript_facts, extract_typescript_facts
@@ -779,8 +780,42 @@ def _file_result(
     )
 
 
-def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOptions) -> FileResult:
-    """Phase three: suppressions (SUPP001/SUPP002), ordering, fingerprints."""
+# Why a file's inline suppressions count for nothing, when they do not.
+NO_INLINE_SUPPRESSIONS = "inline suppressions are disabled by policy (--no-inline-suppressions)"
+
+
+@dataclass(frozen=True)
+class SuppressionBan:
+    paths: GlobSet
+    reason: str
+
+
+def suppression_bans(config: EffectiveConfig) -> tuple[SuppressionBan, ...]:
+    return tuple(
+        SuppressionBan(compile_globset([str(p) for p in entry["paths"]]), str(entry["reason"]))
+        for entry in config.values[SUPPRESSIONS_KEY]["forbidden"]
+    )
+
+
+def suppression_refusal(
+    path: str, options: AnalysisOptions, bans: Sequence[SuppressionBan]
+) -> str | None:
+    """The SUPP001 message every suppression in ``path`` gets; None when they count."""
+    if not options.inline_suppressions:
+        return NO_INLINE_SUPPRESSIONS
+    for ban in bans:
+        pattern = ban.paths.first_match(path)
+        if pattern is not None:
+            return (
+                f"inline suppressions are not allowed in {pattern} "
+                f"(suppressions.forbidden): {ban.reason}"
+            )
+    return None
+
+
+def finish(pending: PendingFile, extra: Sequence[Finding], refusal: str | None) -> FileResult:
+    """Phase three: suppressions (SUPP001/SUPP002), ordering, fingerprints. ``refusal``
+    is the message each inline suppression gets when none count in this file."""
     if pending.failed:
         return _file_result(pending, (), (), ())
     assert pending.source is not None and pending.facts is not None
@@ -799,7 +834,7 @@ def finish(pending: PendingFile, extra: Sequence[Finding], options: AnalysisOpti
         [*pending.findings, *extra],
         pending.facts.comments,
         pending.source,
-        options.inline_suppressions,
+        refusal,
         supp001_enabled,
         supp002_enabled,
     )
@@ -1438,13 +1473,14 @@ def complete(
         duplicate_findings(pendings, config, whole),
         godot_findings(pendings, config, whole, tree),
     )
+    bans = suppression_bans(config)
     results: list[FileResult] = []
     for pending in pendings:
         extra: list[Finding] = []
         for found in phases:
             if pending.path in found:
                 extra.extend(found[pending.path])
-        results.append(finish(pending, extra, options))
+        results.append(finish(pending, extra, suppression_refusal(pending.path, options, bans)))
     return AnalysisOutcome(
         files=tuple(results),
         metrics={"complexity": outcome.complexity, "graph": outcome.graph},
