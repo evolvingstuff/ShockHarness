@@ -5,6 +5,26 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-23
+
+Call boundaries: only the files a project names may write to disk, open a connection or
+make any other call it lists.
+
+**Upgrading from 0.28.0.** No new dependency.
+* **CALL001 does nothing until a project writes an entry.** For example, keeping disk
+  writes in one module: `[[tool.shockharness.rules.call_boundaries.forbidden]]` with
+  `callers = ["app/**"]`, `allowed_callers = ["app/storage/writer.py"]`,
+  `calls = ["@disk_writes"]` and a `reason`. `docs/configuration.md` (Call boundaries) has
+  the catalogs and the syntax.
+* **Baselines.** The bundled defaults gained the `call_boundaries` table, so the
+  configuration digest changes: a baseline recorded under 0.28.0 still applies, with the
+  "created under a different configuration" note until it is recreated.
+* **Cache.** The cache schema is 38: the first run rebuilds it.
+* **Skills.** Three skills changed (`fix-violations` gained a CALL001 row; the version pin
+  in `adopt-shockharness` and `pre-commit-review`), so `check` says
+  `skills: 3 out of date`. Run `shockharness skills update --agent claude` (or `codex`)
+  and commit the result.
+
 ### Added
 - **CALL001: call boundaries, "only these files may call it" (Python, JavaScript).**
   A `[[rules.call_boundaries.forbidden]]` entry binds `callers` (less `allowed_callers`)
