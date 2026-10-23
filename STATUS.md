@@ -6985,3 +6985,18 @@ fallbacks that stay (a shadowing local, a parameter, a constant into a field, a
 parameter's property, a non-empty object), C# (field, `this.` field, a shadowing
 parameter, a constant, a local) and Python (both spellings; a constant, a local and
 another attribute stay).
+
+## Release 0.27.0 (2026-10-22)
+
+On Tom's go-ahead. CI was green on 137b810 (run 39897506423) and on the release commit
+9f835b3 (run 39898882034), 16 of 16 jobs each. The pin moved in the same 15 files. The
+blanket version replace also hit `docs/architecture.md`, whose "`tree-sitter` 0.26.0 is
+excluded" is about tree-sitter, not a pin; it was reverted before the commit. Upgrade
+note, checked by installing skills and a baseline with v0.26.0 in a scratch project and
+running 0.27.0's `check`: `skills: 2 out of date` (the pin in adopt-shockharness and
+pre-commit-review), and the baseline still applies with a "created under a different
+configuration" note (the bundled defaults gained the `suppressions` table, so the
+digest changed). Lazy-initialization findings disappear, which can leave a suppression
+unused (SUPP002) or a baseline entry stale. The tag `v0.27.0` is on 9f835b3. Published by
+`publish.yml` (run 39899438207, 18 of 18 jobs). PyPI lists 0.27.0 with a wheel and an
+sdist.
