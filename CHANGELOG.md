@@ -5,6 +5,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **The `write-compliant-code` skill: clamps on measured values.** A clamp
+  (`Math.max(0, x)`, `clampNumber(x, 0, n)`) on a value the code believes always lies
+  inside the bound hides the case where it does not; assert the bound, or make the
+  out-of-range value impossible where it is chosen. A clamp that is part of the request
+  (a slice from 0) stays. Skill wording rather than a rule (`docs/ideas.md`): from
+  MetaList's return-to-the-list bug, where a saved offset clamped to 0 moved the list
+  80px.
+
 ## [0.27.0] - 2026-10-22
 
 Paths where no inline suppression counts, and DEF002/DEF004 stop reporting lazy

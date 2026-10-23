@@ -172,6 +172,27 @@ a plain `check`; see the `refactor-complexity` skill.
        assert plan.steps, "a scheduled plan always has a step"
        return plan.steps[0]
    ```
+
+   A clamp on a measured value is the same decision made silently. `Math.max(0, offset)`
+   or `clampNumber(offset, 0, height)` on a value the code believes can never be negative
+   hides the case where it is. If the value is saved and added back later, the lost part
+   moves the result, and no line says why. Assert the bound where it must hold, or make the
+   out-of-range value impossible where it is chosen (skip the candidate that would produce
+   it). A clamp is right when the bound is part of the request itself: a slice that starts
+   at index 0, a scroll target inside the page. No rule reports this.
+
+   ```javascript
+   // Hidden: a note still below the line gets offset 0, and coming back lands 80px off.
+   const offset = clampNumber(lineY - rect.top, 0, rect.height);
+
+   // Made impossible where the anchor is chosen (in the loop over candidates) ...
+   if (rect.top > lineY) continue; // a note below the line cannot be the anchor
+   // ... and checked where it is saved: a throw, since console.assert only logs.
+   const offset = lineY - rect.top;
+   if (offset < 0 || offset > rect.height) {
+     throw new Error(`the anchor does not cross the line (offset ${offset})`);
+   }
+   ```
 10. **Declare property contracts where the repository has them**
    (`rules.property_contracts`; the `property-contracts` skill has the details). Put a
    parameter's `requires(x, "p")` first in the body; write `requires(x)` with no
@@ -343,6 +364,7 @@ nothing is a `SUPP002` warning.
 - [ ] Each function whose result carries a promise (non-empty, sorted, bounded, a known key set) checks it before returning and raises on violation.
 - [ ] Records are frozen and collections immutable where nothing needs to change them; functions prefer returning new values to mutating their inputs (local variables may be mutated freely), and any input they do mutate is named as such.
 - [ ] Internal invariants are asserted where they must hold; input from outside is checked with a typed error, never an assert; the entry point refuses `python -O` only when the code asserts.
+- [ ] No clamp (`max(0, x)`, `clampNumber(x, 0, n)`) stands in for a bound the code believes always holds: that bound is asserted, or made impossible where the value is chosen.
 - [ ] Where the repository declares property contracts, each new function on a declared pipeline states its `requires` first and its `produces`/`preserves` on return; nothing produces a property it has not established.
 - [ ] Where code rejects a value outside a set ("not a known tag") that other code offers the user (suggestions, a menu), both build from one function, and a test checks that every offered value of each kind is accepted: separately built lists drift, and no static check sees across an HTTP request.
 
