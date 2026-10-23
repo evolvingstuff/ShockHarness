@@ -222,6 +222,12 @@ SITES: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         frozenset({FINDING_CONSTRUCTOR}),
         "the status is decided by the caller (_async001, _async002, _async003)",
     ),
+    # ASYNC004 reports only a wait a gate's callback reaches; a probable call-graph step on
+    # the way makes it approximate, never unknown (the wait itself is exact syntax).
+    ("rules/drawn_waits.py", "_finding"): (
+        frozenset({FINDING_CONSTRUCTOR}),
+        "violation; approximate confidence when a step was a probable call-graph edge",
+    ),
     # H3: every guardrail finding is a violation (the facts are exact syntax; STATE001's
     # approximate confidence concerns aliasing, not whether the binding is written).
     ("rules/guardrails.py", "_finding"): (

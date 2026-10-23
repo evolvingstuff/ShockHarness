@@ -20,6 +20,7 @@ from shockharness.ir.csharp_nodes import Field, Kind
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.model import (
     MODULE_SCOPE,
+    NO_ASYNC,
     NO_GUARDRAILS,
     PLACEHOLDER_NOT_IMPLEMENTED,
     AsyncFacts,
@@ -193,5 +194,8 @@ def collect_csharp_guardrails(source: SourceText, root: Node) -> tuple[Guardrail
         discarded_calls=tuple(sorted(collector.discarded, key=lambda c: c.span)),
         settled_batches=(),
         rejection_handlers=(),
+        drawn_waits=NO_ASYNC.drawn_waits,
+        held_calls=NO_ASYNC.held_calls,
+        callbacks=NO_ASYNC.callbacks,
     )
     return guardrails, asynchrony

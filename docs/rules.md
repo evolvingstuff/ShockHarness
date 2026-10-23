@@ -1026,7 +1026,7 @@ analyzed file imports through a resolved module edge (a script another module
 imports runs its effects there, and stays reported). The exemption is listed in
 `files[].rules_disabled` with origin `script`.
 
-### ASYNC001-ASYNC003: async lifecycle (H4; warning)
+### ASYNC001-ASYNC004: async lifecycle (H4; warning)
 
 Milestone H4 of specification section 21. Every coroutine, task and Promise
 needs an owner that waits for it and sees its failure. Section
@@ -1039,6 +1039,7 @@ precision is measured (decision 9).
 | `ASYNC001` | a call that is a whole statement (or a JavaScript `void` call) whose callee is a configured coroutine/Promise API or a project function declared `async` | Python, JavaScript | `violation`; `unknown` when the call graph matched the async callee by name only (`probable`) |
 | `ASYNC002` | `create_task(...)` / `ensure_future(...)` as a statement, unless the receiver was bound by a configured supervisor (`async with asyncio.TaskGroup() as group`) | Python | `violation` (exact for `asyncio.*`, approximate otherwise) |
 | `ASYNC003` | `gather(..., return_exceptions=True)` / `Promise.allSettled(...)` whose result is thrown away, or whose enclosing function neither returns the batch nor checks a result for failure | Python, JavaScript | `violation` (exact when thrown away, approximate otherwise) |
+| `ASYNC004` (2026-10-23) | an `await` (or `return`) of an animation's `.finished` that the callback of a gate reaches through awaited calls: the gate is held until the page is drawn | JavaScript, TypeScript | `violation` (approximate when a step was a probable call-graph edge) |
 
 **ASYNC001.** The catalog (`python_coroutine_apis`, `javascript_promise_apis`:
 `asyncio.sleep`, `asyncio.wait_for`, ... `fetch`, `fs/promises` functions,
@@ -1067,6 +1068,27 @@ Returning the batch (or a concise arrow that evaluates to it) hands the check to
 the caller. A Python `gather(..., return_exceptions=True)` in a `finally` body or
 an `except` handler of a function that called `.cancel()` before it is the
 standard wait for cancellation to finish, and is not reported (0.7.0 feedback).
+
+**ASYNC004.** A browser does not run animations for a page it does not draw (a
+background tab, a minimized window), so an animation's `.finished` stays pending until
+the page is shown. A command that awaits one while it holds a gate (a command queue, a
+lock) holds the gate that long, and every later command waits: the page looks frozen.
+
+* **Drawn waits:** an `await` or `return` (or an arrow's expression body) of `.finished`,
+  of a `const` the function bound to it, of `.then`/`.catch`/`.finally` on it, or of
+  `Promise.all`/`race`/`allSettled`/`any` over an array holding one or a `.map` whose
+  callback returns one. `save(job.finished)` passes a value and is not one.
+* **Waiting functions:** a function with a drawn wait, and any function that awaits or
+  returns a call (resolved through the call graph, across files) of one.
+* **Gates:** `rules.async_lifecycle.gates`, entries `callee:index` (the callback's
+  argument index) or `callee:last`. The default is `navigator.locks.request:last`; a
+  project adds its own command queue (`CommandGate.run:1`). The callback must be
+  written at the gate call: a named function passed as the callback is not followed.
+
+One finding at each drawn wait a gate's callback reaches, naming every command that
+reaches it (the gate call's first argument) and where. Not followed: a promise kept in a
+variable and awaited later, or handed to another function; `requestAnimationFrame` or
+`transitionend` wrapped in a promise. **Measured:** MetaList at ced0ecbe^ (147 gate calls; `CommandGate.run:1` and `CommandGate.runWhenFree:1` configured): one finding, exact, at `reference-view-transition-service.js:180`, naming the 10 reference-navigation commands (context menu, floating note, Escape, mouse buttons) that reached it through `navigateWithReferenceSlide` -> `playReferenceViewTransition`. At ced0ecbe, which stops awaiting the slide: none. The eight editors with only the built-in gate: none (none uses Web Locks).
 
 ### PROCESS001, RESULT001, TYPE001, SLEEP001, RETRY001, BATCH001, STUB003: API catalog (H5; warning or review)
 

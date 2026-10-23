@@ -591,6 +591,7 @@ GUARDRAIL_CATALOGS = (
     ("async_lifecycle", "python_coroutine_apis"),
     ("async_lifecycle", "javascript_promise_apis"),
     ("async_lifecycle", "csharp_task_apis"),
+    ("async_lifecycle", "gates"),
     ("processes", "roles"),
     ("processes", "python_process_apis"),
     ("processes", "javascript_process_apis"),
@@ -722,6 +723,22 @@ def _import_boundary_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     return issues
 
 
+# ASYNC004: a gate is its callee and the callback's argument index (or "last").
+GATE_ENTRY = re.compile(r"[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*:(\d+|last)")
+
+
+def _gate_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
+    """rules.async_lifecycle.gates: each entry is 'callee:index' or 'callee:last'."""
+    return [
+        ConfigIssue(
+            f"rules.async_lifecycle.gates[{index}]",
+            f"{entry!r} is not 'callee:index' or 'callee:last' (CommandGate.run:1)",
+        )
+        for index, entry in enumerate(section["gates"])
+        if GATE_ENTRY.fullmatch(entry) is None
+    ]
+
+
 def _suppression_ban_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     """suppressions.forbidden: each entry lists at least one path glob, all valid."""
     issues: list[ConfigIssue] = []
@@ -747,6 +764,7 @@ def _guardrail_entry_issues(rules: Mapping[str, Any]) -> list[ConfigIssue]:
                 issues.append(ConfigIssue(f"rules.{section}.{key}[{index}]", problem))
     issues.extend(_sink_issues(rules["input"]))
     issues.extend(_import_boundary_issues(rules["import_boundaries"]))
+    issues.extend(_gate_issues(rules["async_lifecycle"]))
     return issues
 
 

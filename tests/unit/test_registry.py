@@ -73,6 +73,7 @@ IMPLEMENTED = {
     "ASYNC001",
     "ASYNC002",
     "ASYNC003",
+    "ASYNC004",
     "PROCESS001",
     "RESULT001",
     "TYPE001",

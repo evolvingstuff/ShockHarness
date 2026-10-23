@@ -1,4 +1,4 @@
-"""H4 async lifecycle: ASYNC001, ASYNC002, ASYNC003.
+"""H4 async lifecycle: ASYNC001, ASYNC002, ASYNC003 (ASYNC004, cross-file: drawn_waits.py).
 
 * ASYNC001: a coroutine or Promise is created and thrown away (a call statement, or
   JavaScript ``void``), so its failure is never observed: the callee is a configured
@@ -40,6 +40,7 @@ from shockharness.rules.registry import (
     ASYNC001,
     ASYNC002,
     ASYNC003,
+    ASYNC004,
     CSHARP,
     JAVASCRIPT,
     PYTHON,
@@ -48,7 +49,7 @@ from shockharness.rules.registry import (
 )
 from shockharness.source import SourceText
 
-ASYNC_RULES = (ASYNC001, ASYNC002, ASYNC003)
+ASYNC_RULES = (ASYNC001, ASYNC002, ASYNC003, ASYNC004)
 # Each language's catalog of APIs that return an awaitable, and the awaitable's name.
 ASYNC_API_KEYS = {
     PYTHON: "python_coroutine_apis",

@@ -751,7 +751,7 @@ reason = "process-wide memo; read-mostly, guarded by _LOCK"
 ## Async lifecycle (H4)
 
 ```toml
-[tool.shockharness.rules.async_lifecycle]   # ASYNC001-ASYNC003
+[tool.shockharness.rules.async_lifecycle]   # ASYNC001-ASYNC004
 enabled = true
 severity = "warning"                        # "warning" | "error" | "review"
 roles = ["production", "test"]
@@ -759,10 +759,16 @@ fail_on_unknown = false                     # ASYNC001 through a probable call-g
 python_coroutine_apis = ["asyncio.sleep", "asyncio.wait_for", "asyncio.gather", ...]
 javascript_promise_apis = ["fetch", "fs/promises.readFile", ...]
 supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]
+gates = ["navigator.locks.request:last"]   # ASYNC004: calls holding a gate while their callback runs
 ```
 
+`gates` (ASYNC004) lists the calls that hold a gate, a command queue or a lock, while
+their callback runs: `callee:index` with the callback's argument index, or
+`callee:last`. A project adds its own queue (`gates = ["navigator.locks.request:last",
+"CommandGate.run:1"]`); the callee is matched as written.
+
 `severity` and `roles` work as in the H3 tables. Removing a role or a catalog
-entry, adding a supervisor, or lowering the severity to `review` is a policy
+entry (a gate included), adding a supervisor, or lowering the severity to `review` is a policy
 deviation (and therefore reported by `VERIFY003` and protected by `--policy`).
 `fail_on_unknown = true` makes `unknown` ASYNC001 findings gate by their
 severity. A custom supervisor (a long-lived object that keeps its tasks and logs

@@ -33,6 +33,9 @@ EVIDENCE_MAX_CHARS: Final[int] = 120
 # H6 dataflow: statements and expressions nested deeper than this are not followed (the
 # unit is marked truncated); left-deep operator chains are flattened and never count.
 DATAFLOW_MAX_DEPTH: Final[int] = 100
+# ASYNC004: how many steps (a const, a .then, a Promise.all) lead from what a function
+# awaits to an animation's .finished; deeper chains are not followed.
+MAX_DRAWN_DEPTH: Final[int] = 8
 # GUARD001's rules.consistency.guard_min_percent is a percentage of call sites.
 PERCENT: Final[int] = 100
 # Claude Code's hook protocol: exit 2 shows the hook's stderr to the agent (an edit hook
@@ -121,7 +124,7 @@ ELAPSED_DECIMALS: Final[int] = 3
 # "31": text positions (DOM003); "32": C# usage facts (decision 46); "33": reads outside a
 # lock (STATE003); "34": zero-delay sleeps (SLEEP001 version 2); "35": SystemExit
 # subclasses (EXC006).
-CACHE_SCHEMA_VERSION: Final[str] = "36"
+CACHE_SCHEMA_VERSION: Final[str] = "37"
 # Entry files are sharded by the first characters of the path hash (entries/ab/<hash>.json).
 CACHE_SHARD_CHARS: Final[int] = 2
 # A flattened control-tree entry: kind, child count, operators, sequences, label, labeled.

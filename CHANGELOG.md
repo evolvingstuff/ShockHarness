@@ -6,6 +6,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **ASYNC004: a gated command waits on the page being drawn (JavaScript, TypeScript).**
+  A browser does not run animations for a page it does not draw, so an awaited
+  `.finished` inside a command that holds a gate (a command queue, a Web Lock) holds the
+  gate until the page is shown, and every later command waits. The rule follows awaited
+  and returned calls through the call graph, across files, from each gate's callback to
+  the await, and reports the await once, naming every command that reaches it. Gates
+  are `rules.async_lifecycle.gates` (`callee:index` or `callee:last`); the default is
+  `navigator.locks.request:last`, and a project adds its own queue (`CommandGate.run:1`).
+  On MetaList before its fix: one finding naming the 10 reference-navigation commands
+  that froze; after it, none. The cache schema is 37 (the facts gained fields).
 - **The `write-compliant-code` skill: clamps on measured values.** A clamp
   (`Math.max(0, x)`, `clampNumber(x, 0, n)`) on a value the code believes always lies
   inside the bound hides the case where it does not; assert the bound, or make the

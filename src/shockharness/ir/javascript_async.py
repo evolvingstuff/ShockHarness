@@ -6,6 +6,9 @@ Syntax only, per function scope:
 
 * **discarded calls**: a call that is a whole expression statement (``f();``, not
   ``await f();``), and ``void f()``, with whether the enclosing function is ``async``;
+* **drawn waits, held calls and callbacks** (ASYNC004): what a function awaits or
+  returns that only settles when the page is drawn (an animation's ``.finished``), the
+  calls whose promises it waits on, and every function written as a call's argument;
 * **settled batches**: ``Promise.allSettled(...)``, with whether its result is thrown away
   (an expression statement, awaited or not) and whether the enclosing function inspects
   results for failure (``.status``, ``.reason``, or a ``"rejected"`` string) or returns
@@ -16,12 +19,20 @@ import re
 
 from tree_sitter import Node
 
-from shockharness.constants import LISTENER_ARGUMENTS
+from shockharness.constants import LISTENER_ARGUMENTS, MAX_DRAWN_DEPTH
 from shockharness.ir.javascript_catches import node_span, node_text
 from shockharness.ir.javascript_functions import string_value
 from shockharness.ir.javascript_guardrails import dotted_callee
 from shockharness.ir.javascript_nodes import Field, Kind
-from shockharness.ir.model import AsyncFacts, DiscardedCall, RejectionHandler, SettledBatch
+from shockharness.ir.model import (
+    AsyncFacts,
+    CallbackArgument,
+    DiscardedCall,
+    DrawnWait,
+    HeldCall,
+    RejectionHandler,
+    SettledBatch,
+)
 from shockharness.ir.tree_sitter_common import excerpt
 from shockharness.source import SourceText
 
@@ -251,13 +262,163 @@ def _rejection_handler(source: SourceText, node: Node) -> RejectionHandler | Non
     return RejectionHandler(node_span(source, node), _handler_reports(handler))
 
 
+# -- ASYNC004: waits on the page being drawn -----------------------------------------------
+FINISHED = "finished"  # Animation.finished, ViewTransition.finished
+COMBINATORS = frozenset({"Promise.all", "Promise.race", "Promise.allSettled", "Promise.any"})
+CHAINS = frozenset({"then", "catch", "finally"})
+MAP = "map"
+NEW = Kind.NEW_EXPRESSION
+
+
+def _unwrapped(node: Node) -> Node:
+    while node.type == PARENTHESIZED and node.named_child_count > 0:
+        node = node.named_children[0]
+    return node
+
+
+def _arguments(call: Node) -> list[Node]:
+    arguments = call.child_by_field_name(Field.ARGUMENTS)
+    if arguments is None:
+        return []
+    return [a for a in arguments.named_children if a.type != Kind.COMMENT]
+
+
+def _member(call: Node) -> tuple[Node, str] | None:
+    """(receiver, method) of ``receiver.method(...)``."""
+    function = call.child_by_field_name(Field.FUNCTION)
+    if function is None or function.type != Kind.MEMBER_EXPRESSION:
+        return None
+    receiver = function.child_by_field_name(Field.OBJECT)
+    method = function.child_by_field_name(Field.PROPERTY)
+    if receiver is None or method is None:
+        return None
+    return receiver, node_text(method)
+
+
+def _expression_body(function: Node) -> Node | None:
+    body = function.child_by_field_name(Field.BODY)
+    if function.type != Kind.ARROW_FUNCTION or body is None or body.type == Kind.STATEMENT_BLOCK:
+        return None
+    return body
+
+
+def _bound_value(node: Node, name: str) -> Node | None:
+    """The value of ``const name = ...`` in the function enclosing ``node``."""
+    function = _enclosing_function(node)
+    if function is None:
+        return None
+    stack = [function]
+    while len(stack) > 0:
+        current = stack.pop()
+        if current.type == Kind.VARIABLE_DECLARATOR:
+            bound = current.child_by_field_name(Field.NAME)
+            value = current.child_by_field_name(Field.VALUE)
+            if bound is not None and value is not None and node_text(bound) == name:
+                return value
+        stack.extend(c for c in current.named_children if c.type not in FUNCTIONS)
+    return None
+
+
+def _drawn(node: Node, depth: int) -> bool:
+    """Whether ``node`` is a promise that settles only when the page is drawn."""
+    expression = _unwrapped(node)
+    if depth > MAX_DRAWN_DEPTH:
+        return False
+    if expression.type == Kind.MEMBER_EXPRESSION:
+        method = expression.child_by_field_name(Field.PROPERTY)
+        return method is not None and node_text(method) == FINISHED
+    if expression.type == Kind.IDENTIFIER:
+        value = _bound_value(expression, node_text(expression))
+        return value is not None and _drawn(value, depth + 1)
+    if expression.type != CALL:
+        return False
+    return _drawn_call(expression, depth)
+
+
+def _drawn_call(call: Node, depth: int) -> bool:
+    member = _member(call)
+    if member is not None and member[1] in CHAINS:
+        return _drawn(member[0], depth + 1)
+    if member is not None and member[1] == MAP:
+        callbacks = [_expression_body(a) for a in _arguments(call) if a.type in FUNCTIONS]
+        return any(body is not None and _drawn(body, depth + 1) for body in callbacks)
+    if _callee(call) not in COMBINATORS:
+        return False
+    arguments = _arguments(call)
+    if len(arguments) == 0:
+        return False
+    batch = _unwrapped(arguments[0])
+    if batch.type == Kind.ARRAY:
+        return any(_drawn(element, depth + 1) for element in batch.named_children)
+    return _drawn(batch, depth + 1)
+
+
+def _held(node: Node) -> list[Node]:
+    """The calls whose promises waiting on ``node`` waits on."""
+    expression = _unwrapped(node)
+    if expression.type == NEW:
+        return [expression]
+    if expression.type != CALL:
+        return []
+    member = _member(expression)
+    if member is not None and member[1] in CHAINS:
+        return [expression, *_held(member[0])]
+    if _callee(expression) in COMBINATORS:
+        arguments = _arguments(expression)
+        batch = _unwrapped(arguments[0]) if len(arguments) > 0 else None
+        if batch is not None and batch.type == Kind.ARRAY:
+            return [held for element in batch.named_children for held in _held(element)]
+    return [expression]
+
+
+def _waited_on(node: Node) -> Node | None:
+    """What a function waits on or hands back at ``node``: an awaited or returned
+    expression, or an arrow's expression body."""
+    if node.type in (AWAIT, RETURN) and node.named_child_count > 0:
+        return node.named_children[0]
+    if node.type == Kind.ARROW_FUNCTION:
+        return _expression_body(node)
+    return None
+
+
+def _callbacks(source: SourceText, call: Node) -> list[CallbackArgument]:
+    arguments = _arguments(call)
+    if not any(a.type in FUNCTIONS for a in arguments):
+        return []
+    first = arguments[0]
+    label = string_value(first)
+    if label is None:
+        label = excerpt(first)
+    return [
+        CallbackArgument(_callee(call), index, len(arguments), node_span(source, a), label)
+        for index, a in enumerate(arguments)
+        if a.type in FUNCTIONS
+    ]
+
+
+def _wait_facts(
+    source: SourceText, node: Node, drawn: list[DrawnWait], held: list[HeldCall]
+) -> None:
+    """ASYNC004's facts at ``node`` when it waits on something: a drawn wait, held calls."""
+    waited = _waited_on(node)
+    if waited is None:
+        return
+    if _drawn(waited, 0):
+        drawn.append(DrawnWait(node_span(source, waited), excerpt(waited)))
+    held.extend(HeldCall(node_span(source, call)) for call in _held(waited))
+
+
 def collect_javascript_async(source: SourceText, root: Node) -> AsyncFacts:
     discarded: list[DiscardedCall] = []
     settled: list[SettledBatch] = []
     handlers: list[RejectionHandler] = []
+    drawn: list[DrawnWait] = []
+    held: list[HeldCall] = []
+    callbacks: list[CallbackArgument] = []
     stack: list[Node] = [root]
     while len(stack) > 0:
         node = stack.pop()
+        _wait_facts(source, node, drawn, held)
         handler = _rejection_handler(source, node)
         if handler is not None:
             handlers.append(handler)
@@ -268,9 +429,13 @@ def collect_javascript_async(source: SourceText, root: Node) -> AsyncFacts:
             batch = _settled(source, node)
             if batch is not None:
                 settled.append(batch)
+            callbacks.extend(_callbacks(source, node))
         stack.extend(node.children)
     return AsyncFacts(
         discarded_calls=tuple(sorted(discarded, key=lambda d: (d.span, d.callee))),
         settled_batches=tuple(sorted(settled, key=lambda s: (s.span, s.callee))),
         rejection_handlers=tuple(sorted(handlers, key=lambda h: h.span)),
+        drawn_waits=tuple(sorted(drawn, key=lambda d: d.span)),
+        held_calls=tuple(sorted(set(held), key=lambda h: h.span)),
+        callbacks=tuple(sorted(callbacks, key=lambda c: (c.span, c.index))),
     )

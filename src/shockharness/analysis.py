@@ -94,6 +94,7 @@ from shockharness.rules.defaults import (
     run_default_rules,
     script_functions,
 )
+from shockharness.rules.drawn_waits import DrawnFile, run_async004
 from shockharness.rules.duplicates import ShapeFile, run_duplicates
 from shockharness.rules.exceptions import (
     applicable_boundaries,
@@ -941,6 +942,28 @@ def async_findings(
     return found
 
 
+def drawn_wait_findings(
+    pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
+) -> dict[str, list[Finding]]:
+    """ASYNC004: drawn waits that a gated command reaches, across files."""
+    files = [
+        DrawnFile(
+            path=p.path,
+            source=p.source,
+            units=tuple((unit.key, unit.fact.span) for unit in p.units),
+            asynchrony=p.facts.asynchrony,
+            applies=registry.ASYNC004.rule_id in p.rules_applied,
+        )
+        for p in pendings
+        if not p.failed and p.facts is not None and p.source is not None
+    ]
+    if not any(file.applies for file in files):
+        return {}
+    if graph is None:
+        graph = build_call_graph(_module_inputs(pendings))
+    return run_async004(files, graph.sites, config.section(registry.ASYNC_SECTION))
+
+
 def role_findings(
     pendings: Sequence[PendingFile], config: EffectiveConfig, graph: CallGraph | None
 ) -> dict[str, list[Finding]]:
@@ -1433,6 +1456,7 @@ GRAPH_RULES = (
 )
 GRAPH_PHASES = (
     async_findings,
+    drawn_wait_findings,
     role_findings,
     input_findings,
     assert_findings,

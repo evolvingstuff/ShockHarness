@@ -477,6 +477,10 @@ csharp_task_apis = [
   "File.ReadAllTextAsync", "File.WriteAllTextAsync", "File.ReadAllBytesAsync",
   "File.WriteAllBytesAsync", "File.ReadAllLinesAsync", "File.AppendAllTextAsync",
 ]
+# ASYNC004: calls that hold a gate (a command queue, a lock) while their callback runs:
+# 'callee:index' with the callback's argument index, or 'callee:last'. A project adds its
+# own (CommandGate.run:1); removing one is a policy deviation.
+gates = ["navigator.locks.request:last"]
 # ASYNC002: context managers whose bound name owns the tasks it creates (`async with
 # asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
 supervisors = ["asyncio.TaskGroup", "anyio.create_task_group", "trio.open_nursery"]

@@ -7000,3 +7000,34 @@ digest changed). Lazy-initialization findings disappear, which can leave a suppr
 unused (SUPP002) or a baseline entry stale. The tag `v0.27.0` is on 9f835b3. Published by
 `publish.yml` (run 39899438207, 18 of 18 jobs). PyPI lists 0.27.0 with a wheel and an
 sdist.
+
+## ASYNC004: a gated command waits on the page being drawn (2026-10-23)
+
+On Tom's go-ahead, from the measured prototype (`docs/ideas.md`). Spec decision 54.
+
+* Facts (`ir/javascript_async.py`, new `AsyncFacts` fields; Python and C# leave them
+  empty): drawn waits (an await, return or arrow body of `.finished`, through a `const`
+  in the function, `.then`/`.catch`/`.finally`, or `Promise.all`/`race`/`allSettled`/
+  `any` over an array or a `.map` callback; followed at most `MAX_DRAWN_DEPTH` steps),
+  held calls (the calls a function awaits or returns; their spans are the call sites'),
+  and callbacks written at a call, with the first argument as the label. Cache schema 37.
+* Rule (`rules/drawn_waits.py`, run from `async_findings` after the per-file ASYNC
+  rules): callee unit -> its callers through held calls resolved in `graph.sites`; from
+  each drawn wait, a walk back over those; a gate call's callback is the unit that
+  starts where the callback does. One finding per drawn wait a gate reaches, naming each
+  command and where, approximate when a step was a probable edge.
+* `rules.async_lifecycle.gates` (`callee:index` | `callee:last`, validated), default
+  `navigator.locks.request:last`, in `GUARDRAIL_CATALOGS` so removing one is a deviation.
+
+Measured: MetaList at ced0ecbe^ with `CommandGate.run:1` and `runWhenFree:1` (239
+files): one finding, exact, at `reference-view-transition-service.js:180`, naming the
+same 10 commands the prototype found; at ced0ecbe, none. The eight editors with the
+default gate: none. The self-gate first caught a DEF004 shape in the new `_gated`
+(`count - 1 if gate.index is None else gate.index`), rewritten as branches.
+
+New tests: `tests/unit/test_drawn_waits.py` (10): one finding naming two commands across
+three files; the fix's shape (not awaited) and no configured gate report nothing; Web
+Locks with and without options, and a `const` binding; a returned `.then` chain in
+TypeScript; a value named `finished` is not a wait; three malformed gates; removing the
+built-in gate is a deviation. The registry, report-order and unknown-inventory tests
+list ASYNC004.

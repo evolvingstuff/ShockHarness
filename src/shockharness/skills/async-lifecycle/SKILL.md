@@ -1,6 +1,6 @@
 ---
 name: async-lifecycle
-description: Keep asynchronous work observable in a repository that runs shockharness. Use when writing or changing async Python (asyncio, anyio, trio) or JavaScript (Promises, async functions), when a call to an async function is not awaited, when starting background tasks, when using asyncio.gather(return_exceptions=True) or Promise.allSettled, when scrolling or animating to a position after awaiting something that changes the page, and when shockharness reports ASYNC001, ASYNC002 or ASYNC003. Explains each finding and the owned, awaited or returned alternatives.
+description: Keep asynchronous work observable in a repository that runs shockharness. Use when writing or changing async Python (asyncio, anyio, trio) or JavaScript (Promises, async functions), when a call to an async function is not awaited, when starting background tasks, when using asyncio.gather(return_exceptions=True) or Promise.allSettled, when scrolling or animating to a position after awaiting something that changes the page, when a command or a lock waits on an animation, and when shockharness reports ASYNC001, ASYNC002, ASYNC003 or ASYNC004. Explains each finding and the owned, awaited or returned alternatives.
 ---
 
 # Async lifecycle
@@ -22,6 +22,7 @@ awaited).
 | `ASYNC001` | calls an async function (or `fetch`, `asyncio.sleep`, ...) as a statement, or with `void`, and drops the coroutine or Promise | `await` it, `return` it, or hand it to an owner; a top-level JavaScript entry point ends in `.catch(...)` that reports and sets the exit code |
 | `ASYNC002` | `asyncio.create_task(...)` / `ensure_future(...)` as a statement: the task's handle is dropped | start it in a `TaskGroup`, or keep the handle and await or cancel it |
 | `ASYNC003` | `gather(..., return_exceptions=True)` / `Promise.allSettled` whose results are thrown away or never checked for failure | check every result and raise or report the failures; use plain `gather` / `Promise.all` when the first failure should fail the batch |
+| `ASYNC004` | a command run under a gate (a command queue, `navigator.locks.request`) awaits an animation's `.finished`, directly or through the functions it awaits; a page that is not drawn never settles it, so the gate stays held and every later command waits | let the command return and the animation finish on its own (`.then(cleanUp).catch(report)`: `.finished` rejects when the animation is cancelled), or skip the animation when `document.hidden`; never `void` it away |
 
 `ASYNC001` finds project functions declared `async` across files through the call graph;
 a call matched only by name is reported as `unknown`. Without type information an

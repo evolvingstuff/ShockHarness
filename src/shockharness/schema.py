@@ -425,6 +425,7 @@ CONFIG_SCHEMA = TableField(
                         "javascript_promise_apis": ListField(StrField(allow_empty=False)),
                         "csharp_task_apis": ListField(StrField(allow_empty=False)),
                         "supervisors": ListField(StrField(allow_empty=False)),
+                        "gates": ListField(StrField(allow_empty=False)),
                     },
                     required=(),
                 ),

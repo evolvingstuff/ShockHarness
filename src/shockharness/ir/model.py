@@ -791,13 +791,58 @@ class RejectionHandler:
 
 
 @dataclass(frozen=True)
+class DrawnWait:
+    """An ``await`` or ``return`` (or an arrow's expression body) of a promise that settles
+    only when the page is drawn (JavaScript, ASYNC004): an animation's ``.finished``
+    (``element.animate(...)``, ``document.getAnimations()``, a view transition), directly,
+    through a ``const`` the function bound to one, through ``.then``/``.catch``/``.finally``
+    on one, or through ``Promise.all``/``race``/``allSettled``/``any`` over an array holding
+    one or a ``.map`` whose callback returns one. ``span`` is the expression waited on."""
+
+    span: Span
+    text: str
+
+
+@dataclass(frozen=True)
+class HeldCall:
+    """A call whose promise the enclosing function waits on (JavaScript, ASYNC004): awaited,
+    returned, an arrow's expression body, an element of an awaited ``Promise.all([...])``,
+    or the receiver of an awaited ``.then``. ``span`` is the call's (its ``CallSite``'s)."""
+
+    span: Span
+
+
+@dataclass(frozen=True)
+class CallbackArgument:
+    """A function written as an argument of a call (JavaScript, ASYNC004): ``callee`` as
+    written, the argument's ``index`` among ``count``, its ``span`` (the start of the unit
+    it is), and ``label``, the first argument's text (a command's name)."""
+
+    callee: str
+    index: int
+    count: int
+    span: Span
+    label: str
+
+
+@dataclass(frozen=True)
 class AsyncFacts:
     discarded_calls: tuple[DiscardedCall, ...]
     settled_batches: tuple[SettledBatch, ...]
     rejection_handlers: tuple[RejectionHandler, ...]
+    drawn_waits: tuple[DrawnWait, ...]
+    held_calls: tuple[HeldCall, ...]
+    callbacks: tuple[CallbackArgument, ...]
 
 
-NO_ASYNC = AsyncFacts(discarded_calls=(), settled_batches=(), rejection_handlers=())
+NO_ASYNC = AsyncFacts(
+    discarded_calls=(),
+    settled_batches=(),
+    rejection_handlers=(),
+    drawn_waits=(),
+    held_calls=(),
+    callbacks=(),
+)
 
 
 # --- API-catalog facts (H5) -------------------------------------------------------------

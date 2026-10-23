@@ -1754,6 +1754,65 @@ ASYNC002 = RuleSpec(
     ),
 )
 
+ASYNC004 = RuleSpec(
+    rule_id="ASYNC004",
+    version="1",
+    name="command waits on the page being drawn",
+    family="async_lifecycle",
+    config_section=ASYNC_SECTION,
+    default_severity=SEVERITY_WARNING,
+    implemented=True,
+    languages=(JAVASCRIPT, TYPESCRIPT),
+    summary=(
+        "Code a gated command runs awaits an animation's .finished: a page that is not "
+        "drawn may never settle it, and every later command waits behind the gate."
+    ),
+    rationale=(
+        "A browser does not run animations for a page it does not draw (a background tab, a "
+        "minimized window), so their .finished promises stay pending until the page is "
+        "shown. A command that awaits one holds its gate (a command queue, a lock) the whole "
+        "time, and nothing after it runs: the page looks frozen. From MetaList, where every "
+        "reference navigation awaited its slide inside the command gate."
+    ),
+    guarantees=(
+        "JavaScript and TypeScript. A drawn wait is an await or return (or an arrow's "
+        "expression body) of .finished, of a const the function bound to it, of .then / "
+        ".catch / .finally on it, or of Promise.all / race / allSettled / any over an array "
+        "holding one or a .map whose callback returns one. A function waits on the page when "
+        "it has a drawn wait, or awaits or returns a call (resolved through the call graph) "
+        "of a function that does. Gates: rules.async_lifecycle.gates, 'callee:index' with "
+        "the callback's argument index or 'last' (navigator.locks.request:last by default; "
+        "a project adds its own, CommandGate.run:1). One finding at each drawn wait that a "
+        "gate's callback reaches, naming every command that reaches it (the gate call's "
+        "first argument) and where; approximate when a step was a probable call-graph edge."
+    ),
+    limitations=(
+        "The callback must be written at the gate call (an arrow or a function); a named "
+        "function passed as the callback is not followed. Calls are followed through await "
+        "and return only: a promise kept in a variable and awaited later, or passed to "
+        "another function, is not. A gate is matched by its callee as written. "
+        "requestAnimationFrame and transitionend wrapped in a promise are not recognized."
+    ),
+    remediation=(
+        "Do not hold the gate while the page draws: let the command return and let the "
+        "animation finish on its own (handle its rejection with .catch: .finished rejects "
+        "when the animation is cancelled), or skip the animation when document.hidden. "
+        "Await only work that does not depend on the page being drawn."
+    ),
+    noncompliant_example=(
+        "CommandGate.run('nav', async () => {\n"
+        "  await Promise.all(el.getAnimations().map((a) => a.finished));\n"
+        "});"
+    ),
+    compliant_example=(
+        "CommandGate.run('nav', async () => {\n"
+        "  Promise.all(el.getAnimations().map((a) => a.finished))\n"
+        "    .then(cleanUp)\n"
+        "    .catch(reportError);\n"
+        "});"
+    ),
+)
+
 ASYNC003 = RuleSpec(
     rule_id="ASYNC003",
     version="1",
@@ -3798,6 +3857,7 @@ RULES: tuple[RuleSpec, ...] = (
     ASYNC001,
     ASYNC002,
     ASYNC003,
+    ASYNC004,
     PROCESS001,
     RESULT001,
     TYPE001,

@@ -19,7 +19,7 @@ scopes):
 import ast
 
 from shockharness.constants import ISINSTANCE_ARGUMENTS
-from shockharness.ir.model import AsyncFacts, DiscardedCall, SettledBatch
+from shockharness.ir.model import NO_ASYNC, AsyncFacts, DiscardedCall, SettledBatch
 from shockharness.ir.python_catches import dotted_name, excerpt, node_span
 from shockharness.source import SourceText
 
@@ -229,4 +229,7 @@ def collect_python_async(source: SourceText, module: ast.Module) -> AsyncFacts:
         discarded_calls=tuple(sorted(discarded, key=lambda d: (d.span, d.callee))),
         settled_batches=tuple(sorted(settled, key=lambda s: (s.span, s.callee))),
         rejection_handlers=(),  # a dropped coroutine never runs: there is nothing to report
+        drawn_waits=NO_ASYNC.drawn_waits,  # ASYNC004 is about a page being drawn
+        held_calls=NO_ASYNC.held_calls,
+        callbacks=NO_ASYNC.callbacks,
     )
