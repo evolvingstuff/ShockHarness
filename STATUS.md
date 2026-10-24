@@ -7092,3 +7092,19 @@ release commit was run with its exit code tested (after the CALL001 amend that c
 self-gate violation because a pipe into `tail` hid the gate's exit code). The tag `v0.29.0`
 is on f93030a. Published by `publish.yml` (run 39987849919, 18 of 18 jobs). PyPI lists
 0.29.0 with a wheel and an sdist.
+
+## Release 0.30.0 (2026-10-24)
+
+On Tom's go-ahead: skill guidance only (simulated input, blank checks, samples a parser
+really meets). CI was green on 15b0993 (run 40105388253) and on the release commit 87790f2
+(run 40108195835), 16 of 16 jobs each. The pin moved in the same 15 files. Upgrade note,
+checked by installing skills and a baseline with v0.29.0 in a scratch project and running
+0.30.0's `check`: `skills: 4 out of date`, and no baseline note (no configuration change).
+The tag `v0.30.0` is on 87790f2. Published by `publish.yml` (run 40108701314, 18 of 18
+jobs). PyPI lists 0.30.0 with a wheel and an sdist.
+
+Raised during the release: the repository names MetaList in 61 files (422 lines). Shipped in
+the package: two comments in `defaults.toml` (which `init` copies into every project's
+configuration), 13 rule rationales in `registry.py` that `rules explain` prints (some name
+MetaList functions), and three code comments; none in the skills or the README. 0.30.0 added
+none. Whether to make the shipped text generic is Tom's call.
