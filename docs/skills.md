@@ -118,7 +118,7 @@ Add this line to the agent's instruction file (for example AGENTS.md):
       "sha256": "<hex SHA-256 of the file as written>"
     }
   },
-  "tool_version": "0.30.0"
+  "tool_version": "0.30.1"
 }
 ```
 
@@ -208,7 +208,7 @@ on stderr after its report, and the edit-time hook feeds the same line back to t
 once per upgrade:
 
 ```text
-shockharness: skills: 7 out of date, 1 new since they were installed with ShockHarness 0.22.0 (0.30.0 is installed); run: shockharness skills update --agent claude
+shockharness: skills: 7 out of date, 1 new since they were installed with ShockHarness 0.22.0 (0.30.1 is installed); run: shockharness skills update --agent claude
 ```
 
 It never changes the gate or the report. Edited skills are left out (`update` does not

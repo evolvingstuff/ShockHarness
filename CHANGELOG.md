@@ -5,6 +5,16 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-24
+
+The package's text no longer names the application its lessons came from.
+
+**Upgrading from 0.30.0.** No analysis change, no configuration change: findings, the gate
+and baselines are as in 0.30.0. The version pin changed in two skills
+(`adopt-shockharness`, `pre-commit-review`), so `check` says `skills: 2 out of date`; run
+`shockharness skills update --agent claude` (or `codex`). A configuration written by an
+earlier `init` keeps its old comments; they are comments only.
+
 ### Changed
 - **Shipped text names no project.** The rule explanations (`rules explain`), the comments
   in the bundled defaults (which `init` copies into a new configuration) and three code
