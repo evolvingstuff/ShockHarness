@@ -144,6 +144,24 @@ await refreshList();
 animateScrollTo(() => window.scrollY + row.getBoundingClientRect().top);
 ```
 
+## Writes that run later
+
+Code after an `await`, and a handler for an event that teardown fires (`blur` and
+`focusout` when closing hides a focused field), runs in a later state than the one it was
+written for: the dialog may be closed, the lookup cancelled and replaced, the value already
+set by the previous run. A write that assumes the earlier state fails there, or loudly when
+the store refuses it (a closed dialog, a change that changes nothing). Check, at the write,
+what the write depends on.
+
+```javascript
+input.onblur = () => {
+  if (!dialog.isOpen) return; // closing blurred the field after the dialog's state went
+  const state = dialog.getState();
+  if (!state.isDropdownOpen && state.selected === NO_SELECTION) return; // nothing changes
+  dialog.setState({ isDropdownOpen: false, selected: NO_SELECTION });
+};
+```
+
 ## Checklist
 
 - [ ] Every call to an async function is awaited, returned, or handed to an owner.
@@ -152,6 +170,7 @@ animateScrollTo(() => window.scrollY + row.getBoundingClientRect().top);
 - [ ] No `void` on a Promise; top-level entry points end in a `.catch` that reports and sets the exit code.
 - [ ] Tests await what they call: an unawaited coroutine in a test makes it pass without checking anything.
 - [ ] After an await that changes the page, a scroll is placed at once or re-measures its element each frame, never animated to a position measured once.
+- [ ] Code after an await, and a blur or focusout handler, checks at the write what the write depends on (still open, still current, the value differs).
 
 ## Setting ShockHarness up
 

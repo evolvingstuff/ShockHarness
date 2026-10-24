@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **The `async-lifecycle` skill: writes that run later.** Code after an `await`, and a
+  `blur`/`focusout` handler that closing a dialog can fire, runs in a later state (the
+  dialog closed, the lookup replaced, the value already set): check, at the write, what
+  it depends on. Skill wording rather than a rule (`docs/ideas.md`): from two crashes in
+  one application's dialog, each tied to its own state store.
+
 ## [0.30.1] - 2026-10-24
 
 The package's text no longer names the application its lessons came from.
