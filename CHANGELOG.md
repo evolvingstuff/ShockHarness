@@ -5,6 +5,18 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-24
+
+Skill guidance only: three lessons from MetaList's recent bugs, for tests and for blank
+checks.
+
+**Upgrading from 0.29.0.** No new dependency, no analysis change and no configuration
+change: findings, the gate and baselines are as in 0.29.0 (the cache rebuilds once, as with
+every version, since the version is part of its key). Four skills changed
+(`verification-integrity` and `write-compliant-code` gained guidance; the version pin in
+`adopt-shockharness` and `pre-commit-review`), so `check` says `skills: 4 out of date`. Run
+`shockharness skills update --agent claude` (or `codex`) and commit the result.
+
 ### Added
 - **The `verification-integrity` skill: simulated input.** A helper that simulates a
   keystroke derives every effect (the key event, the browser's editing command) from the
