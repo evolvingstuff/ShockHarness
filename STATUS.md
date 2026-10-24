@@ -7108,3 +7108,19 @@ the package: two comments in `defaults.toml` (which `init` copies into every pro
 configuration), 13 rule rationales in `registry.py` that `rules explain` prints (some name
 MetaList functions), and three code comments; none in the skills or the README. 0.30.0 added
 none. Whether to make the shipped text generic is Tom's call.
+
+## Shipped text names no project; release 0.30.1 (2026-10-24)
+
+On Tom's go-ahead (fcc2aaa): the rule rationales in `registry.py` (`rules explain`), the
+comments in `defaults.toml` (which `init` copies into new configurations) and three code
+comments told their lessons with an application's name and internal function names; they
+now say "one project", and the examples are generic (`CommandQueue.run:1`,
+`app/services/backups.py`, `restore_snapshot`, `build_tree`). `git grep` finds no such name
+under `src`. The documentation and these records still name it; that was left in scope.
+
+Released as 0.30.1 on Tom's go-ahead. CI was green on bc96ae2 (run 40112425035) and on the
+release commit e5b0b62 (run 40115894864), 16 of 16 jobs each. The pin moved in the same 15
+files. Upgrade from 0.30.0, checked in a scratch project: `skills: 2 out of date` (the pins),
+no baseline note (comments do not change the digest). The tag `v0.30.1` is on e5b0b62.
+Published by `publish.yml` (run 40116361837, 18 of 18 jobs). PyPI lists 0.30.1 with a wheel
+and an sdist.
