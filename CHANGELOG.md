@@ -6,6 +6,10 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **The `verification-integrity` skill: simulated input.** A helper that simulates a
+  keystroke derives every effect (the key event, the browser's editing command) from the
+  same modifiers, ideally from one table: ⇧⌘V is Paste and Match Style, not ⌘V's paste.
+  From MetaList's browser suite, whose helper held Shift but always sent `paste`.
 - **The `write-compliant-code` skill: blank means no visible character.** `strip()` and
   `trim()` leave zero-width characters (U+200B to U+200D, U+2060; Python also U+FEFF), so
   text a person typed or pasted is tested for blankness through one shared check that

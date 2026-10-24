@@ -132,6 +132,26 @@ def test_each_writer_output_is_guessed_as_its_format(document: Document) -> None
         assert guess_format(write(document)) == name
 ```
 
+The same holds for a helper that simulates input. A real keystroke's modifiers change
+everything it does: ⇧⌘V in Chrome is Paste and Match Style, not ⌘V's paste. A helper that
+holds Shift but always sends the `paste` command tests a keystroke no user can make. Derive
+every effect (the key event, the browser's editing command) from the same arguments,
+ideally from one table:
+
+```javascript
+// The browser command each shortcut runs, keyed by the modifiers held.
+const COMMANDS = { v: { plain: 'paste', shift: 'pasteAndMatchStyle' }, z: { plain: 'undo', shift: 'redo' } };
+
+async function pressShortcut(page, key, { shift }) {
+  const command = COMMANDS[key][shift ? 'shift' : 'plain'];
+  if (shift) await page.keyboard.down('Shift');
+  await page.keyboard.down('Meta');
+  await page.keyboard.press(key, { commands: [command] });
+  await page.keyboard.up('Meta');
+  if (shift) await page.keyboard.up('Shift');
+}
+```
+
 ## The organization policy file
 
 An organization can fix keys centrally with `shockharness check --policy FILE` (or the
@@ -159,6 +179,7 @@ first place and by reporting honestly what it could not fix.
 - [ ] Every VERIFY finding in the output is answered by reverting the weakening, not by explaining it away.
 - [ ] Anything still failing is reported as failing, with its cause, instead of hidden.
 - [ ] A parser, detector or guesser is tested on samples its real producer made, round-tripped where the producer is available.
+- [ ] A helper that simulates input derives the key event and the browser command from the same modifiers.
 
 ## Setting ShockHarness up
 
