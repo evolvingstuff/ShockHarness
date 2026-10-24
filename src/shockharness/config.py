@@ -738,7 +738,7 @@ def _gate_issues(section: Mapping[str, Any]) -> list[ConfigIssue]:
     return [
         ConfigIssue(
             f"rules.async_lifecycle.gates[{index}]",
-            f"{entry!r} is not 'callee:index' or 'callee:last' (CommandGate.run:1)",
+            f"{entry!r} is not 'callee:index' or 'callee:last' (CommandQueue.run:1)",
         )
         for index, entry in enumerate(section["gates"])
         if GATE_ENTRY.fullmatch(entry) is None

@@ -101,7 +101,7 @@ BLOCKS = frozenset({Kind.STATEMENT_BLOCK, Kind.PROGRAM})
 def _inspection_text(node: Node) -> str | None:
     """Where a failure check counts: the enclosing function; at module top level (a
     script's ``await``), the statement holding the batch and the statements after it in
-    the same block (MetaList: a check one line below, inside a top-level ``try``)."""
+    the same block (as measured: a check one line below, inside a top-level ``try``)."""
     function = _enclosing_function(node)
     if function is not None:
         return node_text(function)

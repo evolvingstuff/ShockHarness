@@ -1144,9 +1144,8 @@ VERIFY005 = RuleSpec(
     ),
     rationale=(
         "A refactor moves the work to another function and the old stub keeps the test "
-        "green while it runs the real thing: in MetaList, three namespace tests went on "
-        "launching real processes after the switcher stopped calling the function they "
-        "stubbed."
+        "green while it runs the real thing: in one project, three tests went on launching "
+        "real processes after the code stopped calling the function they stubbed."
     ),
     guarantees=(
         "Python test and config files. A patch is resolved to the project functions it "
@@ -1197,9 +1196,9 @@ VERIFY006 = RuleSpec(
     ),
     rationale=(
         "VERIFY004 sees a test emptied of its assertions, but deleting the whole file leaves "
-        "nothing to compare, so the build stays green with less verification. In MetaList's "
-        "history, 26 of the 49 deleted test files that imported project code left all of it "
-        "behind; a reviewer should see that the checks went."
+        "nothing to compare, so the build stays green with less verification. In one "
+        "project's history, 26 of the 49 deleted test files that imported project code "
+        "left all of it behind; a reviewer should see that the checks went."
     ),
     guarantees=(
         "Needs a base revision. A file whose role at the base was test, analyzed there, that "
@@ -1771,8 +1770,8 @@ ASYNC004 = RuleSpec(
         "A browser does not run animations for a page it does not draw (a background tab, a "
         "minimized window), so their .finished promises stay pending until the page is "
         "shown. A command that awaits one holds its gate (a command queue, a lock) the whole "
-        "time, and nothing after it runs: the page looks frozen. From MetaList, where every "
-        "reference navigation awaited its slide inside the command gate."
+        "time, and nothing after it runs: the page looks frozen. From an app where every "
+        "navigation awaited its slide animation inside the command queue."
     ),
     guarantees=(
         "JavaScript and TypeScript. A drawn wait is an await or return (or an arrow's "
@@ -1782,7 +1781,7 @@ ASYNC004 = RuleSpec(
         "it has a drawn wait, or awaits or returns a call (resolved through the call graph) "
         "of a function that does. Gates: rules.async_lifecycle.gates, 'callee:index' with "
         "the callback's argument index or 'last' (navigator.locks.request:last by default; "
-        "a project adds its own, CommandGate.run:1). One finding at each drawn wait that a "
+        "a project adds its own, CommandQueue.run:1). One finding at each drawn wait that a "
         "gate's callback reaches, naming every command that reaches it (the gate call's "
         "first argument) and where; approximate when a step was a probable call-graph edge."
     ),
@@ -1800,12 +1799,12 @@ ASYNC004 = RuleSpec(
         "Await only work that does not depend on the page being drawn."
     ),
     noncompliant_example=(
-        "CommandGate.run('nav', async () => {\n"
+        "CommandQueue.run('nav', async () => {\n"
         "  await Promise.all(el.getAnimations().map((a) => a.finished));\n"
         "});"
     ),
     compliant_example=(
-        "CommandGate.run('nav', async () => {\n"
+        "CommandQueue.run('nav', async () => {\n"
         "  Promise.all(el.getAnimations().map((a) => a.finished))\n"
         "    .then(cleanUp)\n"
         "    .catch(reportError);\n"
@@ -2023,8 +2022,8 @@ TYPE002 = RuleSpec(
     ),
     rationale=(
         "An annotation is a claim. Without a checker nothing verifies it, so a wrong one "
-        "reads as true to the next reader and to an agent; MetaList was 96% annotated with "
-        "no checker configured."
+        "reads as true to the next reader and to an agent; one project was 96% annotated "
+        "with no checker configured."
     ),
     guarantees=(
         "Reported when at least rules.types.annotated_share (0.5) of the functions and "
@@ -2952,7 +2951,7 @@ CONTRACT_RULES: tuple[RuleSpec, ...] = (
 )
 
 
-# --- STATE002 (MetaList, 2026-10-17) ----------------------------------------------------
+# --- STATE002 (2026-10-17) --------------------------------------------------------------
 
 STATE002 = RuleSpec(
     rule_id="STATE002",
@@ -2969,9 +2968,9 @@ STATE002 = RuleSpec(
         "thread reading the name in between gets a half-built object."
     ),
     rationale=(
-        "Publishing is the moment other code can see an object. In MetaList, "
-        "get_encryption_service_with_token assigned the cached service and then set its key, "
-        "so a concurrent request's cache hit got a service with no key and failed. Building "
+        "Publishing is the moment other code can see an object. In one project, a cache "
+        "getter assigned the cached service and then set its key, so a concurrent "
+        "request's cache hit got a service with no key and failed. Building "
         "the object in a local and publishing it last removes the window."
     ),
     guarantees=(
@@ -3012,10 +3011,10 @@ STATE003 = RuleSpec(
         "check and what the method does with it."
     ),
     rationale=(
-        "A lock protects a value only where it is held. In MetaList, EncryptedTextStream.write "
-        "checked _closed and encrypted with _dek before taking the lock that close() holds to "
-        "close the stream and clear the key, so a write racing a logout could use a cleared "
-        "key or a closed file."
+        "A lock protects a value only where it is held. In one project, an encrypted stream's "
+        "write checked that it was open and encrypted with its key before taking the lock "
+        "that close() holds to close the stream and clear the key, so a write racing a "
+        "logout could use a cleared key or a closed file."
     ),
     guarantees=(
         "Python. In a class, a lock is an attribute taken as with self.<lock>: whose name holds "
@@ -3266,8 +3265,8 @@ DOM003 = RuleSpec(
     ),
     rationale=(
         "Counting characters is the easy way to remember where the user was across a "
-        "redraw, and it works while the content is only text. MetaList's Paste Reference "
-        "Into Note saved the selection that way, and right-clicking selected images threw: "
+        "redraw, and it works while the content is only text. One editor's paste command "
+        "saved the selection that way, and right-clicking selected images threw: "
         "a selection of images has no text. medium-editor carries hand patches for the same "
         "blind spot (startsWithImage, trailingImageCount, emptyBlocksIndex)."
     ),
@@ -3352,7 +3351,7 @@ DEAD001 = RuleSpec(
     ),
     rationale=(
         "Code that lost its last caller still reads as working, and its tests still pass. "
-        "MetaList's build_note_tree had no callers and about 400 lines hung off it; one of "
+        "In one project, a tree builder had no callers and about 400 lines hung off it; one of "
         "them was the only code that highlighted search terms, so highlighting silently "
         "stopped for a year. The cluster is the unit of decision: delete it, or reconnect "
         "the behavior it holds."
@@ -3366,10 +3365,10 @@ DEAD001 = RuleSpec(
         "rules.dead_code.entry_points with the reason in a comment."
     ),
     noncompliant_example=(
-        "def build_note_tree(notes, query):  # nothing calls it any more\n"
-        "    return highlight_search_terms(render(notes), query)"
+        "def build_tree(items, query):  # nothing calls it any more\n"
+        "    return highlight_search_terms(render(items), query)"
     ),
-    compliant_example="# deleted, or called again from the notes view that needs it",
+    compliant_example="# deleted, or called again from the view that needs it",
 )
 
 DEAD002 = RuleSpec(
@@ -3440,7 +3439,7 @@ DUP001 = RuleSpec(
     ),
     rationale=(
         "Copies drift. A fix made to one copy does not reach the others, and the copies that "
-        "were not fixed keep the bug. MetaList had twenty HTML escapers, one per dialog; some "
+        "were not fixed keep the bug. One project had twenty HTML escapers, one per dialog; some "
         "returned an empty string for a non-string where the others threw."
     ),
     guarantees=DUPLICATES_GUARANTEES,
@@ -3472,9 +3471,10 @@ DUP002 = RuleSpec(
     ),
     rationale=(
         "A difference between copies is either a fix that reached only some of them or a bug "
-        "that only some have, and the caller cannot tell which version it gets. MetaList's "
-        "escapers drifted: some threw on a non-string, some returned an empty string, so the "
-        "same bad input failed loudly in one dialog and showed blank text in another."
+        "that only some have, and the caller cannot tell which version it gets. One "
+        "project's escapers drifted: some threw on a non-string, some returned an empty "
+        "string, so the same bad input failed loudly in one dialog and showed blank text in "
+        "another."
     ),
     guarantees=DUPLICATES_GUARANTEES
     + " Versions are linked when difflib's ratio over their tokens is at least "
@@ -3517,7 +3517,7 @@ CALL001 = RuleSpec(
         "make whatever call the entry names."
     ),
     rationale=(
-        "Some capabilities belong in one place: MetaList's policy note keeps every disk write "
+        "Some capabilities belong in one place: a security policy can keep every disk write "
         "in an encrypted writer and every outbound request in one client, so plaintext never "
         "touches disk and the network has one chokepoint. The capability is a call on "
         "something everyone imports (open, Path.write_text, shutil) or a global (fetch), so "
@@ -3569,10 +3569,10 @@ IMPORT002 = RuleSpec(
         "by name), or a name the entry's allowed_names does not list."
     ),
     rationale=(
-        "Some modules must never reach others: MetaList's startup and database migrations "
-        "may not import the backup service, so a migration can never touch a backup. Such a "
-        "boundary lives in nobody's head once the code is written; an agent adding one "
-        "convenient import crosses it without knowing it was there."
+        "Some modules must never reach others: a project's startup code and database "
+        "migrations may not import its backup service, so a migration can never touch a "
+        "backup. Such a boundary lives in nobody's head once the code is written; an agent "
+        "adding one convenient import crosses it without knowing it was there."
     ),
     guarantees=(
         "Every import of an analyzed file, at any depth (a function's lazy import included): "
@@ -3602,8 +3602,8 @@ IMPORT002 = RuleSpec(
         "entry in the configuration, where the change is reviewed."
     ),
     noncompliant_example=(
-        "# app/db/migrations.py, under a boundary that forbids app/services/backup_service.py\n"
-        "from app.services.backup_service import restore_backup"
+        "# app/db/migrations.py, under a boundary that forbids app/services/backups.py\n"
+        "from app.services.backups import restore_snapshot"
     ),
     compliant_example="# app/db/migrations.py imports only the database layer",
 )

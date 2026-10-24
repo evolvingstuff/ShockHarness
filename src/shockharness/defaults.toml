@@ -83,7 +83,7 @@ severity = "error"
 allowed_values = [0, 1]
 # -1 (a unary minus over 1) is allowed: Python's last-item and all-but-last idioms
 # (items[-1], text[:-1]) and JavaScript's indexOf / findIndex "not found" (H6 feedback
-# from MetaList: 262 findings, none a hidden meaning). false reports it like any other
+# from one project: 262 findings, none a hidden meaning). false reports it like any other
 # literal. A -1 that stands for a project's own meaning is MAGIC003's (rules.sentinels).
 allow_unary_negative_one = true
 # A numeric literal that is the whole value of a module-level constant definition
@@ -479,7 +479,7 @@ csharp_task_apis = [
 ]
 # ASYNC004: calls that hold a gate (a command queue, a lock) while their callback runs:
 # 'callee:index' with the callback's argument index, or 'callee:last'. A project adds its
-# own (CommandGate.run:1); removing one is a policy deviation.
+# own (CommandQueue.run:1); removing one is a policy deviation.
 gates = ["navigator.locks.request:last"]
 # ASYNC002: context managers whose bound name owns the tasks it creates (`async with
 # asyncio.TaskGroup() as group: group.create_task(...)`); adding one is a policy deviation.
@@ -523,7 +523,7 @@ roles = ["production", "test"]
 # A call in a try block with a handler is not reported: it may run for what it raises.
 # A method of a string literal is the str method ("str.join" matches ", ".join(parts));
 # ".join" on a name is not listed: it was Thread.join in every case measured (pytest,
-# pip, hypothesis, MetaList).
+# pip, hypothesis and one application).
 python_must_use = [
   "sorted",
   "reversed",
@@ -1115,7 +1115,7 @@ javascript_network = [
 # dropping a module, exempting another file or adding an allowed name is a loosening.
 #   [[tool.shockharness.rules.import_boundaries.forbidden]]
 #   importers = ["app/db/migrations.py", "app/main.py"]
-#   imported = ["app/services/backup_service.py"]   # project files, by path
+#   imported = ["app/services/backups.py"]   # project files, by path
 #   allowed_names = []            # required: names the importers may still import from it
 #   reason = "a migration can never touch a backup"
 #

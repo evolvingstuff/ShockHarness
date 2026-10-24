@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Changed
+- **Shipped text names no project.** The rule explanations (`rules explain`), the comments
+  in the bundled defaults (which `init` copies into a new configuration) and three code
+  comments told their lessons with one application's name and internal function names;
+  they now say "one project" and use generic examples (`CommandQueue.run:1`,
+  `app/services/backups.py`). The lessons and every rule's behavior are unchanged.
+
 ## [0.30.0] - 2026-10-24
 
 Skill guidance only: three lessons from MetaList's recent bugs, for tests and for blank

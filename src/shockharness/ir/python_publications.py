@@ -4,8 +4,8 @@ In one function, ``G = Thing(...)`` (``G`` named by a ``global`` statement of th
 function) or ``self.X = Thing(...)`` (in a method that is not a constructor), followed by
 a later statement of the same function that writes an attribute of it (``G.field =
 ...``). Between the two, another thread that reads the shared name sees the object
-without the field. From MetaList: ``get_encryption_service_with_token`` published the
-service, then set its ``dek``, so a concurrent cache hit got ``dek = None``.
+without the field. In one project a cache getter published a service, then set its
+key, so a concurrent cache hit got a service with no key.
 
 "Newly constructed" is a call whose callee's last name is capitalized (a class). The
 statements are taken in source order, nested functions and classes excluded; a

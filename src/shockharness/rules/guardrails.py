@@ -275,7 +275,7 @@ ASSERTION_WORD = "assert"
 def _is_assertion(callee: str) -> bool:
     """``assertEqual``, ``self.assertIs``, ``mock.assert_called_with``, ``assert.equal``,
     ``assert.strictEqual``: the Boolean is the expected value, and the assertion says what
-    it means (MetaList: 159 of its 353 BOOL001 findings were these)."""
+    it means (in one project, 159 of its 353 BOOL001 findings were these)."""
     segments = callee.split(".")
     last = segments[len(segments) - 1]
     return last.lower().startswith(ASSERTION_WORD) or ASSERTION_WORD in segments
