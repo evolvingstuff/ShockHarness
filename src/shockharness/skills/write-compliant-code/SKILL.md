@@ -384,6 +384,7 @@ nothing is a `SUPP002` warning.
 - [ ] Text a person typed or pasted is tested for blankness through one shared check that removes zero-width characters (U+200B-U+200D, U+2060, U+FEFF), never a hand-written `strip()` / `trim()` comparison.
 - [ ] Where the repository declares property contracts, each new function on a declared pipeline states its `requires` first and its `produces`/`preserves` on return; nothing produces a property it has not established.
 - [ ] Where code rejects a value outside a set ("not a known tag") that other code offers the user (suggestions, a menu), both build from one function, and a test checks that every offered value of each kind is accepted: separately built lists drift, and no static check sees across an HTTP request.
+- [ ] What is drawn and what a click or a key acts on come from one function: the rows a list shows and the item its index selects are the same list, never two filters of the same field kept in step by hand (they drift, and a row then runs another item).
 
 ## Setting ShockHarness up
 

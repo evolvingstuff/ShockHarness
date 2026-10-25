@@ -6,6 +6,10 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **The `write-compliant-code` skill: what is drawn and what is acted on.** A checklist line:
+  the rows a list shows and the item its index selects come from one function, never two
+  filters of the same field kept in step by hand. Skill wording rather than a rule
+  (`docs/ideas.md`): one true case against four unrelated filters measured.
 - **The `async-lifecycle` skill: writes that run later.** Code after an `await`, and a
   `blur`/`focusout` handler that closing a dialog can fire, runs in a later state (the
   dialog closed, the lookup replaced, the value already set): check, at the write, what
