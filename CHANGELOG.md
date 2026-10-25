@@ -5,6 +5,17 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-25
+
+Skill guidance only: writes that run later, and lists drawn and acted on.
+
+**Upgrading from 0.30.1.** No new dependency, no analysis change and no configuration
+change: findings, the gate and baselines are as in 0.30.1 (the cache rebuilds once, as with
+every version). Four skills changed (`async-lifecycle` and `write-compliant-code` gained
+guidance; the version pin in `adopt-shockharness` and `pre-commit-review`), so `check` says
+`skills: 4 out of date`. Run `shockharness skills update --agent claude` (or `codex`) and
+commit the result.
+
 ### Added
 - **The `write-compliant-code` skill: what is drawn and what is acted on.** A checklist line:
   the rows a list shows and the item its index selects come from one function, never two

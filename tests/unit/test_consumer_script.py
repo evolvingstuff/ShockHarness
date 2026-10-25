@@ -70,8 +70,8 @@ def test_examples_pass_clean_and_fail_after_the_injected_violation(
 
 def test_example_pins_agree() -> None:
     script = load_script()
-    assert script.pinned_versions(EXAMPLES / "python") == ["0.30.1", "0.30.1"]
-    assert script.pinned_versions(EXAMPLES / "js") == ["0.30.1"]
+    assert script.pinned_versions(EXAMPLES / "python") == ["0.31.0", "0.31.0"]
+    assert script.pinned_versions(EXAMPLES / "js") == ["0.31.0"]
 
 
 def test_script_is_stdlib_only() -> None:

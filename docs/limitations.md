@@ -676,7 +676,7 @@ ones (no user-defined or remote profiles), and the only command-line overrides
 are `--profile` and `--parse-errors`. The publish workflow and the reusable
 consumer workflow have not yet run on GitHub: the first `v*` tag exercises
 them (see `docs/releasing.md`), and the example workflows reference the tag
-`v0.30.1`, which exists only after that release.
+`v0.31.0`, which exists only after that release.
 
 ## Platform
 

@@ -6,7 +6,7 @@ ShockHarness repository, which copies it into a throwaway git repository,
 installs the wheel under test, and checks that the gate passes here and fails
 after one injected violation.
 
-* `pyproject.toml` pins `shockharness==0.30.1` under `[project.optional-dependencies] dev`.
+* `pyproject.toml` pins `shockharness==0.31.0` under `[project.optional-dependencies] dev`.
   Dependabot (`.github/dependabot.yml`) opens a PR when a new version is released.
 * `.shockharness.toml` selects the `strict` profile, analyzes `src/` and
   `tests/`, and exempts tests from `MAGIC001`/`DEF001` with a stated reason.

@@ -13,7 +13,7 @@ dependencies = []
 # The analyzer pin lives here, where Dependabot's pip ecosystem can bump it.
 # Keep `shockharness-version` in .github/workflows/shockharness.yml equal to it.
 dev = [
-  "shockharness==0.30.1",
+  "shockharness==0.31.0",
   "pytest>=8",
 ]
 
