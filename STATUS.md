@@ -7124,3 +7124,13 @@ files. Upgrade from 0.30.0, checked in a scratch project: `skills: 2 out of date
 no baseline note (comments do not change the digest). The tag `v0.30.1` is on e5b0b62.
 Published by `publish.yml` (run 40116361837, 18 of 18 jobs). PyPI lists 0.30.1 with a wheel
 and an sdist.
+
+## Release 0.31.0 (2026-10-25)
+
+On Tom's go-ahead: skill guidance only (async-lifecycle: writes that run later;
+write-compliant-code: what is drawn and what is acted on come from one function). CI was
+green on 93a706f (run 40204066586) and on the release commit 26d182c (run 40244069159), 16
+of 16 jobs each. The pin moved in the same 15 files. Upgrade from 0.30.1, checked in a
+scratch project: `skills: 4 out of date`, no baseline note. The tag `v0.31.0` is on 26d182c.
+Published by `publish.yml` (run 40244544914, 18 of 18 jobs). PyPI lists 0.31.0 with a wheel
+and an sdist.
