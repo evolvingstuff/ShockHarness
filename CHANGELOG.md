@@ -5,6 +5,13 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+### Added
+- **The `write-compliant-code` skill: skipping is the caller's choice, and saves check
+  versions.** A function that can skip its work (busy, already running) does it, waits
+  or fails by default, and a caller that wants the skip names it; a save that replaces
+  state from a client compares the version the client read with the stored one. Skill
+  wording rather than rules (`docs/ideas.md`): from two bugs in one application.
+
 ## [0.31.0] - 2026-10-25
 
 Skill guidance only: writes that run later, and lists drawn and acted on.

@@ -71,6 +71,26 @@ a plain `check`; see the `refactor-complexity` skill.
    `x ?? v`, `os.getenv("X", "3")`, `process.env.PORT || 3000`. Read required
    data with indexing (`raw["PORT"]`, `env.PORT` followed by validation) so a
    missing value fails loudly, once, at load time.
+
+   The same holds for behavior. A function that can skip its work (busy, already
+   running, nothing changed) makes skipping the caller's explicit choice: by default it
+   does the work, waits for it, or fails. A default that logs and returns `null` turns
+   every caller that did not know into a silent drop.
+
+   ```javascript
+   // Silent by default: a caller that forgets { requireExecution: true } loses its refresh.
+   async function refreshOrDrop({ requireExecution = false }) {
+     if (busy && !requireExecution) return null;
+     return render(await load());
+   }
+
+   // Skipping is named at the call that wants it.
+   async function refresh({ whenBusy }) {
+     if (busy && whenBusy === "skip") return SKIPPED;
+     if (busy) await idle();
+     return render(await load());
+   }
+   ```
 4. **No numeric literal other than 0, 1 or -1.** A number in code needs a contract:
    variable policy (timeouts, limits, page sizes) becomes a required,
    validated configuration parameter; a fixed value (a spec's exit code, a
@@ -130,6 +150,21 @@ a plain `check`; see the `refactor-complexity` skill.
    export function isBlank(text) {
      return text.replace(INVISIBLE, "").trim() === "";
    }
+   ```
+
+   A save that replaces state from a client checks the version the client read. A
+   snapshot taken before another change (a sort, a rename) can arrive after it; replacing
+   the stored state and bumping the version then undoes that change, and the last writer
+   wins without anyone seeing it. Take the version the client read with the snapshot,
+   refuse or merge when it is older than the stored one, and keep what the client could
+   not have known.
+
+   ```python
+   def save_snapshot(self, tabs: dict[str, Tab], read_at_version: int) -> None:
+       if read_at_version != self._version:
+           raise StaleWrite(f"read at {read_at_version}, stored {self._version}")
+       self._tabs = tabs
+       self._version += 1
    ```
 8. **Prefer immutable values.** A value nobody can change needs no owner, cannot
    be altered behind a caller's back, and makes the order of calls irrelevant.
@@ -371,6 +406,8 @@ nothing is a `SUPP002` warning.
 ## Checklist
 
 - [ ] Every value the code needs is a required parameter or a validated settings field; no `=` default in a signature, no `.get(k, v)`, `or`, `??`, `getenv("X", v)`.
+- [ ] A function that can skip its work does the work, waits or fails by default; skipping is an option the caller names.
+- [ ] A save that replaces state from a client compares the version the client read with the stored one.
 - [ ] No `try`/`catch` outside a boundary declared in `.shockharness.toml`; each approved `try` wraps one operation and re-raises a typed error with its cause.
 - [ ] No numeric literal other than `0` or `1`; each number lives in configuration or a cited, named constant.
 - [ ] Each `0` or `1` that means something (exit code, sentinel, flag) has a name.
