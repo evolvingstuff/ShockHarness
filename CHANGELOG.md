@@ -5,6 +5,21 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-27
+
+The finish-time gate for Claude Code, and two lines of skill guidance.
+
+**Upgrading from 0.31.0.** No new dependency, no analysis change: findings, the gate and
+baselines are as in 0.31.0 (the cache rebuilds once, as with every version). The new
+`[tool.shockharness.hooks.stop]` table is optional and outside the configuration digest,
+so no baseline note. Three skills changed (`write-compliant-code` gained guidance,
+`adopt-shockharness` the `--stop-hook` line, and the version pin in it and
+`pre-commit-review`), so `check` says `skills: 3 out of date`. Run
+`shockharness skills update --agent claude` (or `codex`) and commit the result. To add the
+finish-time gate where skills are already installed, run
+`shockharness skills install --agent claude --stop-hook --force` after the update; `--force`
+rewrites the skill files from the package, so commit any edits to them first.
+
 ### Added
 - **The finish-time gate for Claude Code: `skills install --agent claude --stop-hook`.**
   A `Stop` hook (`shockharness hook claude-code stop`) keeps the agent working while the
