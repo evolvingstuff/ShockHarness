@@ -282,6 +282,61 @@ path.
 Only the edited file is analyzed, so the cross-file rules see that file alone:
 `check` and `gate` in CI stay the authority.
 
+### The finish-time gate (Claude Code)
+
+The edit-time hook reports; nothing stops the agent from saying "done" with the
+findings still there, and it cannot see what the change broke in other files.
+With `--stop-hook`, `skills install --agent claude` adds a `Stop` hook, which
+Claude Code runs when the agent is about to end its turn, and a `SessionStart`
+hook that records the commit `HEAD` is at when the session starts:
+
+```bash
+shockharness skills install --agent claude --stop-hook
+```
+
+```json
+{"hooks": {
+  "Stop": [{"hooks": [{"type": "command", "timeout": 600,
+    "command": "shockharness hook claude-code stop --root \"$CLAUDE_PROJECT_DIR\""}]}],
+  "SessionStart": [{"hooks": [{"type": "command", "timeout": 60,
+    "command": "shockharness hook claude-code session-start --root \"$CLAUDE_PROJECT_DIR\""}]}]}}
+```
+
+At each stop, `shockharness hook claude-code stop` compares the working tree
+(untracked files included) with the session's base commit, as `gate --base`
+compares two commits: the whole tree on both sides, so the cross-file rules see
+the change, under the working tree's configuration. When that gate would fail
+(new hard violations, failing complexity regressions, files that cannot be
+analyzed), it exits 2 with the failing reason and the new violations on stderr,
+and the agent goes on working. When it passes, the agent stops, and CI's
+`gate --base` on the same tree passes too.
+
+* **The base** is the session's start, not the branch point, so a commit made
+  during the session does not hide what the session added, and a project that
+  commits straight to `main` is covered. Without the `SessionStart` record, the
+  first hook run of the session (an edit or a stop) records it. `--base REF`
+  compares against the merge base of `REF` and `HEAD` instead. Uncommitted
+  changes present when the session started count as the session's; the run log
+  notes them.
+* **Fast:** when no file differs from the base, or the tree is as it was at the
+  last stop the hook let through, the hook exits 0 after two git calls. The base
+  revision is analyzed with a cache of its own (`.shockharness-cache/base/`) and
+  the working tree with the project's, so a stop costs two warm analyses: about
+  6 s on this repository, 33 s on MetaList. The first stop of a new base pays
+  for a cold base analysis (159 s on MetaList with both caches cold).
+* **The loop guard:** Claude Code ends a run of eight blocks in a row, but the
+  count restarts after every tool call, so an agent that keeps editing would
+  never reach it. While the agent continues because of this hook, a stop is let
+  through when the new violations are the ones it was last blocked on (nothing
+  fixed) or after `hooks.stop.max_blocks` blocks (default 3). It then exits 1, a
+  notice to you naming what is left; the agent does not act on it. Pressing Esc
+  never runs the hook.
+* **No `SubagentStop` hook:** a subagent's work is part of the main agent's
+  turn, and the main agent's stop sees the same working tree.
+
+`hook/runs.jsonl` records every stop (base, verdict, findings, blocks). A stop
+hook that times out lets the agent stop.
+
 ## 8. Acceptance checks this repository runs
 
 * The wheel builds, installs into a fresh venv, and exposes `shockharness` on `PATH` (`package` job).

@@ -1269,6 +1269,21 @@ the `skills install` command (docs/skills.md). `false` records that the reposito
 no skills and stops the line. Like the `cache` table, the `skills` table is not part of
 the configuration digest: it cannot change a result.
 
+## The finish-time hook
+
+`[tool.shockharness.hooks.stop]` tunes `shockharness hook claude-code stop`
+(docs/integration.md, "The finish-time gate"):
+
+* `max_blocks` (default `3`, at least 1): while the agent continues because the hook
+  blocked its last stop, a stop after this many blocks in a row is let through, with a
+  notice to the user naming what is left. A stop whose new violations are the ones it was
+  last blocked on is let through at once.
+* `shown` (default `20`, at least 1): how many new violations a block lists in full; the
+  rest are counted.
+
+What blocks a stop is the gate (`gates`), not this table. Like the `cache` and `skills`
+tables, `hooks` is not part of the configuration digest.
+
 ## Cache
 
 Per-file results (parse facts, rule findings, per-unit complexity metrics) are

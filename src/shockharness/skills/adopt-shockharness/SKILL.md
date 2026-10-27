@@ -170,6 +170,7 @@ prints one line naming the command; `notify_missing = false` under
 shockharness skills install --agent claude                              # .claude/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent claude --hook                       # also: findings after every edit (.claude/settings.json)
 shockharness skills install --agent claude --hook --lock                # also: a lock file the project's configuration cannot loosen
+shockharness skills install --agent claude --stop-hook                  # also: no "done" while the gate against the session's start fails
 shockharness skills install --agent codex                               # .agents/skills/<name>/SKILL.md in this repository
 shockharness skills install --agent generic --project docs/agent-skills # any agent; prints the line to add to AGENTS.md
 shockharness skills update --agent claude --check                       # exit 1 when an installed skill is stale or edited

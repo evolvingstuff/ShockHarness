@@ -7134,3 +7134,46 @@ of 16 jobs each. The pin moved in the same 15 files. Upgrade from 0.30.1, checke
 scratch project: `skills: 4 out of date`, no baseline note. The tag `v0.31.0` is on 26d182c.
 Published by `publish.yml` (run 40244544914, 18 of 18 jobs). PyPI lists 0.31.0 with a wheel
 and an sdist.
+
+## The finish-time gate: `hook claude-code stop` (2026-10-27)
+
+On Tom's go-ahead, built as `docs/proposal-stop-hook.md` proposed, with the recommended
+answers (the session's start as the base, the CI gate's verdict, opt-in `--stop-hook`) and
+the base analysis using a cache. Spec decision 56.
+
+* `gating/diff.py`: `diff_working_tree` (the working tree as head, analyzed in place with
+  the project's cache; the base export with its own cache under `<cache>/base/`, since
+  entries are kept per path and sharing would overwrite every touched file's entry at each
+  run) and `diff_revisions` share `_compared`, split into `_classified`, `_relabelled` and
+  `_diff_metrics` (the CPLX006 finding on `diff_revisions` is fixed). `analyze_revision`
+  takes the cache (None for `diff`), `hard_violation` is the gate's test the summary and the
+  hook share, and `history.git.renamed_files` takes the revisions, one for the working tree.
+  `api.open_run_cache` (was `_open_cache`) is shared.
+* `hook_stop.py`: `run_stop` (base, a fast path on a digest of the changed files and their
+  content, the cache directory left out; the diff; the verdict and the loop guard) and
+  `run_session_start` (records `HEAD`, prints nothing, notes uncommitted changes). The
+  hook store's `state.json` holds the per-session keys beside the edit hook's file hashes;
+  `hook.remembered_base` lets any hook run record a session's base.
+* `skills/install.py`: `install_claude_stop_hook` appends a `Stop` group (timeout 600) and a
+  `SessionStart` group, once each, and updates their commands for `--lock`; CLI
+  `skills install --stop-hook`, `hook claude-code stop|session-start`, `hook --base`.
+* Config: `[tool.shockharness.hooks.stop]` (`max_blocks` 3, `shown` 20), not digested.
+
+Measured on a clone of MetaList at f999d6cb, as a session that started at 892eeb21 with the
+working tree at fbf12edc (the `[[` reference suggestions feature): the gate passes (MetaList
+gates its own commits). Both caches cold: 159 s. With a default parameter added to
+`app/config.py`: exit 2 in 33 s naming DEF001 and MAGIC001; asked to stop again with nothing
+fixed: exit 1 in 30 s, the notice naming both. On this repository a warm stop takes 6.4 s,
+against 47 s for `diff` of two revisions. Found while measuring and fixed: a project whose
+git does not ignore the cache directory would have seen the hook's own files as changes.
+
+Not done: a stop with nothing changed since its last block still analyzes both trees (30 s
+on MetaList) to name what is left; the block's message could be kept instead.
+
+New tests: `tests/unit/test_hook_stop.py` (14): a commit made during the session does not
+hide its findings; a fixed change passes and the same tree is not analyzed again; untracked
+files count; the cache directory is not a change when git does not ignore it; the guard
+(nothing fixed, `max_blocks`, a new turn starts afresh); the first hook run records the
+base; `--base` and an unknown ref; bad input; the working-tree diff agrees with the
+revision diff; install appends both hooks once and updates them for a lock; the CLI flags;
+the table is validated and not digested.

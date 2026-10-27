@@ -19,6 +19,7 @@ from typing import Any
 
 from shockharness.constants import (
     HOOK_TIMEOUT_SECONDS,
+    STOP_HOOK_TIMEOUT_SECONDS,
     EXIT_OK,
     EXIT_VIOLATIONS,
     JSON_INDENT,
@@ -366,13 +367,20 @@ HOOK_ADDED = "added"
 HOOK_PRESENT = "already present"
 HOOK_COMMAND_UPDATED = "command updated"
 POLICY_FLAG = "--policy"
+# The finish-time gate (--stop-hook): the Stop hook, and the SessionStart hook that
+# records the commit the session starts from. Neither event takes a matcher here.
+STOP = "Stop"
+SESSION_START = "SessionStart"
+STOP_COMMAND = 'shockharness hook claude-code stop --root "$CLAUDE_PROJECT_DIR"'
+SESSION_START_COMMAND = 'shockharness hook claude-code session-start --root "$CLAUDE_PROJECT_DIR"'
 
 
-def hook_command(lock: Path | None) -> str:
-    """The hook's command; with a lock file (``--lock``) it runs under that policy."""
+def hook_command(lock: Path | None, base: str) -> str:
+    """A hook's command (``base``: ``HOOK_COMMAND``, ``STOP_COMMAND``...); with a lock
+    file (``--lock``) it runs under that policy."""
     if lock is None:
-        return HOOK_COMMAND
-    return f'{HOOK_COMMAND} {POLICY_FLAG} "{lock}"'
+        return base
+    return f'{base} {POLICY_FLAG} "{lock}"'
 
 
 def _settings_document(path: Path) -> dict[str, Any]:
@@ -395,22 +403,23 @@ def _settings_document(path: Path) -> dict[str, Any]:
     return document
 
 
-def _runs_shockharness(handler: Any) -> bool:
+def _runs_shockharness(handler: Any, command: str) -> bool:
+    """Whether ``handler`` runs ``command`` (the command without its ``--policy``)."""
     return (
         isinstance(handler, dict)
         and COMMAND_KEY in handler
         and isinstance(handler[COMMAND_KEY], str)
-        and handler[COMMAND_KEY].startswith(HOOK_COMMAND)
+        and handler[COMMAND_KEY].startswith(command)
     )
 
 
-def _hook_group(groups: list[Any]) -> dict[str, Any] | None:
-    """The PostToolUse group that already runs the hook, if any."""
+def _hook_group(groups: list[Any], command: str) -> dict[str, Any] | None:
+    """The group that already runs ``command``, if any."""
     for group in groups:
         if not isinstance(group, dict) or HOOKS_KEY not in group:
             continue
         if isinstance(group[HOOKS_KEY], list) and any(
-            _runs_shockharness(handler) for handler in group[HOOKS_KEY]
+            _runs_shockharness(handler, command) for handler in group[HOOKS_KEY]
         ):
             return group
     return None
@@ -437,7 +446,7 @@ def _update_group(group: dict[str, Any], command: str) -> str | None:
         group[MATCHER_KEY] = EDIT_TOOLS
         status = HOOK_UPDATED
     for handler in group[HOOKS_KEY]:
-        if _runs_shockharness(handler) and handler[COMMAND_KEY] != command:
+        if _runs_shockharness(handler, HOOK_COMMAND) and handler[COMMAND_KEY] != command:
             handler[COMMAND_KEY] = command
             if status is None:
                 status = HOOK_COMMAND_UPDATED
@@ -453,7 +462,7 @@ def install_claude_hook(project_root: Path, command: str) -> tuple[Path, str]:
     document = _settings_document(path)
     hooks = _member(document, HOOKS_KEY, {}, path)
     groups = _member(hooks, POST_TOOL_USE, [], path)
-    existing = _hook_group(groups)
+    existing = _hook_group(groups, HOOK_COMMAND)
     if existing is None:
         handler = {"type": "command", COMMAND_KEY: command, "timeout": HOOK_TIMEOUT_SECONDS}
         groups.append({MATCHER_KEY: EDIT_TOOLS, HOOKS_KEY: [handler]})
@@ -463,6 +472,44 @@ def install_claude_hook(project_root: Path, command: str) -> tuple[Path, str]:
         if updated is None:
             return path, HOOK_PRESENT
         status = updated
+    text = json.dumps(document, indent=JSON_INDENT) + "\n"
+    write_bytes(path, text.encode("utf-8"))
+    return path, status
+
+
+def _event_hook(hooks: dict[str, Any], event: str, base: str, command: str, path: Path) -> str:
+    """Add the group running ``command`` (``base`` with or without a lock) to ``event``'s
+    hooks, or bring the installed one to ``command``; its status."""
+    groups = _member(hooks, event, [], path)
+    existing = _hook_group(groups, base)
+    if existing is None:
+        timeout = HOOK_TIMEOUT_SECONDS
+        if event == STOP:
+            timeout = STOP_HOOK_TIMEOUT_SECONDS
+        groups.append({HOOKS_KEY: [{"type": "command", COMMAND_KEY: command, "timeout": timeout}]})
+        return HOOK_ADDED
+    status = HOOK_PRESENT
+    for handler in existing[HOOKS_KEY]:
+        if _runs_shockharness(handler, base) and handler[COMMAND_KEY] != command:
+            handler[COMMAND_KEY] = command
+            status = HOOK_COMMAND_UPDATED
+    return status
+
+
+def install_claude_stop_hook(project_root: Path, lock: Path | None) -> tuple[Path, str]:
+    """Add the finish-time gate to ``.claude/settings.json``: a Stop hook and the
+    SessionStart hook recording the session's base commit, appended to hooks already
+    configured, only once. The status names each event's change."""
+    path = project_root / CLAUDE_SETTINGS
+    document = _settings_document(path)
+    hooks = _member(document, HOOKS_KEY, {}, path)
+    statuses = {
+        event: _event_hook(hooks, event, base, hook_command(lock, base), path)
+        for event, base in ((STOP, STOP_COMMAND), (SESSION_START, SESSION_START_COMMAND))
+    }
+    status = ", ".join(f"{event} {status}" for event, status in statuses.items())
+    if all(s == HOOK_PRESENT for s in statuses.values()):
+        return path, status
     text = json.dumps(document, indent=JSON_INDENT) + "\n"
     write_bytes(path, text.encode("utf-8"))
     return path, status

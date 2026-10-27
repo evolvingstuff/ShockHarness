@@ -89,7 +89,7 @@ def analyze_paths(
     started = time.perf_counter()
     check_contract_references(root, config)
     discovery = discover(root, list(paths), config)
-    cache, cache_coverage = _open_cache(root, config, options)
+    cache, cache_coverage = open_run_cache(root, config, options)
     outcome = analyze_files(discovery.files, config, options, cache)
     if cache is not None:
         cache_coverage = cache.coverage()
@@ -133,7 +133,7 @@ def check_contract_references(root: Path, config: EffectiveConfig) -> None:
         )
 
 
-def _open_cache(
+def open_run_cache(
     root: Path, config: EffectiveConfig, options: AnalysisOptions
 ) -> tuple[FileCache | None, dict[str, Any]]:
     """The cache for this run (``None`` when disabled or bypassed) and the

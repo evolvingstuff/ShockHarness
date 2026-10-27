@@ -679,6 +679,15 @@ CONFIG_SCHEMA = TableField(
             required=(),
         ),
         "skills": TableField(fields={"notify_missing": BoolField()}, required=()),
+        "hooks": TableField(
+            fields={
+                "stop": TableField(
+                    fields={"max_blocks": IntField(minimum=1), "shown": IntField(minimum=1)},
+                    required=(),
+                )
+            },
+            required=(),
+        ),
         "suppressions": TableField(
             fields={"forbidden": ListField(SUPPRESSION_BAN_SCHEMA)}, required=()
         ),

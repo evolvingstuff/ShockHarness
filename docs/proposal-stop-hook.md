@@ -1,6 +1,19 @@
 # Proposal: a finish-time gate, "the agent cannot stop while its change adds findings"
 
-Status: **proposed** (2026-10-27), waiting for Tom's go-ahead. Nothing is built.
+Status: **built** (2026-10-27, on Tom's go-ahead, with the recommended answers and the
+base analysis using a cache) as `shockharness hook claude-code stop` and
+`session-start`, spec 21.1 decision 56; the user documentation is in
+`docs/integration.md`, "The finish-time gate". Differences from this text:
+* the base revision is not kept in the hook store: it is analyzed at each stop with a
+  cache of its own (`.shockharness-cache/base/`), so a stop costs two warm analyses
+  (6.4 s here, 33 s on MetaList); the first stop with both caches cold took 159 s on
+  MetaList;
+* the fast path compares every changed file, not only source files, so a policy file
+  of any name counts (the cache directory aside, which holds the hook's own files);
+* a stop let through with findings left is a notice by exit 1, the edit hook's
+  convention, not a `systemMessage`;
+* the block counter restarts with each turn (each stop that Claude Code does not mark
+  `stop_hook_active`), so `max_blocks` bounds one turn, not the session.
 Follows the edit-time hook (`shockharness hook claude-code post-edit`, 4583bee); its
 row in `docs/ideas.md` names this as the next step.
 

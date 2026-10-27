@@ -6,6 +6,15 @@ follow Semantic Versioning. The report `schema_version` is tracked separately.
 ## [Unreleased]
 
 ### Added
+- **The finish-time gate for Claude Code: `skills install --agent claude --stop-hook`.**
+  A `Stop` hook (`shockharness hook claude-code stop`) keeps the agent working while the
+  gate against the commit the session started from fails, naming the new hard violations;
+  a `SessionStart` hook records that commit. The whole working tree is compared (untracked
+  files included), so cross-file rules see the change, and a commit made during the session
+  does not hide its findings. A loop guard lets the agent stop, with a notice to you, when
+  nothing was fixed since the last block or after `hooks.stop.max_blocks` blocks (default 3).
+  Opt-in; `[tool.shockharness.hooks.stop]` is not part of the configuration digest
+  (docs/integration.md, "The finish-time gate").
 - **The `write-compliant-code` skill: skipping is the caller's choice, and saves check
   versions.** A function that can skip its work (busy, already running) does it, waits
   or fails by default, and a caller that wants the skip names it; a save that replaces

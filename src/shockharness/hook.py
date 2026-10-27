@@ -20,6 +20,10 @@ user's decision.
 When the project's installed skills are behind the installed ShockHarness (``skills
 update`` would change them), the hook says so once per upgrade, with the command: the state
 remembers, per agent, the versions it last told the agent about.
+
+The first run of a session also records the commit ``HEAD`` is at, the base the
+finish-time gate (``hook_stop``) compares the session's change against when no
+``session-start`` hook recorded it.
 """
 
 import json
@@ -35,7 +39,7 @@ from shockharness.cache.store import cache_settings
 from shockharness.config import SUPPORTED_EXTENSIONS, TIER_CLI, EffectiveConfig
 from shockharness.constants import HOOK_FEEDBACK
 from shockharness.findings import Finding
-from shockharness.history.git import locate_repository, run_git_text
+from shockharness.history.git import locate_repository, resolve_commit, run_git_text
 from shockharness.hook_state import HookStore
 from shockharness.output.text import finding_lines
 from shockharness.rules.accepted_policy import accepted_policy
@@ -46,7 +50,12 @@ from shockharness.skills.freshness import skills_drift
 AGENT_CLAUDE_CODE = "claude-code"
 HOOK_AGENTS = (AGENT_CLAUDE_CODE,)
 EVENT_POST_EDIT = "post-edit"
-HOOK_EVENTS = (EVENT_POST_EDIT,)
+EVENT_STOP = "stop"
+EVENT_SESSION_START = "session-start"
+HOOK_EVENTS = (EVENT_POST_EDIT, EVENT_STOP, EVENT_SESSION_START)
+SESSION_ID = "session_id"
+# A state key per session: the commit HEAD was at when the session started.
+BASE_PREFIX = "session-base:"
 TOOL_INPUT = "tool_input"
 TOOL_NAME = "tool_name"
 FILE_PATH = "file_path"
@@ -100,6 +109,25 @@ def edited_path(event: Any) -> str | None:
     if not isinstance(path, str) or path == "":
         return None
     return path
+
+
+def session_of(event: Any) -> str:
+    """The event's ``session_id``; "" for an event without one."""
+    if not isinstance(event, Mapping) or SESSION_ID not in event:
+        return ""
+    return str(event[SESSION_ID])
+
+
+def remembered_base(root: Path, event: Any, state: Mapping[str, str]) -> dict[str, str]:
+    """``{key: HEAD's commit}`` for a session no hook run has recorded yet; nothing when
+    it has a base, or the project has no commit."""
+    key = BASE_PREFIX + session_of(event)
+    if key in state:
+        return {}
+    commit, _error = resolve_commit(root, "HEAD")
+    if commit is None:
+        return {}
+    return {key: commit}
 
 
 def _within(path: Path, root: Path) -> Path | None:
@@ -302,8 +330,14 @@ def run_post_edit(
         root, config, state, store, fail_on
     )
     skills_message, skills_details, skills_told = _skills_feedback(root, state)
-    if len(changed) > 0 or len(config_changed) > 0 or len(skills_told) > 0:
-        store.save_state({**state, **changed, **config_changed, **skills_told})
+    updates = {
+        **changed,
+        **config_changed,
+        **skills_told,
+        **remembered_base(root, event.value, state),
+    }
+    if len(updates) > 0:
+        store.save_state({**state, **updates})
     files = sorted({*changed, *config_changed})
     details = [*details, *config_details, *skills_details]
     message = message + config_message + skills_message

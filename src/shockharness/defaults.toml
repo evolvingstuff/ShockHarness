@@ -830,7 +830,8 @@ forbidden = []
 # not re-parsed or re-checked; everything cross-file (call graph, cycles, diff, baseline
 # matching, history) is recomputed every run. The directory belongs in .gitignore; a
 # relative path resolves against the analysis root. `--no-cache` bypasses it for one run,
-# `baseline create` and revision diffs never read it. The `cache` table is not part of
+# `baseline create` and revision diffs never read it. The finish-time hook keeps the base
+# revision's entries in a `base/` directory inside it. The `cache` table is not part of
 # the configuration digest, because it cannot change a result.
 [tool.shockharness.cache]
 enabled = true
@@ -844,6 +845,17 @@ directory = ".shockharness-cache"
 # change a result.
 [tool.shockharness.skills]
 notify_missing = true
+
+# The finish-time hook (`shockharness hook claude-code stop`, installed by `skills install
+# --agent claude --stop-hook`): it keeps the agent working while the gate against the
+# commit the session started from fails. While the agent continues because of it, a stop
+# is let through, with a notice to the user naming what is left, after `max_blocks` blocks
+# in a row or when nothing was fixed since the last one. `shown` is how many new
+# violations a block lists in full. Not part of the configuration digest: it cannot
+# change a result.
+[tool.shockharness.hooks.stop]
+max_blocks = 3
+shown = 20
 
 # Property contracts (docs/shockharness_property_contracts_spec.md, milestones P1a and P1b,
 # Python and JavaScript): requires / produces / preserves declarations checked at call

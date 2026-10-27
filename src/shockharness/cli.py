@@ -53,6 +53,8 @@ from shockharness.gating.baseline import Baseline, build_baseline, load_baseline
 from shockharness.gating.diff import DiffReport, diff_revisions, head_paths, with_metrics
 from shockharness.history.hotspots import collect_history
 from shockharness.hook import (
+    EVENT_SESSION_START,
+    EVENT_STOP,
     HOOK_AGENTS,
     HOOK_EVENTS,
     SEVERITY_ORDER,
@@ -60,6 +62,7 @@ from shockharness.hook import (
     run_post_edit,
     write_result,
 )
+from shockharness.hook_stop import run_session_start, run_stop
 from shockharness.inventory import build_inventory
 from shockharness.inventory import render_text as render_inventory
 from shockharness.output import json as json_output
@@ -81,12 +84,14 @@ from shockharness.skills.adapters import (
 from shockharness.skills.freshness import skills_drift
 from shockharness.skills.install import (
     ACTION_NONE,
+    HOOK_COMMAND,
     MANIFEST_FILENAME,
     STATUS_EDITED,
     STATUS_UP_TO_DATE,
     SkillsResult,
     hook_command,
     install_claude_hook,
+    install_claude_stop_hook,
     install_skills,
     update_skills,
     write_lock,
@@ -336,10 +341,20 @@ def _add_skills_install_parser(
         "so the agent hears findings right after each edit); appended, never replacing hooks",
     )
     skills_install.add_argument(
+        "--stop-hook",
+        action="store_true",
+        help="--agent claude: also add the finish-time gate to the project's "
+        ".claude/settings.json (a Stop hook running `shockharness hook claude-code stop`, "
+        "which keeps the agent working while the gate against the commit the session "
+        "started from fails, and a SessionStart hook recording that commit); appended, "
+        "never replacing hooks",
+    )
+    skills_install.add_argument(
         "--lock",
         action="store_true",
-        help="with --hook: write the project's configuration (catch boundaries aside) as a "
-        "policy file under ~/.config/shockharness/locks/ and run the hook with --policy, so "
+        help="with --hook or --stop-hook: write the project's configuration (catch "
+        "boundaries aside) as a policy file under ~/.config/shockharness/locks/ and run the "
+        "hooks with --policy, so "
         "the project can tighten the configuration but not loosen it; kept if it exists "
         "(--force rewrites it)",
     )
@@ -352,7 +367,12 @@ def _add_hook_parser(commands: "argparse._SubParsersAction[argparse.ArgumentPars
         "(the agent's hook JSON on stdin); exit 2 with the findings on stderr, else exit 0",
     )
     hook.add_argument("agent", choices=HOOK_AGENTS, help="the agent whose hook calls this")
-    hook.add_argument("event", choices=HOOK_EVENTS, help="post-edit: after Edit/Write/MultiEdit")
+    hook.add_argument(
+        "event",
+        choices=HOOK_EVENTS,
+        help="post-edit: after Edit/Write/MultiEdit/Bash; stop: when the agent is about to "
+        "end its turn (the finish-time gate); session-start: records the session's base",
+    )
     _add_config_arguments(hook)
     _add_analysis_arguments(hook)
     _add_cache_argument(hook)
@@ -362,6 +382,12 @@ def _add_hook_parser(commands: "argparse._SubParsersAction[argparse.ArgumentPars
         default=HOOK_DEFAULT_FAIL_ON,
         help="feed back findings of this severity or worse (default: warning, so the agent "
         "hears warnings while the code is in its context)",
+    )
+    hook.add_argument(
+        "--base",
+        default=None,
+        help="stop: compare against the merge base of this ref and HEAD instead of the "
+        "commit the session started from",
     )
 
 
@@ -802,28 +828,33 @@ def _print_skill_files(result: SkillsResult) -> None:
 
 
 def _check_hook_arguments(args: argparse.Namespace, agent: str) -> None:
-    if args.lock and not args.hook:
+    if args.lock and not (args.hook or args.stop_hook):
         raise UsageError(
-            "--lock locks the configuration the edit hook runs under; add --hook", None
-        )
-    if not args.hook:
-        return
-    if agent != AGENT_CLAUDE:
-        raise UsageError(f"--hook is for --agent {AGENT_CLAUDE} (Claude Code hooks)", None)
-    if args.user:
-        raise UsageError(
-            "--hook writes the project's .claude/settings.json; it needs a project, not --user",
+            "--lock locks the configuration the hooks run under; add --hook or --stop-hook",
             None,
         )
+    for flag, asked in (("--hook", args.hook), ("--stop-hook", args.stop_hook)):
+        if asked and agent != AGENT_CLAUDE:
+            raise UsageError(f"{flag} is for --agent {AGENT_CLAUDE} (Claude Code hooks)", None)
+        if asked and args.user:
+            raise UsageError(
+                f"{flag} writes the project's .claude/settings.json; it needs a project, "
+                "not --user",
+                None,
+            )
 
 
 def _report_hook(args: argparse.Namespace, agent: str, project_root: Path) -> None:
-    """Install the edit-time hook when asked; offer it to a Claude Code project otherwise."""
+    """Install the edit-time hook and the finish-time gate when asked; offer the edit-time
+    hook to a Claude Code project otherwise."""
+    lock = None
+    if args.lock:
+        lock = _write_project_lock(project_root, args.force)
+    if args.stop_hook:
+        settings, status = install_claude_stop_hook(project_root, lock)
+        sys.stdout.write(f"  stop hook  {settings} ({status})\n")
     if args.hook:
-        lock = None
-        if args.lock:
-            lock = _write_project_lock(project_root, args.force)
-        command = hook_command(lock)
+        command = hook_command(lock, HOOK_COMMAND)
         settings, status = install_claude_hook(project_root, command)
         sys.stdout.write(
             f"  hook       {settings} ({status}): {command}\n"
@@ -984,7 +1015,12 @@ def _run_hook(args: argparse.Namespace) -> int:
     notice to the user, 0 is clean. A configuration error is the usual exit 2: the agent
     sees it, which is right when its edit broke the configuration."""
     config = _load_config(args)
-    result = run_post_edit(read_stdin(), args.root, config, _options(args), args.fail_on)
+    if args.event == EVENT_STOP:
+        result = run_stop(read_stdin(), args.root, config, _options(args), args.base)
+    elif args.event == EVENT_SESSION_START:
+        result = run_session_start(read_stdin(), args.root, config)
+    else:
+        result = run_post_edit(read_stdin(), args.root, config, _options(args), args.fail_on)
     return write_result(result, sys.stderr)
 
 

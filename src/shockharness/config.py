@@ -1055,16 +1055,19 @@ def _merge_legacy_configuration_files(
 
 CACHE_KEY = "cache"
 SKILLS_KEY = "skills"
+HOOKS_KEY = "hooks"
 SUPPRESSIONS_KEY = "suppressions"
-# Tables that cannot change a result: where results are stored, and the skills notice.
-NOT_DIGESTED = (CACHE_KEY, SKILLS_KEY)
+# Tables that cannot change a result: where results are stored, the skills notice, and
+# how the agent hooks report.
+NOT_DIGESTED = (CACHE_KEY, SKILLS_KEY, HOOKS_KEY)
 
 
 def config_digest(values: Mapping[str, Any], entry_points: Sequence[str]) -> str:
     """SHA-256 of the canonical JSON of every key that can change a result: the
-    ``cache`` table (where results are stored, and whether) and the ``skills`` table (a
-    notice beside the report) are left out, so toggling them neither changes the digest a
-    baseline records nor the cache key. The project's entry points change DEF005
+    ``cache`` table (where results are stored, and whether), the ``skills`` table (a
+    notice beside the report) and the ``hooks`` table (how the agent hooks report) are
+    left out, so changing them neither changes the digest a baseline records nor the
+    cache key. The project's entry points change DEF005
     findings, so they are part of it."""
     policy: dict[str, Any] = {
         key: value for key, value in values.items() if key not in NOT_DIGESTED

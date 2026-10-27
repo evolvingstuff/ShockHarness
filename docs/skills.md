@@ -65,7 +65,7 @@ with `generic`, an unknown agent) exit 2 and write nothing.
 ## `skills install`
 
 ```bash
-shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force] [--hook [--lock]]
+shockharness skills install --agent claude|codex|generic [--project PATH] [--user] [--force] [--hook] [--stop-hook] [--lock]
 ```
 
 Writes `<destination>/<name>/SKILL.md` for each of the eight skills, byte for
@@ -85,10 +85,12 @@ written:
   (`.claude/skills`, `.agents/skills`) is kept as it is, so a second install or a
   line of the project's own adds nothing.
 * **`.claude/settings.json`**, with `--hook` (`--agent claude`): the edit-time
-  hook is appended to the `PostToolUse` hooks, once.
-* **The lock**, with `--hook --lock`: the project's effective configuration,
+  hook is appended to the `PostToolUse` hooks, once. With `--stop-hook`: the
+  finish-time gate is appended to the `Stop` hooks and its base recorder to the
+  `SessionStart` hooks, once each (docs/integration.md).
+* **The lock**, with `--hook --lock` or `--stop-hook --lock`: the project's effective configuration,
   minus `rules.exceptions.boundaries`, written as a `--policy` file to
-  `~/.config/shockharness/locks/<project>-<digest>.toml`; the hook command gets
+  `~/.config/shockharness/locks/<project>-<digest>.toml`; the hook commands get
   `--policy "<that file>"`. The project's configuration can then tighten those
   keys but not loosen them; a loosening is reverted to the lock's value and fed
   back as `VERIFY003`. To accept a change, edit the lock. An existing lock is

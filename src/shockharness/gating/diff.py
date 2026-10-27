@@ -2,9 +2,11 @@
 
 Both revisions are resolved with local git only, exported with ``git archive``
 into temporary directories, and analyzed completely (not just changed files) so
-that cross-file effects are never missed. The working tree is not analyzed:
-uncommitted changes are not part of ``HEAD``. The configuration is the working
-tree's, applied to both sides, so the diff compares code under one policy.
+that cross-file effects are never missed. ``diff_revisions`` does not analyze the
+working tree: uncommitted changes are not part of ``HEAD``; ``diff_working_tree`` (the
+finish-time hook) compares a base revision with the working tree itself. The
+configuration is the working tree's, applied to both sides, so the diff compares code
+under one policy.
 
 A diff finding's ``status`` has meant ``new``/``fixed``/``unchanged`` since 0.1.0, so
 the finding's own status (H1: ``violation`` or ``unknown``) is ``finding_status`` there.
@@ -18,17 +20,25 @@ from pathlib import Path
 from typing import Any
 
 from shockharness import gate as gate_module
-from shockharness.analysis import AnalysisOptions, analyze_files, with_unsupported_sources
+from shockharness.analysis import (
+    AnalysisOptions,
+    AnalysisOutcome,
+    analyze_files,
+    with_unsupported_sources,
+)
+from shockharness.api import open_run_cache
 from shockharness.cache.store import (
     REASON_REVISION,
     STATUS_BYPASSED,
+    FileCache,
     cache_coverage_without_cache,
+    cache_directory,
     cache_settings,
 )
 from shockharness.complexity.regressions import abstraction_displacement, complexity_regressions
 from shockharness.config import EffectiveConfig
 from shockharness.constants import REPORT_SCHEMA_VERSION
-from shockharness.discovery import discover
+from shockharness.discovery import DiscoveryResult, discover
 from shockharness.errors import UsageError
 from shockharness.findings import Finding
 from shockharness.gate import NO_REGRESSIONS, GateResult
@@ -118,6 +128,16 @@ class DiffFinding:
         return data
 
 
+def hard_violation(finding: Finding, gating_sections: frozenset[str]) -> bool:
+    """Whether the gate counts ``finding`` as a hard violation: an error, not suppressed,
+    and (when unknown) in a family whose ``fail_on_unknown`` is on."""
+    return (
+        finding.severity == SEVERITY_ERROR
+        and not finding.is_suppressed
+        and gate_module.gates_by_severity(finding, gating_sections)
+    )
+
+
 @dataclass(frozen=True)
 class DiffReport:
     schema_version: str
@@ -135,12 +155,7 @@ class DiffReport:
         gating = gate_module.unknown_gating_sections(self.config)
         for entry in self.findings:
             counts[entry.status] += 1
-            finding = entry.finding
-            if (
-                finding.severity == SEVERITY_ERROR
-                and not finding.is_suppressed
-                and gate_module.gates_by_severity(finding, gating)
-            ):
+            if hard_violation(entry.finding, gating):
                 hard[entry.status] += 1
         return {
             "new": counts[STATUS_NEW],
@@ -200,12 +215,15 @@ def analyze_revision(
     base_config: EffectiveConfig | None,
     *,
     is_head: bool,
+    cache: FileCache | None,
 ) -> Revision:
     """Export the tree at ``ref`` and analyze the part that corresponds to ``root``.
 
     While the tree exists, the revision's committed policy is read (VERIFY003); for the
     head revision, ``base_config`` (the base revision's committed configuration) is used
-    to list the files the base configuration would analyze in the head tree."""
+    to list the files the base configuration would analyze in the head tree. ``cache``
+    is None for ``diff`` (an export is analyzed afresh); the finish-time hook passes the
+    base revision's own cache."""
     commit = resolve_commit(root, ref)
     started = time.perf_counter()
     with tempfile.TemporaryDirectory(prefix="shockharness-") as exported:
@@ -217,25 +235,96 @@ def analyze_revision(
             where = "." if location.prefix == "" else location.prefix
             raise UsageError(f"the analysis root ({where}) does not exist at {ref}", ref)
         discovery = discover(export_root, [export_root], config)
-        outcome = analyze_files(discovery.files, config, options, None)
+        outcome = analyze_files(discovery.files, config, options, cache)
         policy = take_snapshot(export_root, Path(exported), location.prefix, base_config, is_head)
-    files = with_unsupported_sources(outcome.files, discovery, config)
-    findings = [f for result in files for f in result.findings]
-    verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
-    elapsed = time.perf_counter() - started
-    cache = cache_coverage_without_cache(
+    coverage = cache_coverage_without_cache(
         STATUS_BYPASSED, str(cache_settings(config)["directory"]), REASON_REVISION
     )
-    report = build_report(
-        files, discovery, config, verdict, outcome.metrics, elapsed, cache, (), {}
-    )
+    if cache is not None:
+        coverage = cache.coverage()
+    report = _tree_report(discovery, outcome, config, started, coverage)
     return Revision(
         ref=ref, commit=commit, report=report, verification=outcome.verification, policy=policy
     )
 
 
-def _renames(location: RepositoryLocation, base: str, head: str) -> Renames:
-    found, error = renamed_files(location, base, head)
+def _tree_report(
+    discovery: DiscoveryResult,
+    outcome: AnalysisOutcome,
+    config: EffectiveConfig,
+    started: float,
+    cache_coverage: dict[str, Any],
+) -> Report:
+    """One analyzed tree's report, gated on its own (the diff gates it again)."""
+    files = with_unsupported_sources(outcome.files, discovery, config)
+    findings = [f for result in files for f in result.findings]
+    verdict = gate_module.evaluate(findings, files, config, None, NO_REGRESSIONS)
+    elapsed = time.perf_counter() - started
+    return build_report(
+        files, discovery, config, verdict, outcome.metrics, elapsed, cache_coverage, (), {}
+    )
+
+
+WORKING_TREE = "working tree"  # the head's ref when the diff's head is the working tree
+# The base revision's cache entries, in a directory of their own under the cache
+# directory: entries are kept per path, so sharing the working tree's would overwrite
+# the entry of every file the change touched, on both sides, at every run.
+BASE_CACHE_DIRECTORY = "base"
+
+
+@dataclass(frozen=True)
+class TreeCaches:
+    """The caches of a working-tree diff: both None when the cache is off or bypassed,
+    and ``coverage`` is then the working tree's ``coverage.cache`` block."""
+
+    head: FileCache | None
+    base: FileCache | None
+    coverage: dict[str, Any]
+
+
+def open_tree_caches(root: Path, config: EffectiveConfig, options: AnalysisOptions) -> TreeCaches:
+    head, coverage = open_run_cache(root, config, options)
+    if head is None:
+        return TreeCaches(None, None, coverage)
+    configured = f"{cache_settings(config)['directory']}/{BASE_CACHE_DIRECTORY}"
+    base = FileCache(
+        cache_directory(root, config) / BASE_CACHE_DIRECTORY, configured, config.digest
+    )
+    base.open()
+    return TreeCaches(head, base, coverage)
+
+
+def analyze_working_tree(
+    root: Path,
+    location: RepositoryLocation,
+    config: EffectiveConfig,
+    options: AnalysisOptions,
+    base_config: EffectiveConfig | None,
+    caches: TreeCaches,
+) -> Revision:
+    """The working tree under ``root`` as a head revision: analyzed in place, with the
+    project's cache, and its policy read from the files on disk. Its commit is
+    ``HEAD``'s, which the working tree may differ from."""
+    commit = resolve_commit(root, "HEAD")
+    started = time.perf_counter()
+    discovery = discover(root, [root], config)
+    outcome = analyze_files(discovery.files, config, options, caches.head)
+    policy = take_snapshot(root, location.toplevel, location.prefix, base_config, is_head=True)
+    coverage = caches.coverage
+    if caches.head is not None:
+        coverage = caches.head.coverage()
+    report = _tree_report(discovery, outcome, config, started, coverage)
+    return Revision(
+        ref=WORKING_TREE,
+        commit=commit,
+        report=report,
+        verification=outcome.verification,
+        policy=policy,
+    )
+
+
+def _renames(location: RepositoryLocation, revisions: Sequence[str]) -> Renames:
+    found, error = renamed_files(location, revisions)
     if found is None:
         return Renames(available=False, error=error, head_to_base={})
     return Renames(available=True, error=None, head_to_base=found)
@@ -279,10 +368,10 @@ def with_verification(report: Report, result: VerificationResult) -> Report:
 
 def _verify(
     root: Path,
-    location: RepositoryLocation,
     config: EffectiveConfig,
     base: Revision,
     head: Revision,
+    renames: Renames,
 ) -> VerificationResult:
     """VERIFY001-VERIFY004 for the change from ``base`` to ``head``, plus the ``--policy``
     attempts, as one result for the head report."""
@@ -291,7 +380,6 @@ def _verify(
         base_settings = base.policy.config.section(VERIFICATION_SECTION)
     # A change cannot switch off or lower the rules that report it doing so.
     settings = strictest_verification(config.section(VERIFICATION_SECTION), base_settings)
-    renames = _renames(location, base.commit, head.commit)
     verification = compare_revisions(
         base.verification, head.verification, renames, settings, base.commit
     )
@@ -339,24 +427,37 @@ def diff_revisions(
     ``metrics.graph.abstraction_displacement``.
     """
     location = _require_repository(root)
-    base = analyze_revision(root, location, base_ref, config, options, None, is_head=False)
-    head = analyze_revision(
-        root, location, head_ref, config, options, base.policy.config, is_head=True
+    base = analyze_revision(
+        root, location, base_ref, config, options, None, is_head=False, cache=None
     )
-    combined = _verify(root, location, config, base, head)
+    head = analyze_revision(
+        root, location, head_ref, config, options, base.policy.config, is_head=True, cache=None
+    )
+    return _compared(root, config, base, head, _renames(location, (base.commit, head.commit)))
+
+
+def diff_working_tree(
+    root: Path, base_ref: str, config: EffectiveConfig, options: AnalysisOptions
+) -> DiffReport:
+    """``diff_revisions`` with the working tree as the head: what a commit of the tree as
+    it is would add. The base export is analyzed with a cache of its own, so the files the
+    change did not touch are hits; untracked files are part of the working tree."""
+    location = _require_repository(root)
+    caches = open_tree_caches(root, config, options)
+    base = analyze_revision(
+        root, location, base_ref, config, options, None, is_head=False, cache=caches.base
+    )
+    head = analyze_working_tree(root, location, config, options, base.policy.config, caches)
+    return _compared(root, config, base, head, _renames(location, (base.commit,)))
+
+
+def _compared(
+    root: Path, config: EffectiveConfig, base: Revision, head: Revision, renames: Renames
+) -> DiffReport:
+    combined = _verify(root, config, base, head, renames)
     head = replace(head, report=with_verification(head.report, combined))
     base_by_fp = _by_fingerprint(base.report.findings)
-    head_by_fp = _by_fingerprint(head.report.findings)
-
-    entries: list[DiffFinding] = []
-    for fingerprint, finding in head_by_fp.items():
-        status = STATUS_UNCHANGED if fingerprint in base_by_fp else STATUS_NEW
-        entries.append(DiffFinding(status, finding))
-    for fingerprint, finding in base_by_fp.items():
-        if fingerprint not in head_by_fp:
-            entries.append(DiffFinding(STATUS_FIXED, finding))
-    entries.sort(key=lambda e: e.sort_key())
-
+    entries = _classified(base_by_fp, _by_fingerprint(head.report.findings))
     marked, application = apply_fingerprints(
         head.report.findings,
         frozenset(base_by_fp),
@@ -367,14 +468,43 @@ def diff_revisions(
         None,
         (),
     )
-    complexity_settings = config.section(COMPLEXITY_SECTION)
     regressions = complexity_regressions(
         base.report.metrics[COMPLEXITY_SECTION],
         head.report.metrics[COMPLEXITY_SECTION],
-        complexity_settings,
+        config.section(COMPLEXITY_SECTION),
     )
     verdict = gate_module.evaluate(marked, head.report.files, config, application, len(regressions))
     head_marked = replace(head, report=rebuild_with_findings(head.report, marked, verdict))
+    return DiffReport(
+        schema_version=REPORT_SCHEMA_VERSION,
+        tool_version=__version__,
+        config=config,
+        base=base,
+        head=head_marked,
+        findings=_relabelled(entries, marked),
+        metrics=_diff_metrics(base, head_marked, regressions, config),
+        gate=verdict,
+    )
+
+
+def _classified(
+    base_by_fp: Mapping[str, Finding], head_by_fp: Mapping[str, Finding]
+) -> list[DiffFinding]:
+    entries: list[DiffFinding] = []
+    for fingerprint, finding in head_by_fp.items():
+        status = STATUS_UNCHANGED if fingerprint in base_by_fp else STATUS_NEW
+        entries.append(DiffFinding(status, finding))
+    for fingerprint, finding in base_by_fp.items():
+        if fingerprint not in head_by_fp:
+            entries.append(DiffFinding(STATUS_FIXED, finding))
+    entries.sort(key=lambda e: e.sort_key())
+    return entries
+
+
+def _relabelled(
+    entries: Sequence[DiffFinding], marked: Sequence[Finding]
+) -> tuple[DiffFinding, ...]:
+    """The new and unchanged entries with their head finding as the gate marked it."""
     by_fp = {f.fingerprint: f for f in marked}
     relabelled: list[DiffFinding] = []
     for entry in entries:
@@ -384,26 +514,23 @@ def diff_revisions(
         if entry.finding.fingerprint not in by_fp:
             raise AssertionError(f"no head finding for fingerprint {entry.finding.fingerprint}")
         relabelled.append(DiffFinding(entry.status, by_fp[entry.finding.fingerprint]))
-    metrics = dict(head_marked.report.metrics)
+    return tuple(relabelled)
+
+
+def _diff_metrics(
+    base: Revision, head: Revision, regressions: list[dict[str, Any]], config: EffectiveConfig
+) -> dict[str, Any]:
+    metrics = dict(head.report.metrics)
     complexity = dict(metrics[COMPLEXITY_SECTION])
     complexity["regressions"] = regressions
     complexity["regression_policy"] = config.values["gates"]["complexity_regressions"]
     metrics[COMPLEXITY_SECTION] = complexity
     graph = dict(metrics[GRAPH_SECTION])
     graph["abstraction_displacement"] = abstraction_displacement(
-        base.report.metrics, head.report.metrics, complexity_settings
+        base.report.metrics, head.report.metrics, config.section(COMPLEXITY_SECTION)
     )
     metrics[GRAPH_SECTION] = graph
-    return DiffReport(
-        schema_version=REPORT_SCHEMA_VERSION,
-        tool_version=__version__,
-        config=config,
-        base=base,
-        head=head_marked,
-        findings=tuple(relabelled),
-        metrics=metrics,
-        gate=verdict,
-    )
+    return metrics
 
 
 def with_metrics(diff: DiffReport, metrics: dict[str, Any]) -> DiffReport:

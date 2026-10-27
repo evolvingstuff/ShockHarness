@@ -44,6 +44,11 @@ HOOK_FEEDBACK: Final[int] = 2
 # Seconds Claude Code waits for the edit hook (a run analyzes one file, with the cache;
 # measured at about half a second on this repository).
 HOOK_TIMEOUT_SECONDS: Final[int] = 60
+# Seconds Claude Code waits for the finish-time hook, its default for a command hook:
+# a stop analyzes the base revision and the working tree (about 7 s on this repository
+# with a warm cache, 33 s on MetaList, 159 s there with both caches cold); one that
+# times out lets the agent stop.
+STOP_HOOK_TIMEOUT_SECONDS: Final[int] = 600
 # A listener registration's arguments before its options: the event name and the handler
 # (addEventListener("unhandledrejection", h), process.on("unhandledRejection", h)).
 LISTENER_ARGUMENTS: Final[int] = 2

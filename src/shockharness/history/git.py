@@ -89,16 +89,17 @@ NUL = "\0"
 
 
 def renamed_files(
-    location: RepositoryLocation, base: str, head: str
+    location: RepositoryLocation, revisions: Sequence[str]
 ) -> tuple[dict[str, str] | None, str | None]:
-    """Files git considers renamed between two commits, as root-relative POSIX paths
-    ``{head path: base path}`` (H2: VERIFY rules follow a renamed file to its base
-    version). Returns (renames, error); exactly one is set. Only files under the
+    """Files git considers renamed between two commits (``revisions`` is base and head;
+    a base alone compares it with the working tree's tracked files), as root-relative
+    POSIX paths ``{head path: base path}`` (H2: VERIFY rules follow a renamed file to its
+    base version). Returns (renames, error); exactly one is set. Only files under the
     analysis root (``location.prefix``) are reported."""
     pathspec = location.prefix if location.prefix != "" else "."
     text, error = run_git_text(
         location.toplevel,
-        ["diff", "-M", "--name-status", "-z", base, head, "--", pathspec],
+        ["diff", "-M", "--name-status", "-z", *revisions, "--", pathspec],
     )
     if text is None:
         return None, error
